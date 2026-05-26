@@ -40,10 +40,17 @@ export type EditResult = {
   changed: boolean;
 };
 
-export type PendingOperator = "d" | "y";
+export type VimOperator = "d" | "c" | "y";
+
+export type VimMotion = "w" | "b" | "0" | "^" | "$";
+
+export type PendingOperator = VimOperator | "g";
+
+export type NormalCommand = "dd" | "cc" | "yy" | "gg";
 
 export type CommandResult =
   | { type: "pending"; operator: PendingOperator }
-  | { type: "command"; command: "dd" | "yy" }
+  | { type: "command"; command: NormalCommand }
+  | { type: "operatorMotion"; operator: VimOperator; motion: VimMotion }
   | { type: "invalid" }
   | { type: "none" };

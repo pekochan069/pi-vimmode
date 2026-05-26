@@ -15,20 +15,33 @@ import type {
   Position,
   VimEditorOptions,
   VimMode,
+  VimMotion,
+  VimOperator,
   VimRegister,
 } from "./types.ts";
 
 import {
+  bufferEndPosition,
+  bufferStartPosition,
+  changeLine,
   clampPosition,
+  deleteByMotion,
   deleteCharAt,
   deleteLine,
   deleteLineRange,
   deleteRange,
+  firstNonBlankPosition,
+  joinLineWithNext,
   linewiseSelectionText,
+  matchingPairPosition,
+  openLineAbove,
+  openLineBelow,
   pasteRegister,
+  pasteRegisterBefore,
   selectionText,
   visualLineSelectionSummary,
   visualSelectionSummary,
+  yankByMotion,
   yankLine,
   yankLineRange,
 } from "./buffer.ts";
@@ -230,8 +243,15 @@ export class VimEditor extends CustomEditor {
     if (pendingResult.type === "command") {
       this.pending = undefined;
       if (pendingResult.command === "dd") this.deleteCurrentLine();
+      if (pendingResult.command === "cc") this.changeCurrentLine();
       if (pendingResult.command === "yy") this.yankCurrentLine();
+      if (pendingResult.command === "gg") this.move("gg");
       this.invalidate();
+      return;
+    }
+    if (pendingResult.type === "operatorMotion") {
+      this.pending = undefined;
+      this.applyOperatorMotion(pendingResult.operator, pendingResult.motion);
       return;
     }
     if (pendingResult.type === "invalid") {
@@ -356,6 +376,10 @@ export class VimEditor extends CustomEditor {
       case "$":
       case "w":
       case "b":
+      case "G":
+      case "^":
+      case "_":
+      case "%":
         this.move(key);
         return;
       case "i":
@@ -371,6 +395,14 @@ export class VimEditor extends CustomEditor {
         return;
       case "A":
         this.move("$");
+        this.enterInsertMode();
+        return;
+      case "o":
+        this.applyEdit(openLineBelow(this.getText(), this.getCursor()));
+        this.enterInsertMode();
+        return;
+      case "O":
+        this.applyEdit(openLineAbove(this.getText(), this.getCursor()));
         this.enterInsertMode();
         return;
       case "v":
@@ -390,8 +422,24 @@ export class VimEditor extends CustomEditor {
       case "x":
         this.applyEdit(deleteCharAt(this.getText(), this.getCursor()));
         return;
+      case "D":
+        this.applyEdit(deleteByMotion(this.getText(), this.getCursor(), "$"));
+        return;
+      case "C":
+        this.applyEdit(deleteByMotion(this.getText(), this.getCursor(), "$"));
+        this.enterInsertMode();
+        return;
+      case "Y":
+        this.yankCurrentLine();
+        return;
+      case "J":
+        this.applyEdit(joinLineWithNext(this.getText(), this.getCursor()));
+        return;
       case "p":
         this.applyEdit(pasteRegister(this.getText(), this.getCursor(), this.register));
+        return;
+      case "P":
+        this.applyEdit(pasteRegisterBefore(this.getText(), this.getCursor(), this.register));
         return;
       case "u":
         super.handleInput(KEY.undo);
@@ -427,6 +475,21 @@ export class VimEditor extends CustomEditor {
       case "b":
         super.handleInput(KEY.wordLeft);
         break;
+      case "gg":
+        this.restoreCursor(bufferStartPosition());
+        break;
+      case "G":
+        this.restoreCursor(bufferEndPosition(this.getText()));
+        break;
+      case "^":
+      case "_":
+        this.restoreCursor(firstNonBlankPosition(this.getText(), this.getCursor()));
+        break;
+      case "%": {
+        const target = matchingPairPosition(this.getText(), this.getCursor());
+        if (target) this.restoreCursor(target);
+        break;
+      }
     }
     this.invalidate();
   }
@@ -462,6 +525,23 @@ export class VimEditor extends CustomEditor {
 
   private deleteCurrentLine(): void {
     this.applyEdit(deleteLine(this.getText(), this.getCursor()));
+  }
+
+  private changeCurrentLine(): void {
+    this.applyEdit(changeLine(this.getText(), this.getCursor()));
+    this.enterInsertMode();
+  }
+
+  private applyOperatorMotion(operator: VimOperator, motion: VimMotion): void {
+    if (operator === "y") {
+      const register = yankByMotion(this.getText(), this.getCursor(), motion);
+      if (register) this.register = register;
+      this.invalidate();
+      return;
+    }
+
+    this.applyEdit(deleteByMotion(this.getText(), this.getCursor(), motion));
+    if (operator === "c") this.enterInsertMode();
   }
 
   private yankVisualSelection(): void {

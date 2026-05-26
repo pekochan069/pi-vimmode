@@ -71,6 +71,145 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
   });
 
+  test("normal mode supports extended navigation", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("  one\ntwo");
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+    editor.handleInput("G");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 3 });
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("^");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 2 });
+
+    editor.handleInput("0");
+    editor.handleInput("_");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 2 });
+  });
+
+  test("normal percent jumps to matching pair", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("call(a, [b])");
+    editor.handleInput("g");
+    editor.handleInput("g");
+
+    editor.handleInput("%");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 11 });
+
+    editor.handleInput("%");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 4 });
+  });
+
+  test("normal o and O open lines and enter insert", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("o");
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 0 });
+    expect(editor.getVimMode()).toBe("insert");
+
+    const other = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    other.setText("one\ntwo");
+    other.handleInput("O");
+    expect(other.getText()).toBe("one\n\ntwo");
+    expect(other.getCursor()).toEqual({ line: 1, col: 0 });
+    expect(other.getVimMode()).toBe("insert");
+  });
+
+  test("normal operator motions delete change and yank ranges", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("hello world");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("d");
+    editor.handleInput("w");
+    expect(editor.getText()).toBe("world");
+    expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
+
+    const changer = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    changer.setText("hello world");
+    changer.handleInput("g");
+    changer.handleInput("g");
+    changer.handleInput("c");
+    changer.handleInput("w");
+    expect(changer.getText()).toBe("world");
+    expect(changer.getRegister()).toEqual({ type: "char", text: "hello " });
+    expect(changer.getVimMode()).toBe("insert");
+
+    const yanker = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    yanker.setText("hello");
+    yanker.handleInput("g");
+    yanker.handleInput("g");
+    yanker.handleInput("y");
+    yanker.handleInput("$");
+    expect(yanker.getText()).toBe("hello");
+    expect(yanker.getRegister()).toEqual({ type: "char", text: "hello" });
+  });
+
+  test("normal line aliases, join, and paste-before work", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("Y");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "one" });
+    editor.handleInput("G");
+    editor.handleInput("P");
+    expect(editor.getText()).toBe("one\none\ntwo");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 0 });
+
+    const joiner = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    joiner.setText("one\n  two");
+    joiner.handleInput("g");
+    joiner.handleInput("g");
+    joiner.handleInput("J");
+    expect(joiner.getText()).toBe("one two");
+
+    const changer = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    changer.setText("one\ntwo");
+    changer.handleInput("c");
+    changer.handleInput("c");
+    expect(changer.getText()).toBe("one\n");
+    expect(changer.getRegister()).toEqual({ type: "line", text: "two" });
+    expect(changer.getVimMode()).toBe("insert");
+  });
+
+  test("D and C operate to line end", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("hello");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("D");
+    expect(editor.getText()).toBe("");
+    expect(editor.getRegister()).toEqual({ type: "char", text: "hello" });
+
+    const changer = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor;
+    changer.setText("hello");
+    changer.handleInput("g");
+    changer.handleInput("g");
+    changer.handleInput("C");
+    expect(changer.getText()).toBe("");
+    expect(changer.getRegister()).toEqual({ type: "char", text: "hello" });
+    expect(changer.getVimMode()).toBe("insert");
+  });
+
+  test("invalid pending normal command clears without editing", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput("d");
+    expect(editor.getPendingOperator()).toBe("d");
+    editor.handleInput("q");
+    expect(editor.getPendingOperator()).toBeUndefined();
+    expect(editor.getText()).toBe("abc");
+  });
+
   test("visual delete removes selected text and returns normal", () => {
     const { editor } = createEditor();
     for (const char of "abcd") editor.handleInput(char);

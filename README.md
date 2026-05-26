@@ -42,21 +42,30 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 ### Normal mode
 
-| Key                   | Behavior                                   |
-| --------------------- | ------------------------------------------ |
-| `h` / `j` / `k` / `l` | move left / down / up / right              |
-| `0` / `$`             | line start / line end                      |
-| `w` / `b`             | word forward / word backward               |
-| `i`                   | insert at cursor                           |
-| `a`                   | move right, then insert                    |
-| `I` / `A`             | line start/end, then insert                |
-| `v`                   | enter characterwise visual mode            |
-| `V`                   | enter visual line mode                     |
-| `x`                   | delete character under cursor              |
-| `dd`                  | delete current line into linewise register |
-| `yy`                  | yank current line into linewise register   |
-| `p`                   | paste unnamed register                     |
-| `u`                   | delegate to Pi native undo                 |
+| Key                   | Behavior                                        |
+| --------------------- | ----------------------------------------------- |
+| `h` / `j` / `k` / `l` | move left / down / up / right                   |
+| `0` / `$`             | line start / line end                           |
+| `w` / `b`             | word forward / word backward                    |
+| `gg` / `G`            | buffer start / buffer end                       |
+| `^` / `_`             | first non-blank character on current line       |
+| `%`                   | jump to matching `()`, `[]`, or `{}` pair       |
+| `i`                   | insert at cursor                                |
+| `a`                   | move right, then insert                         |
+| `I` / `A`             | line start/end, then insert                     |
+| `o` / `O`             | open blank line below/above, then insert        |
+| `v`                   | enter characterwise visual mode                 |
+| `V`                   | enter visual line mode                          |
+| `x`                   | delete character under cursor                   |
+| `dd` / `cc` / `yy`    | delete/change/yank current line                 |
+| `D` / `C`             | delete/change from cursor through line end      |
+| `Y`                   | yank current line into linewise register        |
+| `d{motion}`           | delete by `w`, `b`, `0`, `^`, or `$`            |
+| `c{motion}`           | change by `w`, `b`, `0`, `^`, or `$`            |
+| `y{motion}`           | yank by `w`, `b`, `0`, `^`, or `$`              |
+| `J`                   | join current line with next line                |
+| `p` / `P`             | paste unnamed register after/before cursor/line |
+| `u`                   | delegate to Pi native undo                      |
 
 ### Visual mode
 
@@ -131,8 +140,8 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 
 - One unnamed register is supported.
 - Yank/delete/change update the register.
-- Linewise paste inserts below the current line.
-- Charwise paste inserts after the cursor.
+- Linewise `p` inserts below the current line; linewise `P` inserts above it.
+- Charwise `p` inserts after the cursor; charwise `P` inserts before it.
 - Empty register paste is a no-op.
 - `u` delegates to Pi native undo. Pi's editor records programmatic text changes made through `setText()`.
 
@@ -142,13 +151,15 @@ The editor border/status area shows mode feedback:
 
 - `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths.
 - `I`, `N`, `V`, and `VL` at narrow widths.
-- Pending `d`/`y` and visual selection summaries show when space allows.
+- Pending `d`/`c`/`y`/`g` and visual selection summaries show when space allows.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
 ## Limitations
 
 - No block visual mode.
-- No search, ex commands, macros, marks, named registers, or system clipboard integration.
+- No counts, text objects, search, ex commands, macros, marks, named registers, or system clipboard integration.
+- Operator motions are limited to `w`, `b`, `0`, `^`, and `$`; no full Vim grammar.
+- `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No full Neovim cursor option parity: blink timing and terminal-specific cursor negotiation are out of scope.
 - Terminal cursor-shape hints are best-effort; unsupported terminals may show Pi's default cursor shape in some non-visual states.
 - Editing uses Pi's cursor coordinates, not full grapheme-cluster Vim semantics. Complex Unicode may not behave exactly like Vim.

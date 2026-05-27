@@ -132,15 +132,23 @@ export class VimEditor extends CustomEditor {
       this.modalState.visualAnchor
     ) {
       return renderVisualEditor({
-        lines: this.getLines(),
-        cursor: this.getCursor(),
-        mode: this.modalState.mode,
-        visualAnchor: this.modalState.visualAnchor,
+        snapshot: {
+          lines: this.getLines(),
+          cursor: this.getCursor(),
+        },
+        visual: {
+          mode: this.modalState.mode,
+          anchor: this.modalState.visualAnchor,
+        },
         cursorStyle: this.getCurrentCursorStyle(),
-        width,
-        terminalRows: this.terminalRows(),
-        focused: this.focused,
-        borderColor: this.borderColor,
+        viewport: {
+          width,
+          terminalRows: this.terminalRows(),
+          focused: this.focused,
+        },
+        display: {
+          borderColor: this.borderColor,
+        },
       });
     }
 

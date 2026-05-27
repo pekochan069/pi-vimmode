@@ -275,6 +275,23 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "line", text: "two" });
   });
 
+  test("visual line paste replaces selected lines with the register", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo\nthree");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("Y");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "one" });
+
+    editor.handleInput("G");
+    editor.handleInput("V");
+    editor.handleInput("p");
+
+    expect(editor.getVimMode()).toBe("normal");
+    expect(editor.getText()).toBe("one\ntwo\none");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "three" });
+  });
+
   test("visual render highlights selected text", () => {
     const { editor } = createEditor();
     editor.setText("abcd");

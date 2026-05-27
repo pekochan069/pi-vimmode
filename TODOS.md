@@ -14,7 +14,7 @@
    - Solution: Hide low-level helpers behind deeper prompt buffer operations: navigation, visual operation, linewise operation, operator-motion operation, paste.
    - Benefits: Off-by-one and cursor placement bugs gain locality; future commands get leverage without callers composing internals.
 
-3. [ ] Deepen visual renderer seam
+3. [x] Deepen visual renderer seam
    - Files: `src/render.ts`, `src/vim-editor.ts`, `test/render.test.ts`
    - Problem: Visual renderer mirrors Pi private render behavior: wrapping, scrolling, ANSI width, cursor precedence; `VimEditor` passes many facts.
    - Solution: Make renderer own active-visual view model more completely; keep non-visual `super.render()` path.
@@ -27,3 +27,6 @@
    - Benefits: Startup/reload bugs localize without over-abstracting current readable code.
 
 Recommended first pick: `VimEditor` Adapter + modal editing Module.
+
+- [ ] visual block
+- [ ] line, column number

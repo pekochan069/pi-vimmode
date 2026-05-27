@@ -24,7 +24,7 @@ The Vim editor SHALL keep `VimEditor` as the Pi-facing `CustomEditor` adapter wh
 
 ### Requirement: Modal editing module owns modal state transitions
 
-The modal editing module SHALL own Vim mode state transitions, pending command handling, register updates, and command execution decisions for supported prompt-editing behavior.
+The modal editing module SHALL own Vim mode state transitions, pending command handling, register updates, and command execution decisions for supported prompt-editing behavior while delegating pure prompt text mechanics to operation-level prompt buffer APIs.
 
 #### Scenario: Insert mode handles escape semantics
 
@@ -44,7 +44,12 @@ The modal editing module SHALL own Vim mode state transitions, pending command h
 #### Scenario: Visual modes preserve anchor behavior
 
 - **WHEN** the editor is in characterwise visual mode or visual line mode and receives supported motion or operation keys
-- **THEN** the modal module preserves current visual anchor semantics while returning effects for selection movement, yank, delete, change, cancel, or mode switching
+- **THEN** the modal module preserves current visual anchor semantics while using prompt buffer operation APIs for selection movement, yank, delete, change, cancel, or mode switching effects
+
+#### Scenario: Prompt buffer operations replace low-level helper composition
+
+- **WHEN** the modal module or adapter needs navigation, visual editing, linewise editing, operator-motion editing, or paste behavior
+- **THEN** it calls prompt buffer operation APIs instead of assembling behavior from low-level text helper exports
 
 ### Requirement: Adapter applies modal effects with public Pi APIs
 
@@ -105,17 +110,27 @@ The change SHALL add modal-engine tests that cover behavior previously only reac
 
 ### Requirement: Status and rendering boundaries remain width-safe
 
-The refactor SHALL keep mode feedback and visual rendering width-safe while separating derivation of status/view state from Pi-facing rendering.
+The refactor SHALL keep mode feedback and visual rendering width-safe while deepening active visual view construction inside the renderer and separating it from Pi-facing adapter rendering.
 
 #### Scenario: Non-visual rendering delegates to Pi base renderer
 
 - **WHEN** the editor renders outside visual modes
-- **THEN** the adapter uses Pi's base editor rendering path and applies only the current status feedback integration
+- **THEN** the adapter uses Pi's base editor rendering path and applies only the current status feedback and cursor marker restyling integration
+
+#### Scenario: Visual renderer receives cohesive render input
+
+- **WHEN** the editor renders in characterwise visual mode or visual line mode with an active anchor
+- **THEN** the adapter passes one cohesive active-visual render input to the renderer instead of coordinating layout, wrapping, scrolling, highlight, or cursor-precedence details itself
 
 #### Scenario: Visual rendering remains scoped
 
 - **WHEN** the editor renders in characterwise visual mode or visual line mode with an active anchor
 - **THEN** visual highlighting remains scoped to the selected range and rendered lines stay within the requested width
+
+#### Scenario: Visual renderer owns active visual view mechanics
+
+- **WHEN** the visual renderer receives prompt content, cursor, active visual state, cursor style, viewport data, and display hooks
+- **THEN** it derives wrapped layout, scroll window, selected cell display, empty selected line display, cursor precedence, padding, and width-safe border or scroll indicator rows without requiring the Pi adapter to compute those details
 
 #### Scenario: Status derivation is testable
 

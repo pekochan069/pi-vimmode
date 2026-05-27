@@ -8,17 +8,13 @@
         "name": "JavaScript/TypeScript",
         "version": null,
         "confidence": "high",
-        "markers": [
-          "package.json"
-        ]
+        "markers": ["package.json"]
       },
       {
         "name": "TypeScript",
         "version": null,
         "confidence": "high",
-        "markers": [
-          "tsconfig.json"
-        ]
+        "markers": ["tsconfig.json"]
       }
     ],
     "frameworks": [],
@@ -48,11 +44,7 @@
   "structure": {
     "isMonorepo": false,
     "workspaces": [],
-    "mainDirectories": [
-      "docs",
-      "src",
-      "test"
-    ],
+    "mainDirectories": ["docs", "src", "test"],
     "gitBranches": {
       "defaultBranch": "main",
       "branchingStrategy": null
@@ -72,22 +64,14 @@
       "purpose": null,
       "fileCount": 1,
       "lastAccessed": 1779796476789,
-      "keyFiles": [
-        "config.yaml"
-      ]
+      "keyFiles": ["config.yaml"]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 7,
       "lastAccessed": 1779796476801,
-      "keyFiles": [
-        "buffer.ts",
-        "commands.ts",
-        "config.ts",
-        "index.ts",
-        "render.ts"
-      ]
+      "keyFiles": ["buffer.ts", "commands.ts", "config.ts", "index.ts", "render.ts"]
     },
     "test": {
       "path": "test",

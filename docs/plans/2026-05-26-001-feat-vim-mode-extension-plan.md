@@ -130,7 +130,7 @@ This tree is the intended shape. The implementer may adjust module boundaries if
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 stateDiagram-v2
@@ -148,17 +148,17 @@ stateDiagram-v2
   Visual --> PiDefault: Enter, controls, unknown non-printable
 ```
 
-| Mode | Extension handles | Pi delegates | State cleanup |
-|------|-------------------|--------------|---------------|
-| Insert | Inactive `Esc` to normal | Printable text, submit, newline, autocomplete, image paste, external editor, app shortcuts | Starts as default mode |
-| Normal | Vim printable commands and pending `d`/`y` | `Esc`, `Enter`, controls, unknown non-printable sequences | `Enter`/clear-like actions reset mode to insert before delegation |
-| Visual | Motions, `y`, `d`/`x`, `c`, `Esc` | `Enter`, controls, unknown non-printable sequences | Delegated submit/clear-like actions clear selection and reset to insert |
+| Mode   | Extension handles                          | Pi delegates                                                                               | State cleanup                                                           |
+| ------ | ------------------------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Insert | Inactive `Esc` to normal                   | Printable text, submit, newline, autocomplete, image paste, external editor, app shortcuts | Starts as default mode                                                  |
+| Normal | Vim printable commands and pending `d`/`y` | `Esc`, `Enter`, controls, unknown non-printable sequences                                  | `Enter`/clear-like actions reset mode to insert before delegation       |
+| Visual | Motions, `y`, `d`/`x`, `c`, `Esc`          | `Enter`, controls, unknown non-printable sequences                                         | Delegated submit/clear-like actions clear selection and reset to insert |
 
-| Feedback item | Normal width | Narrow fallback | Drop order |
-|---------------|--------------|-----------------|------------|
-| Mode | `INSERT`, `NORMAL`, `VISUAL` | `I`, `N`, `V` | Never drop if width permits one char |
-| Pending operator | `d…` or `y…` beside mode | one-character operator | Drop after mode only if width is too small |
-| Visual summary | selection size/range on right | shorter count | Drop before mode/pending |
+| Feedback item    | Normal width                  | Narrow fallback        | Drop order                                 |
+| ---------------- | ----------------------------- | ---------------------- | ------------------------------------------ |
+| Mode             | `INSERT`, `NORMAL`, `VISUAL`  | `I`, `N`, `V`          | Never drop if width permits one char       |
+| Pending operator | `d…` or `y…` beside mode      | one-character operator | Drop after mode only if width is too small |
+| Visual summary   | selection size/range on right | shorter count          | Drop before mode/pending                   |
 
 ---
 
@@ -173,22 +173,27 @@ stateDiagram-v2
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `package.json`
 
 **Approach:**
+
 - Add the Pi extension manifest pointing at `./src/index.ts`.
 - Add a Bun test script while keeping the existing typecheck script.
 - Add Pi core packages as peer dependencies/runtime metadata as required by the installed Pi docs, then add local dev/typecheck dependency guidance only if imports do not resolve.
 - Verify the package uses the documented import scope for this installed Pi version before code modules depend on it.
 
 **Patterns to follow:**
+
 - Existing `package.json` ESM/Bun setup.
 - Pi extension package docs for manifest and dependency shape.
 
 **Test scenarios:**
+
 - Test expectation: none -- package metadata has no behavior by itself.
 
 **Verification:**
+
 - Package metadata exposes the extension entrypoint.
 - Pi imports can be resolved for local typecheck and runtime loading.
 
@@ -203,6 +208,7 @@ stateDiagram-v2
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `src/types.ts`
 - Create: `src/buffer.ts`
 - Create: `src/commands.ts`
@@ -210,6 +216,7 @@ stateDiagram-v2
 - Test: `test/commands.test.ts`
 
 **Approach:**
+
 - Define shared types for mode, position, normalized range, register kind, edit result, and pending command state.
 - Implement range normalization for forward/reverse same-line and multiline selections.
 - Implement selected-text extraction, charwise delete/change, linewise delete/yank/paste, and empty-buffer preservation.
@@ -219,10 +226,12 @@ stateDiagram-v2
 **Execution note:** Implement new behavior test-first because this unit carries most off-by-one risk.
 
 **Patterns to follow:**
+
 - Existing `tsconfig.json` strict typing.
 - Bun test style from project guidance.
 
 **Test scenarios:**
+
 - Happy path: normalize a forward same-line visual range and extract exactly the inclusive selected text.
 - Happy path: normalize a reversed multiline range and extract text preserving embedded newlines.
 - Happy path: delete a charwise visual range and return updated text plus target cursor at range start.
@@ -233,6 +242,7 @@ stateDiagram-v2
 - Edge case: pending `d` followed by an invalid printable key clears pending state without editing.
 
 **Verification:**
+
 - Pure tests cover range math, linewise operations, charwise operations, register behavior, and command parser state.
 
 ---
@@ -246,11 +256,13 @@ stateDiagram-v2
 **Dependencies:** U1, U2
 
 **Files:**
+
 - Create: `src/index.ts`
 - Create: `src/vim-editor.ts`
 - Test: `test/vim-editor.test.ts`
 
 **Approach:**
+
 - Export the Pi extension factory from `src/index.ts` and register the custom editor on `session_start`.
 - Implement `VimEditor extends CustomEditor` with startup mode `insert`.
 - In insert mode, delegate everything except inactive-autocomplete `Esc` to `super.handleInput(data)`.
@@ -260,10 +272,12 @@ stateDiagram-v2
 - Use installed Pi `CustomEditor`/keybinding wiring in at least one smoke or integration-shaped test path; a fake harness can supplement but not replace this check.
 
 **Patterns to follow:**
+
 - Pi bundled Custom Editor docs, modal editor example, and border-status editor example.
 - Existing OpenSpec decision to avoid private editor internals.
 
 **Test scenarios:**
+
 - Happy path: session registration creates a Vim editor component factory.
 - Happy path: editor starts in insert mode.
 - Happy path: insert printable text delegates to default editor behavior.
@@ -275,6 +289,7 @@ stateDiagram-v2
 - Integration: unmapped printable keys in normal mode do not insert text.
 
 **Verification:**
+
 - Extension loads through the declared entrypoint.
 - Mode transitions and delegation matrix are covered by tests or a documented smoke harness.
 - Cursor restoration has a proven public-only path before structural edit units proceed.
@@ -290,6 +305,7 @@ stateDiagram-v2
 **Dependencies:** U2, U3
 
 **Files:**
+
 - Modify: `src/vim-editor.ts`
 - Modify: `src/buffer.ts`
 - Modify: `src/commands.ts`
@@ -299,6 +315,7 @@ stateDiagram-v2
 - Test: `test/vim-editor.test.ts`
 
 **Approach:**
+
 - Implement `h/j/k/l`, `0`, `$`, `w`, and `b` through public Pi editor movements or the cursor path proven in U3.
 - Implement `i`, `a`, `I`, and `A` as mode transitions with cursor movement before entering insert when needed.
 - Implement `x`, `dd`, `yy`, and `p` using pure helpers and cursor restoration.
@@ -307,10 +324,12 @@ stateDiagram-v2
 - Keep pending command state one-key and clear it before delegating control shortcuts.
 
 **Patterns to follow:**
+
 - Public editor APIs only: read text/cursor, write text, then restore cursor via the U3-proven public path.
 - OpenSpec design constraint: no private cursor state mutation.
 
 **Test scenarios:**
+
 - Happy path: `h/j/k/l` move cursor when possible and clamp at boundaries.
 - Happy path: `0` and `$` move to current line start/end.
 - Happy path: `i/a/I/A` enter insert at expected positions.
@@ -324,6 +343,7 @@ stateDiagram-v2
 - Integration: mixed insert edit, Vim structural edit, and repeated `u` follow Pi undo order without double-restoring stale text.
 
 **Verification:**
+
 - Normal-mode commands satisfy the keymap without stealing Pi controls.
 - Cursor restoration is stable after structural edits.
 - Undo behavior uses one authority and does not maintain conflicting local/native stacks.
@@ -339,12 +359,14 @@ stateDiagram-v2
 **Dependencies:** U2, U3, U4
 
 **Files:**
+
 - Modify: `src/vim-editor.ts`
 - Modify: `src/buffer.ts`
 - Test: `test/buffer.test.ts`
 - Test: `test/vim-editor.test.ts`
 
 **Approach:**
+
 - Enter visual mode on `v` from normal mode and store the anchor cursor.
 - Reuse supported motion keys to move the active cursor and recompute normalized inclusive range.
 - Implement visual `y`, `d`/`x`, and `c` using pure selection helpers and unnamed register updates.
@@ -355,10 +377,12 @@ stateDiagram-v2
 **Execution note:** Add characterization-style tests for same-line, reversed, and multiline selections before wiring them into `VimEditor`.
 
 **Patterns to follow:**
+
 - Pure range helpers from U2.
 - Normal-mode movement/delegation helpers from U4.
 
 **Test scenarios:**
+
 - Happy path: `v` anchors at current cursor and enters visual mode.
 - Happy path: visual motions extend selection while preserving anchor.
 - Happy path: visual `y` copies selected text, clears selection, and returns normal.
@@ -370,6 +394,7 @@ stateDiagram-v2
 - Integration: visual `Enter` clears visual state, resets mode to insert, and delegates to Pi submit.
 
 **Verification:**
+
 - Visual mode solves the missing `pi-vim` capability: selection can be created, moved, yanked, deleted, changed, and cancelled.
 - Destructive visual actions are never available with completely hidden mode feedback.
 
@@ -384,10 +409,12 @@ stateDiagram-v2
 **Dependencies:** U3, U4, U5
 
 **Files:**
+
 - Modify: `src/vim-editor.ts`
 - Test: `test/vim-editor.test.ts`
 
 **Approach:**
+
 - Render feedback in the editor border/status area using ANSI-aware fitting helpers.
 - Left feedback priority: mode first, then pending operator (`d…`/`y…`). Right feedback priority: visual selection count/range, then optional selected-text preview.
 - At narrow widths, truncate right-side visual details first, abbreviate mode to `I`/`N`/`V` second, and preserve at least one-character mode feedback when width allows.
@@ -395,9 +422,11 @@ stateDiagram-v2
 - Clear extension-owned transient undo/cursor restoration state on prompt-reset flows; keep unnamed register scoped to the editor session unless implementation reveals session reset semantics require clearing it.
 
 **Patterns to follow:**
+
 - Pi TUI width helpers and border-status editor fitting pattern.
 
 **Test scenarios:**
+
 - Happy path: render output includes the active mode label after mode switches.
 - Happy path: pending `d`/`y` state shows and clears after invalid key, `Esc`, control shortcut, and completed command.
 - Happy path: visual render output includes selection summary when a selection exists.
@@ -406,6 +435,7 @@ stateDiagram-v2
 - Integration: submit/clear/external-editor delegation resets mode to insert and does not leave stale visual or pending state.
 
 **Verification:**
+
 - Rendered editor lines never exceed the width supplied by Pi.
 - User can always tell which mode is active when terminal width permits any label.
 - New prompts after delegated reset flows start in insert mode.
@@ -421,6 +451,7 @@ stateDiagram-v2
 **Dependencies:** U1, U2, U3, U4, U5, U6
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `package.json`
 - Test: `test/buffer.test.ts`
@@ -428,19 +459,23 @@ stateDiagram-v2
 - Test: `test/vim-editor.test.ts`
 
 **Approach:**
+
 - Replace starter README with purpose, install/loading instructions, keymap, mode semantics, compatibility notes, validation guidance, and known limitations.
 - Document conflict decisions: `Enter` delegates and resets to insert for the next prompt, normal `Esc` delegates, autocomplete `Esc` remains insert, register semantics, Pi-native undo behavior, feedback placement, and Unicode limitations.
 - Ensure package scripts cover automated tests and typechecking.
 - Add a manual smoke checklist for local Pi usage without turning it into shell-command choreography.
 
 **Patterns to follow:**
+
 - README as public contract for Pi extension behavior.
 - OpenSpec requirements as source for supported behavior list.
 
 **Test scenarios:**
+
 - Test expectation: none -- documentation itself has no runtime behavior; runtime behavior is covered by U2-U6 tests.
 
 **Verification:**
+
 - README accurately describes current behavior and limitations.
 - Automated tests and typechecking complete successfully.
 - Manual smoke covers mode switching, normal edits, visual yank/delete/change, prompt submit, normal-mode interrupt behavior, and next-prompt insert-mode reset.
@@ -460,16 +495,16 @@ stateDiagram-v2
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| `setText()` resets cursor to end of buffer | Make public cursor restoration a U3 gate before structural edits; cover multiline, empty, EOL, and long-line cases. |
-| Dual undo stacks can corrupt history | Use Pi native undo for v1 because `setText()` appears to push undo snapshots; do not add a local undo stack unless evidence requires a plan/spec update. |
-| Normal/visual submit can leave next prompt outside insert mode | Reset mode to insert before delegating submit/clear-like flows; test next-prompt lifecycle behavior. |
-| Visual selection without highlight may feel incomplete | Ship functional visual operations plus visible `VISUAL`/selection feedback and optional preview; defer rich highlighting. |
-| Shortcut regression from swallowed control keys | Treat unknown control/non-printable sequences as Pi-owned and cover delegation in tests/smoke checks. |
-| Autocomplete conflict on `Esc` | Check autocomplete state in insert mode, delegate `Esc` when completion is active, and remain insert for that key. |
-| Import/package scope mismatch across Pi versions | Make manifest/dependency resolution a U1 exit criterion before implementation modules depend on Pi imports. |
-| Unicode cursor semantics mismatch | Use Pi cursor coordinates consistently and document v1 limitations; defer grapheme-perfect support. |
+| Risk                                                           | Mitigation                                                                                                                                               |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setText()` resets cursor to end of buffer                     | Make public cursor restoration a U3 gate before structural edits; cover multiline, empty, EOL, and long-line cases.                                      |
+| Dual undo stacks can corrupt history                           | Use Pi native undo for v1 because `setText()` appears to push undo snapshots; do not add a local undo stack unless evidence requires a plan/spec update. |
+| Normal/visual submit can leave next prompt outside insert mode | Reset mode to insert before delegating submit/clear-like flows; test next-prompt lifecycle behavior.                                                     |
+| Visual selection without highlight may feel incomplete         | Ship functional visual operations plus visible `VISUAL`/selection feedback and optional preview; defer rich highlighting.                                |
+| Shortcut regression from swallowed control keys                | Treat unknown control/non-printable sequences as Pi-owned and cover delegation in tests/smoke checks.                                                    |
+| Autocomplete conflict on `Esc`                                 | Check autocomplete state in insert mode, delegate `Esc` when completion is active, and remain insert for that key.                                       |
+| Import/package scope mismatch across Pi versions               | Make manifest/dependency resolution a U1 exit criterion before implementation modules depend on Pi imports.                                              |
+| Unicode cursor semantics mismatch                              | Use Pi cursor coordinates consistently and document v1 limitations; defer grapheme-perfect support.                                                      |
 
 ---
 

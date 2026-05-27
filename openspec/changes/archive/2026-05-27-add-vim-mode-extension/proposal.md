@@ -15,6 +15,7 @@
 ## Capabilities
 
 ### New Capabilities
+
 - `vim-mode-editor`: Pi prompt editor replacement that provides Vim-style insert, normal, and visual editing while remaining compatible with Pi app shortcuts.
 
 ### Modified Capabilities

@@ -1,8 +1,11 @@
 # prompt-buffer-operations Specification
 
 ## Purpose
+
 TBD - created by archiving change deepen-buffer-ts-prompt-buffer-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt buffer exposes operation-level navigation
 
 The prompt buffer module SHALL expose navigation operations that resolve cursor targets for supported prompt motions without requiring callers to compose low-level line, offset, or clamp helpers.
@@ -86,4 +89,3 @@ The implementation SHALL validate prompt buffer operation behavior with focused 
 
 - **WHEN** the project validation suite runs
 - **THEN** buffer operation tests cover the operation-level APIs without depending on Pi runtime objects
-

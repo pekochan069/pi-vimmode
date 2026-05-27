@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { isPendingOperatorKey, parseNormalCommand } from "../src/commands.ts";
+import { isPendingOperatorKey, parseNormalCommand, resolveNormalCommand } from "../src/commands.ts";
+import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
 
 const operatorMotions = ["w", "b", "0", "^", "$"] as const;
 
@@ -48,5 +49,80 @@ describe("normal command parser", () => {
     expect(isPendingOperatorKey("y")).toBe(true);
     expect(isPendingOperatorKey("g")).toBe(true);
     expect(isPendingOperatorKey("x")).toBe(false);
+  });
+
+  test("resolves configured semantic operators, motions, and commands", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
+      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
+      commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"] },
+    };
+
+    expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
+      type: "pending",
+      pending: "q",
+    });
+    expect(resolveNormalCommand("e", "q", keymap)).toEqual({
+      type: "operatorMotion",
+      operator: "delete",
+      motion: "wordForward",
+    });
+    expect(resolveNormalCommand("n", undefined, keymap)).toEqual({
+      type: "command",
+      command: "openLineBelow",
+    });
+  });
+
+  test("resolves finite multi-key sequences and invalid pending prefixes", () => {
+    expect(resolveNormalCommand("g", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "pending",
+      pending: "g",
+    });
+    expect(resolveNormalCommand("g", "g", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "bufferStart",
+    });
+    expect(resolveNormalCommand("x", "g", DEFAULT_VIM_KEYMAP)).toEqual({ type: "invalid" });
+  });
+
+  test("resolves multi-key operators and operator motions", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["qq"] },
+      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["ef"] },
+    };
+
+    const pendingOperatorPrefix = resolveNormalCommand("q", undefined, keymap);
+    expect(pendingOperatorPrefix).toEqual({ type: "pending", pending: "q" });
+    const pendingOperator = resolveNormalCommand("q", "q", keymap);
+    expect(pendingOperator).toEqual({ type: "pending", pending: "qq" });
+
+    const pendingMotion = resolveNormalCommand("e", "qq", keymap);
+    expect(pendingMotion.type).toBe("pending");
+    expect(
+      resolveNormalCommand(
+        "f",
+        pendingMotion.type === "pending" ? pendingMotion.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "operatorMotion",
+      operator: "delete",
+      motion: "wordForward",
+    });
+
+    const pendingRepeat = resolveNormalCommand("q", "qq", keymap);
+    expect(pendingRepeat.type).toBe("pending");
+    expect(
+      resolveNormalCommand(
+        "q",
+        pendingRepeat.type === "pending" ? pendingRepeat.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "lineCommand",
+      operator: "delete",
+    });
   });
 });

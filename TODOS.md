@@ -26,7 +26,10 @@
    - Solution: Only deepen when lifecycle changes again; keep config Module pure.
    - Benefits: Startup/reload bugs localize without over-abstracting current readable code.
 
-Recommended first pick: `VimEditor` Adapter + modal editing Module.
+Recommended next pick: `visual block` if selection scope matters next; extract lifecycle/settings only if reload bugs recur.
 
+- [x] line, column number
 - [ ] visual block
-- [ ] line, column number
+- [ ] macro
+- [ ] registers
+- [ ] mark

@@ -3,6 +3,7 @@ import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Position, ResolvedVimUi, VimMode } from "../types.ts";
 
 import {
+  visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
   visualSelectionText,
@@ -30,9 +31,12 @@ export type ModalStatus = {
 type AnchoredVisualStatusInput = ModalVisualStatusInput & { visualAnchor: Position };
 
 export function modalModeLabel(mode: VimMode, width: number, ui?: ResolvedVimUi): string {
-  const full = ui?.mode.labels[mode] ?? (mode === "visualLine" ? "V-LINE" : mode.toUpperCase());
+  const full =
+    ui?.mode.labels[mode] ??
+    (mode === "visualLine" ? "V-LINE" : mode === "visualBlock" ? "V-BLOCK" : mode.toUpperCase());
   const narrow =
-    ui?.mode.narrowLabels[mode] ?? (mode === "visualLine" ? "VL" : (mode[0]?.toUpperCase() ?? "?"));
+    ui?.mode.narrowLabels[mode] ??
+    (mode === "visualLine" ? "VL" : mode === "visualBlock" ? "VB" : (mode[0]?.toUpperCase() ?? "?"));
   return width < full.length + 4 ? narrow : full;
 }
 
@@ -75,6 +79,7 @@ export function modalVisualStatus(input: ModalVisualStatusInput): string {
   const anchored = { ...input, visualAnchor: input.visualAnchor, ui };
   if (input.mode === "visual") return characterVisualStatus(anchored);
   if (input.mode === "visualLine") return lineVisualStatus(anchored);
+  if (input.mode === "visualBlock") return blockVisualStatus(anchored);
   return "";
 }
 
@@ -102,6 +107,21 @@ function lineVisualStatus(input: AnchoredVisualStatusInput): string {
     input.visualAnchor,
     input.cursor,
     "line",
+  ).replace(/\n/g, "↵");
+  const preview =
+    selected.length > 0 ? ` · ${truncateToWidth(selected, ui.selection.previewMaxChars, "…")}` : "";
+  return ` ${summary}${preview} `;
+}
+
+function blockVisualStatus(input: AnchoredVisualStatusInput): string {
+  const ui = input.ui ?? DEFAULT_VIM_UI;
+  const summary = visualBlockSelectionSummary(input.text, input.visualAnchor, input.cursor);
+  if (input.width < 20) return ` ${summary.split(" ")[0]}B `;
+  const selected = visualSelectionText(
+    input.text,
+    input.visualAnchor,
+    input.cursor,
+    "block",
   ).replace(/\n/g, "↵");
   const preview =
     selected.length > 0 ? ` · ${truncateToWidth(selected, ui.selection.previewMaxChars, "…")}` : "";

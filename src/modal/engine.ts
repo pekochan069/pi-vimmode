@@ -1,4 +1,4 @@
-import { decodeKittyPrintable, matchesKey } from "@earendil-works/pi-tui";
+import { decodeKittyPrintable, matchesKey, parseKey } from "@earendil-works/pi-tui";
 
 import type {
   EditResult,
@@ -20,11 +20,13 @@ import type {
 
 import {
   changeLine,
+  deleteBlockRange,
   deleteByMotion,
   deleteCharAt,
   deleteLine,
   deleteLineRange,
   deleteRange,
+  insertBlockText,
   joinLineWithNext,
   navigateBuffer,
   openLineAbove,
@@ -44,9 +46,11 @@ import {
 import { keymapForOptions } from "../config.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
 
-function printableKey(data: string): string | undefined {
+function keySequence(data: string): string | undefined {
   return (
-    decodeKittyPrintable(data) ?? (data.length === 1 && data.charCodeAt(0) >= 32 ? data : undefined)
+    decodeKittyPrintable(data) ??
+    (data.length === 1 && data.charCodeAt(0) >= 32 ? data : undefined) ??
+    parseKey(data)
   );
 }
 
@@ -84,7 +88,7 @@ function modeUpdate(
   options: ModalOptions,
   extraEffects: ModalEffect[] = [],
 ): ModalUpdate {
-  if (mode === "visual" || mode === "visualLine") {
+  if (mode === "visual" || mode === "visualLine" || mode === "visualBlock") {
     return {
       state: { ...state, mode, pending: undefined },
       effects: [
@@ -239,6 +243,8 @@ function applyCommand(
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visual", options);
     case "visualLine":
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualLine", options);
+    case "visualBlock":
+      return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualBlock", options);
     case "deleteChar":
       return editUpdate(nextState, deleteCharAt(snapshot.text, snapshot.cursor));
     case "deleteToLineEnd":
@@ -265,12 +271,56 @@ function applyCommand(
   }
 }
 
+function handleBlockInsertInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate {
+  if (!state.blockInsert) return modeUpdate(state, "normal", options);
+  if (matchesKey(data, "escape")) {
+    const result = insertBlockText(
+      snapshot.text,
+      state.blockInsert.anchor,
+      state.blockInsert.active,
+      state.blockInsert.text,
+      state.blockInsert.placement,
+      state.blockInsert.previewLine,
+    );
+    const nextState = { ...state, blockInsert: undefined, visualAnchor: undefined };
+    return modeUpdate(editState(nextState, result), "normal", options, [{ type: "edit", result }]);
+  }
+
+  if (matchesKey(data, "backspace")) {
+    if (state.blockInsert.text.length === 0) return invalidate(state);
+    return withEffects(
+      {
+        ...state,
+        blockInsert: { ...state.blockInsert, text: state.blockInsert.text.slice(0, -1) },
+      },
+      [{ type: "delegate", input: data }, { type: "invalidate" }],
+    );
+  }
+
+  const key = keySequence(data);
+  if (!key || key.length !== 1) return invalidate(state);
+  return withEffects(
+    {
+      ...state,
+      blockInsert: { ...state.blockInsert, text: state.blockInsert.text + key },
+    },
+    [{ type: "delegate", input: data }, { type: "invalidate" }],
+  );
+}
+
 function handleInsertInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
 ): ModalUpdate {
+  if (state.blockInsert) return handleBlockInsertInput(state, snapshot, options, data);
+
   if (matchesKey(data, "escape")) {
     if (snapshot.isAutocompleteOpen) return delegate(state, data);
     return modeUpdate(state, "normal", options);
@@ -291,8 +341,15 @@ function handleNormalInput(
   }
 
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  if (matchesKey(data, "ctrl+v")) {
+    return modeUpdate(
+      { ...clearPending(state), visualAnchor: snapshot.cursor },
+      "visualBlock",
+      options,
+    );
+  }
 
-  const key = printableKey(data);
+  const key = keySequence(data);
   if (!key) {
     const nextState = clearPending(state);
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
@@ -322,17 +379,58 @@ function handleNormalInput(
   return invalidate(state);
 }
 
+function visualKindForMode(mode: VimMode): "char" | "line" | "block" {
+  if (mode === "visualLine") return "line";
+  if (mode === "visualBlock") return "block";
+  return "char";
+}
+
+function startBlockInsert(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  placement: "start" | "end",
+): ModalUpdate {
+  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+  const previewLine = Math.min(state.visualAnchor.line, snapshot.cursor.line);
+  const startCol = Math.min(state.visualAnchor.col, snapshot.cursor.col);
+  const endCol = Math.max(state.visualAnchor.col, snapshot.cursor.col);
+  const previewCol = placement === "start" ? startCol : endCol + 1;
+  return withEffects(
+    {
+      mode: "insert",
+      register: state.register,
+      blockInsert: {
+        anchor: state.visualAnchor,
+        active: snapshot.cursor,
+        placement,
+        previewLine,
+        text: "",
+      },
+    },
+    [
+      { type: "restoreCursor", position: { line: previewLine, col: previewCol } },
+      { type: "terminalCursor", style: options.cursor.insert },
+      { type: "invalidate" },
+    ],
+  );
+}
+
 function handleVisualInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
-  linewise: boolean,
 ): ModalUpdate {
   if (matchesKey(data, "escape")) return modeUpdate(state, "normal", options);
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  if (matchesKey(data, "ctrl+v")) {
+    return state.mode === "visualBlock"
+      ? invalidate(state)
+      : modeUpdate(state, "visualBlock", options);
+  }
 
-  const key = printableKey(data);
+  const key = keySequence(data);
   if (!key) return delegate(state, data);
 
   const keymap = keymapForOptions(options);
@@ -340,22 +438,42 @@ function handleVisualInput(
   if (result.type === "motion") return moveUpdate(state, result.motion, snapshot);
   if (result.type === "command") {
     if (result.command === "visualLine") {
-      return linewise ? invalidate(state) : modeUpdate(state, "visualLine", options);
+      return state.mode === "visualLine"
+        ? invalidate(state)
+        : modeUpdate(state, "visualLine", options);
     }
     if (result.command === "visualChar") {
-      return linewise ? modeUpdate(state, "visual", options) : invalidate(state);
+      return state.mode === "visual" ? invalidate(state) : modeUpdate(state, "visual", options);
+    }
+    if (result.command === "visualBlock") {
+      return state.mode === "visualBlock"
+        ? invalidate(state)
+        : modeUpdate(state, "visualBlock", options);
+    }
+    if (state.mode === "visualBlock" && result.command === "insertLineStart") {
+      return startBlockInsert(state, snapshot, options, "start");
+    }
+    if (state.mode === "visualBlock" && result.command === "insertLineEnd") {
+      return startBlockInsert(state, snapshot, options, "end");
     }
     if (result.command === "deleteChar") {
-      return deleteVisualSelection(state, snapshot, options, "normal", linewise);
+      return deleteVisualSelection(
+        state,
+        snapshot,
+        options,
+        "normal",
+        visualKindForMode(state.mode),
+      );
     }
     if (result.command === "pasteAfter") {
-      if (linewise) return pasteVisualLineSelection(state, snapshot, options);
+      if (state.mode === "visualLine") return pasteVisualLineSelection(state, snapshot, options);
       return invalidate(state);
     }
   }
   if (result.type === "pending") {
     const operator = operatorActionForSequence(result.pending, keymap);
-    if (operator) return applyVisualOperator(state, snapshot, options, linewise, operator);
+    if (operator)
+      return applyVisualOperator(state, snapshot, options, visualKindForMode(state.mode), operator);
     return invalidate({ ...state, pending: result.pending });
   }
   if (result.type === "invalid") return invalidate(clearPending(state));
@@ -367,31 +485,25 @@ function applyVisualOperator(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  linewise: boolean,
+  kind: "char" | "line" | "block",
   operator: VimOperatorAction,
 ): ModalUpdate {
   if (operator === "yank") {
     if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-    return yankVisualUpdate(state, snapshot, options, linewise);
+    return yankVisualUpdate(state, snapshot, options, kind);
   }
-  if (operator === "change")
-    return deleteVisualSelection(state, snapshot, options, "insert", linewise);
-  return deleteVisualSelection(state, snapshot, options, "normal", linewise);
+  if (operator === "change") return deleteVisualSelection(state, snapshot, options, "insert", kind);
+  return deleteVisualSelection(state, snapshot, options, "normal", kind);
 }
 
 function yankVisualUpdate(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  linewise: boolean,
+  kind: "char" | "line" | "block",
 ): ModalUpdate {
   if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-  const register = yankVisualSelection(
-    snapshot.text,
-    state.visualAnchor,
-    snapshot.cursor,
-    linewise ? "line" : "char",
-  );
+  const register = yankVisualSelection(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
   const nextState = register ? { ...state, register } : state;
   return modeUpdate(nextState, "normal", options);
 }
@@ -401,12 +513,15 @@ function deleteVisualSelection(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   nextMode: VimMode,
-  linewise: boolean,
+  kind: "char" | "line" | "block",
 ): ModalUpdate {
   if (!state.visualAnchor) return modeUpdate(state, nextMode, options);
-  const result = linewise
-    ? deleteLineRange(snapshot.text, state.visualAnchor, snapshot.cursor)
-    : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
+  const result =
+    kind === "line"
+      ? deleteLineRange(snapshot.text, state.visualAnchor, snapshot.cursor)
+      : kind === "block"
+        ? deleteBlockRange(snapshot.text, state.visualAnchor, snapshot.cursor)
+        : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
   return modeUpdate(editState(state, result), nextMode, options, [{ type: "edit", result }]);
 }
 
@@ -432,7 +547,8 @@ export function handleModalInput(
   data: string,
 ): ModalUpdate {
   if (state.mode === "insert") return handleInsertInput(state, snapshot, options, data);
-  if (state.mode === "visual") return handleVisualInput(state, snapshot, options, data, false);
-  if (state.mode === "visualLine") return handleVisualInput(state, snapshot, options, data, true);
+  if (state.mode === "visual" || state.mode === "visualLine" || state.mode === "visualBlock") {
+    return handleVisualInput(state, snapshot, options, data);
+  }
   return handleNormalInput(state, snapshot, options, data);
 }

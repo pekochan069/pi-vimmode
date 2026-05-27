@@ -141,7 +141,9 @@ export class VimEditor extends CustomEditor {
 
   private renderEditorLines(width: number): string[] {
     if (
-      (this.modalState.mode === "visual" || this.modalState.mode === "visualLine") &&
+      (this.modalState.mode === "visual" ||
+        this.modalState.mode === "visualLine" ||
+        this.modalState.mode === "visualBlock") &&
       this.modalState.visualAnchor
     ) {
       return renderVisualEditor({

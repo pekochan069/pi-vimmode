@@ -115,6 +115,7 @@ describe("vim editor integration", () => {
         ...DEFAULT_VIM_OPTIONS.keymap!,
         operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["q"] },
         motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["B"] },
       },
     });
     editor.setText("hello world");
@@ -124,6 +125,8 @@ describe("vim editor integration", () => {
     editor.handleInput("e");
     expect(editor.getText()).toBe("world");
     expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
+    editor.handleInput("B");
+    expect(editor.getVimMode()).toBe("visualBlock");
   });
 
   test("normal mode supports extended navigation", () => {
@@ -315,8 +318,45 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("visual");
     editor.handleInput("V");
     expect(editor.getVimMode()).toBe("visualLine");
+    editor.handleInput("\x16");
+    expect(editor.getVimMode()).toBe("visualBlock");
     editor.handleInput("v");
     expect(editor.getVimMode()).toBe("visual");
+  });
+
+  test("visual block delete changes rectangular text and renders V-BLOCK status", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abcd\nefgh");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("l");
+    editor.handleInput("\x16");
+    editor.handleInput("j");
+    editor.handleInput("l");
+    expect(editor.getVimMode()).toBe("visualBlock");
+    expect(editor.render(40).join("\n")).toContain("V-BLOCK");
+    editor.handleInput("d");
+    expect(editor.getVimMode()).toBe("normal");
+    expect(editor.getText()).toBe("ad\neh");
+    expect(editor.getRegister()).toEqual({ type: "char", text: "bc\nfg" });
+  });
+
+  test("visual block I inserts typed text across selected lines on escape", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abcd\nefgh");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("l");
+    editor.handleInput("\x16");
+    editor.handleInput("j");
+    editor.handleInput("l");
+    editor.handleInput("I");
+    expect(editor.getVimMode()).toBe("insert");
+    editor.handleInput("X");
+    expect(editor.getText()).toBe("aXbcd\nefgh");
+    editor.handleInput("\x1b");
+    expect(editor.getVimMode()).toBe("normal");
+    expect(editor.getText()).toBe("aXbcd\neXfgh");
   });
 
   test("visual line change removes full lines and enters insert", () => {
@@ -362,7 +402,13 @@ describe("vim editor integration", () => {
   test("configured cursor styles write terminal hints on mode changes", () => {
     const { editor, writes } = createEditor({
       startMode: "insert",
-      cursor: { insert: "bar", normal: "underline", visual: "block", visualLine: "bar" },
+      cursor: {
+        insert: "bar",
+        normal: "underline",
+        visual: "block",
+        visualLine: "bar",
+        visualBlock: "block",
+      },
     });
     expect(writes.at(-1)).toBe("\x1b[6 q");
     editor.handleInput("\x1b");

@@ -56,7 +56,7 @@ describe("normal command parser", () => {
       ...DEFAULT_VIM_KEYMAP,
       operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
       motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
-      commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"] },
+      commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"], visualBlock: ["ctrl+v"] },
     };
 
     expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
@@ -71,6 +71,10 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("n", undefined, keymap)).toEqual({
       type: "command",
       command: "openLineBelow",
+    });
+    expect(resolveNormalCommand("ctrl+v", undefined, keymap)).toEqual({
+      type: "command",
+      command: "visualBlock",
     });
   });
 

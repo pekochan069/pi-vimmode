@@ -1,4 +1,4 @@
-export type VimMode = "insert" | "normal" | "visual" | "visualLine";
+export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
 
 export type StartupMode = Extract<VimMode, "insert" | "normal">;
 
@@ -31,6 +31,7 @@ export type VimCommandAction =
   | "openLineAbove"
   | "visualChar"
   | "visualLine"
+  | "visualBlock"
   | "deleteChar"
   | "deleteToLineEnd"
   | "changeToLineEnd"

@@ -26,7 +26,7 @@ The Vim editor SHALL support a visual block mode that selects a rectangular regi
 
 ### Requirement: Visual block mode supports blockwise operations
 
-The Vim editor SHALL apply yank, delete, and change commands to visual block selections using line-by-line rectangular text slices.
+The Vim editor SHALL apply yank, delete, change, and block insert commands to visual block selections using line-by-line rectangular text slices.
 
 #### Scenario: Yank visual block selection
 
@@ -42,6 +42,16 @@ The Vim editor SHALL apply yank, delete, and change commands to visual block sel
 
 - **WHEN** the editor is in visual block mode and the user presses `c`
 - **THEN** the selected rectangular text slices are removed from each affected line, copied to the unnamed character register joined by newline characters, visual selection clears, and the editor enters insert mode
+
+#### Scenario: Insert before visual block selection
+
+- **WHEN** the editor is in visual block mode, the user presses `I`, types text, and presses `Escape`
+- **THEN** the typed text is inserted at the block start column on every selected line and the editor returns to normal mode
+
+#### Scenario: Append after visual block selection
+
+- **WHEN** the editor is in visual block mode, the user presses `A`, types text, and presses `Escape`
+- **THEN** the typed text is inserted after the block end column on every selected line and the editor returns to normal mode
 
 ### Requirement: Visual block selections are highlighted inline
 
@@ -75,6 +85,11 @@ The Vim editor SHALL allow switching between characterwise, linewise, and blockw
 
 - **WHEN** the editor is in visual line mode and the user presses `Ctrl-v`
 - **THEN** the editor switches to visual block mode, keeps the existing visual anchor, and keeps the current cursor position
+
+#### Scenario: Enter visual block mode with configured command binding
+
+- **WHEN** `piVimMode.keymap.commands.visualBlock` maps a printable key sequence or Vim-style modifier sequence such as `<C-v>` / `<A-x>` and the editor receives that sequence in normal or visual mode
+- **THEN** the editor enters or switches to visual block mode while preserving any existing visual anchor
 
 #### Scenario: Switch from visual block to characterwise visual
 

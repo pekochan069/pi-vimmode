@@ -32,7 +32,7 @@ export type ActiveVisualRenderInput = {
     cursor: Position;
   };
   visual: {
-    mode: Extract<VimMode, "visual" | "visualLine">;
+    mode: Extract<VimMode, "visual" | "visualLine" | "visualBlock">;
     anchor: Position;
   };
   cursorStyle: CursorStyle;
@@ -49,7 +49,7 @@ export type ActiveVisualRenderInput = {
 type VisualRenderView = {
   lines: string[];
   cursor: Position;
-  mode: Extract<VimMode, "visual" | "visualLine">;
+  mode: Extract<VimMode, "visual" | "visualLine" | "visualBlock">;
   visualAnchor: Position;
   cursorStyle: CursorStyle;
   width: number;

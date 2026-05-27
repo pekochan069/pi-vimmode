@@ -36,13 +36,14 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 - **NORMAL**: Vim command mode. Printable keys are interpreted as supported Vim commands or ignored.
 - **VISUAL**: characterwise selection mode. Selected text is highlighted inline while selection operations use an extension-local unnamed register.
 - **V-LINE**: linewise visual selection mode. Whole selected lines are highlighted and linewise operations use the unnamed line register.
+- **V-BLOCK**: blockwise visual selection mode. Rectangular cells are highlighted and blockwise operations use newline-joined character registers.
 
 ### Escape behavior
 
 - Insert + inactive autocomplete: `Esc` enters normal mode.
 - Insert + active autocomplete: `Esc` delegates to Pi and remains insert mode.
 - Normal: `Esc` delegates to Pi so interrupt/abort behavior still works.
-- Visual / V-Line: `Esc` cancels selection and returns to normal mode.
+- Visual / V-Line / V-Block: `Esc` cancels selection and returns to normal mode.
 
 ## Keymap
 
@@ -62,6 +63,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `o` / `O`             | open blank line below/above, then insert        |
 | `v`                   | enter characterwise visual mode                 |
 | `V`                   | enter visual line mode                          |
+| `Ctrl-v`              | enter visual block mode                         |
 | `x`                   | delete character under cursor                   |
 | `dd` / `cc` / `yy`    | delete/change/yank current line                 |
 | `D` / `C`             | delete/change from cursor through line end      |
@@ -75,14 +77,15 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 ### Visual mode
 
-| Key                                           | Behavior                                                |
-| --------------------------------------------- | ------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend characterwise selection                          |
-| `V`                                           | switch to visual line mode without resetting the anchor |
-| `y`                                           | yank selection and return normal                        |
-| `d` / `x`                                     | delete selection and return normal                      |
-| `c`                                           | delete selection and enter insert                       |
-| `Esc`                                         | cancel selection and return normal                      |
+| Key                                           | Behavior                                                 |
+| --------------------------------------------- | -------------------------------------------------------- |
+| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend characterwise selection                           |
+| `V`                                           | switch to visual line mode without resetting the anchor  |
+| `Ctrl-v`                                      | switch to visual block mode without resetting the anchor |
+| `y`                                           | yank selection and return normal                         |
+| `d` / `x`                                     | delete selection and return normal                       |
+| `c`                                           | delete selection and enter insert                        |
+| `Esc`                                         | cancel selection and return normal                       |
 
 ### Visual line mode
 
@@ -90,10 +93,25 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | --------------------------------------------- | ---------------------------------------------------------------- |
 | `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend the selected line range                                   |
 | `v`                                           | switch to characterwise visual mode without resetting the anchor |
+| `Ctrl-v`                                      | switch to visual block mode without resetting the anchor         |
 | `y`                                           | yank selected lines into a linewise register and return normal   |
 | `d` / `x`                                     | delete selected lines into a linewise register and return normal |
 | `c`                                           | delete selected lines into a linewise register and enter insert  |
 | `Esc`                                         | cancel selection and return normal                               |
+
+### Visual block mode
+
+| Key                                           | Behavior                                                                                           |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend the selected rectangular block                                                              |
+| `v`                                           | switch to characterwise visual mode without resetting the anchor                                   |
+| `V`                                           | switch to visual line mode without resetting the anchor                                            |
+| `I`                                           | collect inserted text, then insert it before the block on each selected line when `Esc` is pressed |
+| `A`                                           | collect inserted text, then insert it after the block on each selected line when `Esc` is pressed  |
+| `y`                                           | yank selected block slices joined by newlines and return normal                                    |
+| `d` / `x`                                     | delete selected block slices into a character register and return normal                           |
+| `c`                                           | delete selected block slices into a character register and enter insert                            |
+| `Esc`                                         | cancel selection and return normal                                                                 |
 
 ## Settings
 
@@ -108,7 +126,8 @@ Project settings override global settings field by field.
       "insert": "bar",
       "normal": "block",
       "visual": "block",
-      "visualLine": "block"
+      "visualLine": "block",
+      "visualBlock": "block"
     },
     "keymap": {
       "operators": {
@@ -140,7 +159,8 @@ Project settings override global settings field by field.
         "joinLine": ["J"],
         "undo": ["u"],
         "visualChar": ["v"],
-        "visualLine": ["V"]
+        "visualLine": ["V"],
+        "visualBlock": ["<C-v>"]
       },
       "operatorMotions": {
         "delete": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
@@ -159,13 +179,15 @@ Project settings override global settings field by field.
           "insert": "INSERT",
           "normal": "NORMAL",
           "visual": "VISUAL",
-          "visualLine": "V-LINE"
+          "visualLine": "V-LINE",
+          "visualBlock": "V-BLOCK"
         },
         "narrowLabels": {
           "insert": "I",
           "normal": "N",
           "visual": "V",
-          "visualLine": "VL"
+          "visualLine": "VL",
+          "visualBlock": "VB"
         }
       },
       "selection": {
@@ -222,7 +244,12 @@ Supported motion actions:
 Supported command actions:
 
 - Insert/open: `insertBefore`, `insertAfter`, `insertLineStart`, `insertLineEnd`, `openLineBelow`, `openLineAbove`
-- Visual: `visualChar`, `visualLine`
+- Visual: `visualChar`, `visualLine`, `visualBlock`
+
+Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`, `<A-x>` becomes `alt+x`, and `<S-tab>` becomes `shift+tab`.
+
+`Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
+
 - Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `undo`
 
 `operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
@@ -250,7 +277,7 @@ The extension does not execute or parse `.vimrc`, Vimscript, or Neovim Lua.
 
 Unknown control/non-printable keys delegate to Pi. In particular:
 
-- `Enter` submits in all modes. Normal/visual/V-Line submit resets Vim transient state and returns to the configured startup mode for the next prompt.
+- `Enter` submits in all modes. Normal/visual/V-Line/V-Block submit resets Vim transient state and returns to the configured startup mode for the next prompt.
 - `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model/thinking shortcuts, autocomplete controls, external-editor shortcuts, and image paste stay Pi-owned.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with a warning.
 - Unmapped printable keys in normal/visual mode are ignored instead of inserted.

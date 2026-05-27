@@ -46,6 +46,13 @@ import {
   semanticMotionToLegacy,
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions } from "../config.ts";
+import {
+  clearRegisterTarget,
+  isRegisterPrefixKey,
+  registerTargetForKey,
+  registerToRead,
+  writeRegisters,
+} from "./registers.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
 
 function keySequence(data: string): string | undefined {
@@ -72,12 +79,18 @@ function delegate(state: ModalState, input: string): ModalUpdate {
   return withEffects(state, [{ type: "delegate", input }]);
 }
 
+function clearCommandPending(state: ModalState): ModalState {
+  const { pending: _pending, pendingMacro: _pendingMacro, ...rest } = state;
+  return rest;
+}
+
 function clearPending(state: ModalState): ModalState {
-  return { ...state, pending: undefined, pendingMacro: undefined };
+  return clearRegisterTarget(clearCommandPending(state));
 }
 
 function clearPendingMacro(state: ModalState): ModalState {
-  return { ...state, pendingMacro: undefined };
+  const { pendingMacro: _pendingMacro, ...rest } = state;
+  return rest;
 }
 
 function macroTokens(state: ModalState, slot: string): readonly string[] {
@@ -115,7 +128,7 @@ function appendRecordedInput(state: ModalState, slot: string, input: string): Mo
 }
 
 function editState(state: ModalState, result: EditResult): ModalState {
-  return result.register ? { ...state, register: result.register } : state;
+  return writeRegisters(state, result.register);
 }
 
 function editUpdate(state: ModalState, result: EditResult): ModalUpdate {
@@ -130,7 +143,13 @@ function modeUpdate(
 ): ModalUpdate {
   if (mode === "visual" || mode === "visualLine" || mode === "visualBlock") {
     return {
-      state: { ...state, mode, pending: undefined },
+      state: {
+        ...state,
+        mode,
+        pending: undefined,
+        pendingMacro: undefined,
+        pendingRegister: undefined,
+      },
       effects: [
         ...extraEffects,
         { type: "terminalCursor", style: options.cursor[mode] },
@@ -198,7 +217,7 @@ function moveUpdate(
 }
 
 function yankUpdate(state: ModalState, register: VimRegister | undefined): ModalUpdate {
-  return invalidate(register ? { ...state, register } : state);
+  return invalidate(writeRegisters(state, register));
 }
 
 function operatorMotionKey(motion: VimMotionAction): VimMotion | undefined {
@@ -213,8 +232,8 @@ function applyOperatorMotion(
   options: ModalOptions,
 ): ModalUpdate {
   const legacyMotion = operatorMotionKey(motion);
-  const baseState = clearPending(state);
-  if (!legacyMotion) return invalidate(baseState);
+  const baseState = clearCommandPending(state);
+  if (!legacyMotion) return invalidate(clearPending(state));
   if (operator === "yank") {
     return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, legacyMotion));
   }
@@ -232,7 +251,7 @@ function applyLineCommand(
   options: ModalOptions,
   operator: VimOperatorAction,
 ): ModalUpdate {
-  const nextState = clearPending(state);
+  const nextState = clearCommandPending(state);
   if (operator === "delete")
     return editUpdate(nextState, deleteLine(snapshot.text, snapshot.cursor));
   if (operator === "change") {
@@ -248,7 +267,17 @@ function applyCommand(
   options: ModalOptions,
   command: VimCommandAction,
 ): ModalUpdate {
-  const nextState = clearPending(state);
+  const nextState = clearCommandPending(state);
+  const registerAware = [
+    "deleteChar",
+    "deleteToLineEnd",
+    "changeToLineEnd",
+    "yankLine",
+    "pasteAfter",
+    "pasteBefore",
+  ].includes(command);
+  if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
+
   switch (command) {
     case "insertBefore":
       return modeUpdate(nextState, "insert", options);
@@ -300,11 +329,14 @@ function applyCommand(
     case "joinLine":
       return editUpdate(nextState, joinLineWithNext(snapshot.text, snapshot.cursor));
     case "pasteAfter":
-      return editUpdate(nextState, pasteRegister(snapshot.text, snapshot.cursor, state.register));
+      return editUpdate(
+        clearRegisterTarget(nextState),
+        pasteRegister(snapshot.text, snapshot.cursor, registerToRead(state)),
+      );
     case "pasteBefore":
       return editUpdate(
-        nextState,
-        pasteRegisterBefore(snapshot.text, snapshot.cursor, state.register),
+        clearRegisterTarget(nextState),
+        pasteRegisterBefore(snapshot.text, snapshot.cursor, registerToRead(state)),
       );
     case "undo":
       return withEffects(nextState, [{ type: "adapterCommand", command: "undo" }]);
@@ -395,8 +427,18 @@ function handleNormalInput(
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
   }
 
-  if (!state.pending) {
-    const keymap = keymapForOptions(options);
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (!state.pending && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+
+  const keymap = keymapForOptions(options);
+  if (!state.pending && !state.pendingRegister) {
     const macros = macrosForOptions(options);
     if (
       snapshot.isMacroReplaying &&
@@ -428,11 +470,16 @@ function handleNormalInput(
     if (macroResult.type === "invalid") return invalidate(clearPendingMacro(state));
   }
 
-  const pendingResult = resolveNormalCommand(key, state.pending, keymapForOptions(options));
-  if (pendingResult.type === "pending")
+  const pendingResult = resolveNormalCommand(key, state.pending, keymap);
+  if (pendingResult.type === "pending") {
+    const operator = operatorActionForSequence(pendingResult.pending, keymap);
+    if (state.pendingRegister && !operator) return invalidate(clearPending(state));
     return invalidate({ ...state, pending: pendingResult.pending });
-  if (pendingResult.type === "motion")
+  }
+  if (pendingResult.type === "motion") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
     return moveUpdate(clearPending(state), pendingResult.motion, snapshot);
+  }
   if (pendingResult.type === "command")
     return applyCommand(state, snapshot, options, pendingResult.command);
   if (pendingResult.type === "lineCommand") {
@@ -449,7 +496,7 @@ function handleNormalInput(
   }
   if (pendingResult.type === "invalid") return invalidate(clearPending(state));
 
-  return invalidate(state);
+  return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
 function visualKindForMode(mode: VimMode): "char" | "line" | "block" {
@@ -475,6 +522,7 @@ function startBlockInsert(
       mode: "insert",
       pending: undefined,
       pendingMacro: undefined,
+      pendingRegister: undefined,
       visualAnchor: undefined,
       blockInsert: {
         anchor: state.visualAnchor,
@@ -509,10 +557,26 @@ function handleVisualInput(
   const key = keySequence(data);
   if (!key) return delegate(state, data);
 
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (!state.pending && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+
   const keymap = keymapForOptions(options);
   const result = resolveNormalCommand(key, state.pending, keymap);
-  if (result.type === "motion") return moveUpdate(state, result.motion, snapshot);
+  if (result.type === "motion") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return moveUpdate(state, result.motion, snapshot);
+  }
   if (result.type === "command") {
+    const registerAware = result.command === "deleteChar" || result.command === "pasteAfter";
+    if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
+
     if (result.command === "visualLine") {
       return state.mode === "visualLine"
         ? invalidate(state)
@@ -543,18 +607,19 @@ function handleVisualInput(
     }
     if (result.command === "pasteAfter") {
       if (state.mode === "visualLine") return pasteVisualLineSelection(state, snapshot, options);
-      return invalidate(state);
+      return invalidate(state.pendingRegister ? clearPending(state) : state);
     }
   }
   if (result.type === "pending") {
     const operator = operatorActionForSequence(result.pending, keymap);
     if (operator)
       return applyVisualOperator(state, snapshot, options, visualKindForMode(state.mode), operator);
+    if (state.pendingRegister) return invalidate(clearPending(state));
     return invalidate({ ...state, pending: result.pending });
   }
   if (result.type === "invalid") return invalidate(clearPending(state));
 
-  return invalidate(state);
+  return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
 function applyVisualOperator(
@@ -580,8 +645,7 @@ function yankVisualUpdate(
 ): ModalUpdate {
   if (!state.visualAnchor) return modeUpdate(state, "normal", options);
   const register = yankVisualSelection(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
-  const nextState = register ? { ...state, register } : state;
-  return modeUpdate(nextState, "normal", options);
+  return modeUpdate(writeRegisters(state, register), "normal", options);
 }
 
 function deleteVisualSelection(
@@ -611,7 +675,7 @@ function pasteVisualLineSelection(
     snapshot.text,
     state.visualAnchor,
     snapshot.cursor,
-    state.register,
+    registerToRead(state),
   );
   return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
 }

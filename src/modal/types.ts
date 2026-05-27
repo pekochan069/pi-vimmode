@@ -23,6 +23,10 @@ export type MacroSlot = string;
 export type MacroStore = Partial<Record<MacroSlot, readonly string[]>>;
 export type PendingMacroTarget = "record" | "play";
 
+export type RegisterSlot = string;
+export type RegisterStore = Partial<Record<RegisterSlot, VimRegister>>;
+export type PendingRegisterTarget = { slot: RegisterSlot; append: boolean } | "awaitingSlot";
+
 export type BlockInsertState = {
   anchor: Position;
   active: Position;
@@ -41,6 +45,8 @@ export type ModalState = {
   recordingSlot?: MacroSlot;
   lastPlayedMacro?: MacroSlot;
   pendingMacro?: PendingMacroTarget;
+  namedRegisters?: RegisterStore;
+  pendingRegister?: PendingRegisterTarget;
 };
 
 export type AdapterCommand =

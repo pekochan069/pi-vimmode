@@ -100,6 +100,10 @@ export class VimEditor extends CustomEditor {
     return this.modalState.register;
   }
 
+  getNamedRegister(slot: string) {
+    return this.modalState.namedRegisters?.[slot.toLowerCase()];
+  }
+
   getPendingOperator() {
     return pendingDisplay(this.modalState.pending);
   }

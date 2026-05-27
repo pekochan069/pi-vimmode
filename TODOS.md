@@ -20,7 +20,7 @@
    - Solution: Make renderer own active-visual view model more completely; keep non-visual `super.render()` path.
    - Benefits: Rendering bugs gain locality; visual features reuse one tested Module.
 
-4. [ ] Extract lifecycle/settings install Module if reload bugs recur
+4. [x] Extract lifecycle/settings install Module if reload bugs recur
    - Files: `src/index.ts`, `src/config.ts`
    - Problem: Small file encodes subtle Pi lifecycle behavior: stable factory, delayed reinstall, multi-hook install, terminal cursor reset.
    - Solution: Only deepen when lifecycle changes again; keep config Module pure.

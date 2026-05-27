@@ -23,6 +23,7 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  replaceLineRangeWithRegister,
   yankByMotion,
   yankLine,
   yankVisualSelection,
@@ -354,6 +355,9 @@ function handleVisualInput(
       return deleteVisualSelection(state, snapshot, options, "normal", linewise);
     case "c":
       return deleteVisualSelection(state, snapshot, options, "insert", linewise);
+    case "p":
+      if (linewise) return pasteVisualLineSelection(state, snapshot, options);
+      return invalidate(state);
   }
 
   return invalidate(state);
@@ -388,6 +392,21 @@ function deleteVisualSelection(
     ? deleteLineRange(snapshot.text, state.visualAnchor, snapshot.cursor)
     : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
   return modeUpdate(editState(state, result), nextMode, options, [{ type: "edit", result }]);
+}
+
+function pasteVisualLineSelection(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+): ModalUpdate {
+  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+  const result = replaceLineRangeWithRegister(
+    snapshot.text,
+    state.visualAnchor,
+    snapshot.cursor,
+    state.register,
+  );
+  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
 }
 
 export function handleModalInput(

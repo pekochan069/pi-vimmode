@@ -362,6 +362,40 @@ export function deleteLineRange(text: string, anchor: Position, active: Position
   };
 }
 
+export function replaceLineRangeWithRegister(
+  text: string,
+  anchor: Position,
+  active: Position,
+  register: VimRegister | undefined,
+): EditResult {
+  const lines = splitText(text);
+  const range = normalizeLineRange(lines, anchor, active);
+  const selected = linewiseSelectionText(text, anchor, active);
+  if (!register || register.text.length === 0) {
+    return {
+      text,
+      cursor: { line: range.startLine, col: 0 },
+      changed: false,
+    };
+  }
+
+  const inserted = register.text.split("\n");
+  let nextLines = [
+    ...lines.slice(0, range.startLine),
+    ...inserted,
+    ...lines.slice(range.endLine + 1),
+  ];
+  if (nextLines.length === 0) nextLines = [""];
+
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: { line: range.startLine, col: 0 },
+    register: { type: "line", text: selected },
+    changed: nextText !== text,
+  };
+}
+
 export function deleteCharAt(text: string, cursor: Position): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);

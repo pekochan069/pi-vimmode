@@ -26,7 +26,27 @@ type LayoutLine = {
   isLastChunk: boolean;
 };
 
-export type VisualRenderOptions = {
+export type ActiveVisualRenderInput = {
+  snapshot: {
+    lines: string[];
+    cursor: Position;
+  };
+  visual: {
+    mode: Extract<VimMode, "visual" | "visualLine">;
+    anchor: Position;
+  };
+  cursorStyle: CursorStyle;
+  viewport: {
+    width: number;
+    terminalRows?: number;
+    focused?: boolean;
+  };
+  display?: {
+    borderColor?: (text: string) => string;
+  };
+};
+
+type VisualRenderView = {
   lines: string[];
   cursor: Position;
   mode: Extract<VimMode, "visual" | "visualLine">;
@@ -68,7 +88,7 @@ export function cursorShapeEscape(style: CursorStyle): string {
 export const RESET_CURSOR_SHAPE = "\x1b[0 q";
 
 function isSelectedCell(
-  mode: VisualRenderOptions["mode"],
+  mode: VisualRenderView["mode"],
   lines: string[],
   anchor: Position,
   cursor: Position,
@@ -79,7 +99,7 @@ function isSelectedCell(
 }
 
 function isLineSelected(
-  mode: VisualRenderOptions["mode"],
+  mode: VisualRenderView["mode"],
   lines: string[],
   anchor: Position,
   cursor: Position,
@@ -155,7 +175,7 @@ function chunkHasCursor(chunk: LayoutLine, cursor: Position): boolean {
 
 function renderLayoutLine(
   chunk: LayoutLine,
-  options: VisualRenderOptions,
+  options: VisualRenderView,
 ): { text: string; width: number } {
   const line = options.lines[chunk.lineIndex] ?? "";
   const marker = options.focused && chunkHasCursor(chunk, options.cursor) ? CURSOR_MARKER : "";
@@ -229,7 +249,22 @@ function scrollWindow(
   return { visible: layout.slice(offset, offset + maxVisible), offset };
 }
 
-export function renderVisualEditor(options: VisualRenderOptions): string[] {
+function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderView {
+  return {
+    lines: input.snapshot.lines,
+    cursor: input.snapshot.cursor,
+    mode: input.visual.mode,
+    visualAnchor: input.visual.anchor,
+    cursorStyle: input.cursorStyle,
+    width: input.viewport.width,
+    terminalRows: input.viewport.terminalRows,
+    focused: input.viewport.focused,
+    borderColor: input.display?.borderColor,
+  };
+}
+
+export function renderVisualEditor(input: ActiveVisualRenderInput): string[] {
+  const options = createVisualRenderView(input);
   if (options.width <= 0) return [];
 
   const borderColor = options.borderColor ?? ((text: string) => text);
@@ -265,7 +300,13 @@ export function renderVisualEditor(options: VisualRenderOptions): string[] {
   if (linesBelow > 0) {
     const indicator = `─── ↓ ${linesBelow} more `;
     const remaining = options.width - visibleWidth(indicator);
-    result.push(borderColor(indicator + "─".repeat(Math.max(0, remaining))));
+    result.push(
+      borderColor(
+        remaining >= 0
+          ? indicator + "─".repeat(remaining)
+          : truncateToWidth(indicator, options.width),
+      ),
+    );
   } else {
     result.push(horizontal);
   }

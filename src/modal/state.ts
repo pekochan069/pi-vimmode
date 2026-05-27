@@ -11,6 +11,9 @@ export function resetTransientState(state: ModalState, mode: VimMode): ModalStat
   return {
     mode,
     register: state.register,
+    macros: state.macros,
+    recordingSlot: state.recordingSlot,
+    lastPlayedMacro: state.lastPlayedMacro,
   };
 }
 

@@ -8,8 +8,9 @@ Current limitations explicitly list macros as unsupported. The remaining adjacen
 
 **Goals:**
 
-- Support normal-mode macro recording with `q{slot}` and stop recording with `q`.
-- Support normal-mode macro playback with `@{slot}` and repeat-last playback with `@@`.
+- Support normal-mode macro recording with `q{slot}` and stop recording with `q` by default.
+- Support normal-mode macro playback with `@{slot}` and repeat-last playback with `@@` by default.
+- Support macro config for record/play keys, enabled state, allowed slots, and replay step cap.
 - Record replayable prompt-editor inputs across normal, insert, visual, and visual-line modes.
 - Keep macro slots in memory and independent from the unnamed yank/delete register.
 - Reuse parser, modal engine, status derivation, and adapter effect application seams.
@@ -43,7 +44,7 @@ Alternative considered: store semantic commands or edit results. Rejected becaus
 
 ### Model macro prefixes separately from operator pending state
 
-Add finite parser/modal pending states for macro recording and playback prefixes instead of overloading `pendingOperator`. `q` from normal mode starts `recordMacroTarget` unless already recording; `@` starts `playMacroTarget`; `@@` resolves to repeat-last playback. Invalid target keys clear the pending macro state without editing text.
+Add finite parser/modal pending states for macro recording and playback prefixes instead of overloading `pendingOperator`. Configured record keys default to `q`; configured play keys default to `@`. Record key from normal mode starts `recordMacroTarget` unless already recording; play key starts `playMacroTarget`; pressing the play key twice resolves to repeat-last playback. Invalid target keys clear the pending macro state without editing text.
 
 Rationale: macro prefixes are target-taking commands, not operators over motions. Separate pending state avoids confusing status text, operator-motion validation, and keymap behavior.
 
@@ -56,6 +57,14 @@ The engine returns a `playMacro` effect containing a snapshot of input tokens. T
 Rationale: the adapter already owns effect application and cursor restoration. A replay effect keeps the engine pure while preserving live semantics for edits and rendering.
 
 Alternative considered: have the engine recursively call itself for every stored token. Rejected because effect application between tokens is adapter-owned and cursor/text snapshots must update after each token.
+
+### Keep macro configuration shallow
+
+Add `piVimMode.keymap.macros.record` and `piVimMode.keymap.macros.play` for control keys, plus `piVimMode.macros.enabled`, `slots`, and `maxReplaySteps` for behavior. Keep macro slots lowercase `a-z` only.
+
+Rationale: macro controls are Vim grammar, but users need to avoid local key conflicts. Behavior options cover safety and scope without introducing persistent registers or full Vimscript behavior.
+
+Alternative considered: only hard-code `q` and `@`. Rejected after user requested configurable macro behavior.
 
 ### Keep status feedback small and width-safe
 

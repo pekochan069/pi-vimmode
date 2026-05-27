@@ -62,6 +62,7 @@ describe("modal contracts", () => {
     const effects: ModalEffect[] = [
       { type: "delegate", input: "\r" },
       { type: "edit", result: { text: "x", cursor, changed: true } },
+      { type: "playMacro", slot: "a", inputs: ["i", "x", "\x1b"] },
       { type: "invalidate" },
       { type: "terminalCursor", style: "bar" },
     ];
@@ -69,6 +70,7 @@ describe("modal contracts", () => {
     expect(effects.map((effect) => effect.type)).toEqual([
       "delegate",
       "edit",
+      "playMacro",
       "invalidate",
       "terminalCursor",
     ]);
@@ -147,6 +149,49 @@ describe("modal view state", () => {
     expect(status.left.trim()).toBe("L2:C3 CMD d…");
     expect(status.right).toBe("");
   });
+
+  test("modal status shows active macro recording", () => {
+    const status = modalStatus({
+      mode: "normal",
+      text: "abc",
+      cursor,
+      width: 40,
+      recordingSlot: "a",
+    });
+
+    expect(status.left.trim()).toContain("NORMAL REC a");
+
+    const modeHidden = modalStatus({
+      mode: "normal",
+      text: "abc",
+      cursor,
+      width: 10,
+      recordingSlot: "a",
+      ui: {
+        status: { enabled: true, items: ["selection"] },
+        mode: {
+          enabled: false,
+          labels: {
+            insert: "INSERT",
+            normal: "NORMAL",
+            visual: "VISUAL",
+            visualLine: "V-LINE",
+            visualBlock: "V-BLOCK",
+          },
+          narrowLabels: {
+            insert: "I",
+            normal: "N",
+            visual: "V",
+            visualLine: "VL",
+            visualBlock: "VB",
+          },
+        },
+        selection: { enabled: true, previewMaxChars: 16 },
+        cursorPosition: { enabled: false, base: 1, format: "{line}:{column}" },
+      },
+    });
+    expect(modeHidden.left.trim()).toBe("REC a");
+  });
 });
 
 describe("modal engine", () => {
@@ -178,19 +223,19 @@ describe("modal engine", () => {
       ...options,
       keymap: {
         ...DEFAULT_VIM_KEYMAP,
-        operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
+        operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["z"] },
         motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
         commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"], visualBlock: ["alt+x"] },
       },
     };
 
-    expect(handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "q")).toEqual({
-      state: { mode: "normal", pending: "q" },
+    expect(handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "z")).toEqual({
+      state: { mode: "normal", pending: "z" },
       effects: [{ type: "invalidate" }],
     });
 
     const deleted = handleModalInput(
-      { mode: "normal", pending: "q" },
+      { mode: "normal", pending: "z" },
       { text: "abc def", lines: ["abc def"], cursor },
       configuredOptions,
       "e",
@@ -454,6 +499,95 @@ describe("modal engine", () => {
       type: "edit",
       result: { text: "abcYd\nefgYh", cursor: { line: 0, col: 4 }, changed: true },
     });
+  });
+
+  test("macro recording starts, captures handled inputs, and stops in normal mode", () => {
+    const started = handleModalInput({ mode: "normal" }, snapshot, options, "q");
+    expect(started.state).toEqual({ mode: "normal", pendingMacro: "record" });
+
+    const recording = handleModalInput(started.state, snapshot, options, "a");
+    expect(recording.state).toEqual({ mode: "normal", macros: { a: [] }, recordingSlot: "a" });
+
+    const insert = handleModalInput(recording.state, snapshot, options, "i");
+    expect(insert.state).toMatchObject({
+      mode: "insert",
+      recordingSlot: "a",
+      macros: { a: ["i"] },
+    });
+
+    const typedQ = handleModalInput(insert.state, snapshot, options, "q");
+    expect(typedQ.state.macros?.a).toEqual(["i", "q"]);
+
+    const escaped = handleModalInput(typedQ.state, snapshot, options, "\x1b");
+    expect(escaped.state.macros?.a).toEqual(["i", "q", "\x1b"]);
+    expect(escaped.state.recordingSlot).toBe("a");
+
+    const stopped = handleModalInput(escaped.state, snapshot, options, "q");
+    expect(stopped.state).toEqual({ mode: "normal", macros: { a: ["i", "q", "\x1b"] } });
+  });
+
+  test("macro recording excludes delegated app shortcuts and preserves unnamed register", () => {
+    const state: ModalState = {
+      mode: "normal",
+      recordingSlot: "a",
+      macros: { a: [] },
+      register: { type: "char", text: "keep" },
+    };
+
+    const submitted = handleModalInput(state, snapshot, options, "\r");
+    expect(submitted.state.macros?.a).toEqual([]);
+    expect(submitted.state.register).toEqual({ type: "char", text: "keep" });
+  });
+
+  test("macro playback emits replay effects and repeat-last no-ops safely", () => {
+    const pending = handleModalInput(
+      { mode: "normal", macros: { a: ["i", "X", "\x1b"] } },
+      snapshot,
+      options,
+      "@",
+    );
+    expect(pending.state).toEqual({
+      mode: "normal",
+      macros: { a: ["i", "X", "\x1b"] },
+      pendingMacro: "play",
+    });
+
+    const played = handleModalInput(pending.state, snapshot, options, "a");
+    expect(played.state.lastPlayedMacro).toBe("a");
+    expect(played.effects).toEqual([{ type: "playMacro", slot: "a", inputs: ["i", "X", "\x1b"] }]);
+
+    const repeated = handleModalInput(played.state, snapshot, options, "@");
+    expect(handleModalInput(repeated.state, snapshot, options, "@").effects).toEqual([
+      { type: "playMacro", slot: "a", inputs: ["i", "X", "\x1b"] },
+    ]);
+
+    expect(handleModalInput({ mode: "normal" }, snapshot, options, "@").state.pendingMacro).toBe(
+      "play",
+    );
+    expect(
+      handleModalInput({ mode: "normal", pendingMacro: "play" }, snapshot, options, "@").effects,
+    ).toEqual([{ type: "invalidate" }]);
+  });
+
+  test("macro playback is ignored while recording or replaying", () => {
+    const recording = handleModalInput(
+      { mode: "normal", recordingSlot: "a", macros: { a: [] } },
+      snapshot,
+      options,
+      "@",
+    );
+    const ignoredRecorded = handleModalInput(recording.state, snapshot, options, "a");
+    expect(ignoredRecorded.effects).toEqual([{ type: "invalidate" }]);
+    expect(ignoredRecorded.state.macros?.a).toEqual([]);
+
+    expect(
+      handleModalInput(
+        { mode: "normal", macros: { a: ["x"] } },
+        { ...snapshot, isMacroReplaying: true },
+        options,
+        "@",
+      ).effects,
+    ).toEqual([{ type: "invalidate" }]);
   });
 
   test("visual line change returns linewise edit and insert-mode intent", () => {

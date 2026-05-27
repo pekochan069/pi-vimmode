@@ -99,6 +99,7 @@ describe("vim config parsing", () => {
           operators: { delete: ["q"], change: ["ctrl+c"] },
           motions: { wordForward: ["e"] },
           commands: { openLineBelow: ["n"], visualBlock: ["<C-v>", "<A-x>"] },
+          macros: { record: ["m"], play: ["r"] },
           operatorMotions: { delete: ["wordForward"] },
         },
       },
@@ -109,8 +110,25 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
+    expect(result.options.keymap?.macros.record).toEqual(["m"]);
+    expect(result.options.keymap?.macros.play).toEqual(["r"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
+  });
+
+  test("parses macro behavior options", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        macros: { enabled: false, slots: ["x", "y", "bad"], maxReplaySteps: 12 },
+      },
+    });
+
+    expect(result.options.macros).toMatchObject({
+      enabled: false,
+      slots: ["x", "y"],
+      maxReplaySteps: 12,
+    });
+    expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
   });
 
   test("rejects operator motions without range semantics", () => {

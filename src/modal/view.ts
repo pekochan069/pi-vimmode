@@ -21,6 +21,7 @@ export type ModalVisualStatusInput = {
 
 export type ModalStatusInput = ModalVisualStatusInput & {
   pending?: string;
+  recordingSlot?: string;
 };
 
 export type ModalStatus = {
@@ -36,7 +37,11 @@ export function modalModeLabel(mode: VimMode, width: number, ui?: ResolvedVimUi)
     (mode === "visualLine" ? "V-LINE" : mode === "visualBlock" ? "V-BLOCK" : mode.toUpperCase());
   const narrow =
     ui?.mode.narrowLabels[mode] ??
-    (mode === "visualLine" ? "VL" : mode === "visualBlock" ? "VB" : (mode[0]?.toUpperCase() ?? "?"));
+    (mode === "visualLine"
+      ? "VL"
+      : mode === "visualBlock"
+        ? "VB"
+        : (mode[0]?.toUpperCase() ?? "?"));
   return width < full.length + 4 ? narrow : full;
 }
 
@@ -45,9 +50,14 @@ export function modalStatus(input: ModalStatusInput): ModalStatus {
   if (!ui.status.enabled) return { left: "", right: "" };
 
   const parts: string[] = [];
+  let recordingAdded = false;
   for (const item of ui.status.items) {
-    if (item === "mode" && ui.mode.enabled) {
-      parts.push(modalModeLabel(input.mode, input.width, ui));
+    if (item === "mode") {
+      if (ui.mode.enabled) parts.push(modalModeLabel(input.mode, input.width, ui));
+      if (input.recordingSlot) {
+        parts.push(`REC ${input.recordingSlot}`);
+        recordingAdded = true;
+      }
     } else if (item === "pendingOperator" && input.pending) {
       parts.push(`${input.pending}…`);
     } else if (item === "selection" && ui.selection.enabled) {
@@ -57,6 +67,8 @@ export function modalStatus(input: ModalStatusInput): ModalStatus {
       parts.push(cursorPositionStatus(input.cursor, ui));
     }
   }
+
+  if (input.recordingSlot && !recordingAdded) parts.unshift(`REC ${input.recordingSlot}`);
 
   return {
     left: parts.length > 0 ? ` ${parts.join(" ")} ` : "",

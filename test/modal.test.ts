@@ -15,6 +15,7 @@ const options = {
     normal: "block" as const,
     visual: "block" as const,
     visualLine: "block" as const,
+    visualBlock: "block" as const,
   },
 };
 const snapshot = { text: "abc", lines: ["abc"], cursor };
@@ -41,7 +42,13 @@ describe("modal contracts", () => {
   test("transitionMode returns terminal cursor and invalidate effects", () => {
     const result = transitionMode({ mode: "normal" }, "visual", {
       startMode: "insert",
-      cursor: { insert: "bar", normal: "block", visual: "underline", visualLine: "block" },
+      cursor: {
+        insert: "bar",
+        normal: "block",
+        visual: "underline",
+        visualLine: "block",
+        visualBlock: "block",
+      },
     });
 
     expect(result.state).toEqual({ mode: "visual" });
@@ -94,6 +101,16 @@ describe("modal view state", () => {
         width: 40,
       }),
     ).toContain("2 lines");
+
+    expect(
+      modalVisualStatus({
+        mode: "visualBlock",
+        text: "abcd\nefgh",
+        cursor: { line: 1, col: 2 },
+        visualAnchor: { line: 0, col: 1 },
+        width: 40,
+      }),
+    ).toContain("2x2 block");
   });
 
   test("modal status respects UI item config and cursor position format", () => {
@@ -107,8 +124,20 @@ describe("modal view state", () => {
         status: { enabled: true, items: ["cursorPosition", "mode", "pendingOperator"] },
         mode: {
           enabled: true,
-          labels: { insert: "INS", normal: "CMD", visual: "VIS", visualLine: "VLN" },
-          narrowLabels: { insert: "I", normal: "C", visual: "V", visualLine: "VL" },
+          labels: {
+            insert: "INS",
+            normal: "CMD",
+            visual: "VIS",
+            visualLine: "VLN",
+            visualBlock: "VBLK",
+          },
+          narrowLabels: {
+            insert: "I",
+            normal: "C",
+            visual: "V",
+            visualLine: "VL",
+            visualBlock: "VB",
+          },
         },
         selection: { enabled: false, previewMaxChars: 4 },
         cursorPosition: { enabled: true, base: 1, format: "L{line}:C{column}" },
@@ -151,7 +180,7 @@ describe("modal engine", () => {
         ...DEFAULT_VIM_KEYMAP,
         operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
         motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
-        commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"] },
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"], visualBlock: ["alt+x"] },
       },
     };
 
@@ -180,6 +209,9 @@ describe("modal engine", () => {
     const opened = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "n");
     expect(opened.state.mode).toBe("insert");
     expect(opened.effects[0]?.type).toBe("edit");
+
+    const visualBlock = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "\x1bx");
+    expect(visualBlock.state).toEqual({ mode: "visualBlock", visualAnchor: cursor });
   });
 
   test("normal edit commands return structural edit effects and register state", () => {
@@ -303,6 +335,125 @@ describe("modal engine", () => {
       { type: "terminalCursor", style: "block" },
       { type: "invalidate" },
     ]);
+  });
+
+  test("normal ctrl-v enters visual block mode", () => {
+    const result = handleModalInput({ mode: "normal" }, snapshot, options, "\x16");
+
+    expect(result.state).toEqual({ mode: "visualBlock", visualAnchor: cursor });
+    expect(result.effects).toEqual([
+      { type: "terminalCursor", style: "block" },
+      { type: "invalidate" },
+    ]);
+  });
+
+  test("visual block switches kind without resetting anchor", () => {
+    const state: ModalState = { mode: "visualBlock", visualAnchor: { line: 0, col: 1 } };
+    expect(handleModalInput(state, snapshot, options, "v").state).toEqual({
+      mode: "visual",
+      visualAnchor: { line: 0, col: 1 },
+    });
+    expect(handleModalInput(state, snapshot, options, "V").state).toEqual({
+      mode: "visualLine",
+      visualAnchor: { line: 0, col: 1 },
+    });
+
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, visualBlock: ["alt+x"] },
+      },
+    };
+    expect(
+      handleModalInput(
+        { mode: "visual", visualAnchor: { line: 0, col: 1 } },
+        snapshot,
+        configuredOptions,
+        "\x1bx",
+      ).state,
+    ).toEqual({ mode: "visualBlock", visualAnchor: { line: 0, col: 1 } });
+  });
+
+  test("visual block yank delete and change use blockwise character registers", () => {
+    const blockState: ModalState = { mode: "visualBlock", visualAnchor: { line: 0, col: 1 } };
+    const blockSnapshot = {
+      text: "abcd\nefgh",
+      lines: ["abcd", "efgh"],
+      cursor: { line: 1, col: 2 },
+    };
+
+    const yanked = handleModalInput(blockState, blockSnapshot, options, "y");
+    expect(yanked.state).toEqual({ mode: "normal", register: { type: "char", text: "bc\nfg" } });
+
+    const deleted = handleModalInput(blockState, blockSnapshot, options, "d");
+    expect(deleted.state).toEqual({ mode: "normal", register: { type: "char", text: "bc\nfg" } });
+    expect(deleted.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "ad\neh",
+        cursor: { line: 0, col: 1 },
+        register: { type: "char", text: "bc\nfg" },
+        changed: true,
+      },
+    });
+
+    const changed = handleModalInput(blockState, blockSnapshot, options, "c");
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "char", text: "bc\nfg" });
+  });
+
+  test("visual block I and A collect text and insert across selected lines on escape", () => {
+    const blockState: ModalState = { mode: "visualBlock", visualAnchor: { line: 0, col: 1 } };
+    const blockSnapshot = {
+      text: "abcd\nefgh",
+      lines: ["abcd", "efgh"],
+      cursor: { line: 1, col: 2 },
+    };
+
+    const started = handleModalInput(blockState, blockSnapshot, options, "I");
+    expect(started.state).toEqual({
+      mode: "insert",
+      blockInsert: {
+        anchor: { line: 0, col: 1 },
+        active: { line: 1, col: 2 },
+        placement: "start",
+        previewLine: 0,
+        text: "",
+      },
+    });
+    expect(started.effects[0]).toEqual({ type: "restoreCursor", position: { line: 0, col: 1 } });
+
+    const typed = handleModalInput(started.state, blockSnapshot, options, "X");
+    expect(typed.effects[0]).toEqual({ type: "delegate", input: "X" });
+    const finished = handleModalInput(
+      typed.state,
+      { text: "aXbcd\nefgh", lines: ["aXbcd", "efgh"], cursor: { line: 0, col: 2 } },
+      options,
+      "\x1b",
+    );
+    expect(finished.state.mode).toBe("normal");
+    expect(finished.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "aXbcd\neXfgh", cursor: { line: 0, col: 2 }, changed: true },
+    });
+
+    const appendStarted = handleModalInput(blockState, blockSnapshot, options, "A");
+    expect(appendStarted.effects[0]).toEqual({
+      type: "restoreCursor",
+      position: { line: 0, col: 3 },
+    });
+    const appendTyped = handleModalInput(appendStarted.state, blockSnapshot, options, "Y");
+    const appendFinished = handleModalInput(
+      appendTyped.state,
+      { text: "abcYd\nefgh", lines: ["abcYd", "efgh"], cursor: { line: 0, col: 4 } },
+      options,
+      "\x1b",
+    );
+    expect(appendFinished.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "abcYd\nefgYh", cursor: { line: 0, col: 4 }, changed: true },
+    });
   });
 
   test("visual line change returns linewise edit and insert-mode intent", () => {

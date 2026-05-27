@@ -18,11 +18,20 @@ export type EditorSnapshot = {
   isAutocompleteOpen?: boolean;
 };
 
+export type BlockInsertState = {
+  anchor: Position;
+  active: Position;
+  placement: "start" | "end";
+  previewLine: number;
+  text: string;
+};
+
 export type ModalState = {
   mode: VimMode;
   visualAnchor?: Position;
   register?: VimRegister;
   pending?: PendingOperator;
+  blockInsert?: BlockInsertState;
 };
 
 export type AdapterCommand =

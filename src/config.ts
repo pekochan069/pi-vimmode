@@ -21,6 +21,7 @@ const VIM_MODES = [
   "normal",
   "visual",
   "visualLine",
+  "visualBlock",
 ] as const satisfies readonly VimMode[];
 const START_MODES = new Set<StartupMode>(["insert", "normal"]);
 const CURSOR_STYLES = new Set<CursorStyle>(["block", "bar", "underline"]);
@@ -49,6 +50,7 @@ export const VIM_COMMAND_ACTIONS = [
   "openLineAbove",
   "visualChar",
   "visualLine",
+  "visualBlock",
   "deleteChar",
   "deleteToLineEnd",
   "changeToLineEnd",
@@ -91,8 +93,6 @@ const PROTECTED_KEY_NAMES = new Set([
   "shift+ctrl+p",
   "ctrl+t",
   "shift+tab",
-  "ctrl+v",
-  "alt+v",
 ]);
 
 export const DEFAULT_VIM_KEYMAP = Object.freeze({
@@ -124,6 +124,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     openLineAbove: Object.freeze(["O"]),
     visualChar: Object.freeze(["v"]),
     visualLine: Object.freeze(["V"]),
+    visualBlock: Object.freeze([]),
     deleteChar: Object.freeze(["x"]),
     deleteToLineEnd: Object.freeze(["D"]),
     changeToLineEnd: Object.freeze(["C"]),
@@ -152,12 +153,14 @@ export const DEFAULT_VIM_UI = Object.freeze({
       normal: "NORMAL",
       visual: "VISUAL",
       visualLine: "V-LINE",
+      visualBlock: "V-BLOCK",
     }),
     narrowLabels: Object.freeze({
       insert: "I",
       normal: "N",
       visual: "V",
       visualLine: "VL",
+      visualBlock: "VB",
     }),
   }),
   selection: Object.freeze({
@@ -178,6 +181,7 @@ export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
     normal: "block",
     visual: "block",
     visualLine: "block",
+    visualBlock: "block",
   }),
   keymap: DEFAULT_VIM_KEYMAP,
   ui: DEFAULT_VIM_UI,
@@ -249,6 +253,7 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       openLineAbove: [...keymap.commands.openLineAbove],
       visualChar: [...keymap.commands.visualChar],
       visualLine: [...keymap.commands.visualLine],
+      visualBlock: [...keymap.commands.visualBlock],
       deleteChar: [...keymap.commands.deleteChar],
       deleteToLineEnd: [...keymap.commands.deleteToLineEnd],
       changeToLineEnd: [...keymap.commands.changeToLineEnd],
@@ -292,10 +297,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSupportedKeySequence(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  if (value.length === 0) return false;
-  return !PROTECTED_KEY_NAMES.has(value.toLowerCase());
+function normalizeVimKeySequence(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+
+  const angleMatch = value.match(/^<(.+)>$/);
+  if (!angleMatch) return value;
+
+  const parts = angleMatch[1]?.split("-").filter(Boolean) ?? [];
+  if (parts.length === 0) return undefined;
+
+  const key = parts.at(-1)?.toLowerCase();
+  if (!key) return undefined;
+
+  const modifiers = parts.slice(0, -1).map((part) => {
+    const modifier = part.toLowerCase();
+    if (modifier === "c" || modifier === "control" || modifier === "ctrl") return "ctrl";
+    if (modifier === "a" || modifier === "m" || modifier === "alt" || modifier === "meta") {
+      return "alt";
+    }
+    if (modifier === "s" || modifier === "shift") return "shift";
+    if (modifier === "super" || modifier === "cmd" || modifier === "d") return "super";
+    return undefined;
+  });
+
+  if (modifiers.some((modifier) => modifier === undefined)) return undefined;
+  return [...(modifiers as string[]), key].join("+");
+}
+
+function isProtectedKeySequence(sequence: string): boolean {
+  return PROTECTED_KEY_NAMES.has(sequence.toLowerCase());
 }
 
 function parseStringArray(value: unknown, label: string, warnings: string[]): string[] | undefined {
@@ -306,8 +336,9 @@ function parseStringArray(value: unknown, label: string, warnings: string[]): st
 
   const parsed: string[] = [];
   for (const item of value) {
-    if (isSupportedKeySequence(item)) {
-      parsed.push(item);
+    const sequence = normalizeVimKeySequence(item);
+    if (sequence && !isProtectedKeySequence(sequence)) {
+      parsed.push(sequence);
     } else {
       warnings.push(`${label} contains unsupported or protected key`);
     }

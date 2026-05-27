@@ -8,8 +8,15 @@ import type {
 } from "./types.ts";
 
 export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
-export type VisualSelectionKind = "char" | "line";
-export type VisualSelectionMode = "visual" | "visualLine";
+export type VisualSelectionKind = "char" | "line" | "block";
+export type VisualSelectionMode = "visual" | "visualLine" | "visualBlock";
+
+type BlockRange = {
+  startLine: number;
+  endLine: number;
+  startCol: number;
+  endCol: number;
+};
 
 function splitText(text: string): string[] {
   const lines = text.split("\n");
@@ -269,6 +276,32 @@ function normalizeLineRange(lines: string[], anchor: Position, active: Position)
   };
 }
 
+function normalizeBlockRange(lines: string[], anchor: Position, active: Position): BlockRange {
+  const a = clampPosition(lines, anchor);
+  const b = clampPosition(lines, active);
+  return {
+    startLine: Math.min(a.line, b.line),
+    endLine: Math.max(a.line, b.line),
+    startCol: Math.min(a.col, b.col),
+    endCol: Math.max(a.col, b.col),
+  };
+}
+
+function blockSelectionText(text: string, anchor: Position, active: Position): string {
+  const lines = splitText(text);
+  const range = normalizeBlockRange(lines, anchor, active);
+  const selected: string[] = [];
+
+  for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+    const line = lines[lineIndex] ?? "";
+    const start = Math.min(range.startCol, line.length);
+    const end = Math.min(range.endCol + 1, line.length);
+    selected.push(line.slice(start, end));
+  }
+
+  return selected.join("\n");
+}
+
 function selectionText(text: string, anchor: Position, active: Position): string {
   const lines = splitText(text);
   const range = normalizeRange(lines, anchor, active);
@@ -332,6 +365,62 @@ export function deleteRange(text: string, anchor: Position, active: Position): E
     text: nextText,
     cursor: clampPosition(nextLines, cursor),
     register: { type: "char", text: selected },
+    changed: nextText !== text,
+  };
+}
+
+export function insertBlockText(
+  text: string,
+  anchor: Position,
+  active: Position,
+  insertText: string,
+  placement: "start" | "end",
+  skipLine?: number,
+): EditResult {
+  if (insertText.length === 0) return { text, cursor: anchor, changed: false };
+
+  const lines = splitText(text);
+  const range = normalizeBlockRange(lines, anchor, active);
+  const nextLines = [...lines];
+  const col = placement === "start" ? range.startCol : range.endCol + 1;
+
+  for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+    if (lineIndex === skipLine) continue;
+    const line = nextLines[lineIndex] ?? "";
+    const insertCol = Math.min(col, line.length);
+    nextLines[lineIndex] = line.slice(0, insertCol) + insertText + line.slice(insertCol);
+  }
+
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: clampPosition(nextLines, {
+      line: range.startLine,
+      col: Math.min(col + insertText.length, nextLines[range.startLine]?.length ?? 0),
+    }),
+    changed: nextText !== text,
+  };
+}
+
+export function deleteBlockRange(text: string, anchor: Position, active: Position): EditResult {
+  const lines = splitText(text);
+  const range = normalizeBlockRange(lines, anchor, active);
+  const selected = blockSelectionText(text, anchor, active);
+  const nextLines = [...lines];
+
+  for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+    const line = nextLines[lineIndex] ?? "";
+    const start = Math.min(range.startCol, line.length);
+    const end = Math.min(range.endCol + 1, line.length);
+    nextLines[lineIndex] = line.slice(0, start) + line.slice(end);
+  }
+
+  const nextText = joinLines(nextLines);
+  const cursor = clampPosition(nextLines, { line: range.startLine, col: range.startCol });
+  return {
+    text: nextText,
+    cursor,
+    register: selected.length > 0 ? { type: "char", text: selected } : undefined,
     changed: nextText !== text,
   };
 }
@@ -442,7 +531,10 @@ export function yankVisualSelection(
 ): VimRegister | undefined {
   if (kind === "line") return yankLineRange(text, anchor, active);
 
-  const selected = selectionText(text, anchor, active);
+  const selected =
+    kind === "block"
+      ? blockSelectionText(text, anchor, active)
+      : selectionText(text, anchor, active);
   return selected.length > 0 ? { type: "char", text: selected } : undefined;
 }
 
@@ -452,9 +544,9 @@ export function visualSelectionText(
   active: Position,
   kind: VisualSelectionKind,
 ): string {
-  return kind === "line"
-    ? linewiseSelectionText(text, anchor, active)
-    : selectionText(text, anchor, active);
+  if (kind === "line") return linewiseSelectionText(text, anchor, active);
+  if (kind === "block") return blockSelectionText(text, anchor, active);
+  return selectionText(text, anchor, active);
 }
 
 export function deleteLine(text: string, cursor: Position): EditResult {
@@ -664,6 +756,15 @@ export function isVisualCellSelected(
   col: number,
 ): boolean {
   if (mode === "visualLine") return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
+  if (mode === "visualBlock") {
+    const range = normalizeBlockRange(lines, anchor, cursor);
+    return (
+      lineIndex >= range.startLine &&
+      lineIndex <= range.endLine &&
+      col >= range.startCol &&
+      col <= range.endCol
+    );
+  }
 
   const range = normalizeRange(lines, anchor, cursor);
   const pos = { line: lineIndex, col };
@@ -699,4 +800,16 @@ export function visualLineSelectionSummary(
   const range = normalizeLineRange(lines, anchor, active);
   const count = range.endLine - range.startLine + 1;
   return `${count} ${count === 1 ? "line" : "lines"}`;
+}
+
+export function visualBlockSelectionSummary(
+  text: string,
+  anchor: Position,
+  active: Position,
+): string {
+  const lines = splitText(text);
+  const range = normalizeBlockRange(lines, anchor, active);
+  const lineCount = range.endLine - range.startLine + 1;
+  const colCount = range.endCol - range.startCol + 1;
+  return `${lineCount}x${colCount} block`;
 }

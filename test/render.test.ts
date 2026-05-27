@@ -19,7 +19,7 @@ type VisualFixture = {
   lines: string[];
   cursor: ReturnType<typeof p>;
   visualAnchor: ReturnType<typeof p>;
-  mode: Extract<VimMode, "visual" | "visualLine">;
+  mode: Extract<VimMode, "visual" | "visualLine" | "visualBlock">;
   cursorStyle?: CursorStyle;
   width?: number;
   terminalRows?: number;
@@ -90,6 +90,23 @@ describe("visual render helper", () => {
     expect(lines.length).toBeGreaterThan(3);
     expect(lines.join("\n")).toContain(CURSOR_BAR_START);
     expectWidthSafe(lines, 8);
+  });
+
+  test("highlights visual block selections as rectangles", () => {
+    const lines = renderVisual({
+      lines: ["abcdef", "xx", "123456"],
+      cursor: p(2, 4),
+      visualAnchor: p(0, 2),
+      mode: "visualBlock",
+      cursorStyle: "underline",
+      width: 16,
+    });
+    const output = lines.join("\n");
+    expect(output).toContain(`${SELECTION_START}c`);
+    expect(output).toContain(`${SELECTION_START}3`);
+    expect(output).not.toContain(`${SELECTION_START}x`);
+    expect(output).toContain(CURSOR_UNDERLINE_START);
+    expectWidthSafe(lines, 16);
   });
 
   test("handles narrow widths", () => {

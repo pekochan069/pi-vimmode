@@ -28,7 +28,13 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         startMode: "normal",
-        cursor: { insert: "underline", normal: "bar", visual: "block", visualLine: "underline" },
+        cursor: {
+          insert: "underline",
+          normal: "bar",
+          visual: "block",
+          visualLine: "underline",
+          visualBlock: "bar",
+        },
       },
     });
     expect(result.warnings).toEqual([]);
@@ -38,6 +44,7 @@ describe("vim config parsing", () => {
       normal: "bar",
       visual: "block",
       visualLine: "underline",
+      visualBlock: "bar",
     });
   });
 
@@ -52,6 +59,7 @@ describe("vim config parsing", () => {
       normal: "block",
       visual: "underline",
       visualLine: "bar",
+      visualBlock: "block",
     });
   });
 
@@ -90,7 +98,7 @@ describe("vim config parsing", () => {
         keymap: {
           operators: { delete: ["q"], change: ["ctrl+c"] },
           motions: { wordForward: ["e"] },
-          commands: { openLineBelow: ["n"] },
+          commands: { openLineBelow: ["n"], visualBlock: ["<C-v>", "<A-x>"] },
           operatorMotions: { delete: ["wordForward"] },
         },
       },
@@ -100,6 +108,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.operators.change).toEqual(["c"]);
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });

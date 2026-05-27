@@ -4,7 +4,9 @@ import {
   bufferEndPosition,
   bufferStartPosition,
   changeLine,
+  deleteBlockRange,
   deleteByMotion,
+  insertBlockText,
   deleteCharAt,
   deleteLine,
   deleteLineRange,
@@ -20,6 +22,7 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
   visualSelectionText,
@@ -62,6 +65,8 @@ describe("prompt buffer operation API", () => {
     expect(isVisualCellSelected("visual", lines, p(0, 1), p(1, 1), 2, 0)).toBe(false);
     expect(isVisualLineSelected("visualLine", lines, p(0, 1), p(1, 1), 1)).toBe(true);
     expect(isVisualLineSelected("visual", lines, p(0, 1), p(1, 1), 1)).toBe(false);
+    expect(isVisualCellSelected("visualBlock", lines, p(0, 1), p(2, 2), 1, 2)).toBe(true);
+    expect(isVisualCellSelected("visualBlock", lines, p(0, 1), p(2, 2), 1, 0)).toBe(false);
   });
 });
 
@@ -104,6 +109,48 @@ describe("charwise edits", () => {
     const result = deleteCharAt("abc", p(0, 3));
     expect(result.text).toBe("abc");
     expect(result.changed).toBe(false);
+  });
+});
+
+describe("blockwise visual operations", () => {
+  test("extracts rectangular selections in document order", () => {
+    const text = "alpha\nbravo\ncharlie";
+    expect(yankVisualSelection(text, p(0, 1), p(2, 3), "block")).toEqual({
+      type: "char",
+      text: "lph\nrav\nhar",
+    });
+    expect(visualSelectionText(text, p(2, 3), p(0, 1), "block")).toBe("lph\nrav\nhar");
+  });
+
+  test("handles ragged lines as empty slices", () => {
+    const text = "abcdef\nx\n12345";
+    expect(yankVisualSelection(text, p(0, 2), p(2, 4), "block")).toEqual({
+      type: "char",
+      text: "cde\n\n345",
+    });
+    expect(visualBlockSelectionSummary(text, p(0, 2), p(2, 4))).toBe("3x3 block");
+  });
+
+  test("deletes rectangular selections line by line", () => {
+    const result = deleteBlockRange("abcdef\nx\n12345", p(0, 2), p(2, 4));
+    expect(result.text).toBe("abf\nx\n12");
+    expect(result.cursor).toEqual(p(0, 2));
+    expect(result.register).toEqual({ type: "char", text: "cde\n\n345" });
+    expect(result.changed).toBe(true);
+  });
+
+  test("inserts text at visual block start and end columns", () => {
+    expect(insertBlockText("abcd\nefgh", p(0, 1), p(1, 2), "XX", "start")).toEqual({
+      text: "aXXbcd\neXXfgh",
+      cursor: p(0, 3),
+      changed: true,
+    });
+
+    expect(insertBlockText("abcd\nefgh", p(0, 1), p(1, 2), "XX", "end")).toEqual({
+      text: "abcXXd\nefgXXh",
+      cursor: p(0, 5),
+      changed: true,
+    });
   });
 });
 

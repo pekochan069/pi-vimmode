@@ -16,7 +16,12 @@ export type EditorSnapshot = {
   lines: string[];
   cursor: Position;
   isAutocompleteOpen?: boolean;
+  isMacroReplaying?: boolean;
 };
+
+export type MacroSlot = string;
+export type MacroStore = Partial<Record<MacroSlot, readonly string[]>>;
+export type PendingMacroTarget = "record" | "play";
 
 export type BlockInsertState = {
   anchor: Position;
@@ -32,6 +37,10 @@ export type ModalState = {
   register?: VimRegister;
   pending?: PendingOperator;
   blockInsert?: BlockInsertState;
+  macros?: MacroStore;
+  recordingSlot?: MacroSlot;
+  lastPlayedMacro?: MacroSlot;
+  pendingMacro?: PendingMacroTarget;
 };
 
 export type AdapterCommand =
@@ -55,6 +64,7 @@ export type ModalEffect =
   | { type: "adapterCommand"; command: AdapterCommand }
   | { type: "edit"; result: EditResult }
   | { type: "restoreCursor"; position: Position }
+  | { type: "playMacro"; slot: MacroSlot; inputs: readonly string[] }
   | { type: "invalidate" }
   | { type: "terminalCursor"; style: CursorStyle };
 

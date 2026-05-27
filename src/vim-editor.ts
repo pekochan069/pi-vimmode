@@ -70,6 +70,7 @@ function cloneOptions(options: VimEditorOptions): VimEditorOptions {
     cursor: { ...options.cursor },
     keymap: options.keymap,
     ui: options.ui,
+    macros: options.macros,
   };
 }
 
@@ -77,6 +78,7 @@ export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: VimEditorOptions;
   private lastTerminalCursorStyle: CursorStyle | undefined;
+  private isMacroReplaying = false;
 
   constructor(
     tui: TUI,
@@ -124,6 +126,7 @@ export class VimEditor extends CustomEditor {
       visualAnchor: this.modalState.visualAnchor,
       width,
       pending: pendingDisplay(this.modalState.pending),
+      recordingSlot: this.modalState.recordingSlot,
       ui: uiForOptions(this.options),
     });
     lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
@@ -136,6 +139,7 @@ export class VimEditor extends CustomEditor {
       lines: this.getLines(),
       cursor: this.getCursor(),
       isAutocompleteOpen: this.isShowingAutocomplete(),
+      isMacroReplaying: this.isMacroReplaying,
     };
   }
 
@@ -188,12 +192,25 @@ export class VimEditor extends CustomEditor {
       case "restoreCursor":
         this.restoreCursor(effect.position);
         return;
+      case "playMacro":
+        this.playMacro(effect.inputs);
+        return;
       case "terminalCursor":
         this.applyTerminalCursorStyle(effect.style);
         return;
       case "invalidate":
         this.invalidate();
         return;
+    }
+  }
+
+  private playMacro(inputs: readonly string[]): void {
+    if (this.isMacroReplaying) return;
+    this.isMacroReplaying = true;
+    try {
+      for (const input of inputs) this.handleInput(input);
+    } finally {
+      this.isMacroReplaying = false;
     }
   }
 

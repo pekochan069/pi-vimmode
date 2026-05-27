@@ -73,6 +73,10 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `y{motion}`           | yank by `w`, `b`, `0`, `^`, or `$`              |
 | `J`                   | join current line with next line                |
 | `p` / `P`             | paste unnamed register after/before cursor/line |
+| `q{a-z}`              | start recording an in-memory macro slot         |
+| `q`                   | stop recording from normal mode                 |
+| `@{a-z}`              | replay a recorded macro slot                    |
+| `@@`                  | replay the last successfully played macro       |
 | `u`                   | delegate to Pi native undo                      |
 
 ### Visual mode
@@ -162,11 +166,25 @@ Project settings override global settings field by field.
         "visualLine": ["V"],
         "visualBlock": ["<C-v>"]
       },
+      "macros": {
+        "record": ["q"],
+        "play": ["@"]
+      },
       "operatorMotions": {
         "delete": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
         "change": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
         "yank": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]
       }
+    },
+    "macros": {
+      "enabled": true,
+      "slots": [
+        "a", "b", "c", "d", "e", "f", "g", "h",
+        "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x",
+        "y", "z"
+      ],
+      maxReplaySteps": 1000
     },
     "ui": {
       "status": {
@@ -254,7 +272,22 @@ Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`,
 
 `operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
 
-Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `qq`, then `qqqq` deletes the current line and `qq{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
+Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `zz`, then `zzzz` deletes the current line and `zz{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
+
+Macro controls are configured under `keymap.macros`:
+
+- `record`: normal-mode prefix keys for starting/stopping recording. Defaults to `q`.
+- `play`: normal-mode prefix keys for playback/repeat. Defaults to `@`.
+
+If you remap macro controls, use the configured record key to stop recording and the configured play key twice to repeat the last macro.
+
+### `piVimMode.macros`
+
+`macros` configures macro behavior:
+
+- `enabled`: enable/disable all macro recording and playback. Defaults to `true`.
+- `slots`: allowed lowercase `a-z` macro slots. Defaults to all lowercase letters.
+- `maxReplaySteps`: maximum input tokens replayed from one macro invocation. Defaults to `1000`.
 
 ### `piVimMode.ui`
 
@@ -291,13 +324,25 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 - Empty register paste is a no-op.
 - `u` delegates to Pi native undo. Pi's editor records programmatic text changes made through `setText()`.
 
+## Macros
+
+- `q{a-z}` starts recording an in-memory macro slot and replaces any previous macro in that slot by default.
+- Normal-mode `q` stops the active recording by default. Insert-mode `q` inserts and records literal text.
+- `@{a-z}` replays a recorded macro through the same Vim input path used for live input by default.
+- `@@` repeats the last successfully played macro by default.
+- Macro record/play keys, allowed slots, enabled state, and replay step cap are configurable.
+- Macro slots are separate from the unnamed yank/delete register and are not full named registers.
+- Pi-owned delegated shortcuts such as prompt submit/abort, autocomplete control, and playback commands are not recorded.
+- Macro playback is non-recursive: playback commands inside replay are ignored.
+- Macros are in-memory only and do not persist across sessions.
+
 ## Feedback
 
 The editor border/status area shows configurable feedback:
 
 - `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
 - `I`, `N`, `V`, and `VL` at narrow widths by default.
-- Pending operators/key prefixes and visual selection summaries show when enabled and space allows.
+- Pending operators/key prefixes, active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
 - Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
@@ -308,7 +353,7 @@ The editor border/status area shows configurable feedback:
 Modal editing behavior lives under `src/modal/`:
 
 - `engine.ts` owns mode transitions, finite semantic key dispatch, register updates, and supported Vim semantics.
-- `types.ts` defines adapter-applied effects such as delegation, edits, cursor restoration, invalidation, and terminal cursor hints.
+- `types.ts` defines adapter-applied effects such as delegation, edits, macro replay, cursor restoration, invalidation, and terminal cursor hints.
 - `view.ts` derives mode labels, status items, visual status text, and cursor position text without needing Pi TUI objects.
 
 The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. Config maps keys to supported semantic actions; it does not add private Pi APIs or full Vim parity.
@@ -322,8 +367,7 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 
 ## Limitations
 
-- No block visual mode.
-- No counts, text objects, search, ex commands, macros, marks, named registers, leader maps, recursive mappings, or system clipboard integration.
+- No counts, text objects, search, ex commands, marks, named registers, leader maps, recursive mappings, persistent macros, or system clipboard integration.
 - Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No `.vimrc`, Vimscript, or Neovim Lua parsing.
@@ -352,4 +396,5 @@ Manual smoke checklist:
 8. Submit from insert and normal modes.
 9. Configure a custom `piVimMode.keymap` operator, motion, and UI status order, then confirm normal and visual mode use the custom mappings.
 10. Confirm next prompt returns to the configured startup mode.
-11. Confirm normal-mode `Esc` can still interrupt/abort Pi.
+11. Record `qa`, type an insert/normal sequence, stop with normal-mode `q`, replay with `@a`, then repeat with `@@`.
+12. Confirm normal-mode `Esc` can still interrupt/abort Pi.

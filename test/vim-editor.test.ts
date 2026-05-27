@@ -92,8 +92,62 @@ describe("vim editor integration", () => {
     const { editor } = createEditor();
     editor.handleInput("a");
     editor.handleInput("\x1b");
-    editor.handleInput("q");
+    editor.handleInput("z");
     expect(editor.getText()).toBe("a");
+  });
+
+  test("records and replays a macro through the editor path", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.handleInput("q");
+    editor.handleInput("a");
+    expect(editor.render(40).join("\n")).toContain("REC a");
+    editor.handleInput("i");
+    editor.handleInput("X");
+    editor.handleInput("\x1b");
+    editor.handleInput("q");
+
+    editor.setText("");
+    editor.handleInput("@");
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("X");
+    expect(editor.getVimMode()).toBe("normal");
+
+    editor.handleInput("@");
+    editor.handleInput("@");
+    expect(editor.getText()).toBe("XX");
+  });
+
+  test("macro playback missing slot is a no-op", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput("@");
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("abc");
+    expect(editor.getVimMode()).toBe("normal");
+  });
+
+  test("macro keys and behavior are configurable", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        macros: { record: ["m"], play: ["r"] },
+      },
+      macros: { enabled: true, slots: ["x"], maxReplaySteps: 2 },
+    });
+
+    editor.handleInput("m");
+    editor.handleInput("x");
+    editor.handleInput("i");
+    editor.handleInput("A");
+    editor.handleInput("B");
+    editor.handleInput("\x1b");
+    editor.handleInput("m");
+    editor.setText("");
+    editor.handleInput("r");
+    editor.handleInput("x");
+    expect(editor.getText()).toBe("A");
   });
 
   test("normal x deletes character under cursor into register", () => {
@@ -113,7 +167,7 @@ describe("vim editor integration", () => {
       startMode: "normal",
       keymap: {
         ...DEFAULT_VIM_OPTIONS.keymap!,
-        operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["q"] },
+        operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["z"] },
         motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
         commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["B"] },
       },
@@ -121,7 +175,7 @@ describe("vim editor integration", () => {
     editor.setText("hello world");
     editor.handleInput("g");
     editor.handleInput("g");
-    editor.handleInput("q");
+    editor.handleInput("z");
     editor.handleInput("e");
     expect(editor.getText()).toBe("world");
     expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });

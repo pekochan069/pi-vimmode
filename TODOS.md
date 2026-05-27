@@ -29,7 +29,8 @@
 Recommended next pick: `visual block` if selection scope matters next; extract lifecycle/settings only if reload bugs recur.
 
 - [x] line, column number
-- [ ] visual block
-- [ ] macro
+- [x] visual block
+- [x] macro
 - [ ] registers
 - [ ] mark
+- [ ] Ctrl+a, Ctrl+x, ...

@@ -26,6 +26,17 @@ export type SemanticCommandResult =
   | { type: "invalid" }
   | { type: "none" };
 
+export type MacroTarget = "record" | "play";
+
+export type MacroCommandResult =
+  | { type: "pendingMacro"; target: MacroTarget }
+  | { type: "startRecording"; slot: string }
+  | { type: "stopRecording" }
+  | { type: "playMacro"; slot: string }
+  | { type: "repeatMacro" }
+  | { type: "invalid" }
+  | { type: "none" };
+
 type Binding =
   | { sequence: string; kind: "operator"; operator: VimOperatorAction }
   | { sequence: string; kind: "motion"; motion: VimMotionAction }
@@ -113,6 +124,52 @@ function hasLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
   return bindingsFor(keymap).some(
     (binding) => binding.sequence.startsWith(sequence) && binding.sequence.length > sequence.length,
   );
+}
+
+export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");
+
+export function isMacroSlot(key: string, slots: readonly string[] = DEFAULT_MACRO_SLOTS): boolean {
+  return slots.includes(key);
+}
+
+export function isMacroControlKey(
+  key: string,
+  recordKeys: readonly string[] = ["q"],
+  playKeys: readonly string[] = ["@"],
+): boolean {
+  return recordKeys.includes(key) || playKeys.includes(key);
+}
+
+export function resolveMacroCommand(
+  key: string,
+  pending: MacroTarget | undefined,
+  isRecording: boolean,
+  config: {
+    enabled?: boolean;
+    slots?: readonly string[];
+    recordKeys?: readonly string[];
+    playKeys?: readonly string[];
+  } = {},
+): MacroCommandResult {
+  if (config.enabled === false) return { type: "none" };
+  const slots = config.slots ?? DEFAULT_MACRO_SLOTS;
+  const recordKeys = config.recordKeys ?? ["q"];
+  const playKeys = config.playKeys ?? ["@"];
+
+  if (pending === "record") {
+    return isMacroSlot(key, slots) ? { type: "startRecording", slot: key } : { type: "invalid" };
+  }
+
+  if (pending === "play") {
+    if (playKeys.includes(key)) return { type: "repeatMacro" };
+    return isMacroSlot(key, slots) ? { type: "playMacro", slot: key } : { type: "invalid" };
+  }
+
+  if (recordKeys.includes(key)) {
+    return isRecording ? { type: "stopRecording" } : { type: "pendingMacro", target: "record" };
+  }
+  if (playKeys.includes(key)) return { type: "pendingMacro", target: "play" };
+  return { type: "none" };
 }
 
 export function pendingDisplay(pending: string | undefined): string | undefined {

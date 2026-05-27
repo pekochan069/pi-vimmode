@@ -39,11 +39,13 @@ import {
   yankVisualSelection,
 } from "../buffer.ts";
 import {
+  isMacroControlKey,
   operatorActionForSequence,
+  resolveMacroCommand,
   resolveNormalCommand,
   semanticMotionToLegacy,
 } from "../commands.ts";
-import { keymapForOptions } from "../config.ts";
+import { keymapForOptions, macrosForOptions } from "../config.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
 
 function keySequence(data: string): string | undefined {
@@ -71,7 +73,45 @@ function delegate(state: ModalState, input: string): ModalUpdate {
 }
 
 function clearPending(state: ModalState): ModalState {
-  return { ...state, pending: undefined };
+  return { ...state, pending: undefined, pendingMacro: undefined };
+}
+
+function clearPendingMacro(state: ModalState): ModalState {
+  return { ...state, pendingMacro: undefined };
+}
+
+function macroTokens(state: ModalState, slot: string): readonly string[] {
+  return state.macros?.[slot] ?? [];
+}
+
+function startMacroRecording(state: ModalState, slot: string): ModalUpdate {
+  return invalidate({
+    ...clearPendingMacro(state),
+    macros: { ...state.macros, [slot]: [] },
+    recordingSlot: slot,
+  });
+}
+
+function stopMacroRecording(state: ModalState): ModalUpdate {
+  return invalidate({ ...clearPendingMacro(state), recordingSlot: undefined });
+}
+
+function playMacroUpdate(state: ModalState, slot: string, options: ModalOptions): ModalUpdate {
+  const inputs = macroTokens(state, slot).slice(0, macrosForOptions(options).maxReplaySteps);
+  if (inputs.length === 0) return invalidate(clearPendingMacro(state));
+  return withEffects({ ...clearPendingMacro(state), lastPlayedMacro: slot }, [
+    { type: "playMacro", slot, inputs },
+  ]);
+}
+
+function appendRecordedInput(state: ModalState, slot: string, input: string): ModalState {
+  return {
+    ...state,
+    macros: {
+      ...state.macros,
+      [slot]: [...(state.macros?.[slot] ?? []), input],
+    },
+  };
 }
 
 function editState(state: ModalState, result: EditResult): ModalState {
@@ -355,6 +395,39 @@ function handleNormalInput(
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
   }
 
+  if (!state.pending) {
+    const keymap = keymapForOptions(options);
+    const macros = macrosForOptions(options);
+    if (
+      snapshot.isMacroReplaying &&
+      (state.pendingMacro || isMacroControlKey(key, keymap.macros.record, keymap.macros.play))
+    ) {
+      return invalidate(clearPendingMacro(state));
+    }
+    const macroResult = resolveMacroCommand(key, state.pendingMacro, Boolean(state.recordingSlot), {
+      enabled: macros.enabled,
+      slots: macros.slots,
+      recordKeys: keymap.macros.record,
+      playKeys: keymap.macros.play,
+    });
+    if (macroResult.type === "pendingMacro")
+      return invalidate({ ...clearPending(state), pendingMacro: macroResult.target });
+    if (macroResult.type === "startRecording") return startMacroRecording(state, macroResult.slot);
+    if (macroResult.type === "stopRecording") return stopMacroRecording(state);
+    if (macroResult.type === "playMacro") {
+      if (snapshot.isMacroReplaying || state.recordingSlot)
+        return invalidate(clearPendingMacro(state));
+      return playMacroUpdate(state, macroResult.slot, options);
+    }
+    if (macroResult.type === "repeatMacro") {
+      if (snapshot.isMacroReplaying || state.recordingSlot || !state.lastPlayedMacro) {
+        return invalidate(clearPendingMacro(state));
+      }
+      return playMacroUpdate(state, state.lastPlayedMacro, options);
+    }
+    if (macroResult.type === "invalid") return invalidate(clearPendingMacro(state));
+  }
+
   const pendingResult = resolveNormalCommand(key, state.pending, keymapForOptions(options));
   if (pendingResult.type === "pending")
     return invalidate({ ...state, pending: pendingResult.pending });
@@ -398,8 +471,11 @@ function startBlockInsert(
   const previewCol = placement === "start" ? startCol : endCol + 1;
   return withEffects(
     {
+      ...state,
       mode: "insert",
-      register: state.register,
+      pending: undefined,
+      pendingMacro: undefined,
+      visualAnchor: undefined,
       blockInsert: {
         anchor: state.visualAnchor,
         active: snapshot.cursor,
@@ -540,7 +616,7 @@ function pasteVisualLineSelection(
   return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
 }
 
-export function handleModalInput(
+function routeModalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
@@ -551,4 +627,48 @@ export function handleModalInput(
     return handleVisualInput(state, snapshot, options, data);
   }
   return handleNormalInput(state, snapshot, options, data);
+}
+
+function shouldRecordInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  update: ModalUpdate,
+  options: ModalOptions,
+  data: string,
+): boolean {
+  if (!state.recordingSlot) return false;
+  if (snapshot.isMacroReplaying) return false;
+  if (isDelegatedResetKey(data)) return false;
+
+  const key = keySequence(data);
+  const keymap = keymapForOptions(options);
+  if (
+    key &&
+    state.mode === "normal" &&
+    (state.pendingMacro || isMacroControlKey(key, keymap.macros.record, keymap.macros.play))
+  )
+    return false;
+  if (state.mode === "insert" && matchesKey(data, "escape") && snapshot.isAutocompleteOpen) {
+    return false;
+  }
+  if (update.effects.some((effect) => effect.type === "playMacro")) return false;
+  if (update.effects.some((effect) => effect.type === "delegate") && state.mode !== "insert") {
+    return false;
+  }
+  return true;
+}
+
+export function handleModalInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate {
+  const update = routeModalInput(state, snapshot, options, data);
+  if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, options, data))
+    return update;
+  return {
+    ...update,
+    state: appendRecordedInput(update.state, state.recordingSlot, data),
+  };
 }

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { isPendingOperatorKey, parseNormalCommand, resolveNormalCommand } from "../src/commands.ts";
+import {
+  isMacroSlot,
+  isPendingOperatorKey,
+  parseNormalCommand,
+  resolveMacroCommand,
+  resolveNormalCommand,
+} from "../src/commands.ts";
 import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
 
 const operatorMotions = ["w", "b", "0", "^", "$"] as const;
@@ -49,6 +55,47 @@ describe("normal command parser", () => {
     expect(isPendingOperatorKey("y")).toBe(true);
     expect(isPendingOperatorKey("g")).toBe(true);
     expect(isPendingOperatorKey("x")).toBe(false);
+  });
+
+  test("resolves macro prefixes and targets separately from operator state", () => {
+    expect(isMacroSlot("a")).toBe(true);
+    expect(isMacroSlot("z")).toBe(true);
+    expect(isMacroSlot("A")).toBe(false);
+    expect(isMacroSlot("1")).toBe(false);
+    expect(resolveMacroCommand("q", undefined, false)).toEqual({
+      type: "pendingMacro",
+      target: "record",
+    });
+    expect(resolveMacroCommand("a", "record", false)).toEqual({
+      type: "startRecording",
+      slot: "a",
+    });
+    expect(resolveMacroCommand("1", "record", false)).toEqual({ type: "invalid" });
+    expect(resolveMacroCommand("q", undefined, true)).toEqual({ type: "stopRecording" });
+    expect(resolveMacroCommand("@", undefined, false)).toEqual({
+      type: "pendingMacro",
+      target: "play",
+    });
+    expect(resolveMacroCommand("a", "play", false)).toEqual({ type: "playMacro", slot: "a" });
+    expect(resolveMacroCommand("@", "play", false)).toEqual({ type: "repeatMacro" });
+    expect(resolveMacroCommand("w", undefined, false)).toEqual({ type: "none" });
+    expect(
+      resolveMacroCommand("m", undefined, false, {
+        recordKeys: ["m"],
+        playKeys: ["r"],
+        slots: ["x"],
+      }),
+    ).toEqual({ type: "pendingMacro", target: "record" });
+    expect(
+      resolveMacroCommand("x", "record", false, {
+        recordKeys: ["m"],
+        playKeys: ["r"],
+        slots: ["x"],
+      }),
+    ).toEqual({ type: "startRecording", slot: "x" });
+    expect(resolveMacroCommand("q", undefined, false, { enabled: false })).toEqual({
+      type: "none",
+    });
   });
 
   test("resolves configured semantic operators, motions, and commands", () => {

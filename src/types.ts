@@ -43,10 +43,16 @@ export type VimCommandAction =
 
 export type VimStatusItem = "mode" | "pendingOperator" | "selection" | "cursorPosition";
 
+export type VimMacroKeymapOptions = {
+  record: readonly string[];
+  play: readonly string[];
+};
+
 export type VimKeymapOptions = {
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
   commands: Record<VimCommandAction, readonly string[]>;
+  macros: VimMacroKeymapOptions;
   operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
 };
 
@@ -75,11 +81,20 @@ export type VimUiOptions = {
 
 export type ResolvedVimUi = VimUiOptions;
 
+export type VimMacroOptions = {
+  enabled: boolean;
+  slots: readonly string[];
+  maxReplaySteps: number;
+};
+
+export type ResolvedVimMacros = VimMacroOptions;
+
 export type VimEditorOptions = {
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;
   ui?: ResolvedVimUi;
+  macros?: ResolvedVimMacros;
 };
 
 export type Position = {

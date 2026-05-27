@@ -1,8 +1,11 @@
 # vim-mode-visual-configuration Specification
 
 ## Purpose
+
 TBD - created by archiving change enhance-visual-modes-and-cursors. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Visual selections are highlighted inline
 
 The Vim editor SHALL render active visual selections with visible inline highlighting while preserving prompt text and terminal-width safety.
@@ -155,4 +158,3 @@ The change SHALL include tests and documentation for visual highlighting, visual
 
 - **WHEN** the user opens the project README
 - **THEN** it documents `V`, visual line operations, visual selection highlighting, `piVimMode.startMode`, and `piVimMode.cursor` settings
-

@@ -1,8 +1,11 @@
 # vim-editor-adapter-architecture Specification
 
 ## Purpose
+
 TBD - created by archiving change deepen-vimeditor-pi-adapter-modal-editing-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: VimEditor acts as the Pi adapter
 
 The Vim editor SHALL keep `VimEditor` as the Pi-facing `CustomEditor` adapter while moving modal editing semantics out of the adapter class.
@@ -136,4 +139,3 @@ The refactor SHALL keep mode feedback and visual rendering width-safe while deep
 
 - **WHEN** mode, pending command, or visual selection state changes
 - **THEN** testable status/view helpers can derive the correct label and summary data without requiring Pi TUI objects
-

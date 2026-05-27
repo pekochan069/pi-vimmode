@@ -1,8 +1,11 @@
 # extended-vim-keybindings Specification
 
 ## Purpose
+
 TBD - created by archiving change add-more-vim-keybindings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode supports additional navigation bindings
 
 The Vim editor SHALL support additional normal-mode navigation bindings for common prompt movement.
@@ -146,4 +149,3 @@ The change SHALL include tests and documentation for each new keybinding group.
 
 - **WHEN** the user opens the project README
 - **THEN** it documents the added normal-mode commands, supported operator-motion combinations, and current limitations
-

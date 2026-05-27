@@ -32,16 +32,16 @@ Use a stable editor factory, install through more than one lifecycle event, and 
 
 ```ts
 const editorFactory = (
-	tui: ConstructorParameters<typeof VimEditor>[0],
-	theme: ConstructorParameters<typeof VimEditor>[1],
-	keybindings: ConstructorParameters<typeof VimEditor>[2],
+  tui: ConstructorParameters<typeof VimEditor>[0],
+  theme: ConstructorParameters<typeof VimEditor>[1],
+  keybindings: ConstructorParameters<typeof VimEditor>[2],
 ) => new VimEditor(tui, theme, keybindings);
 
 const installEditor = (ctx: ExtensionContext) => {
-	if (ctx.ui.getEditorComponent() !== editorFactory) {
-		ctx.ui.setEditorComponent(editorFactory);
-	}
-	ctx.ui.setStatus("pi-vimmode", "vim");
+  if (ctx.ui.getEditorComponent() !== editorFactory) {
+    ctx.ui.setEditorComponent(editorFactory);
+  }
+  ctx.ui.setStatus("pi-vimmode", "vim");
 };
 ```
 
@@ -49,15 +49,15 @@ Install immediately and again on the next tick so extension load, resource disco
 
 ```ts
 const installEditorSoon = (ctx: ExtensionContext) => {
-	installEditor(ctx);
-	setTimeout(() => {
-		try {
-			installEditor(ctx);
-		} catch {
-			// Expected only when context goes stale during reload/session switch.
-			// Prefer narrowing/logging if Pi exposes a stale-context signal.
-		}
-	}, 0);
+  installEditor(ctx);
+  setTimeout(() => {
+    try {
+      installEditor(ctx);
+    } catch {
+      // Expected only when context goes stale during reload/session switch.
+      // Prefer narrowing/logging if Pi exposes a stale-context signal.
+    }
+  }, 0);
 };
 ```
 
@@ -65,15 +65,15 @@ Register multiple lifecycle hooks:
 
 ```ts
 pi.on("session_start", (_event, ctx) => {
-	installEditorSoon(ctx);
+  installEditorSoon(ctx);
 });
 
 pi.on("resources_discover", (_event, ctx) => {
-	installEditorSoon(ctx);
+  installEditorSoon(ctx);
 });
 
 pi.on("agent_end", (_event, ctx) => {
-	installEditor(ctx);
+  installEditor(ctx);
 });
 ```
 

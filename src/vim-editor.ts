@@ -5,10 +5,11 @@ import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./
 import type { CursorStyle, EditResult, Position, VimEditorOptions, VimMode } from "./types.ts";
 
 import { normalizeBufferPosition } from "./buffer.ts";
-import { cursorStyleForMode, DEFAULT_VIM_OPTIONS } from "./config.ts";
+import { pendingDisplay } from "./commands.ts";
+import { cursorStyleForMode, DEFAULT_VIM_OPTIONS, uiForOptions } from "./config.ts";
 import { handleModalInput } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
-import { modalModeLabel, modalVisualStatus } from "./modal/view.ts";
+import { modalStatus } from "./modal/view.ts";
 import {
   cursorShapeEscape,
   renderVisualEditor,
@@ -64,7 +65,12 @@ export function fitStatusBorder(
 }
 
 function cloneOptions(options: VimEditorOptions): VimEditorOptions {
-  return { startMode: options.startMode, cursor: { ...options.cursor } };
+  return {
+    startMode: options.startMode,
+    cursor: { ...options.cursor },
+    keymap: options.keymap,
+    ui: options.ui,
+  };
 }
 
 export class VimEditor extends CustomEditor {
@@ -93,7 +99,7 @@ export class VimEditor extends CustomEditor {
   }
 
   getPendingOperator() {
-    return this.modalState.pending;
+    return pendingDisplay(this.modalState.pending);
   }
 
   getCurrentCursorStyle(): CursorStyle {
@@ -111,9 +117,16 @@ export class VimEditor extends CustomEditor {
     if (lines.length === 0 || width <= 0) return lines;
 
     const last = lines.length - 1;
-    const pending = this.modalState.pending ? ` ${this.modalState.pending}…` : "";
-    const left = ` ${modalModeLabel(this.modalState.mode, width)}${pending} `;
-    lines[last] = fitStatusBorder(left, this.visualStatus(width), width, this.borderColor);
+    const status = modalStatus({
+      mode: this.modalState.mode,
+      text: this.getText(),
+      cursor: this.getCursor(),
+      visualAnchor: this.modalState.visualAnchor,
+      width,
+      pending: pendingDisplay(this.modalState.pending),
+      ui: uiForOptions(this.options),
+    });
+    lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
     return lines;
   }
 
@@ -207,16 +220,6 @@ export class VimEditor extends CustomEditor {
 
     super.handleInput(KEY.lineStart);
     for (let i = 0; i < target.col; i++) super.handleInput(KEY.right);
-  }
-
-  private visualStatus(width: number): string {
-    return modalVisualStatus({
-      mode: this.modalState.mode,
-      text: this.getText(),
-      cursor: this.getCursor(),
-      visualAnchor: this.modalState.visualAnchor,
-      width,
-    });
   }
 
   private terminalRows(): number | undefined {

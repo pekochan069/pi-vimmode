@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import type { ModalEffect, ModalState } from "../src/modal/types.ts";
 
+import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
 import { handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
-import { modalModeLabel, modalVisualStatus } from "../src/modal/view.ts";
+import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
 
 const cursor = { line: 0, col: 0 };
 const options = {
@@ -94,6 +95,29 @@ describe("modal view state", () => {
       }),
     ).toContain("2 lines");
   });
+
+  test("modal status respects UI item config and cursor position format", () => {
+    const status = modalStatus({
+      mode: "normal",
+      text: "one\ntwo",
+      cursor: { line: 1, col: 2 },
+      width: 40,
+      pending: "d",
+      ui: {
+        status: { enabled: true, items: ["cursorPosition", "mode", "pendingOperator"] },
+        mode: {
+          enabled: true,
+          labels: { insert: "INS", normal: "CMD", visual: "VIS", visualLine: "VLN" },
+          narrowLabels: { insert: "I", normal: "C", visual: "V", visualLine: "VL" },
+        },
+        selection: { enabled: false, previewMaxChars: 4 },
+        cursorPosition: { enabled: true, base: 1, format: "L{line}:C{column}" },
+      },
+    });
+
+    expect(status.left.trim()).toBe("L2:C3 CMD d…");
+    expect(status.right).toBe("");
+  });
 });
 
 describe("modal engine", () => {
@@ -118,6 +142,44 @@ describe("modal engine", () => {
       state: { mode: "normal" },
       effects: [{ type: "invalidate" }],
     });
+  });
+
+  test("normal mode uses configured semantic keymap", () => {
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
+        motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"] },
+      },
+    };
+
+    expect(handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "q")).toEqual({
+      state: { mode: "normal", pending: "q" },
+      effects: [{ type: "invalidate" }],
+    });
+
+    const deleted = handleModalInput(
+      { mode: "normal", pending: "q" },
+      { text: "abc def", lines: ["abc def"], cursor },
+      configuredOptions,
+      "e",
+    );
+    expect(deleted.state.register).toEqual({ type: "char", text: "abc " });
+    expect(deleted.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "def",
+        cursor,
+        register: { type: "char", text: "abc " },
+        changed: true,
+      },
+    });
+
+    const opened = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "n");
+    expect(opened.state.mode).toBe("insert");
+    expect(opened.effects[0]?.type).toBe("edit");
   });
 
   test("normal edit commands return structural edit effects and register state", () => {
@@ -153,6 +215,58 @@ describe("modal engine", () => {
         { type: "delegate", input: "\r" },
       ],
     });
+  });
+
+  test("visual mode uses configured motion keys", () => {
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        motions: { ...DEFAULT_VIM_KEYMAP.motions, right: ["r"] },
+      },
+    };
+
+    expect(
+      handleModalInput({ mode: "visual", visualAnchor: cursor }, snapshot, configuredOptions, "r")
+        .effects,
+    ).toEqual([{ type: "adapterCommand", command: "right" }, { type: "invalidate" }]);
+  });
+
+  test("visual mode supports configured multi-key motions and operators", () => {
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        operators: { ...DEFAULT_VIM_KEYMAP.operators, yank: ["qq"] },
+        motions: { ...DEFAULT_VIM_KEYMAP.motions, right: ["rr"] },
+      },
+    };
+
+    const pendingMotion = handleModalInput(
+      { mode: "visual", visualAnchor: cursor },
+      snapshot,
+      configuredOptions,
+      "r",
+    );
+    expect(pendingMotion.state.pending).toBe("r");
+    expect(handleModalInput(pendingMotion.state, snapshot, configuredOptions, "r").effects).toEqual(
+      [{ type: "adapterCommand", command: "right" }, { type: "invalidate" }],
+    );
+
+    const pendingOperator = handleModalInput(
+      { mode: "visual", visualAnchor: cursor },
+      snapshot,
+      configuredOptions,
+      "q",
+    );
+    const yanked = handleModalInput(
+      pendingOperator.state,
+      { text: "abc", lines: ["abc"], cursor: { line: 0, col: 1 } },
+      configuredOptions,
+      "q",
+    );
+    expect(yanked.state.register).toEqual({ type: "char", text: "ab" });
+    expect(yanked.state.mode).toBe("normal");
   });
 
   test("visual delete returns edit effect and normal-mode cursor intent", () => {

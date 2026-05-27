@@ -109,6 +109,74 @@ Project settings override global settings field by field.
       "normal": "block",
       "visual": "block",
       "visualLine": "block"
+    },
+    "keymap": {
+      "operators": {
+        "delete": ["d"],
+        "change": ["c"],
+        "yank": ["y"]
+      },
+      "motions": {
+        "left": ["h"],
+        "down": ["j"],
+        "up": ["k"],
+        "right": ["l"],
+        "wordForward": ["w"],
+        "wordBackward": ["b"],
+        "lineStart": ["0"],
+        "lineEnd": ["$"],
+        "firstNonBlank": ["^", "_"],
+        "bufferStart": ["gg"],
+        "bufferEnd": ["G"],
+        "matchingPair": ["%"]
+      },
+      "commands": {
+        "insertBefore": ["i"],
+        "insertAfter": ["a"],
+        "openLineBelow": ["o"],
+        "openLineAbove": ["O"],
+        "pasteAfter": ["p"],
+        "pasteBefore": ["P"],
+        "joinLine": ["J"],
+        "undo": ["u"],
+        "visualChar": ["v"],
+        "visualLine": ["V"]
+      },
+      "operatorMotions": {
+        "delete": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
+        "change": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
+        "yank": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]
+      }
+    },
+    "ui": {
+      "status": {
+        "enabled": true,
+        "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
+      },
+      "mode": {
+        "enabled": true,
+        "labels": {
+          "insert": "INSERT",
+          "normal": "NORMAL",
+          "visual": "VISUAL",
+          "visualLine": "V-LINE"
+        },
+        "narrowLabels": {
+          "insert": "I",
+          "normal": "N",
+          "visual": "V",
+          "visualLine": "VL"
+        }
+      },
+      "selection": {
+        "enabled": true,
+        "previewMaxChars": 16
+      },
+      "cursorPosition": {
+        "enabled": false,
+        "base": 1,
+        "format": "{line}:{column}"
+      }
     }
   }
 }
@@ -134,12 +202,57 @@ Supported cursor styles per mode:
 Invalid cursor styles fall back per mode, so one bad value does not discard the rest of the config.
 Terminal cursor-shape escape support is best-effort; the editor also renders a mode-specific fake cursor where it can do so safely.
 
+### `piVimMode.keymap`
+
+`keymap` maps printable key sequences to supported semantic actions. Invalid fields fall back per field, so one bad mapping does not discard the rest of the keymap.
+
+Supported operator actions:
+
+- `delete`
+- `change`
+- `yank`
+
+Supported motion actions:
+
+- `left`, `down`, `up`, `right`
+- `wordForward`, `wordBackward`
+- `lineStart`, `lineEnd`, `firstNonBlank`
+- `bufferStart`, `bufferEnd`, `matchingPair`
+
+Supported command actions:
+
+- Insert/open: `insertBefore`, `insertAfter`, `insertLineStart`, `insertLineEnd`, `openLineBelow`, `openLineAbove`
+- Visual: `visualChar`, `visualLine`
+- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `undo`
+
+`operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
+
+Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `qq`, then `qqqq` deletes the current line and `qq{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
+
+### `piVimMode.ui`
+
+`ui` configures the Vim status area without changing editing behavior.
+
+Supported status items:
+
+- `mode`: current mode label
+- `pendingOperator`: pending operator or key-sequence prefix such as `d…` or `g…`
+- `selection`: visual selection summary and preview
+- `cursorPosition`: line and column using `cursorPosition.format`
+
+`mode.labels` and `mode.narrowLabels` customize mode names. `selection.previewMaxChars` controls selection preview width. `cursorPosition.base` supports `0` or `1`, and `cursorPosition.format` must include `{line}` and `{column}`.
+
+The UI config is the single source of truth for status display. Vim/Neovim alias options such as `showmode`, `showcmd`, and `ruler` are not supported; configure `ui.status.items`, `ui.mode.enabled`, and `ui.cursorPosition.enabled` directly instead.
+
+The extension does not execute or parse `.vimrc`, Vimscript, or Neovim Lua.
+
 ## Pi shortcut compatibility
 
 Unknown control/non-printable keys delegate to Pi. In particular:
 
 - `Enter` submits in all modes. Normal/visual/V-Line submit resets Vim transient state and returns to the configured startup mode for the next prompt.
-- `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model/thinking shortcuts, and image paste stay Pi-owned unless explicitly implemented by this extension.
+- `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model/thinking shortcuts, autocomplete controls, external-editor shortcuts, and image paste stay Pi-owned.
+- Protected Pi shortcut names are rejected from `piVimMode.keymap` with a warning.
 - Unmapped printable keys in normal/visual mode are ignored instead of inserted.
 
 ## Registers and undo
@@ -153,11 +266,12 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 
 ## Feedback
 
-The editor border/status area shows mode feedback:
+The editor border/status area shows configurable feedback:
 
-- `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths.
-- `I`, `N`, `V`, and `VL` at narrow widths.
-- Pending `d`/`c`/`y`/`g` and visual selection summaries show when space allows.
+- `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
+- `I`, `N`, `V`, and `VL` at narrow widths by default.
+- Pending operators/key prefixes and visual selection summaries show when enabled and space allows.
+- Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
 ## Architecture
@@ -166,18 +280,26 @@ The editor border/status area shows mode feedback:
 
 Modal editing behavior lives under `src/modal/`:
 
-- `engine.ts` owns mode transitions, finite key dispatch, register updates, and supported Vim semantics.
+- `engine.ts` owns mode transitions, finite semantic key dispatch, register updates, and supported Vim semantics.
 - `types.ts` defines adapter-applied effects such as delegation, edits, cursor restoration, invalidation, and terminal cursor hints.
-- `view.ts` derives mode labels and visual status text without needing Pi TUI objects.
+- `view.ts` derives mode labels, status items, visual status text, and cursor position text without needing Pi TUI objects.
 
-The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. This split is a refactor boundary only: no new keybindings, no private Pi APIs, and no full Vim parity expansion.
+The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. Config maps keys to supported semantic actions; it does not add private Pi APIs or full Vim parity.
+
+## Project docs
+
+- `TODOS.md`: remaining follow-up work and completed architecture deepening notes.
+- `docs/plans/`: historical implementation plans for the Vim editor work.
+- `docs/solutions/`: reusable learnings for parser, buffer, lifecycle, and visual-mode bugs.
+- `openspec/specs/`: durable OpenSpec requirements for supported Vim behavior.
 
 ## Limitations
 
 - No block visual mode.
-- No counts, text objects, search, ex commands, macros, marks, named registers, or system clipboard integration.
-- Operator motions are limited to `w`, `b`, `0`, `^`, and `$`; no full Vim grammar.
+- No counts, text objects, search, ex commands, macros, marks, named registers, leader maps, recursive mappings, or system clipboard integration.
+- Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
+- No `.vimrc`, Vimscript, or Neovim Lua parsing.
 - No full Neovim cursor option parity: blink timing and terminal-specific cursor negotiation are out of scope.
 - Terminal cursor-shape hints are best-effort; unsupported terminals may show Pi's default cursor shape in some non-visual states.
 - Editing uses Pi's cursor coordinates, not full grapheme-cluster Vim semantics. Complex Unicode may not behave exactly like Vim.
@@ -187,6 +309,8 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 ```sh
 bun test
 bun run check-types
+bun run lint
+bun run format:check
 ```
 
 Manual smoke checklist:
@@ -199,5 +323,6 @@ Manual smoke checklist:
 6. Configure `piVimMode.startMode` and confirm a new editor starts in that mode.
 7. Configure `piVimMode.cursor` and confirm cursor style changes by mode where the terminal supports it.
 8. Submit from insert and normal modes.
-9. Confirm next prompt returns to the configured startup mode.
-10. Confirm normal-mode `Esc` can still interrupt/abort Pi.
+9. Configure a custom `piVimMode.keymap` operator, motion, and UI status order, then confirm normal and visual mode use the custom mappings.
+10. Confirm next prompt returns to the configured startup mode.
+11. Confirm normal-mode `Esc` can still interrupt/abort Pi.

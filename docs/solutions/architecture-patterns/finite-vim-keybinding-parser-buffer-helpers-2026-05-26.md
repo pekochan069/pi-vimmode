@@ -12,6 +12,7 @@ applies_when:
   - "Implementing multi-key editor commands without full Vim grammar"
   - "Separating parser behavior from text-buffer transformations"
   - "Extracting modal editor state into a pure engine behind a Pi CustomEditor adapter"
+  - "Adding configurable semantic keymaps without accepting unsupported Vim grammar"
 tags:
   - vim-mode
   - keybindings
@@ -19,6 +20,7 @@ tags:
   - buffer-helpers
   - modal-engine
   - adapter-boundary
+  - configurable-keymap
   - typescript
   - bun
 ---
@@ -27,13 +29,14 @@ tags:
 
 ## Context
 
-`pi-vimmode` needed more Vim-native prompt-editing commands without becoming a full Vim emulator. The feature added finite normal-mode bindings such as `gg`, `G`, `^`, `_`, `%`, `o`/`O`, `d`/`c`/`y` with selected motions, `cc`, `D`, `C`, `Y`, `J`, and `P`.
+`pi-vimmode` needed more Vim-native prompt-editing commands without becoming a full Vim emulator. The feature added finite normal-mode bindings such as `gg`, `G`, `^`, `_`, `%`, `o`/`O`, `d`/`c`/`y` with selected motions, `cc`, `D`, `C`, `Y`, `J`, and `P`, then evolved those defaults into a configurable semantic keymap.
 
 The risky part was not wiring individual keys. The risky part was keeping three concerns from collapsing into one fragile editor switch:
 
-- pending command grammar (`g`, `d`, `c`, `y`),
+- pending command grammar (`g`, `d`, `c`, `y`, and custom multi-key prefixes),
 - text-buffer transforms and register semantics,
-- Pi editor dispatch and shortcut delegation.
+- Pi editor dispatch and shortcut delegation,
+- config validation so a user-visible mapping never resolves to a no-op executor path.
 
 ## Guidance
 
@@ -70,6 +73,21 @@ if (isVimMotion(key)) return { type: "operatorMotion", operator: pending, motion
 
 Unsupported pending combinations return `invalid`; normal mode clears pending state without inserting text.
 
+When mappings become configurable, keep semantic actions separate from raw keys. Prefix state should carry enough structure to distinguish an operator prefix from a motion prefix after an operator. A raw concatenated string works for `d` + `w`, but it breaks once operators or motions can be multi-key.
+
+Good pattern:
+
+```ts
+const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
+const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
+
+function encodeOperatorMotionPending(operatorSequence: string, motionPrefix: string): string {
+  return `${operatorSequence}${OPERATOR_MOTION_SEPARATOR}${motionPrefix}`;
+}
+```
+
+Expose display text separately from internal pending state so status UI can show `qqe…` without depending on parser sentinels.
+
 ### 2. Put text semantics in pure `src/buffer.ts` helpers
 
 Keep the editor out of string surgery. Add pure helpers for each behavior family:
@@ -99,6 +117,8 @@ return orderedOffsetRange(previousWordStartOffset(text, current), current);
 ```
 
 Keep `deleteRange()` / `selectionText()` for visual mode. Use `deleteByMotion()` / `yankByMotion()` for operator commands.
+
+Config should only accept operator motions with executable range semantics. Normal/visual motions such as `right`, `bufferStart`, and `matchingPair` can be valid movement actions while still being invalid after `d`, `c`, or `y` until the buffer module implements matching operator ranges. Reject unsupported operator motions during config parsing with a warning instead of letting the modal engine silently no-op.
 
 ### 4. Let `VimEditor` dispatch, not compute
 
@@ -134,7 +154,7 @@ When `VimEditor` starts owning mode transitions, register updates, pending opera
 - `src/modal/engine.ts` owns supported Vim semantics: insert/normal/visual input handling, pending command cleanup, register updates, structural edit decisions, and mode transitions.
 - `src/modal/state.ts` owns modal state construction, transient reset, and transition effects while preserving the unnamed register.
 - `src/modal/types.ts` defines the adapter boundary: snapshots, modal state, updates, and effects.
-- `src/modal/view.ts` derives mode labels and visual status text without depending on Pi TUI objects.
+- `src/modal/view.ts` derives mode labels, ordered status items, visual status text, and cursor position text without depending on Pi TUI objects.
 
 The core contract is: modal code returns adapter-applied intents; the adapter performs Pi runtime calls.
 
@@ -168,6 +188,7 @@ The modal engine extraction adds another payoff: a failing command can be isolat
 
 - Adding normal-mode Vim bindings to `pi-vimmode`.
 - Adding pending prefixes such as `g`, `d`, `c`, or `y`.
+- Adding configurable key sequences for existing semantic actions.
 - Adding prompt text transforms that update the unnamed register.
 - Implementing Vim-like behavior with intentionally limited scope.
 - Testing modal editor behavior where most cases can be proven below the TUI integration layer.
@@ -250,11 +271,11 @@ The exact effect union can grow, but each new effect should name one adapter res
 
 Validation for the working implementation:
 
+- `bun test` — 98 passing tests after configurable keymap/UI work
 - `bun run check-types`
-- `bun test` — 77 passing tests after modal extraction
 - `bun run lint`
+- `bun run format:check`
 - `git diff --check`
-- `oxfmt --check` on changed docs/source/tests
 
 ## Related
 

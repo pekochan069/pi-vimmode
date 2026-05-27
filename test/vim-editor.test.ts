@@ -52,6 +52,42 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("");
   });
 
+  test("renders configured mode labels", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      ui: {
+        ...DEFAULT_VIM_OPTIONS.ui!,
+        mode: {
+          ...DEFAULT_VIM_OPTIONS.ui!.mode,
+          labels: { ...DEFAULT_VIM_OPTIONS.ui!.mode.labels, normal: "COMMAND" },
+          narrowLabels: { ...DEFAULT_VIM_OPTIONS.ui!.mode.narrowLabels, normal: "C" },
+        },
+      },
+    });
+
+    expect(editor.render(40).join("\n")).toContain("COMMAND");
+    expect(editor.render(8).join("\n")).toContain("C");
+  });
+
+  test("renders configured cursor position status", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      ui: {
+        ...DEFAULT_VIM_OPTIONS.ui!,
+        status: { enabled: true, items: ["mode", "cursorPosition"] },
+        cursorPosition: { enabled: true, base: 1, format: "L{line}:C{column}" },
+      },
+    });
+    editor.setText("one\ntwo");
+    editor.handleInput("G");
+
+    const lines = editor.render(40);
+    expect(lines.join("\n")).toContain("L2:C4");
+    expectRenderedWidth(lines, 40);
+  });
+
   test("normal mode ignores unmapped printable keys", () => {
     const { editor } = createEditor();
     editor.handleInput("a");
@@ -69,6 +105,25 @@ describe("vim editor integration", () => {
     editor.handleInput("x");
     expect(editor.getText()).toBe("a");
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
+  });
+
+  test("normal mode uses configured keymap through the editor", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["q"] },
+        motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
+      },
+    });
+    editor.setText("hello world");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("q");
+    editor.handleInput("e");
+    expect(editor.getText()).toBe("world");
+    expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
   });
 
   test("normal mode supports extended navigation", () => {

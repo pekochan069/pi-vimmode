@@ -2,7 +2,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { CursorStyle, CursorStyles, StartupMode, VimEditorOptions, VimMode } from "./types.ts";
+import type {
+  CursorStyle,
+  CursorStyles,
+  ResolvedVimKeymap,
+  ResolvedVimUi,
+  StartupMode,
+  VimCommandAction,
+  VimEditorOptions,
+  VimMode,
+  VimMotionAction,
+  VimOperatorAction,
+  VimStatusItem,
+} from "./types.ts";
 
 const VIM_MODES = [
   "insert",
@@ -13,6 +25,152 @@ const VIM_MODES = [
 const START_MODES = new Set<StartupMode>(["insert", "normal"]);
 const CURSOR_STYLES = new Set<CursorStyle>(["block", "bar", "underline"]);
 
+export const VIM_OPERATOR_ACTIONS = ["delete", "change", "yank"] as const;
+export const VIM_MOTION_ACTIONS = [
+  "left",
+  "down",
+  "up",
+  "right",
+  "wordForward",
+  "wordBackward",
+  "lineStart",
+  "lineEnd",
+  "firstNonBlank",
+  "bufferStart",
+  "bufferEnd",
+  "matchingPair",
+] as const satisfies readonly VimMotionAction[];
+export const VIM_COMMAND_ACTIONS = [
+  "insertBefore",
+  "insertAfter",
+  "insertLineStart",
+  "insertLineEnd",
+  "openLineBelow",
+  "openLineAbove",
+  "visualChar",
+  "visualLine",
+  "deleteChar",
+  "deleteToLineEnd",
+  "changeToLineEnd",
+  "yankLine",
+  "joinLine",
+  "pasteAfter",
+  "pasteBefore",
+  "undo",
+] as const satisfies readonly VimCommandAction[];
+export const VIM_STATUS_ITEMS = [
+  "mode",
+  "pendingOperator",
+  "selection",
+  "cursorPosition",
+] as const satisfies readonly VimStatusItem[];
+
+const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
+const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
+const COMMAND_ACTION_SET = new Set<string>(VIM_COMMAND_ACTIONS);
+const OPERATOR_MOTION_ACTION_SET = new Set<string>([
+  "wordForward",
+  "wordBackward",
+  "lineStart",
+  "firstNonBlank",
+  "lineEnd",
+]);
+const STATUS_ITEM_SET = new Set<string>(VIM_STATUS_ITEMS);
+const PROTECTED_KEY_NAMES = new Set([
+  "enter",
+  "return",
+  "escape",
+  "esc",
+  "tab",
+  "shift+enter",
+  "ctrl+c",
+  "ctrl+d",
+  "ctrl+g",
+  "ctrl+l",
+  "ctrl+p",
+  "shift+ctrl+p",
+  "ctrl+t",
+  "shift+tab",
+  "ctrl+v",
+  "alt+v",
+]);
+
+export const DEFAULT_VIM_KEYMAP = Object.freeze({
+  operators: Object.freeze({
+    delete: Object.freeze(["d"]),
+    change: Object.freeze(["c"]),
+    yank: Object.freeze(["y"]),
+  }),
+  motions: Object.freeze({
+    left: Object.freeze(["h"]),
+    down: Object.freeze(["j"]),
+    up: Object.freeze(["k"]),
+    right: Object.freeze(["l"]),
+    wordForward: Object.freeze(["w"]),
+    wordBackward: Object.freeze(["b"]),
+    lineStart: Object.freeze(["0"]),
+    lineEnd: Object.freeze(["$"]),
+    firstNonBlank: Object.freeze(["^", "_"]),
+    bufferStart: Object.freeze(["gg"]),
+    bufferEnd: Object.freeze(["G"]),
+    matchingPair: Object.freeze(["%"]),
+  }),
+  commands: Object.freeze({
+    insertBefore: Object.freeze(["i"]),
+    insertAfter: Object.freeze(["a"]),
+    insertLineStart: Object.freeze(["I"]),
+    insertLineEnd: Object.freeze(["A"]),
+    openLineBelow: Object.freeze(["o"]),
+    openLineAbove: Object.freeze(["O"]),
+    visualChar: Object.freeze(["v"]),
+    visualLine: Object.freeze(["V"]),
+    deleteChar: Object.freeze(["x"]),
+    deleteToLineEnd: Object.freeze(["D"]),
+    changeToLineEnd: Object.freeze(["C"]),
+    yankLine: Object.freeze(["Y"]),
+    joinLine: Object.freeze(["J"]),
+    pasteAfter: Object.freeze(["p"]),
+    pasteBefore: Object.freeze(["P"]),
+    undo: Object.freeze(["u"]),
+  }),
+  operatorMotions: Object.freeze({
+    delete: Object.freeze(["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]),
+    change: Object.freeze(["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]),
+    yank: Object.freeze(["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]),
+  }),
+}) as unknown as ResolvedVimKeymap;
+
+export const DEFAULT_VIM_UI = Object.freeze({
+  status: Object.freeze({
+    enabled: true,
+    items: Object.freeze(["mode", "pendingOperator", "selection"]),
+  }),
+  mode: Object.freeze({
+    enabled: true,
+    labels: Object.freeze({
+      insert: "INSERT",
+      normal: "NORMAL",
+      visual: "VISUAL",
+      visualLine: "V-LINE",
+    }),
+    narrowLabels: Object.freeze({
+      insert: "I",
+      normal: "N",
+      visual: "V",
+      visualLine: "VL",
+    }),
+  }),
+  selection: Object.freeze({
+    enabled: true,
+    previewMaxChars: 16,
+  }),
+  cursorPosition: Object.freeze({
+    enabled: false,
+    base: 1,
+    format: "{line}:{column}",
+  }),
+}) as unknown as ResolvedVimUi;
+
 export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
   startMode: "insert",
   cursor: Object.freeze({
@@ -21,11 +179,33 @@ export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
     visual: "block",
     visualLine: "block",
   }),
+  keymap: DEFAULT_VIM_KEYMAP,
+  ui: DEFAULT_VIM_UI,
 });
 
 type PartialVimOptions = {
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
+  keymap?: PartialKeymapOptions;
+  ui?: PartialUiOptions;
+};
+
+type PartialKeymapOptions = {
+  operators?: Partial<Record<VimOperatorAction, string[]>>;
+  motions?: Partial<Record<VimMotionAction, string[]>>;
+  commands?: Partial<Record<VimCommandAction, string[]>>;
+  operatorMotions?: Partial<Record<VimOperatorAction, VimMotionAction[]>>;
+};
+
+type PartialUiOptions = {
+  status?: Partial<ResolvedVimUi["status"]>;
+  mode?: {
+    enabled?: boolean;
+    labels?: Partial<Record<VimMode, string>>;
+    narrowLabels?: Partial<Record<VimMode, string>>;
+  };
+  selection?: Partial<ResolvedVimUi["selection"]>;
+  cursorPosition?: Partial<ResolvedVimUi["cursorPosition"]>;
 };
 
 export type VimConfigLoadResult = {
@@ -39,15 +219,355 @@ export type VimConfigPaths = {
   projectSettingsPath?: string;
 };
 
+function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVimKeymap {
+  return {
+    operators: {
+      delete: [...keymap.operators.delete],
+      change: [...keymap.operators.change],
+      yank: [...keymap.operators.yank],
+    },
+    motions: {
+      left: [...keymap.motions.left],
+      down: [...keymap.motions.down],
+      up: [...keymap.motions.up],
+      right: [...keymap.motions.right],
+      wordForward: [...keymap.motions.wordForward],
+      wordBackward: [...keymap.motions.wordBackward],
+      lineStart: [...keymap.motions.lineStart],
+      lineEnd: [...keymap.motions.lineEnd],
+      firstNonBlank: [...keymap.motions.firstNonBlank],
+      bufferStart: [...keymap.motions.bufferStart],
+      bufferEnd: [...keymap.motions.bufferEnd],
+      matchingPair: [...keymap.motions.matchingPair],
+    },
+    commands: {
+      insertBefore: [...keymap.commands.insertBefore],
+      insertAfter: [...keymap.commands.insertAfter],
+      insertLineStart: [...keymap.commands.insertLineStart],
+      insertLineEnd: [...keymap.commands.insertLineEnd],
+      openLineBelow: [...keymap.commands.openLineBelow],
+      openLineAbove: [...keymap.commands.openLineAbove],
+      visualChar: [...keymap.commands.visualChar],
+      visualLine: [...keymap.commands.visualLine],
+      deleteChar: [...keymap.commands.deleteChar],
+      deleteToLineEnd: [...keymap.commands.deleteToLineEnd],
+      changeToLineEnd: [...keymap.commands.changeToLineEnd],
+      yankLine: [...keymap.commands.yankLine],
+      joinLine: [...keymap.commands.joinLine],
+      pasteAfter: [...keymap.commands.pasteAfter],
+      pasteBefore: [...keymap.commands.pasteBefore],
+      undo: [...keymap.commands.undo],
+    },
+    operatorMotions: {
+      delete: [...keymap.operatorMotions.delete],
+      change: [...keymap.operatorMotions.change],
+      yank: [...keymap.operatorMotions.yank],
+    },
+  };
+}
+
+function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
+  return {
+    status: { enabled: ui.status.enabled, items: [...ui.status.items] },
+    mode: {
+      enabled: ui.mode.enabled,
+      labels: { ...ui.mode.labels },
+      narrowLabels: { ...ui.mode.narrowLabels },
+    },
+    selection: { ...ui.selection },
+    cursorPosition: { ...ui.cursorPosition },
+  };
+}
+
 function cloneDefaultOptions(): VimEditorOptions {
   return {
     startMode: DEFAULT_VIM_OPTIONS.startMode,
     cursor: { ...DEFAULT_VIM_OPTIONS.cursor },
+    keymap: cloneKeymap(),
+    ui: cloneUi(),
   };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSupportedKeySequence(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0) return false;
+  return !PROTECTED_KEY_NAMES.has(value.toLowerCase());
+}
+
+function parseStringArray(value: unknown, label: string, warnings: string[]): string[] | undefined {
+  if (!Array.isArray(value)) {
+    warnings.push(`${label} must be an array of key strings`);
+    return undefined;
+  }
+
+  const parsed: string[] = [];
+  for (const item of value) {
+    if (isSupportedKeySequence(item)) {
+      parsed.push(item);
+    } else {
+      warnings.push(`${label} contains unsupported or protected key`);
+    }
+  }
+
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function parseActionStringArray<T extends string>(
+  value: unknown,
+  allowed: Set<string>,
+  label: string,
+  warnings: string[],
+): T[] | undefined {
+  if (!Array.isArray(value)) {
+    warnings.push(`${label} must be an array`);
+    return undefined;
+  }
+
+  const parsed: T[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && allowed.has(item)) parsed.push(item as T);
+    else warnings.push(`${label} contains unsupported action`);
+  }
+
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function parseKeyBindings<T extends string>(
+  value: unknown,
+  allowed: Set<string>,
+  sourceLabel: string,
+  group: string,
+  warnings: string[],
+): Partial<Record<T, string[]>> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.keymap.${group} must be an object`);
+    return undefined;
+  }
+
+  const parsed: Partial<Record<T, string[]>> = {};
+  const seen = new Map<string, string>();
+  for (const [action, bindings] of Object.entries(value)) {
+    if (!allowed.has(action)) {
+      warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.${group}.${action}`);
+      continue;
+    }
+    const keys = parseStringArray(
+      bindings,
+      `${sourceLabel}: piVimMode.keymap.${group}.${action}`,
+      warnings,
+    );
+    if (!keys) continue;
+    parsed[action as T] = keys;
+    for (const key of keys) {
+      const previous = seen.get(key);
+      if (previous && previous !== action) {
+        warnings.push(
+          `${sourceLabel}: duplicate piVimMode.keymap.${group} binding ${key} for ${previous} and ${action}`,
+        );
+      } else {
+        seen.set(key, action);
+      }
+    }
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseKeymap(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialKeymapOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialKeymapOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.keymap must be an object`);
+    return { warnings };
+  }
+
+  partial.operators = parseKeyBindings<VimOperatorAction>(
+    value.operators,
+    OPERATOR_ACTION_SET,
+    sourceLabel,
+    "operators",
+    warnings,
+  );
+  partial.motions = parseKeyBindings<VimMotionAction>(
+    value.motions,
+    MOTION_ACTION_SET,
+    sourceLabel,
+    "motions",
+    warnings,
+  );
+  partial.commands = parseKeyBindings<VimCommandAction>(
+    value.commands,
+    COMMAND_ACTION_SET,
+    sourceLabel,
+    "commands",
+    warnings,
+  );
+
+  if (value.operatorMotions !== undefined) {
+    if (!isRecord(value.operatorMotions)) {
+      warnings.push(`${sourceLabel}: piVimMode.keymap.operatorMotions must be an object`);
+    } else {
+      const operatorMotions: Partial<Record<VimOperatorAction, VimMotionAction[]>> = {};
+      for (const [operator, motions] of Object.entries(value.operatorMotions)) {
+        if (!OPERATOR_ACTION_SET.has(operator)) {
+          warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.operatorMotions.${operator}`);
+          continue;
+        }
+        const parsed = parseActionStringArray<VimMotionAction>(
+          motions,
+          OPERATOR_MOTION_ACTION_SET,
+          `${sourceLabel}: piVimMode.keymap.operatorMotions.${operator} contains unsupported operator motion`,
+          warnings,
+        );
+        if (parsed) operatorMotions[operator as VimOperatorAction] = parsed;
+      }
+      if (Object.keys(operatorMotions).length > 0) partial.operatorMotions = operatorMotions;
+    }
+  }
+
+  return { partial, warnings };
+}
+
+function parseModeLabelMap(
+  value: unknown,
+  sourceLabel: string,
+  field: "labels" | "narrowLabels",
+  warnings: string[],
+): Partial<Record<VimMode, string>> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.ui.mode.${field} must be an object`);
+    return undefined;
+  }
+
+  const labels: Partial<Record<VimMode, string>> = {};
+  for (const mode of VIM_MODES) {
+    const label = value[mode];
+    if (label === undefined) continue;
+    if (typeof label === "string" && label.length > 0) labels[mode] = label;
+    else
+      warnings.push(
+        `${sourceLabel}: piVimMode.ui.mode.${field}.${mode} must be a non-empty string`,
+      );
+  }
+  return Object.keys(labels).length > 0 ? labels : undefined;
+}
+
+function parseUi(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialUiOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialUiOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.ui must be an object`);
+    return { warnings };
+  }
+
+  if (value.status !== undefined) {
+    if (!isRecord(value.status)) {
+      warnings.push(`${sourceLabel}: piVimMode.ui.status must be an object`);
+    } else {
+      const status: Partial<ResolvedVimUi["status"]> = {};
+      if (typeof value.status.enabled === "boolean") status.enabled = value.status.enabled;
+      else if (value.status.enabled !== undefined)
+        warnings.push(`${sourceLabel}: piVimMode.ui.status.enabled must be a boolean`);
+      if (value.status.items !== undefined) {
+        const items = parseActionStringArray<VimStatusItem>(
+          value.status.items,
+          STATUS_ITEM_SET,
+          `${sourceLabel}: piVimMode.ui.status.items`,
+          warnings,
+        );
+        if (items) status.items = items;
+      }
+      partial.status = status;
+    }
+  }
+
+  if (value.mode !== undefined) {
+    if (!isRecord(value.mode)) {
+      warnings.push(`${sourceLabel}: piVimMode.ui.mode must be an object`);
+    } else {
+      const mode: PartialUiOptions["mode"] = {};
+      if (typeof value.mode.enabled === "boolean") mode.enabled = value.mode.enabled;
+      else if (value.mode.enabled !== undefined)
+        warnings.push(`${sourceLabel}: piVimMode.ui.mode.enabled must be a boolean`);
+      mode.labels = parseModeLabelMap(value.mode.labels, sourceLabel, "labels", warnings);
+      mode.narrowLabels = parseModeLabelMap(
+        value.mode.narrowLabels,
+        sourceLabel,
+        "narrowLabels",
+        warnings,
+      );
+      partial.mode = mode;
+    }
+  }
+
+  if (value.selection !== undefined) {
+    if (!isRecord(value.selection)) {
+      warnings.push(`${sourceLabel}: piVimMode.ui.selection must be an object`);
+    } else {
+      const selection: Partial<ResolvedVimUi["selection"]> = {};
+      if (typeof value.selection.enabled === "boolean") selection.enabled = value.selection.enabled;
+      else if (value.selection.enabled !== undefined)
+        warnings.push(`${sourceLabel}: piVimMode.ui.selection.enabled must be a boolean`);
+      if (
+        typeof value.selection.previewMaxChars === "number" &&
+        Number.isInteger(value.selection.previewMaxChars) &&
+        value.selection.previewMaxChars >= 0
+      ) {
+        selection.previewMaxChars = value.selection.previewMaxChars;
+      } else if (value.selection.previewMaxChars !== undefined) {
+        warnings.push(
+          `${sourceLabel}: piVimMode.ui.selection.previewMaxChars must be a non-negative integer`,
+        );
+      }
+      partial.selection = selection;
+    }
+  }
+
+  if (value.cursorPosition !== undefined) {
+    if (!isRecord(value.cursorPosition)) {
+      warnings.push(`${sourceLabel}: piVimMode.ui.cursorPosition must be an object`);
+    } else {
+      const cursorPosition: Partial<ResolvedVimUi["cursorPosition"]> = {};
+      if (typeof value.cursorPosition.enabled === "boolean") {
+        cursorPosition.enabled = value.cursorPosition.enabled;
+      } else if (value.cursorPosition.enabled !== undefined) {
+        warnings.push(`${sourceLabel}: piVimMode.ui.cursorPosition.enabled must be a boolean`);
+      }
+      if (value.cursorPosition.base === 0 || value.cursorPosition.base === 1) {
+        cursorPosition.base = value.cursorPosition.base;
+      } else if (value.cursorPosition.base !== undefined) {
+        warnings.push(`${sourceLabel}: piVimMode.ui.cursorPosition.base must be 0 or 1`);
+      }
+      if (
+        typeof value.cursorPosition.format === "string" &&
+        value.cursorPosition.format.includes("{line}") &&
+        value.cursorPosition.format.includes("{column}")
+      ) {
+        cursorPosition.format = value.cursorPosition.format;
+      } else if (value.cursorPosition.format !== undefined) {
+        warnings.push(
+          `${sourceLabel}: piVimMode.ui.cursorPosition.format must include {line} and {column}`,
+        );
+      }
+      partial.cursorPosition = cursorPosition;
+    }
+  }
+
+  return { partial, warnings };
 }
 
 function parsePiVimMode(
@@ -91,12 +611,77 @@ function parsePiVimMode(
     }
   }
 
+  if (value.vimOptions !== undefined) {
+    warnings.push(`${sourceLabel}: piVimMode.vimOptions is no longer supported; use piVimMode.ui`);
+  }
+
+  const keymap = parseKeymap(value.keymap, sourceLabel);
+  partial.keymap = keymap.partial;
+  warnings.push(...keymap.warnings);
+
+  const ui = parseUi(value.ui, sourceLabel);
+  partial.ui = ui.partial;
+  warnings.push(...ui.warnings);
+
   return { partial, warnings };
+}
+
+function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
+  if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
+  if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
+  if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
+  if (partial.operatorMotions) {
+    target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
+  }
+}
+
+function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
+  if (partial.status) target.status = { ...target.status, ...partial.status };
+  if (partial.mode) {
+    target.mode = {
+      ...target.mode,
+      enabled: partial.mode.enabled ?? target.mode.enabled,
+      labels: { ...target.mode.labels, ...partial.mode.labels },
+      narrowLabels: { ...target.mode.narrowLabels, ...partial.mode.narrowLabels },
+    };
+  }
+  if (partial.selection) target.selection = { ...target.selection, ...partial.selection };
+  if (partial.cursorPosition) {
+    target.cursorPosition = { ...target.cursorPosition, ...partial.cursorPosition };
+  }
+}
+
+function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
+  const warnings: string[] = [];
+  const seen = new Map<string, string>();
+  const add = (sequence: string, label: string) => {
+    const previous = seen.get(sequence);
+    if (previous && previous !== label) {
+      warnings.push(
+        `resolved settings: duplicate piVimMode.keymap binding ${sequence} for ${previous} and ${label}`,
+      );
+    } else {
+      seen.set(sequence, label);
+    }
+  };
+
+  for (const [operator, sequences] of Object.entries(keymap.operators)) {
+    for (const sequence of sequences) add(sequence, `operators.${operator}`);
+  }
+  for (const [motion, sequences] of Object.entries(keymap.motions)) {
+    for (const sequence of sequences) add(sequence, `motions.${motion}`);
+  }
+  for (const [command, sequences] of Object.entries(keymap.commands)) {
+    for (const sequence of sequences) add(sequence, `commands.${command}`);
+  }
+  return warnings;
 }
 
 function mergePartialOptions(target: VimEditorOptions, partial: PartialVimOptions): void {
   if (partial.startMode) target.startMode = partial.startMode;
   if (partial.cursor) target.cursor = { ...target.cursor, ...partial.cursor };
+  if (partial.keymap) mergeKeymap(target.keymap ?? cloneKeymap(), partial.keymap);
+  if (partial.ui) mergeUi(target.ui ?? cloneUi(), partial.ui);
 }
 
 export function resolveVimOptions(
@@ -115,6 +700,7 @@ export function resolveVimOptions(
   const parsedProject = parsePiVimMode(projectPiVimMode, "project settings");
   mergePartialOptions(options, parsedProject.partial);
   warnings.push(...parsedProject.warnings);
+  warnings.push(...detectKeymapConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
 
   return { options, warnings };
 }
@@ -156,6 +742,14 @@ export function loadVimOptions(paths: VimConfigPaths = {}): VimConfigLoadResult 
     options: resolved.options,
     warnings: [...globalRead.warnings, ...projectRead.warnings, ...resolved.warnings],
   };
+}
+
+export function keymapForOptions(options: VimEditorOptions): ResolvedVimKeymap {
+  return options.keymap ?? DEFAULT_VIM_KEYMAP;
+}
+
+export function uiForOptions(options: VimEditorOptions): ResolvedVimUi {
+  return options.ui ?? DEFAULT_VIM_UI;
 }
 
 export function cursorStyleForMode(options: VimEditorOptions, mode: VimMode): CursorStyle {

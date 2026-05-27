@@ -1,6 +1,14 @@
 import { decodeKittyPrintable, matchesKey } from "@earendil-works/pi-tui";
 
-import type { EditResult, VimMode, VimMotion, VimOperator, VimRegister } from "../types.ts";
+import type {
+  EditResult,
+  VimCommandAction,
+  VimMode,
+  VimMotion,
+  VimMotionAction,
+  VimOperatorAction,
+  VimRegister,
+} from "../types.ts";
 import type {
   AdapterCommand,
   EditorSnapshot,
@@ -28,23 +36,13 @@ import {
   yankLine,
   yankVisualSelection,
 } from "../buffer.ts";
-import { parseNormalCommand } from "../commands.ts";
+import {
+  operatorActionForSequence,
+  resolveNormalCommand,
+  semanticMotionToLegacy,
+} from "../commands.ts";
+import { keymapForOptions } from "../config.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
-
-export type VimMoveKey =
-  | "h"
-  | "j"
-  | "k"
-  | "l"
-  | "0"
-  | "$"
-  | "w"
-  | "b"
-  | "gg"
-  | "G"
-  | "^"
-  | "_"
-  | "%";
 
 function printableKey(data: string): string | undefined {
   return (
@@ -109,45 +107,49 @@ function resetAndDelegate(state: ModalState, options: ModalOptions, input: strin
   ]);
 }
 
-function moveEffectFor(key: VimMoveKey, snapshot: EditorSnapshot): ModalEffect | undefined {
-  const adapterCommands: Partial<Record<VimMoveKey, AdapterCommand>> = {
-    h: "left",
-    j: "down",
-    k: "up",
-    l: "right",
-    "0": "lineStart",
-    $: "lineEnd",
-    w: "wordRight",
-    b: "wordLeft",
+function moveEffectFor(motion: VimMotionAction, snapshot: EditorSnapshot): ModalEffect | undefined {
+  const adapterCommands: Partial<Record<VimMotionAction, AdapterCommand>> = {
+    left: "left",
+    down: "down",
+    up: "up",
+    right: "right",
+    lineStart: "lineStart",
+    lineEnd: "lineEnd",
+    wordForward: "wordRight",
+    wordBackward: "wordLeft",
   };
-  const command = adapterCommands[key];
+  const command = adapterCommands[motion];
   if (command) return { type: "adapterCommand", command };
-  if (key === "gg") {
+  if (motion === "bufferStart") {
     return {
       type: "restoreCursor",
       position: navigateBuffer(snapshot.text, snapshot.cursor, "start"),
     };
   }
-  if (key === "G") {
+  if (motion === "bufferEnd") {
     return {
       type: "restoreCursor",
       position: navigateBuffer(snapshot.text, snapshot.cursor, "end"),
     };
   }
-  if (key === "^" || key === "_") {
+  if (motion === "firstNonBlank") {
     return {
       type: "restoreCursor",
       position: navigateBuffer(snapshot.text, snapshot.cursor, "firstNonBlank"),
     };
   }
-  if (key === "%") {
+  if (motion === "matchingPair") {
     const target = navigateBuffer(snapshot.text, snapshot.cursor, "matchingPair");
     return target ? { type: "restoreCursor", position: target } : undefined;
   }
 }
 
-function moveUpdate(state: ModalState, key: VimMoveKey, snapshot: EditorSnapshot): ModalUpdate {
-  const effect = moveEffectFor(key, snapshot);
+function moveUpdate(
+  state: ModalState,
+  motion: VimMotionAction,
+  snapshot: EditorSnapshot,
+): ModalUpdate {
+  const effect = moveEffectFor(motion, snapshot);
   return withEffects(state, effect ? [effect, { type: "invalidate" }] : [{ type: "invalidate" }]);
 }
 
@@ -155,104 +157,112 @@ function yankUpdate(state: ModalState, register: VimRegister | undefined): Modal
   return invalidate(register ? { ...state, register } : state);
 }
 
+function operatorMotionKey(motion: VimMotionAction): VimMotion | undefined {
+  return semanticMotionToLegacy(motion);
+}
+
 function applyOperatorMotion(
   state: ModalState,
   snapshot: EditorSnapshot,
-  operator: VimOperator,
-  motion: VimMotion,
+  operator: VimOperatorAction,
+  motion: VimMotionAction,
   options: ModalOptions,
 ): ModalUpdate {
+  const legacyMotion = operatorMotionKey(motion);
   const baseState = clearPending(state);
-  if (operator === "y") {
-    return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, motion));
+  if (!legacyMotion) return invalidate(baseState);
+  if (operator === "yank") {
+    return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, legacyMotion));
   }
 
-  const result = deleteByMotion(snapshot.text, snapshot.cursor, motion);
+  const result = deleteByMotion(snapshot.text, snapshot.cursor, legacyMotion);
   const edited = editState(baseState, result);
   const effects: ModalEffect[] = [{ type: "edit", result }];
-  if (operator === "c") {
-    const transitioned = transitionMode(edited, "insert", options, effects);
-    return transitioned;
-  }
+  if (operator === "change") return transitionMode(edited, "insert", options, effects);
   return withEffects(edited, effects);
 }
 
-function handleNormalPrintable(
+function applyLineCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  key: string,
+  operator: VimOperatorAction,
 ): ModalUpdate {
-  switch (key) {
-    case "h":
-    case "j":
-    case "k":
-    case "l":
-    case "0":
-    case "$":
-    case "w":
-    case "b":
-    case "G":
-    case "^":
-    case "_":
-    case "%":
-      return moveUpdate(state, key, snapshot);
-    case "i":
-      return modeUpdate(state, "insert", options);
-    case "a":
-      return modeUpdate(state, "insert", options, [
+  const nextState = clearPending(state);
+  if (operator === "delete")
+    return editUpdate(nextState, deleteLine(snapshot.text, snapshot.cursor));
+  if (operator === "change") {
+    const result = changeLine(snapshot.text, snapshot.cursor);
+    return modeUpdate(editState(nextState, result), "insert", options, [{ type: "edit", result }]);
+  }
+  return yankUpdate(nextState, yankLine(snapshot.text, snapshot.cursor));
+}
+
+function applyCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+): ModalUpdate {
+  const nextState = clearPending(state);
+  switch (command) {
+    case "insertBefore":
+      return modeUpdate(nextState, "insert", options);
+    case "insertAfter":
+      return modeUpdate(nextState, "insert", options, [
         { type: "adapterCommand", command: "right" },
         { type: "invalidate" },
       ]);
-    case "I":
-      return modeUpdate(state, "insert", options, [
+    case "insertLineStart":
+      return modeUpdate(nextState, "insert", options, [
         { type: "adapterCommand", command: "lineStart" },
         { type: "invalidate" },
       ]);
-    case "A":
-      return modeUpdate(state, "insert", options, [
+    case "insertLineEnd":
+      return modeUpdate(nextState, "insert", options, [
         { type: "adapterCommand", command: "lineEnd" },
         { type: "invalidate" },
       ]);
-    case "o":
-      return modeUpdate(
-        editState(state, openLineBelow(snapshot.text, snapshot.cursor)),
-        "insert",
-        options,
-        [{ type: "edit", result: openLineBelow(snapshot.text, snapshot.cursor) }],
-      );
-    case "O":
-      return modeUpdate(
-        editState(state, openLineAbove(snapshot.text, snapshot.cursor)),
-        "insert",
-        options,
-        [{ type: "edit", result: openLineAbove(snapshot.text, snapshot.cursor) }],
-      );
-    case "v":
-      return modeUpdate({ ...state, visualAnchor: snapshot.cursor }, "visual", options);
-    case "V":
-      return modeUpdate({ ...state, visualAnchor: snapshot.cursor }, "visualLine", options);
-    case "x":
-      return editUpdate(state, deleteCharAt(snapshot.text, snapshot.cursor));
-    case "D":
-      return editUpdate(state, deleteByMotion(snapshot.text, snapshot.cursor, "$"));
-    case "C": {
-      const result = deleteByMotion(snapshot.text, snapshot.cursor, "$");
-      return modeUpdate(editState(state, result), "insert", options, [{ type: "edit", result }]);
+    case "openLineBelow": {
+      const result = openLineBelow(snapshot.text, snapshot.cursor);
+      return modeUpdate(editState(nextState, result), "insert", options, [
+        { type: "edit", result },
+      ]);
     }
-    case "Y":
-      return yankUpdate(state, yankLine(snapshot.text, snapshot.cursor));
-    case "J":
-      return editUpdate(state, joinLineWithNext(snapshot.text, snapshot.cursor));
-    case "p":
-      return editUpdate(state, pasteRegister(snapshot.text, snapshot.cursor, state.register));
-    case "P":
-      return editUpdate(state, pasteRegisterBefore(snapshot.text, snapshot.cursor, state.register));
-    case "u":
-      return withEffects(state, [{ type: "adapterCommand", command: "undo" }]);
+    case "openLineAbove": {
+      const result = openLineAbove(snapshot.text, snapshot.cursor);
+      return modeUpdate(editState(nextState, result), "insert", options, [
+        { type: "edit", result },
+      ]);
+    }
+    case "visualChar":
+      return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visual", options);
+    case "visualLine":
+      return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualLine", options);
+    case "deleteChar":
+      return editUpdate(nextState, deleteCharAt(snapshot.text, snapshot.cursor));
+    case "deleteToLineEnd":
+      return editUpdate(nextState, deleteByMotion(snapshot.text, snapshot.cursor, "$"));
+    case "changeToLineEnd": {
+      const result = deleteByMotion(snapshot.text, snapshot.cursor, "$");
+      return modeUpdate(editState(nextState, result), "insert", options, [
+        { type: "edit", result },
+      ]);
+    }
+    case "yankLine":
+      return yankUpdate(nextState, yankLine(snapshot.text, snapshot.cursor));
+    case "joinLine":
+      return editUpdate(nextState, joinLineWithNext(snapshot.text, snapshot.cursor));
+    case "pasteAfter":
+      return editUpdate(nextState, pasteRegister(snapshot.text, snapshot.cursor, state.register));
+    case "pasteBefore":
+      return editUpdate(
+        nextState,
+        pasteRegisterBefore(snapshot.text, snapshot.cursor, state.register),
+      );
+    case "undo":
+      return withEffects(nextState, [{ type: "adapterCommand", command: "undo" }]);
   }
-
-  return invalidate(state);
 }
 
 function handleInsertInput(
@@ -288,23 +298,15 @@ function handleNormalInput(
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
   }
 
-  const pendingResult = parseNormalCommand(key, state.pending);
-  if (pendingResult.type === "pending") {
-    return invalidate({ ...state, pending: pendingResult.operator });
-  }
-  if (pendingResult.type === "command") {
-    const nextState = clearPending(state);
-    if (pendingResult.command === "dd")
-      return editUpdate(nextState, deleteLine(snapshot.text, snapshot.cursor));
-    if (pendingResult.command === "cc") {
-      const result = changeLine(snapshot.text, snapshot.cursor);
-      return modeUpdate(editState(nextState, result), "insert", options, [
-        { type: "edit", result },
-      ]);
-    }
-    if (pendingResult.command === "yy")
-      return yankUpdate(nextState, yankLine(snapshot.text, snapshot.cursor));
-    return moveUpdate(nextState, "gg", snapshot);
+  const pendingResult = resolveNormalCommand(key, state.pending, keymapForOptions(options));
+  if (pendingResult.type === "pending")
+    return invalidate({ ...state, pending: pendingResult.pending });
+  if (pendingResult.type === "motion")
+    return moveUpdate(clearPending(state), pendingResult.motion, snapshot);
+  if (pendingResult.type === "command")
+    return applyCommand(state, snapshot, options, pendingResult.command);
+  if (pendingResult.type === "lineCommand") {
+    return applyLineCommand(state, snapshot, options, pendingResult.operator);
   }
   if (pendingResult.type === "operatorMotion") {
     return applyOperatorMotion(
@@ -317,7 +319,7 @@ function handleNormalInput(
   }
   if (pendingResult.type === "invalid") return invalidate(clearPending(state));
 
-  return handleNormalPrintable(state, snapshot, options, key);
+  return invalidate(state);
 }
 
 function handleVisualInput(
@@ -333,34 +335,48 @@ function handleVisualInput(
   const key = printableKey(data);
   if (!key) return delegate(state, data);
 
-  switch (key) {
-    case "h":
-    case "j":
-    case "k":
-    case "l":
-    case "0":
-    case "$":
-    case "w":
-    case "b":
-      return moveUpdate(state, key, snapshot);
-    case "V":
+  const keymap = keymapForOptions(options);
+  const result = resolveNormalCommand(key, state.pending, keymap);
+  if (result.type === "motion") return moveUpdate(state, result.motion, snapshot);
+  if (result.type === "command") {
+    if (result.command === "visualLine") {
       return linewise ? invalidate(state) : modeUpdate(state, "visualLine", options);
-    case "v":
+    }
+    if (result.command === "visualChar") {
       return linewise ? modeUpdate(state, "visual", options) : invalidate(state);
-    case "y":
-      if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-      return yankVisualUpdate(state, snapshot, options, linewise);
-    case "d":
-    case "x":
+    }
+    if (result.command === "deleteChar") {
       return deleteVisualSelection(state, snapshot, options, "normal", linewise);
-    case "c":
-      return deleteVisualSelection(state, snapshot, options, "insert", linewise);
-    case "p":
+    }
+    if (result.command === "pasteAfter") {
       if (linewise) return pasteVisualLineSelection(state, snapshot, options);
       return invalidate(state);
+    }
   }
+  if (result.type === "pending") {
+    const operator = operatorActionForSequence(result.pending, keymap);
+    if (operator) return applyVisualOperator(state, snapshot, options, linewise, operator);
+    return invalidate({ ...state, pending: result.pending });
+  }
+  if (result.type === "invalid") return invalidate(clearPending(state));
 
   return invalidate(state);
+}
+
+function applyVisualOperator(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  linewise: boolean,
+  operator: VimOperatorAction,
+): ModalUpdate {
+  if (operator === "yank") {
+    if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+    return yankVisualUpdate(state, snapshot, options, linewise);
+  }
+  if (operator === "change")
+    return deleteVisualSelection(state, snapshot, options, "insert", linewise);
+  return deleteVisualSelection(state, snapshot, options, "normal", linewise);
 }
 
 function yankVisualUpdate(

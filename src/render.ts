@@ -2,7 +2,7 @@ import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi
 
 import type { CursorStyle, Position, VimMode } from "./types.ts";
 
-import { normalizeLineRange, normalizeRange } from "./buffer.ts";
+import { isVisualCellSelected, isVisualLineSelected } from "./buffer.ts";
 
 export const SELECTION_START = "\x1b[7m";
 export const CURSOR_BLOCK_START = "\x1b[4;7m";
@@ -67,39 +67,25 @@ export function cursorShapeEscape(style: CursorStyle): string {
 
 export const RESET_CURSOR_SHAPE = "\x1b[0 q";
 
-function comparePositions(a: Position, b: Position): number {
-  if (a.line !== b.line) return a.line - b.line;
-  return a.col - b.col;
-}
-
 function isSelectedCell(
-  mode: VimMode,
+  mode: VisualRenderOptions["mode"],
   lines: string[],
   anchor: Position,
   cursor: Position,
   lineIndex: number,
   col: number,
 ): boolean {
-  if (mode === "visualLine") {
-    const range = normalizeLineRange(lines, anchor, cursor);
-    return lineIndex >= range.startLine && lineIndex <= range.endLine;
-  }
-
-  const range = normalizeRange(lines, anchor, cursor);
-  const pos = { line: lineIndex, col };
-  return comparePositions(pos, range.start) >= 0 && comparePositions(pos, range.end) <= 0;
+  return isVisualCellSelected(mode, lines, anchor, cursor, lineIndex, col);
 }
 
 function isLineSelected(
-  mode: VimMode,
+  mode: VisualRenderOptions["mode"],
   lines: string[],
   anchor: Position,
   cursor: Position,
   lineIndex: number,
 ): boolean {
-  if (mode !== "visualLine") return false;
-  const range = normalizeLineRange(lines, anchor, cursor);
-  return lineIndex >= range.startLine && lineIndex <= range.endLine;
+  return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
 }
 
 function wordWrapLine(line: string, width: number): TextChunk[] {

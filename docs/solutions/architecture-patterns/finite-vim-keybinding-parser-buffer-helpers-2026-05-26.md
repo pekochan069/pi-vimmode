@@ -1,6 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
+last_updated: 2026-05-27
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -10,11 +11,14 @@ applies_when:
   - "Adding finite Vim-style commands to a prompt editor"
   - "Implementing multi-key editor commands without full Vim grammar"
   - "Separating parser behavior from text-buffer transformations"
+  - "Extracting modal editor state into a pure engine behind a Pi CustomEditor adapter"
 tags:
   - vim-mode
   - keybindings
   - parser
   - buffer-helpers
+  - modal-engine
+  - adapter-boundary
   - typescript
   - bun
 ---
@@ -33,11 +37,11 @@ The risky part was not wiring individual keys. The risky part was keeping three 
 
 ## Guidance
 
-Use a three-layer shape: finite parser, pure buffer helpers, editor dispatch.
+Use a three-layer shape first: finite parser, pure buffer helpers, editor dispatch. When modal behavior keeps growing, deepen that shape into a pure modal engine behind the Pi adapter.
 
-### 1. Parse finite grammar in `src/commands.ts`
+### 1. Parse finite grammar through explicit command types
 
-Represent supported grammar explicitly in types, then return typed parser results. Do not hide pending-state behavior inside `VimEditor` branches.
+Represent supported grammar explicitly in `src/types.ts`, then have `src/commands.ts` return typed parser results. Do not hide pending-state behavior inside `VimEditor` branches.
 
 ```ts
 export type VimOperator = "d" | "c" | "y";
@@ -122,6 +126,30 @@ Do not imply full Vim parity. Document exact support:
 
 This keeps future bug reports and follow-up work anchored to the prompt-editor contract rather than full Vim behavior.
 
+### 6. Evolve heavy editor dispatch into a pure modal engine
+
+When `VimEditor` starts owning mode transitions, register updates, pending operators, visual anchors, status derivation, cursor restoration, terminal cursor hints, and Pi delegation at once, split the dispatch layer again:
+
+- `src/vim-editor.ts` stays the Pi `CustomEditor` adapter. It collects snapshots, calls the modal module, applies effects, restores cursors through public editor behavior, invalidates rendering, and writes best-effort terminal cursor hints.
+- `src/modal/engine.ts` owns supported Vim semantics: insert/normal/visual input handling, pending command cleanup, register updates, structural edit decisions, and mode transitions.
+- `src/modal/state.ts` owns modal state construction, transient reset, and transition effects while preserving the unnamed register.
+- `src/modal/types.ts` defines the adapter boundary: snapshots, modal state, updates, and effects.
+- `src/modal/view.ts` derives mode labels and visual status text without depending on Pi TUI objects.
+
+The core contract is: modal code returns adapter-applied intents; the adapter performs Pi runtime calls.
+
+```ts
+export type ModalEffect =
+  | { type: "delegate"; input: string }
+  | { type: "adapterCommand"; command: AdapterCommand }
+  | { type: "edit"; result: EditResult }
+  | { type: "restoreCursor"; position: Position }
+  | { type: "invalidate" }
+  | { type: "terminalCursor"; style: CursorStyle };
+```
+
+This keeps pure tests focused on decisions and adapter tests focused on integration smoke.
+
 ## Why This Matters
 
 Finite prompt-editor Vim support fails when parser, buffer model, and editor dispatch merge into one switch statement:
@@ -132,7 +160,9 @@ Finite prompt-editor Vim support fails when parser, buffer model, and editor dis
 - edge cases require brittle integration tests instead of cheap unit tests,
 - undocumented Vim differences create churn around unsupported behavior.
 
-The parser → buffer helpers → editor dispatch split keeps behavior explicit and makes future bindings easier to add safely.
+The parser → buffer helpers → modal engine → adapter split keeps behavior explicit and makes future bindings easier to add safely.
+
+The modal engine extraction adds another payoff: a failing command can be isolated to pure modal state, buffer math, adapter effect application, rendering, cursor restoration, or terminal hints instead of one large `CustomEditor` subclass.
 
 ## When to Apply
 
@@ -141,7 +171,7 @@ The parser → buffer helpers → editor dispatch split keeps behavior explicit 
 - Adding prompt text transforms that update the unnamed register.
 - Implementing Vim-like behavior with intentionally limited scope.
 - Testing modal editor behavior where most cases can be proven below the TUI integration layer.
-- Reconciling OpenSpec changes where tasks mention commands not yet defined in proposal, design, or spec.
+- Refactoring a `CustomEditor` subclass that mixes product semantics with Pi runtime integration.
 
 ## Examples
 
@@ -178,26 +208,63 @@ over inline `setText()` slicing inside `VimEditor`. The helper can be covered in
 
 ### Layered tests
 
-Use three tiers:
+Use four tiers:
 
 1. `test/commands.test.ts` — parser matrix, pending states, invalid reset.
 2. `test/buffer.test.ts` — range helpers, `%`, line open/join, paste-before, no-op cases.
-3. `test/vim-editor.test.ts` — integration smoke for command groups, mode transitions, register effects, visual regressions.
+3. `test/modal.test.ts` — modal state/effect contracts, insert/normal/visual transitions, register preservation, TUI-free status derivation.
+4. `test/vim-editor.test.ts` — adapter integration smoke for command groups, cursor restoration, terminal cursor hints, visual render/status integration.
 
-Avoid exploding editor integration tests for every parser combination when parser and buffer tests already cover the matrix.
+Avoid exploding editor integration tests for every parser combination when parser, buffer, and modal tests already cover the matrix.
+
+### Adapter effect interpreter
+
+Keep `VimEditor` as an interpreter over modal effects:
+
+```ts
+private applyEffect(effect: ModalEffect): void {
+  switch (effect.type) {
+    case "delegate":
+      super.handleInput(effect.input);
+      return;
+    case "adapterCommand":
+      super.handleInput(KEY[effect.command]);
+      return;
+    case "edit":
+      this.applyEdit(effect.result);
+      return;
+    case "restoreCursor":
+      this.restoreCursor(effect.position);
+      return;
+    case "terminalCursor":
+      this.applyTerminalCursorStyle(effect.style);
+      return;
+    case "invalidate":
+      this.invalidate();
+      return;
+  }
+}
+```
+
+The exact effect union can grow, but each new effect should name one adapter responsibility instead of smuggling Pi calls into the modal module.
 
 Validation for the working implementation:
 
-- `bun test` — 63 passing tests
 - `bun run check-types`
+- `bun test` — 77 passing tests after modal extraction
 - `bun run lint`
 - `git diff --check`
+- `oxfmt --check` on changed docs/source/tests
 
 ## Related
 
 - `src/commands.ts` — finite normal-mode parser
 - `src/types.ts` — typed command result model
 - `src/buffer.ts` — pure text/register helpers
-- `src/vim-editor.ts` — editor dispatch and mode transitions
-- `test/commands.test.ts`, `test/buffer.test.ts`, `test/vim-editor.test.ts` — layered test coverage
+- `src/modal/engine.ts` — modal input engine for insert, normal, visual, and visual-line modes
+- `src/modal/state.ts` — modal state initialization, transient cleanup, and transition effects
+- `src/modal/types.ts` — snapshot, state, update, and effect contracts between modal code and adapter
+- `src/modal/view.ts` — TUI-free mode/status derivation
+- `src/vim-editor.ts` — Pi `CustomEditor` adapter and effect interpreter
+- `test/commands.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts` — layered test coverage
 - `docs/solutions/developer-experience/pi-vimmode-auto-activation-2026-05-26.md` — same editor component, focused on lifecycle/activation reliability rather than keybinding behavior

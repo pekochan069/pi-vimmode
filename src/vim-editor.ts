@@ -4,7 +4,7 @@ import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@eare
 import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
 import type { CursorStyle, EditResult, Position, VimEditorOptions, VimMode } from "./types.ts";
 
-import { clampPosition } from "./buffer.ts";
+import { normalizeBufferPosition } from "./buffer.ts";
 import { cursorStyleForMode, DEFAULT_VIM_OPTIONS } from "./config.ts";
 import { handleModalInput } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
@@ -186,7 +186,7 @@ export class VimEditor extends CustomEditor {
   }
 
   private restoreCursor(position: Position): void {
-    const target = clampPosition(this.getLines(), position);
+    const target = normalizeBufferPosition(this.getText(), position);
     const current = this.getCursor();
 
     if (current.line > target.line) {

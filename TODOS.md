@@ -1,0 +1,29 @@
+# TODOs
+
+## Architecture deepening opportunities
+
+1. [x] Deepen `VimEditor` into Pi Adapter + modal editing Module
+   - Files: `src/vim-editor.ts`, `src/commands.ts`, `src/buffer.ts`, `test/vim-editor.test.ts`
+   - Problem: `VimEditor` mixes Pi `CustomEditor` Adapter, mode machine, pending operator, register, command execution, cursor restore, render/status, terminal cursor.
+   - Solution: Keep Pi prompt editor Adapter concrete. Move modal editing behavior into deeper Module.
+   - Benefits: Better locality for mode/register/pending bugs; more leverage from tests through one prompt-editing Interface; less integration-test burden.
+
+2. [ ] Deepen `buffer.ts` from helper pile into prompt buffer operation Module
+   - Files: `src/buffer.ts`, `src/vim-editor.ts`, `src/render.ts`, `test/buffer.test.ts`
+   - Problem: Many exported helpers expose range math, selection details, and register semantics; Interface drifting shallow.
+   - Solution: Hide low-level helpers behind deeper prompt buffer operations: navigation, visual operation, linewise operation, operator-motion operation, paste.
+   - Benefits: Off-by-one and cursor placement bugs gain locality; future commands get leverage without callers composing internals.
+
+3. [ ] Deepen visual renderer seam
+   - Files: `src/render.ts`, `src/vim-editor.ts`, `test/render.test.ts`
+   - Problem: Visual renderer mirrors Pi private render behavior: wrapping, scrolling, ANSI width, cursor precedence; `VimEditor` passes many facts.
+   - Solution: Make renderer own active-visual view model more completely; keep non-visual `super.render()` path.
+   - Benefits: Rendering bugs gain locality; visual features reuse one tested Module.
+
+4. [ ] Extract lifecycle/settings install Module if reload bugs recur
+   - Files: `src/index.ts`, `src/config.ts`
+   - Problem: Small file encodes subtle Pi lifecycle behavior: stable factory, delayed reinstall, multi-hook install, terminal cursor reset.
+   - Solution: Only deepen when lifecycle changes again; keep config Module pure.
+   - Benefits: Startup/reload bugs localize without over-abstracting current readable code.
+
+Recommended first pick: `VimEditor` Adapter + modal editing Module.

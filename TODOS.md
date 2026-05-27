@@ -8,7 +8,7 @@
    - Solution: Keep Pi prompt editor Adapter concrete. Move modal editing behavior into deeper Module.
    - Benefits: Better locality for mode/register/pending bugs; more leverage from tests through one prompt-editing Interface; less integration-test burden.
 
-2. [ ] Deepen `buffer.ts` from helper pile into prompt buffer operation Module
+2. [x] Deepen `buffer.ts` from helper pile into prompt buffer operation Module
    - Files: `src/buffer.ts`, `src/vim-editor.ts`, `src/render.ts`, `test/buffer.test.ts`
    - Problem: Many exported helpers expose range math, selection details, and register semantics; Interface drifting shallow.
    - Solution: Hide low-level helpers behind deeper prompt buffer operations: navigation, visual operation, linewise operation, operator-motion operation, paste.

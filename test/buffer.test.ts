@@ -9,46 +9,78 @@ import {
   deleteLine,
   deleteLineRange,
   deleteRange,
-  firstNonBlankColumn,
   firstNonBlankPosition,
+  isVisualCellSelected,
+  isVisualLineSelected,
   joinLineWithNext,
-  linewiseSelectionText,
   matchingPairPosition,
-  normalizeLineRange,
-  normalizeRange,
+  navigateBuffer,
+  normalizeBufferPosition,
   openLineAbove,
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
-  selectionText,
   visualLineSelectionSummary,
   visualSelectionSummary,
+  visualSelectionText,
   yankByMotion,
   yankLine,
   yankLineRange,
+  yankVisualSelection,
 } from "../src/buffer.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 
-describe("range normalization and selection", () => {
-  test("normalizes forward same-line range and extracts inclusive text", () => {
-    const text = "hello world";
-    expect(normalizeRange([text], p(0, 1), p(0, 4))).toEqual({ start: p(0, 1), end: p(0, 4) });
-    expect(selectionText(text, p(0, 1), p(0, 4))).toBe("ello");
+describe("prompt buffer operation API", () => {
+  test("navigates structural buffer targets through one operation", () => {
+    const text = "one\n  two\nthree";
+    expect(navigateBuffer(text, p(1, 99), "start")).toEqual(p(0, 0));
+    expect(navigateBuffer(text, p(0, 0), "end")).toEqual(p(2, 5));
+    expect(navigateBuffer(text, p(1, 99), "firstNonBlank")).toEqual(p(1, 2));
+    expect(navigateBuffer("call(a)", p(0, 4), "matchingPair")).toEqual(p(0, 6));
+    expect(navigateBuffer("plain", p(0, 0), "matchingPair")).toBeUndefined();
   });
 
-  test("normalizes reversed multiline range and preserves newlines", () => {
-    const text = "alpha\nbravo\ncharlie";
-    expect(normalizeRange(text.split("\n"), p(2, 2), p(0, 3))).toEqual({
-      start: p(0, 3),
-      end: p(2, 2),
+  test("normalizes cursor positions for adapter restoration", () => {
+    expect(normalizeBufferPosition("one\ntwo", p(9, 9))).toEqual(p(1, 3));
+  });
+
+  test("yanks visual selections without callers composing registers", () => {
+    expect(yankVisualSelection("alpha\nbravo", p(0, 1), p(0, 3), "char")).toEqual({
+      type: "char",
+      text: "lph",
     });
-    expect(selectionText(text, p(2, 2), p(0, 3))).toBe("ha\nbravo\ncha");
+    expect(yankVisualSelection("alpha\nbravo", p(0, 1), p(1, 2), "line")).toEqual({
+      type: "line",
+      text: "alpha\nbravo",
+    });
   });
 
-  test("reports visual selection summary", () => {
+  test("answers visual render selection predicates", () => {
+    const lines = ["one", "two", "three"];
+    expect(isVisualCellSelected("visual", lines, p(0, 1), p(1, 1), 0, 2)).toBe(true);
+    expect(isVisualCellSelected("visual", lines, p(0, 1), p(1, 1), 2, 0)).toBe(false);
+    expect(isVisualLineSelected("visualLine", lines, p(0, 1), p(1, 1), 1)).toBe(true);
+    expect(isVisualLineSelected("visual", lines, p(0, 1), p(1, 1), 1)).toBe(false);
+  });
+});
+
+describe("visual selection operations", () => {
+  test("extracts inclusive characterwise selections through yank operations", () => {
+    expect(yankVisualSelection("hello world", p(0, 1), p(0, 4), "char")).toEqual({
+      type: "char",
+      text: "ello",
+    });
+    expect(yankVisualSelection("alpha\nbravo\ncharlie", p(2, 2), p(0, 3), "char")).toEqual({
+      type: "char",
+      text: "ha\nbravo\ncha",
+    });
+  });
+
+  test("reports visual selection summary and preview", () => {
     expect(visualSelectionSummary("abc", p(0, 0), p(0, 1))).toBe("2 chars");
     expect(visualSelectionSummary("a\nb", p(0, 0), p(1, 0))).toBe("2 lines");
+    expect(visualSelectionText("a\nb", p(0, 0), p(1, 0), "char")).toBe("a\nb");
   });
 });
 
@@ -76,17 +108,14 @@ describe("charwise edits", () => {
 });
 
 describe("linewise visual operations", () => {
-  test("normalizes forward and reversed line ranges", () => {
-    const lines = ["one", "two", "three"];
-    expect(normalizeLineRange(lines, p(0, 2), p(2, 1))).toEqual({ startLine: 0, endLine: 2 });
-    expect(normalizeLineRange(lines, p(2, 1), p(0, 2))).toEqual({ startLine: 0, endLine: 2 });
-  });
-
   test("extracts selected full lines in document order", () => {
     const text = "one\ntwo\nthree";
-    expect(linewiseSelectionText(text, p(0, 2), p(1, 1))).toBe("one\ntwo");
-    expect(linewiseSelectionText(text, p(2, 1), p(1, 0))).toBe("two\nthree");
+    expect(yankVisualSelection(text, p(0, 2), p(1, 1), "line")).toEqual({
+      type: "line",
+      text: "one\ntwo",
+    });
     expect(yankLineRange(text, p(2, 1), p(1, 0))).toEqual({ type: "line", text: "two\nthree" });
+    expect(visualSelectionText(text, p(2, 1), p(1, 0), "line")).toBe("two\nthree");
   });
 
   test("deletes selected middle lines and returns a linewise register", () => {
@@ -144,9 +173,8 @@ describe("extended navigation helpers", () => {
   test("computes buffer boundary and first non-blank positions", () => {
     expect(bufferStartPosition()).toEqual(p(0, 0));
     expect(bufferEndPosition("one\ntwo")).toEqual(p(1, 3));
-    expect(firstNonBlankColumn("   value")).toBe(3);
-    expect(firstNonBlankColumn("   ")).toBe(0);
     expect(firstNonBlankPosition("one\n  two", p(1, 4))).toEqual(p(1, 2));
+    expect(firstNonBlankPosition("one\n   ", p(1, 2))).toEqual(p(1, 0));
   });
 
   test("finds matching pairs under or after the cursor", () => {

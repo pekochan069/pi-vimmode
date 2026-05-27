@@ -11,25 +11,21 @@ import type {
 } from "./types.ts";
 
 import {
-  bufferEndPosition,
-  bufferStartPosition,
   changeLine,
   deleteByMotion,
   deleteCharAt,
   deleteLine,
   deleteLineRange,
   deleteRange,
-  firstNonBlankPosition,
   joinLineWithNext,
-  matchingPairPosition,
+  navigateBuffer,
   openLineAbove,
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
-  selectionText,
   yankByMotion,
   yankLine,
-  yankLineRange,
+  yankVisualSelection,
 } from "../buffer.ts";
 import { parseNormalCommand } from "../commands.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
@@ -125,16 +121,26 @@ function moveEffectFor(key: VimMoveKey, snapshot: EditorSnapshot): ModalEffect |
   };
   const command = adapterCommands[key];
   if (command) return { type: "adapterCommand", command };
-  if (key === "gg") return { type: "restoreCursor", position: bufferStartPosition() };
-  if (key === "G") return { type: "restoreCursor", position: bufferEndPosition(snapshot.text) };
+  if (key === "gg") {
+    return {
+      type: "restoreCursor",
+      position: navigateBuffer(snapshot.text, snapshot.cursor, "start"),
+    };
+  }
+  if (key === "G") {
+    return {
+      type: "restoreCursor",
+      position: navigateBuffer(snapshot.text, snapshot.cursor, "end"),
+    };
+  }
   if (key === "^" || key === "_") {
     return {
       type: "restoreCursor",
-      position: firstNonBlankPosition(snapshot.text, snapshot.cursor),
+      position: navigateBuffer(snapshot.text, snapshot.cursor, "firstNonBlank"),
     };
   }
   if (key === "%") {
-    const target = matchingPairPosition(snapshot.text, snapshot.cursor);
+    const target = navigateBuffer(snapshot.text, snapshot.cursor, "matchingPair");
     return target ? { type: "restoreCursor", position: target } : undefined;
   }
 }
@@ -160,10 +166,9 @@ function applyOperatorMotion(
     return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, motion));
   }
 
-  const edited = editState(baseState, deleteByMotion(snapshot.text, snapshot.cursor, motion));
-  const effects: ModalEffect[] = [
-    { type: "edit", result: deleteByMotion(snapshot.text, snapshot.cursor, motion) },
-  ];
+  const result = deleteByMotion(snapshot.text, snapshot.cursor, motion);
+  const edited = editState(baseState, result);
+  const effects: ModalEffect[] = [{ type: "edit", result }];
   if (operator === "c") {
     const transitioned = transitionMode(edited, "insert", options, effects);
     return transitioned;
@@ -343,7 +348,7 @@ function handleVisualInput(
       return linewise ? modeUpdate(state, "visual", options) : invalidate(state);
     case "y":
       if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-      return yankVisualSelection(state, snapshot, options, linewise);
+      return yankVisualUpdate(state, snapshot, options, linewise);
     case "d":
     case "x":
       return deleteVisualSelection(state, snapshot, options, "normal", linewise);
@@ -354,24 +359,20 @@ function handleVisualInput(
   return invalidate(state);
 }
 
-function yankVisualSelection(
+function yankVisualUpdate(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   linewise: boolean,
 ): ModalUpdate {
   if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-  if (linewise) {
-    return modeUpdate(
-      { ...state, register: yankLineRange(snapshot.text, state.visualAnchor, snapshot.cursor) },
-      "normal",
-      options,
-    );
-  }
-
-  const selected = selectionText(snapshot.text, state.visualAnchor, snapshot.cursor);
-  const nextState =
-    selected.length > 0 ? { ...state, register: { type: "char" as const, text: selected } } : state;
+  const register = yankVisualSelection(
+    snapshot.text,
+    state.visualAnchor,
+    snapshot.cursor,
+    linewise ? "line" : "char",
+  );
+  const nextState = register ? { ...state, register } : state;
   return modeUpdate(nextState, "normal", options);
 }
 

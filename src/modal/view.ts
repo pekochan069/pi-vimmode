@@ -3,10 +3,9 @@ import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Position, VimMode } from "../types.ts";
 
 import {
-  linewiseSelectionText,
-  selectionText,
   visualLineSelectionSummary,
   visualSelectionSummary,
+  visualSelectionText,
 } from "../buffer.ts";
 
 export type ModalVisualStatusInput = {
@@ -36,7 +35,12 @@ export function modalVisualStatus(input: ModalVisualStatusInput): string {
 function characterVisualStatus(input: AnchoredVisualStatusInput): string {
   const summary = visualSelectionSummary(input.text, input.visualAnchor, input.cursor);
   if (input.width < 20) return ` ${summary.split(" ")[0]} `;
-  const selected = selectionText(input.text, input.visualAnchor, input.cursor).replace(/\n/g, "↵");
+  const selected = visualSelectionText(
+    input.text,
+    input.visualAnchor,
+    input.cursor,
+    "char",
+  ).replace(/\n/g, "↵");
   const preview = selected.length > 0 ? ` · ${truncateToWidth(selected, 16, "…")}` : "";
   return ` ${summary}${preview} `;
 }
@@ -44,10 +48,12 @@ function characterVisualStatus(input: AnchoredVisualStatusInput): string {
 function lineVisualStatus(input: AnchoredVisualStatusInput): string {
   const summary = visualLineSelectionSummary(input.text, input.visualAnchor, input.cursor);
   if (input.width < 20) return ` ${summary.split(" ")[0]}L `;
-  const selected = linewiseSelectionText(input.text, input.visualAnchor, input.cursor).replace(
-    /\n/g,
-    "↵",
-  );
+  const selected = visualSelectionText(
+    input.text,
+    input.visualAnchor,
+    input.cursor,
+    "line",
+  ).replace(/\n/g, "↵");
   const preview = selected.length > 0 ? ` · ${truncateToWidth(selected, 16, "…")}` : "";
   return ` ${summary}${preview} `;
 }

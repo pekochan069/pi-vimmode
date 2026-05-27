@@ -7,16 +7,20 @@ import type {
   VimRegister,
 } from "./types.ts";
 
-export function splitText(text: string): string[] {
+export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
+export type VisualSelectionKind = "char" | "line";
+export type VisualSelectionMode = "visual" | "visualLine";
+
+function splitText(text: string): string[] {
   const lines = text.split("\n");
   return lines.length === 0 ? [""] : lines;
 }
 
-export function joinLines(lines: string[]): string {
+function joinLines(lines: string[]): string {
   return (lines.length === 0 ? [""] : lines).join("\n");
 }
 
-export function clampPosition(lines: string[], position: Position): Position {
+function clampPosition(lines: string[], position: Position): Position {
   const safeLines = lines.length === 0 ? [""] : lines;
   const line = Math.max(0, Math.min(position.line, safeLines.length - 1));
   const length = safeLines[line]?.length ?? 0;
@@ -24,12 +28,12 @@ export function clampPosition(lines: string[], position: Position): Position {
   return { line, col };
 }
 
-export function comparePositions(a: Position, b: Position): number {
+function comparePositions(a: Position, b: Position): number {
   if (a.line !== b.line) return a.line - b.line;
   return a.col - b.col;
 }
 
-export function firstNonBlankColumn(line: string): number {
+function firstNonBlankColumn(line: string): number {
   const match = /\S/.exec(line);
   return match?.index ?? 0;
 }
@@ -214,13 +218,49 @@ export function matchingPairPosition(text: string, cursor: Position): Position |
   return undefined;
 }
 
-export function normalizeRange(lines: string[], anchor: Position, active: Position): TextRange {
+export function normalizeBufferPosition(text: string, cursor: Position): Position {
+  return clampPosition(splitText(text), cursor);
+}
+
+export function navigateBuffer(
+  text: string,
+  cursor: Position,
+  target: "matchingPair",
+): Position | undefined;
+export function navigateBuffer(
+  text: string,
+  cursor: Position,
+  target: Exclude<BufferNavigationTarget, "matchingPair">,
+): Position;
+export function navigateBuffer(
+  text: string,
+  cursor: Position,
+  target: BufferNavigationTarget,
+): Position | undefined;
+export function navigateBuffer(
+  text: string,
+  cursor: Position,
+  target: BufferNavigationTarget,
+): Position | undefined {
+  switch (target) {
+    case "start":
+      return bufferStartPosition();
+    case "end":
+      return bufferEndPosition(text);
+    case "firstNonBlank":
+      return firstNonBlankPosition(text, cursor);
+    case "matchingPair":
+      return matchingPairPosition(text, cursor);
+  }
+}
+
+function normalizeRange(lines: string[], anchor: Position, active: Position): TextRange {
   const a = clampPosition(lines, anchor);
   const b = clampPosition(lines, active);
   return comparePositions(a, b) <= 0 ? { start: a, end: b } : { start: b, end: a };
 }
 
-export function normalizeLineRange(lines: string[], anchor: Position, active: Position): LineRange {
+function normalizeLineRange(lines: string[], anchor: Position, active: Position): LineRange {
   const a = clampPosition(lines, anchor);
   const b = clampPosition(lines, active);
   return {
@@ -229,7 +269,7 @@ export function normalizeLineRange(lines: string[], anchor: Position, active: Po
   };
 }
 
-export function selectionText(text: string, anchor: Position, active: Position): string {
+function selectionText(text: string, anchor: Position, active: Position): string {
   const lines = splitText(text);
   const range = normalizeRange(lines, anchor, active);
   const { start, end } = range;
@@ -253,7 +293,7 @@ export function selectionText(text: string, anchor: Position, active: Position):
   return selected.join("\n");
 }
 
-export function linewiseSelectionText(text: string, anchor: Position, active: Position): string {
+function linewiseSelectionText(text: string, anchor: Position, active: Position): string {
   const lines = splitText(text);
   const range = normalizeLineRange(lines, anchor, active);
   return lines.slice(range.startLine, range.endLine + 1).join("\n");
@@ -358,6 +398,29 @@ export function yankLine(text: string, cursor: Position): VimRegister {
 
 export function yankLineRange(text: string, anchor: Position, active: Position): VimRegister {
   return { type: "line", text: linewiseSelectionText(text, anchor, active) };
+}
+
+export function yankVisualSelection(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: VisualSelectionKind,
+): VimRegister | undefined {
+  if (kind === "line") return yankLineRange(text, anchor, active);
+
+  const selected = selectionText(text, anchor, active);
+  return selected.length > 0 ? { type: "char", text: selected } : undefined;
+}
+
+export function visualSelectionText(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: VisualSelectionKind,
+): string {
+  return kind === "line"
+    ? linewiseSelectionText(text, anchor, active)
+    : selectionText(text, anchor, active);
 }
 
 export function deleteLine(text: string, cursor: Position): EditResult {
@@ -556,6 +619,33 @@ export function pasteRegisterBefore(
     cursor: { line: pos.line, col: insertCol },
     changed: true,
   };
+}
+
+export function isVisualCellSelected(
+  mode: VisualSelectionMode,
+  lines: string[],
+  anchor: Position,
+  cursor: Position,
+  lineIndex: number,
+  col: number,
+): boolean {
+  if (mode === "visualLine") return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
+
+  const range = normalizeRange(lines, anchor, cursor);
+  const pos = { line: lineIndex, col };
+  return comparePositions(pos, range.start) >= 0 && comparePositions(pos, range.end) <= 0;
+}
+
+export function isVisualLineSelected(
+  mode: VisualSelectionMode,
+  lines: string[],
+  anchor: Position,
+  cursor: Position,
+  lineIndex: number,
+): boolean {
+  if (mode !== "visualLine") return false;
+  const range = normalizeLineRange(lines, anchor, cursor);
+  return lineIndex >= range.startLine && lineIndex <= range.endLine;
 }
 
 export function visualSelectionSummary(text: string, anchor: Position, active: Position): string {

@@ -8,13 +8,13 @@ export function createModalState(mode: StartupMode): ModalState {
 }
 
 export function resetTransientState(state: ModalState, mode: VimMode): ModalState {
-  return {
-    mode,
-    register: state.register,
-    macros: state.macros,
-    recordingSlot: state.recordingSlot,
-    lastPlayedMacro: state.lastPlayedMacro,
-  };
+  const nextState: ModalState = { mode };
+  if (state.register) nextState.register = state.register;
+  if (state.namedRegisters) nextState.namedRegisters = state.namedRegisters;
+  if (state.macros) nextState.macros = state.macros;
+  if (state.recordingSlot) nextState.recordingSlot = state.recordingSlot;
+  if (state.lastPlayedMacro) nextState.lastPlayedMacro = state.lastPlayedMacro;
+  return nextState;
 }
 
 export function transitionMode(

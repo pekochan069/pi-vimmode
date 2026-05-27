@@ -126,6 +126,34 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("normal");
   });
 
+  test("macro slots stay separate from named edit registers", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.handleInput("q");
+    editor.handleInput("a");
+    editor.handleInput("i");
+    editor.handleInput("X");
+    editor.handleInput("\x1b");
+    editor.handleInput("q");
+
+    editor.setText("ab");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput('"');
+    editor.handleInput("a");
+    editor.handleInput("x");
+    expect(editor.getNamedRegister("a")).toEqual({ type: "char", text: "a" });
+
+    editor.setText("");
+    editor.handleInput("@");
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("X");
+
+    editor.handleInput('"');
+    editor.handleInput("a");
+    editor.handleInput("p");
+    expect(editor.getText()).toBe("Xa");
+  });
+
   test("macro keys and behavior are configurable", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
@@ -159,6 +187,29 @@ describe("vim editor integration", () => {
     editor.handleInput("x");
     expect(editor.getText()).toBe("a");
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
+  });
+
+  test("named registers persist in editor session and stay separate from unnamed register", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput('"');
+    editor.handleInput("a");
+    editor.handleInput("y");
+    editor.handleInput("y");
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+
+    editor.handleInput("j");
+    editor.handleInput("y");
+    editor.handleInput("y");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "two" });
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+
+    editor.handleInput('"');
+    editor.handleInput("a");
+    editor.handleInput("p");
+    expect(editor.getText()).toBe("one\ntwo\none");
   });
 
   test("normal mode uses configured keymap through the editor", () => {

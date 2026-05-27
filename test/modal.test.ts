@@ -25,17 +25,20 @@ describe("modal contracts", () => {
     expect(createModalState("normal")).toEqual({ mode: "normal" });
   });
 
-  test("resetTransientState clears visual and pending state without dropping register", () => {
+  test("resetTransientState clears visual and pending state without dropping registers", () => {
     const state: ModalState = {
       mode: "visual",
       pending: "d",
+      pendingRegister: { slot: "a", append: false },
       visualAnchor: cursor,
       register: { type: "char", text: "x" },
+      namedRegisters: { a: { type: "line", text: "one" } },
     };
 
     expect(resetTransientState(state, "insert")).toEqual({
       mode: "insert",
       register: { type: "char", text: "x" },
+      namedRegisters: { a: { type: "line", text: "one" } },
     });
   });
 
@@ -276,6 +279,167 @@ describe("modal engine", () => {
     ]);
   });
 
+  test("normal named register prefix yanks current line", () => {
+    const prefix = handleModalInput({ mode: "normal" }, snapshot, options, '"');
+    expect(prefix.state).toEqual({ mode: "normal", pendingRegister: "awaitingSlot" });
+
+    const targeted = handleModalInput(prefix.state, snapshot, options, "a");
+    expect(targeted.state).toEqual({
+      mode: "normal",
+      pendingRegister: { slot: "a", append: false },
+    });
+
+    const pending = handleModalInput(targeted.state, snapshot, options, "y");
+    expect(pending.state).toEqual({
+      mode: "normal",
+      pending: "y",
+      pendingRegister: { slot: "a", append: false },
+    });
+
+    const yanked = handleModalInput(pending.state, snapshot, options, "y");
+    expect(yanked.state).toEqual({
+      mode: "normal",
+      register: { type: "line", text: "abc" },
+      namedRegisters: { a: { type: "line", text: "abc" } },
+    });
+  });
+
+  test("normal named register prefix writes deletes and operator yanks", () => {
+    const deletedLine = handleModalInput(
+      { mode: "normal", pending: "d", pendingRegister: { slot: "a", append: false } },
+      { text: "one\ntwo", lines: ["one", "two"], cursor },
+      options,
+      "d",
+    );
+    expect(deletedLine.state.namedRegisters?.a).toEqual({ type: "line", text: "one" });
+    expect(deletedLine.state.register).toEqual({ type: "line", text: "one" });
+
+    const deletedChar = handleModalInput(
+      { mode: "normal", pendingRegister: { slot: "b", append: false } },
+      snapshot,
+      options,
+      "x",
+    );
+    expect(deletedChar.state.namedRegisters?.b).toEqual({ type: "char", text: "a" });
+    expect(deletedChar.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "bc", cursor, register: { type: "char", text: "a" }, changed: true },
+    });
+
+    const yankedWord = handleModalInput(
+      { mode: "normal", pending: "y", pendingRegister: { slot: "c", append: false } },
+      { text: "abc def", lines: ["abc def"], cursor },
+      options,
+      "w",
+    );
+    expect(yankedWord.state.namedRegisters?.c).toEqual({ type: "char", text: "abc " });
+    expect(yankedWord.effects).toEqual([{ type: "invalidate" }]);
+  });
+
+  test("named register paste reads named target and leaves unnamed paste unchanged", () => {
+    const state = {
+      mode: "normal" as const,
+      register: { type: "char" as const, text: "U" },
+      namedRegisters: { a: { type: "char" as const, text: "A" } },
+    };
+
+    const namedPaste = handleModalInput(
+      { ...state, pendingRegister: { slot: "a", append: false } },
+      { text: "xy", lines: ["xy"], cursor: { line: 0, col: 0 } },
+      options,
+      "p",
+    );
+    expect(namedPaste.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "xAy", cursor: { line: 0, col: 1 }, changed: true },
+    });
+
+    const unnamedPaste = handleModalInput(
+      namedPaste.state,
+      { text: "xy", lines: ["xy"], cursor: { line: 0, col: 0 } },
+      options,
+      "p",
+    );
+    expect(unnamedPaste.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "xUy", cursor: { line: 0, col: 1 }, changed: true },
+    });
+  });
+
+  test("named line register pastes before current line and missing paste no-ops", () => {
+    const pasted = handleModalInput(
+      {
+        mode: "normal",
+        register: { type: "line", text: "unnamed" },
+        namedRegisters: { a: { type: "line", text: "alpha\nbeta" } },
+        pendingRegister: { slot: "a", append: true },
+      },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: { line: 1, col: 0 } },
+      options,
+      "P",
+    );
+    expect(pasted.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "one\nalpha\nbeta\ntwo",
+        cursor: { line: 1, col: 0 },
+        changed: true,
+      },
+    });
+
+    const missing = handleModalInput(
+      { mode: "normal", pendingRegister: { slot: "z", append: false } },
+      snapshot,
+      options,
+      "p",
+    );
+    expect(missing.state).toEqual({ mode: "normal" });
+    expect(missing.effects[0]).toEqual({
+      type: "edit",
+      result: { text: "abc", cursor, changed: false },
+    });
+  });
+
+  test("register prefix target is safe and one-shot", () => {
+    const invalid = handleModalInput(
+      { mode: "normal", pendingRegister: "awaitingSlot", register: { type: "char", text: "x" } },
+      snapshot,
+      options,
+      "1",
+    );
+    expect(invalid.state).toEqual({ mode: "normal", register: { type: "char", text: "x" } });
+
+    const unsupported = handleModalInput(
+      {
+        mode: "normal",
+        pendingRegister: { slot: "a", append: false },
+        namedRegisters: { a: { type: "line", text: "keep" } },
+      },
+      snapshot,
+      options,
+      "q",
+    );
+    expect(unsupported.state).toEqual({
+      mode: "normal",
+      namedRegisters: { a: { type: "line", text: "keep" } },
+    });
+
+    const appended = handleModalInput(
+      {
+        mode: "normal",
+        pending: "y",
+        namedRegisters: { a: { type: "line", text: "one" } },
+        pendingRegister: { slot: "a", append: true },
+      },
+      { text: "two", lines: ["two"], cursor },
+      options,
+      "y",
+    );
+    expect(appended.state.namedRegisters?.a).toEqual({ type: "line", text: "one\ntwo" });
+    expect(appended.state.register).toEqual({ type: "line", text: "two" });
+    expect(appended.state.pendingRegister).toBeUndefined();
+  });
+
   test("normal delegated reset shortcuts return to configured startup mode", () => {
     expect(
       handleModalInput(
@@ -344,6 +508,91 @@ describe("modal engine", () => {
     );
     expect(yanked.state.register).toEqual({ type: "char", text: "ab" });
     expect(yanked.state.mode).toBe("normal");
+  });
+
+  test("visual named register prefix yanks selected text", () => {
+    const prefix = handleModalInput(
+      { mode: "visual", visualAnchor: { line: 0, col: 1 } },
+      { text: "abcd", lines: ["abcd"], cursor: { line: 0, col: 2 } },
+      options,
+      '"',
+    );
+    expect(prefix.state.pendingRegister).toBe("awaitingSlot");
+
+    const target = handleModalInput(
+      prefix.state,
+      { text: "abcd", lines: ["abcd"], cursor: { line: 0, col: 2 } },
+      options,
+      "a",
+    );
+    const yanked = handleModalInput(
+      target.state,
+      { text: "abcd", lines: ["abcd"], cursor: { line: 0, col: 2 } },
+      options,
+      "y",
+    );
+
+    expect(yanked.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "bc" },
+      namedRegisters: { a: { type: "char", text: "bc" } },
+    });
+  });
+
+  test("visual line and block operations write named registers", () => {
+    const lineDeleted = handleModalInput(
+      {
+        mode: "visualLine",
+        visualAnchor: { line: 0, col: 0 },
+        pendingRegister: { slot: "a", append: false },
+      },
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: { line: 1, col: 0 } },
+      options,
+      "d",
+    );
+    expect(lineDeleted.state.namedRegisters?.a).toEqual({ type: "line", text: "one\ntwo" });
+    expect(lineDeleted.state.register).toEqual({ type: "line", text: "one\ntwo" });
+
+    const blockChanged = handleModalInput(
+      {
+        mode: "visualBlock",
+        visualAnchor: { line: 0, col: 1 },
+        pendingRegister: { slot: "b", append: false },
+      },
+      { text: "abcd\nefgh", lines: ["abcd", "efgh"], cursor: { line: 1, col: 2 } },
+      options,
+      "c",
+    );
+    expect(blockChanged.state.mode).toBe("insert");
+    expect(blockChanged.state.namedRegisters?.b).toEqual({ type: "char", text: "bc\nfg" });
+    expect(blockChanged.state.register).toEqual({ type: "char", text: "bc\nfg" });
+  });
+
+  test("visual line paste replacement can read named register", () => {
+    const result = handleModalInput(
+      {
+        mode: "visualLine",
+        visualAnchor: { line: 1, col: 0 },
+        register: { type: "line", text: "unnamed" },
+        namedRegisters: { a: { type: "line", text: "alpha\nbeta" } },
+        pendingRegister: { slot: "a", append: false },
+      },
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: { line: 1, col: 0 } },
+      options,
+      "p",
+    );
+
+    expect(result.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "one\nalpha\nbeta\nthree",
+        cursor: { line: 1, col: 0 },
+        register: { type: "line", text: "two" },
+        changed: true,
+      },
+    });
+    expect(result.state.namedRegisters?.a).toEqual({ type: "line", text: "two" });
+    expect(result.state.register).toEqual({ type: "line", text: "two" });
   });
 
   test("visual delete returns edit effect and normal-mode cursor intent", () => {

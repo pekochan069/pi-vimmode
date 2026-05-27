@@ -31,6 +31,6 @@ Recommended next pick: `visual block` if selection scope matters next; extract l
 - [x] line, column number
 - [x] visual block
 - [x] macro
-- [ ] registers
+- [x] registers
 - [ ] mark
 - [ ] Ctrl+a, Ctrl+x, ...

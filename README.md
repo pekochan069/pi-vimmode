@@ -6,7 +6,13 @@ Vim-style prompt editing for [Pi](https://github.com/earendil-works/pi-coding-ag
 
 ## Install / load
 
-From this directory:
+Install from Git:
+
+```sh
+pi install git:https://github.com/pekochan069/pi-vimmode
+```
+
+For local development from this checkout:
 
 ```sh
 bun install
@@ -153,6 +159,18 @@ The editor border/status area shows mode feedback:
 - `I`, `N`, `V`, and `VL` at narrow widths.
 - Pending `d`/`c`/`y`/`g` and visual selection summaries show when space allows.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
+
+## Architecture
+
+`VimEditor` is the Pi adapter shell. It owns `CustomEditor` integration, snapshots, effect application, rendering bridge, public cursor restoration, and best-effort terminal cursor writes.
+
+Modal editing behavior lives under `src/modal/`:
+
+- `engine.ts` owns mode transitions, finite key dispatch, register updates, and supported Vim semantics.
+- `types.ts` defines adapter-applied effects such as delegation, edits, cursor restoration, invalidation, and terminal cursor hints.
+- `view.ts` derives mode labels and visual status text without needing Pi TUI objects.
+
+The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. This split is a refactor boundary only: no new keybindings, no private Pi APIs, and no full Vim parity expansion.
 
 ## Limitations
 

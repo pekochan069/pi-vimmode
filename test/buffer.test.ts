@@ -9,13 +9,17 @@ import {
   insertBlockText,
   deleteCharAt,
   deleteLine,
+  deleteLineMarkRange,
   deleteLineRange,
+  deleteMarkRange,
   deleteRange,
+  exactMarkPosition,
   firstNonBlankPosition,
   isVisualCellSelected,
   isVisualLineSelected,
   joinLineWithNext,
   matchingPairPosition,
+  lineMarkPosition,
   navigateBuffer,
   normalizeBufferPosition,
   openLineAbove,
@@ -28,7 +32,9 @@ import {
   visualSelectionText,
   yankByMotion,
   yankLine,
+  yankLineMarkRange,
   yankLineRange,
+  yankMarkRange,
   yankVisualSelection,
 } from "../src/buffer.ts";
 
@@ -46,6 +52,28 @@ describe("prompt buffer operation API", () => {
 
   test("normalizes cursor positions for adapter restoration", () => {
     expect(normalizeBufferPosition("one\ntwo", p(9, 9))).toEqual(p(1, 3));
+  });
+
+  test("resolves local mark positions safely", () => {
+    expect(exactMarkPosition("one\n  two", p(9, 9))).toEqual(p(1, 5));
+    expect(lineMarkPosition("one\n  two", p(1, 99))).toEqual(p(1, 2));
+    expect(lineMarkPosition("one\n   ", p(1, 99))).toEqual(p(1, 0));
+  });
+
+  test("applies mark ranges as charwise or linewise operations", () => {
+    expect(yankMarkRange("hello", p(0, 1), p(0, 3))).toEqual({ type: "char", text: "ell" });
+    expect(deleteMarkRange("hello", p(0, 1), p(0, 3))).toMatchObject({
+      text: "ho",
+      register: { type: "char", text: "ell" },
+    });
+    expect(yankLineMarkRange("one\ntwo\nthree", p(2, 0), p(1, 2))).toEqual({
+      type: "line",
+      text: "two\nthree",
+    });
+    expect(deleteLineMarkRange("one\ntwo\nthree", p(2, 0), p(1, 2))).toMatchObject({
+      text: "one",
+      register: { type: "line", text: "two\nthree" },
+    });
   });
 
   test("yanks visual selections without callers composing registers", () => {

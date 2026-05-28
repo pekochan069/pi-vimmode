@@ -7,7 +7,7 @@ import type { CursorStyle, EditResult, Position, VimEditorOptions, VimMode } fro
 import { normalizeBufferPosition } from "./buffer.ts";
 import { pendingDisplay } from "./commands.ts";
 import { cursorStyleForMode, DEFAULT_VIM_OPTIONS, uiForOptions } from "./config.ts";
-import { handleModalInput } from "./modal/engine.ts";
+import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import {
@@ -105,7 +105,11 @@ export class VimEditor extends CustomEditor {
   }
 
   getPendingOperator() {
-    return pendingDisplay(this.modalState.pending);
+    return pendingDisplay(this.modalState.pending) ?? modalPendingDisplay(this.modalState);
+  }
+
+  getMark(slot: string) {
+    return this.modalState.marks?.[slot];
   }
 
   getCurrentCursorStyle(): CursorStyle {
@@ -129,7 +133,7 @@ export class VimEditor extends CustomEditor {
       cursor: this.getCursor(),
       visualAnchor: this.modalState.visualAnchor,
       width,
-      pending: pendingDisplay(this.modalState.pending),
+      pending: pendingDisplay(this.modalState.pending) ?? modalPendingDisplay(this.modalState),
       recordingSlot: this.modalState.recordingSlot,
       ui: uiForOptions(this.options),
     });

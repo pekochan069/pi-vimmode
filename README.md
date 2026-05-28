@@ -49,37 +49,41 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 ### Normal mode
 
-| Key                   | Behavior                                         |
-| --------------------- | ------------------------------------------------ |
-| `h` / `j` / `k` / `l` | move left / down / up / right                    |
-| `0` / `$`             | line start / line end                            |
-| `w` / `b`             | word forward / word backward                     |
-| `gg` / `G`            | buffer start / buffer end                        |
-| `^` / `_`             | first non-blank character on current line        |
-| `%`                   | jump to matching `()`, `[]`, or `{}` pair        |
-| `i`                   | insert at cursor                                 |
-| `a`                   | move right, then insert                          |
-| `I` / `A`             | line start/end, then insert                      |
-| `o` / `O`             | open blank line below/above, then insert         |
-| `v`                   | enter characterwise visual mode                  |
-| `V`                   | enter visual line mode                           |
-| `Ctrl-v`              | enter visual block mode                          |
-| `x`                   | delete character under cursor                    |
-| `dd` / `cc` / `yy`    | delete/change/yank current line                  |
-| `D` / `C`             | delete/change from cursor through line end       |
-| `Y`                   | yank current line into linewise register         |
-| `d{motion}`           | delete by `w`, `b`, `0`, `^`, or `$`             |
-| `c{motion}`           | change by `w`, `b`, `0`, `^`, or `$`             |
-| `y{motion}`           | yank by `w`, `b`, `0`, `^`, or `$`               |
-| `J`                   | join current line with next line                 |
-| `p` / `P`             | paste unnamed register after/before cursor/line  |
-| `"{a-z}{cmd}`         | run yank/delete/change/paste with named register |
-| `"{A-Z}{cmd}`         | append yank/delete/change into named register    |
-| `q{a-z}`              | start recording an in-memory macro slot          |
-| `q`                   | stop recording from normal mode                  |
-| `@{a-z}`              | replay a recorded macro slot                     |
-| `@@`                  | replay the last successfully played macro        |
-| `u`                   | delegate to Pi native undo                       |
+| Key                         | Behavior                                            |
+| --------------------------- | --------------------------------------------------- |
+| `h` / `j` / `k` / `l`       | move left / down / up / right                       |
+| `0` / `$`                   | line start / line end                               |
+| `w` / `b`                   | word forward / word backward                        |
+| `gg` / `G`                  | buffer start / buffer end                           |
+| `^` / `_`                   | first non-blank character on current line           |
+| `%`                         | jump to matching `()`, `[]`, or `{}` pair           |
+| `i`                         | insert at cursor                                    |
+| `a`                         | move right, then insert                             |
+| `I` / `A`                   | line start/end, then insert                         |
+| `o` / `O`                   | open blank line below/above, then insert            |
+| `v`                         | enter characterwise visual mode                     |
+| `V`                         | enter visual line mode                              |
+| `Ctrl-v`                    | enter visual block mode                             |
+| `x`                         | delete character under cursor                       |
+| `dd` / `cc` / `yy`          | delete/change/yank current line                     |
+| `D` / `C`                   | delete/change from cursor through line end          |
+| `Y`                         | yank current line into linewise register            |
+| `d{motion}`                 | delete by `w`, `b`, `0`, `^`, or `$`                |
+| `c{motion}`                 | change by `w`, `b`, `0`, `^`, or `$`                |
+| `y{motion}`                 | yank by `w`, `b`, `0`, `^`, or `$`                  |
+| `m{a-z}`                    | set a local mark at the current cursor position     |
+| `` `{a-z}``                 | jump to a local mark's exact cursor position        |
+| `'{a-z}`                    | jump to first non-blank column on marked line       |
+| `d` / `c` / `y` + mark jump | operate to a local mark as charwise/linewise motion |
+| `J`                         | join current line with next line                    |
+| `p` / `P`                   | paste unnamed register after/before cursor/line     |
+| `"{a-z}{cmd}`               | run yank/delete/change/paste with named register    |
+| `"{A-Z}{cmd}`               | append yank/delete/change into named register       |
+| `q{a-z}`                    | start recording an in-memory macro slot             |
+| `q`                         | stop recording from normal mode                     |
+| `@{a-z}`                    | replay a recorded macro slot                        |
+| `@@`                        | replay the last successfully played macro           |
+| `u`                         | delegate to Pi native undo                          |
 
 ### Visual mode
 
@@ -92,6 +96,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `d` / `x`                                     | delete selection and return normal                          |
 | `c`                                           | delete selection and enter insert                           |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register |
+| `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark              |
 | `Esc`                                         | cancel selection and return normal                          |
 
 ### Visual line mode
@@ -105,6 +110,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `d` / `x`                                     | delete selected lines into a linewise register and return normal  |
 | `c`                                           | delete selected lines into a linewise register and enter insert   |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change/paste with replace/append register |
+| `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark                    |
 | `Esc`                                         | cancel selection and return normal                                |
 
 ### Visual block mode
@@ -120,6 +126,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `d` / `x`                                     | delete selected block slices into a character register and return normal                           |
 | `c`                                           | delete selected block slices into a character register and enter insert                            |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register                                        |
+| `` `{a-z}`` / `'{a-z}`                        | jump active block corner to exact/line local mark                                                  |
 | `Esc`                                         | cancel selection and return normal                                                                 |
 
 ## Settings
@@ -342,8 +349,15 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with a warning.
 - Unmapped printable keys in normal/visual mode are ignored instead of inserted.
 
-## Registers and undo
+## Marks, registers, and undo
 
+- Local marks `a-z` are supported in memory for the editor session.
+- `m{slot}` stores the current cursor position in a lowercase local mark slot.
+- Backtick + `{slot}` jumps to the stored line/column; single quote + `{slot}` jumps to the first non-blank column on the stored line.
+- Visual mode mark jumps preserve the selection anchor and move the active cursor/corner.
+- `d`, `c`, and `y` accept mark jumps as motions: exact mark jumps are characterwise; line mark jumps are linewise.
+- Missing marks and invalid mark slots are safe no-ops. Stale mark positions are clamped to the current prompt.
+- Global marks, special/automatic marks, mark lists, persistence, and full Vim mark adjustment after edits are not supported.
 - One unnamed register and named edit registers `a-z` are supported in memory for the editor session.
 - Yank/delete/change always update the unnamed register, even when a named register is targeted.
 - `"{a-z}` targets the next supported yank/delete/change/paste command with a named register.
@@ -372,7 +386,7 @@ The editor border/status area shows configurable feedback:
 
 - `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
 - `I`, `N`, `V`, and `VL` at narrow widths by default.
-- Pending operators/key prefixes, active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
+- Pending operators/key prefixes, mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
 - Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
@@ -397,7 +411,7 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 
 ## Limitations
 
-- No counts, text objects, search, ex commands, marks, leader maps, recursive mappings, persistent macros, numbered/special registers, or system clipboard integration.
+- No counts, text objects, search, ex commands, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
 - Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No `.vimrc`, Vimscript, or Neovim Lua parsing.

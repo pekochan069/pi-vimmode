@@ -1,8 +1,11 @@
 # vim-extension-lifecycle Specification
 
 ## Purpose
+
 TBD - created by archiving change extract-lifecycle-settings-install-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Lifecycle hooks install the Vim editor component
 
 The Vim extension lifecycle SHALL register Pi hooks that keep the Vim editor component installed across session start, resource discovery, agent end, and session shutdown events.
@@ -131,4 +134,3 @@ The change SHALL include automated validation for the extracted lifecycle behavi
 
 - **WHEN** the repository typecheck command is executed
 - **THEN** the Vim mode extension compiles without TypeScript errors
-

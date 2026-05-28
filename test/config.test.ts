@@ -157,6 +157,53 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
   });
 
+  test("parses search highlight options", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        search: {
+          highlight: false,
+          highlightCurrent: false,
+          clearOnCancel: false,
+          clearOnInsert: false,
+          maxHighlights: 7,
+        },
+      },
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.search).toEqual({
+      highlight: false,
+      highlightCurrent: false,
+      clearOnCancel: false,
+      clearOnInsert: false,
+      maxHighlights: 7,
+    });
+  });
+
+  test("invalid search highlight options fall back per field", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        search: {
+          highlight: "yes",
+          highlightCurrent: true,
+          clearOnCancel: 1,
+          clearOnInsert: false,
+          maxHighlights: -1,
+        },
+      },
+    });
+
+    expect(result.options.search).toMatchObject({
+      highlight: true,
+      highlightCurrent: true,
+      clearOnCancel: true,
+      clearOnInsert: false,
+      maxHighlights: 200,
+    });
+    expect(result.warnings.some((warning) => warning.includes("search.highlight"))).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("search.maxHighlights"))).toBe(true);
+  });
+
   test("parses mark behavior options", () => {
     const result = resolveVimOptions({
       piVimMode: {

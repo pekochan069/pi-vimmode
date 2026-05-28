@@ -1,10 +1,12 @@
 import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { CursorStyle, Position, VimMode } from "./types.ts";
+import type { CursorStyle, Position, TextRange, VimMode } from "./types.ts";
 
-import { isVisualCellSelected, isVisualLineSelected } from "./buffer.ts";
+import { findSearchHighlightRanges, isVisualCellSelected, isVisualLineSelected } from "./buffer.ts";
 
 export const SELECTION_START = "\x1b[7m";
+export const SEARCH_START = "\x1b[43m";
+export const SEARCH_CURRENT_START = "\x1b[30;43m";
 export const CURSOR_BLOCK_START = "\x1b[4;7m";
 export const CURSOR_UNDERLINE_START = "\x1b[4m";
 export const CURSOR_BAR_START = "\x1b[1m";
@@ -26,9 +28,35 @@ type LayoutLine = {
   isLastChunk: boolean;
 };
 
+export type SearchHighlightRenderInput = {
+  query: string;
+  current?: Position;
+  highlightCurrent: boolean;
+  maxHighlights: number;
+};
+
+export type PromptRenderInput = {
+  snapshot: {
+    lines: string[];
+    text: string;
+    cursor: Position;
+  };
+  cursorStyle: CursorStyle;
+  viewport: {
+    width: number;
+    terminalRows?: number;
+    focused?: boolean;
+  };
+  search?: SearchHighlightRenderInput;
+  display?: {
+    borderColor?: (text: string) => string;
+  };
+};
+
 export type ActiveVisualRenderInput = {
   snapshot: {
     lines: string[];
+    text?: string;
     cursor: Position;
   };
   visual: {
@@ -41,6 +69,7 @@ export type ActiveVisualRenderInput = {
     terminalRows?: number;
     focused?: boolean;
   };
+  search?: SearchHighlightRenderInput;
   display?: {
     borderColor?: (text: string) => string;
   };
@@ -49,17 +78,27 @@ export type ActiveVisualRenderInput = {
 type VisualRenderView = {
   lines: string[];
   cursor: Position;
-  mode: Extract<VimMode, "visual" | "visualLine" | "visualBlock">;
-  visualAnchor: Position;
+  mode?: Extract<VimMode, "visual" | "visualLine" | "visualBlock">;
+  visualAnchor?: Position;
   cursorStyle: CursorStyle;
   width: number;
   terminalRows?: number;
   focused?: boolean;
   borderColor?: (text: string) => string;
+  search?: SearchHighlightRenderInput;
+  searchRanges: TextRange[];
 };
 
 function styleSelection(text: string): string {
   return `${SELECTION_START}${text}${ANSI_RESET}`;
+}
+
+function styleSearch(text: string): string {
+  return `${SEARCH_START}${text}${ANSI_RESET}`;
+}
+
+function styleCurrentSearch(text: string): string {
+  return `${SEARCH_CURRENT_START}${text}${ANSI_RESET}`;
 }
 
 export function renderCursorCell(cell: string, style: CursorStyle): string {
@@ -90,22 +129,42 @@ export const RESET_CURSOR_SHAPE = "\x1b[0 q";
 function isSelectedCell(
   mode: VisualRenderView["mode"],
   lines: string[],
-  anchor: Position,
+  anchor: Position | undefined,
   cursor: Position,
   lineIndex: number,
   col: number,
 ): boolean {
-  return isVisualCellSelected(mode, lines, anchor, cursor, lineIndex, col);
+  return !!mode && !!anchor && isVisualCellSelected(mode, lines, anchor, cursor, lineIndex, col);
 }
 
 function isLineSelected(
   mode: VisualRenderView["mode"],
   lines: string[],
-  anchor: Position,
+  anchor: Position | undefined,
   cursor: Position,
   lineIndex: number,
 ): boolean {
-  return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
+  return !!mode && !!anchor && isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
+}
+
+function isCellInRange(range: TextRange, lineIndex: number, col: number): boolean {
+  if (lineIndex < range.start.line || lineIndex > range.end.line) return false;
+  if (range.start.line === range.end.line) return col >= range.start.col && col <= range.end.col;
+  if (lineIndex === range.start.line) return col >= range.start.col;
+  if (lineIndex === range.end.line) return col <= range.end.col;
+  return true;
+}
+
+function searchRangeAt(options: VisualRenderView, lineIndex: number, col: number): "current" | "other" | undefined {
+  const current = options.search?.current;
+  if (options.search?.highlightCurrent && current) {
+    const currentRange = {
+      start: current,
+      end: { line: current.line, col: current.col + options.search.query.length - 1 },
+    };
+    if (isCellInRange(currentRange, lineIndex, col)) return "current";
+  }
+  return options.searchRanges.some((range) => isCellInRange(range, lineIndex, col)) ? "other" : undefined;
 }
 
 function wordWrapLine(line: string, width: number): TextChunk[] {
@@ -205,7 +264,10 @@ function renderLayoutLine(
     ) {
       output += styleSelection(cell);
     } else {
-      output += cell;
+      const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
+      if (searchStyle === "current") output += styleCurrentSearch(cell);
+      else if (searchStyle === "other") output += styleSearch(cell);
+      else output += cell;
     }
 
     renderedWidth += cellWidth;
@@ -249,7 +311,27 @@ function scrollWindow(
   return { visible: layout.slice(offset, offset + maxVisible), offset };
 }
 
+function createSearchRanges(text: string, search: SearchHighlightRenderInput | undefined): TextRange[] {
+  if (!search) return [];
+  return findSearchHighlightRanges(text, search.query, Math.max(0, search.maxHighlights));
+}
+
+function createPromptRenderView(input: PromptRenderInput): VisualRenderView {
+  return {
+    lines: input.snapshot.lines,
+    cursor: input.snapshot.cursor,
+    cursorStyle: input.cursorStyle,
+    width: input.viewport.width,
+    terminalRows: input.viewport.terminalRows,
+    focused: input.viewport.focused,
+    borderColor: input.display?.borderColor,
+    search: input.search,
+    searchRanges: createSearchRanges(input.snapshot.text, input.search),
+  };
+}
+
 function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderView {
+  const text = input.snapshot.text ?? input.snapshot.lines.join("\n");
   return {
     lines: input.snapshot.lines,
     cursor: input.snapshot.cursor,
@@ -260,11 +342,12 @@ function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderVie
     terminalRows: input.viewport.terminalRows,
     focused: input.viewport.focused,
     borderColor: input.display?.borderColor,
+    search: input.search,
+    searchRanges: createSearchRanges(text, input.search),
   };
 }
 
-export function renderVisualEditor(input: ActiveVisualRenderInput): string[] {
-  const options = createVisualRenderView(input);
+function renderEditorView(options: VisualRenderView): string[] {
   if (options.width <= 0) return [];
 
   const borderColor = options.borderColor ?? ((text: string) => text);
@@ -312,6 +395,14 @@ export function renderVisualEditor(input: ActiveVisualRenderInput): string[] {
   }
 
   return result;
+}
+
+export function renderPromptEditor(input: PromptRenderInput): string[] {
+  return renderEditorView(createPromptRenderView(input));
+}
+
+export function renderVisualEditor(input: ActiveVisualRenderInput): string[] {
+  return renderEditorView(createVisualRenderView(input));
 }
 
 function escapeRegExp(text: string): string {

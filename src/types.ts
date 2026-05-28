@@ -51,6 +51,9 @@ export type VimCommandAction =
   | "tillCharBackward"
   | "repeatCharSearch"
   | "repeatCharSearchReverse"
+  | "startSearch"
+  | "repeatSearch"
+  | "repeatSearchReverse"
   | "repeatChange"
   | "undo";
 
@@ -92,6 +95,16 @@ export type VimKeymapOptions = {
 };
 
 export type ResolvedVimKeymap = VimKeymapOptions;
+
+export type VimSearchOptions = {
+  highlight: boolean;
+  highlightCurrent: boolean;
+  clearOnCancel: boolean;
+  clearOnInsert: boolean;
+  maxHighlights: number;
+};
+
+export type ResolvedVimSearch = VimSearchOptions;
 
 export type VimUiOptions = {
   status: {
@@ -138,6 +151,7 @@ export type VimEditorOptions = {
   ui?: ResolvedVimUi;
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
+  search?: ResolvedVimSearch;
 };
 
 export type Position = {

@@ -9,6 +9,9 @@ import {
   deleteByMotion,
   deleteTextObject,
   findCharOnLine,
+  findSearchHighlightRanges,
+  findSearchMatch,
+  deleteSearchRange,
   insertBlockText,
   deleteCharAt,
   deleteLine,
@@ -40,6 +43,7 @@ import {
   yankLineMarkRange,
   yankLineRange,
   yankMarkRange,
+  yankSearchRange,
   yankTextObject,
   yankVisualSelection,
 } from "../src/buffer.ts";
@@ -342,6 +346,41 @@ describe("roadmap buffer helpers", () => {
       cursor: p(0, 9),
     });
     expect(adjustNumberAtOrAfterCursor("none", p(0, 0), 1).changed).toBe(false);
+  });
+
+  test("finds literal prompt search matches with wrap-around", () => {
+    const text = "alpha beta\ngamma beta";
+    expect(findSearchMatch(text, p(0, 0), "beta", "forward")).toEqual(p(0, 6));
+    expect(findSearchMatch(text, p(1, 6), "beta", "forward")).toEqual(p(0, 6));
+    expect(findSearchMatch(text, p(1, 10), "beta", "backward")).toEqual(p(1, 6));
+    expect(findSearchMatch(text, p(0, 0), "beta", "backward")).toEqual(p(1, 6));
+    expect(findSearchMatch(text, p(0, 0), "missing", "forward")).toBeUndefined();
+    expect(findSearchMatch(text, p(0, 0), "", "forward")).toBeUndefined();
+  });
+
+  test("finds bounded literal search highlight ranges", () => {
+    expect(findSearchHighlightRanges("one two one", "one", 10)).toEqual([
+      { start: p(0, 0), end: p(0, 2) },
+      { start: p(0, 8), end: p(0, 10) },
+    ]);
+    expect(findSearchHighlightRanges("one\none", "one", 1)).toEqual([
+      { start: p(0, 0), end: p(0, 2) },
+    ]);
+    expect(findSearchHighlightRanges("aaa", "aa", 10)).toEqual([
+      { start: p(0, 0), end: p(0, 1) },
+    ]);
+    expect(findSearchHighlightRanges("aaa", "", 10)).toEqual([]);
+  });
+
+  test("applies prompt search targets as operator ranges", () => {
+    expect(deleteSearchRange("alpha beta gamma", p(0, 0), p(0, 6), "beta")).toMatchObject({
+      text: " gamma",
+      register: { type: "char", text: "alpha beta" },
+    });
+    expect(yankSearchRange("alpha beta gamma", p(0, 14), p(0, 6), "beta")).toEqual({
+      type: "char",
+      text: "beta gamm",
+    });
   });
 
   test("finds characters on the current line", () => {

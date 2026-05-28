@@ -1,7 +1,7 @@
 import type { StartupMode, VimEditorOptions, VimMode } from "../types.ts";
 import type { ModalEffect, ModalState, ModalUpdate } from "./types.ts";
 
-import { cursorStyleForMode } from "../config.ts";
+import { cursorStyleForMode, searchForOptions } from "../config.ts";
 
 export function createModalState(mode: StartupMode): ModalState {
   return { mode };
@@ -16,8 +16,16 @@ export function resetTransientState(state: ModalState, mode: VimMode): ModalStat
   if (state.lastPlayedMacro) nextState.lastPlayedMacro = state.lastPlayedMacro;
   if (state.marks) nextState.marks = state.marks;
   if (state.lastCharSearch) nextState.lastCharSearch = state.lastCharSearch;
+  if (state.lastSearch) nextState.lastSearch = state.lastSearch;
+  if (state.searchHighlight) nextState.searchHighlight = state.searchHighlight;
   if (state.lastRepeatableChange) nextState.lastRepeatableChange = state.lastRepeatableChange;
   return nextState;
+}
+
+function clearHighlightsForMode(state: ModalState, mode: VimMode, options: VimEditorOptions): ModalState {
+  if (mode !== "insert" || !searchForOptions(options).clearOnInsert) return state;
+  const { searchHighlight: _searchHighlight, ...rest } = state;
+  return rest;
 }
 
 export function transitionMode(
@@ -26,7 +34,7 @@ export function transitionMode(
   options: VimEditorOptions,
   extraEffects: ModalEffect[] = [],
 ): ModalUpdate {
-  const nextState = resetTransientState(state, mode);
+  const nextState = clearHighlightsForMode(resetTransientState(state, mode), mode, options);
   return {
     state: nextState,
     effects: [

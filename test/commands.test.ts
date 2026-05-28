@@ -207,6 +207,22 @@ describe("normal command parser", () => {
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordEnd", count: 4 });
   });
 
+  test("resolves prompt search commands", () => {
+    expect(resolveNormalCommand("/", undefined)).toEqual({
+      type: "command",
+      command: "startSearch",
+    });
+    expect(resolveNormalCommand("n", undefined)).toEqual({
+      type: "command",
+      command: "repeatSearch",
+    });
+    expect(resolveNormalCommand("N", undefined)).toEqual({
+      type: "command",
+      command: "repeatSearchReverse",
+    });
+    expect(resolveNormalCommand("/", "d")).toEqual({ type: "invalid" });
+  });
+
   test("resolves char commands and operator text objects", () => {
     const replacePending = resolveNormalCommand("r", undefined);
     expect(replacePending.type).toBe("pending");

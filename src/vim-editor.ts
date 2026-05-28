@@ -6,12 +6,13 @@ import type { CursorStyle, EditResult, Position, VimEditorOptions, VimMode } fro
 
 import { normalizeBufferPosition } from "./buffer.ts";
 import { pendingDisplay } from "./commands.ts";
-import { cursorStyleForMode, DEFAULT_VIM_OPTIONS, uiForOptions } from "./config.ts";
+import { cursorStyleForMode, DEFAULT_VIM_OPTIONS, searchForOptions, uiForOptions } from "./config.ts";
 import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import {
   cursorShapeEscape,
+  renderPromptEditor,
   renderVisualEditor,
   RESET_CURSOR_SHAPE,
   restyleCursorMarker,
@@ -72,6 +73,7 @@ function cloneOptions(options: VimEditorOptions): VimEditorOptions {
     ui: options.ui,
     macros: options.macros,
     marks: options.marks,
+    search: options.search,
   };
 }
 
@@ -152,6 +154,18 @@ export class VimEditor extends CustomEditor {
     };
   }
 
+  private searchRenderInput() {
+    if (!this.modalState.searchHighlight) return undefined;
+    const search = searchForOptions(this.options);
+    if (!search.highlight) return undefined;
+    return {
+      query: this.modalState.searchHighlight.query,
+      current: this.modalState.searchHighlight.current,
+      highlightCurrent: search.highlightCurrent,
+      maxHighlights: search.maxHighlights,
+    };
+  }
+
   private renderEditorLines(width: number): string[] {
     if (
       (this.modalState.mode === "visual" ||
@@ -162,6 +176,7 @@ export class VimEditor extends CustomEditor {
       return renderVisualEditor({
         snapshot: {
           lines: this.getLines(),
+          text: this.getText(),
           cursor: this.getCursor(),
         },
         visual: {
@@ -174,6 +189,27 @@ export class VimEditor extends CustomEditor {
           terminalRows: this.terminalRows(),
           focused: this.focused,
         },
+        search: this.searchRenderInput(),
+        display: {
+          borderColor: this.borderColor,
+        },
+      });
+    }
+
+    if (this.searchRenderInput()) {
+      return renderPromptEditor({
+        snapshot: {
+          lines: this.getLines(),
+          text: this.getText(),
+          cursor: this.getCursor(),
+        },
+        cursorStyle: this.getCurrentCursorStyle(),
+        viewport: {
+          width,
+          terminalRows: this.terminalRows(),
+          focused: this.focused,
+        },
+        search: this.searchRenderInput(),
         display: {
           borderColor: this.borderColor,
         },

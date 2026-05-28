@@ -8,8 +8,11 @@ import {
   CURSOR_BLOCK_START,
   CURSOR_UNDERLINE_START,
   renderCursorCell,
+  renderPromptEditor,
   renderVisualEditor,
   restyleCursorMarker,
+  SEARCH_CURRENT_START,
+  SEARCH_START,
   SELECTION_START,
 } from "../src/render.ts";
 
@@ -48,6 +51,35 @@ function renderVisual(fixture: VisualFixture): string[] {
 function expectWidthSafe(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 }
+
+describe("search highlight render helper", () => {
+  test("renders search and current-match highlights width-safely", () => {
+    const lines = renderPromptEditor({
+      snapshot: { text: "one two one", lines: ["one two one"], cursor: p(0, 8) },
+      cursorStyle: "block",
+      viewport: { width: 20, focused: false },
+      search: { query: "one", current: p(0, 8), highlightCurrent: true, maxHighlights: 20 },
+    });
+    const output = lines.join("\n");
+    expect(output).toContain(SEARCH_START);
+    expect(output).toContain(SEARCH_CURRENT_START);
+    expectWidthSafe(lines, 20);
+  });
+
+  test("visual selection takes precedence over search highlights", () => {
+    const lines = renderVisualEditor({
+      snapshot: { text: "one two one", lines: ["one two one"], cursor: p(0, 2) },
+      visual: { mode: "visual", anchor: p(0, 0) },
+      cursorStyle: "block",
+      viewport: { width: 20, focused: false },
+      search: { query: "one", current: p(0, 8), highlightCurrent: true, maxHighlights: 20 },
+    });
+    const output = lines.join("\n");
+    expect(output).toContain(SELECTION_START);
+    expect(output).toContain(SEARCH_CURRENT_START);
+    expectWidthSafe(lines, 20);
+  });
+});
 
 describe("visual render helper", () => {
   test("highlights characterwise selected text", () => {

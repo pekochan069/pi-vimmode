@@ -667,6 +667,72 @@ export function adjustNumberAtOrAfterCursor(
 }
 
 export type CharSearchKind = "findForward" | "findBackward" | "tillForward" | "tillBackward";
+export type SearchDirection = "forward" | "backward";
+
+export function findSearchHighlightRanges(
+  text: string,
+  query: string,
+  maxRanges = Number.POSITIVE_INFINITY,
+): TextRange[] {
+  if (query.length === 0 || query.includes("\n") || maxRanges <= 0) return [];
+  const ranges: TextRange[] = [];
+  let offset = 0;
+  while (ranges.length < maxRanges) {
+    const match = text.indexOf(query, offset);
+    if (match < 0) break;
+    const end = Math.max(match, Math.min(text.length, match + query.length) - 1);
+    ranges.push({ start: offsetToPosition(text, match), end: offsetToPosition(text, end) });
+    offset = match + query.length;
+  }
+  return ranges;
+}
+
+export function findSearchMatch(
+  text: string,
+  cursor: Position,
+  query: string,
+  direction: SearchDirection = "forward",
+): Position | undefined {
+  if (query.length === 0 || query.includes("\n")) return undefined;
+  const start = positionToOffset(text, cursor);
+  if (direction === "forward") {
+    const later = text.indexOf(query, Math.min(text.length, start + 1));
+    if (later >= 0) return offsetToPosition(text, later);
+    const wrapped = text.indexOf(query, 0);
+    return wrapped >= 0 ? offsetToPosition(text, wrapped) : undefined;
+  }
+
+  const earlier = start > 0 ? text.lastIndexOf(query, start - 1) : -1;
+  if (earlier >= 0) return offsetToPosition(text, earlier);
+  const wrapped = text.lastIndexOf(query);
+  return wrapped >= 0 ? offsetToPosition(text, wrapped) : undefined;
+}
+
+function searchRangeEnd(text: string, target: Position, query: string): Position {
+  const targetOffset = positionToOffset(text, target);
+  const endOffset = Math.max(targetOffset, Math.min(text.length, targetOffset + query.length) - 1);
+  return offsetToPosition(text, endOffset);
+}
+
+export function deleteSearchRange(
+  text: string,
+  cursor: Position,
+  target: Position,
+  query: string,
+): EditResult {
+  const active = comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
+  return deleteRange(text, cursor, active);
+}
+
+export function yankSearchRange(
+  text: string,
+  cursor: Position,
+  target: Position,
+  query: string,
+): VimRegister | undefined {
+  const active = comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
+  return yankVisualSelection(text, cursor, active, "char");
+}
 
 export function findCharOnLine(
   text: string,

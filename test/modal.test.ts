@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ModalEffect, ModalState } from "../src/modal/types.ts";
+import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
 import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
 import { handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
 
+const p = (line: number, col: number) => ({ line, col });
 const cursor = { line: 0, col: 0 };
-const options = {
+const options: ModalOptions = {
   startMode: "insert" as const,
   cursor: {
     insert: "bar" as const,
@@ -25,13 +26,14 @@ function applyModalKeys(
   initialText: string,
   initialCursor: { line: number; col: number },
   keys: readonly string[],
+  modalOptions: ModalOptions = options,
 ) {
   let state = initialState;
   let text = initialText;
   let cursor = initialCursor;
 
   for (const key of keys) {
-    const update = handleModalInput(state, { text, lines: text.split("\n"), cursor }, options, key);
+    const update = handleModalInput(state, { text, lines: text.split("\n"), cursor }, modalOptions, key);
     state = update.state;
     for (const effect of update.effects) {
       if (effect.type === "edit") {
@@ -61,6 +63,7 @@ describe("modal contracts", () => {
       marks: { a: cursor },
       pendingMark: { kind: "jumpExact" },
       lastCharSearch: { command: "findCharForward", target: ":" },
+      lastSearch: { query: "two", direction: "forward" },
       lastRepeatableChange: { type: "command", command: "deleteChar" },
     };
 
@@ -70,6 +73,7 @@ describe("modal contracts", () => {
       namedRegisters: { a: { type: "line", text: "one" } },
       marks: { a: cursor },
       lastCharSearch: { command: "findCharForward", target: ":" },
+      lastSearch: { query: "two", direction: "forward" },
       lastRepeatableChange: { type: "command", command: "deleteChar" },
     });
   });
@@ -440,6 +444,109 @@ describe("modal engine", () => {
     );
     expect(changed.state.mode).toBe("insert");
     expect(changed.effects[0]).toMatchObject({ type: "edit", result: { text: "hello " } });
+  });
+
+  test("normal mode supports prompt search and repeat", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), [
+      "/",
+      "o",
+      "n",
+      "e",
+      "\r",
+      "n",
+      "N",
+    ]);
+
+    expect(result.text).toBe("one two one");
+    expect(result.cursor).toEqual(p(0, 8));
+    expect(result.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+    expect(result.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+    expect(result.state.pendingSearch).toBeUndefined();
+  });
+
+  test("prompt search highlight state honors config and clear events", () => {
+    const noHighlight = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["/", "o", "n", "e", "\r"], {
+      ...options,
+      search: { highlight: false, highlightCurrent: true, clearOnCancel: true, clearOnInsert: true, maxHighlights: 200 },
+    });
+    expect(noHighlight.state.searchHighlight).toBeUndefined();
+    expect(noHighlight.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+
+    const highlighted = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["/", "o", "n", "e", "\r"]);
+    expect(highlighted.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+
+    const cancelled = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["/", "x", "\x1b"]);
+    expect(cancelled.state.searchHighlight).toBeUndefined();
+
+    const insert = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["i"]);
+    expect(insert.state.mode).toBe("insert");
+    expect(insert.state.searchHighlight).toBeUndefined();
+
+    const preserveOnInsert = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["i"], {
+      ...options,
+      search: { highlight: true, highlightCurrent: true, clearOnCancel: true, clearOnInsert: false, maxHighlights: 200 },
+    });
+    expect(preserveOnInsert.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+  });
+
+  test("normal prompt search handles cancellation empty and missing queries safely", () => {
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["/", "x", "\x1b"])).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      state: { mode: "normal" },
+    });
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["/", "\r"])).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      state: { mode: "normal" },
+    });
+    const missingWithPrevious = applyModalKeys(
+      { mode: "normal", searchHighlight: { query: "a", current: p(0, 0) } },
+      "abc",
+      p(0, 0),
+      ["/", "z", "\r"],
+    );
+    expect(missingWithPrevious).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      state: { mode: "normal", searchHighlight: { query: "a", current: p(0, 0) } },
+    });
+  });
+
+  test("visual mode supports prompt search motion", () => {
+    const result = applyModalKeys({ mode: "visual", visualAnchor: p(0, 0) }, "one two one", p(0, 0), [
+      "/",
+      "t",
+      "w",
+      "o",
+      "\r",
+    ]);
+
+    expect(result.cursor).toEqual(p(0, 4));
+    expect(result.state).toMatchObject({ mode: "visual", visualAnchor: p(0, 0) });
+  });
+
+  test("operators accept prompt search motions", () => {
+    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["d", "/", "t", "w", "o", "\r"])).toMatchObject({
+      text: " three",
+      cursor: p(0, 0),
+      state: { mode: "normal", register: { type: "char", text: "one two" } },
+    });
+    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["y", "/", "t", "w", "o", "\r"])).toMatchObject({
+      text: "one two three",
+      cursor: p(0, 0),
+      state: { mode: "normal", register: { type: "char", text: "one two" } },
+    });
+    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["c", "/", "t", "w", "o", "\r"])).toMatchObject({
+      text: " three",
+      cursor: p(0, 0),
+      state: { mode: "insert", register: { type: "char", text: "one two" } },
+    });
+    expect(applyModalKeys({ mode: "normal" }, "one two", p(0, 0), ["d", "/", "z", "\r"])).toMatchObject({
+      text: "one two",
+      cursor: p(0, 0),
+      state: { mode: "normal" },
+    });
   });
 
   test("normal mode sets and jumps to local marks", () => {

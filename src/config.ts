@@ -8,6 +8,7 @@ import type {
   ResolvedVimKeymap,
   ResolvedVimMacros,
   ResolvedVimMarks,
+  ResolvedVimSearch,
   ResolvedVimUi,
   StartupMode,
   VimCommandAction,
@@ -72,6 +73,9 @@ export const VIM_COMMAND_ACTIONS = [
   "tillCharBackward",
   "repeatCharSearch",
   "repeatCharSearchReverse",
+  "startSearch",
+  "repeatSearch",
+  "repeatSearchReverse",
   "repeatChange",
   "undo",
 ] as const satisfies readonly VimCommandAction[];
@@ -170,6 +174,9 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     tillCharBackward: Object.freeze(["T"]),
     repeatCharSearch: Object.freeze([";"]),
     repeatCharSearchReverse: Object.freeze([","]),
+    startSearch: Object.freeze(["/"]),
+    repeatSearch: Object.freeze(["n"]),
+    repeatSearchReverse: Object.freeze(["N"]),
     repeatChange: Object.freeze(["."]),
     undo: Object.freeze(["u"]),
   }),
@@ -245,6 +252,14 @@ export const DEFAULT_VIM_MARKS = Object.freeze({
   slots: Object.freeze(LOWERCASE_SLOT_KEYS),
 }) as unknown as ResolvedVimMarks;
 
+export const DEFAULT_VIM_SEARCH = Object.freeze({
+  highlight: true,
+  highlightCurrent: true,
+  clearOnCancel: true,
+  clearOnInsert: true,
+  maxHighlights: 200,
+}) as unknown as ResolvedVimSearch;
+
 export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
   startMode: "insert",
   cursor: Object.freeze({
@@ -258,6 +273,7 @@ export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
   ui: DEFAULT_VIM_UI,
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
+  search: DEFAULT_VIM_SEARCH,
 });
 
 type PartialVimOptions = {
@@ -267,6 +283,7 @@ type PartialVimOptions = {
   ui?: PartialUiOptions;
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
+  search?: PartialSearchOptions;
 };
 
 type PartialKeymapOptions = {
@@ -280,6 +297,7 @@ type PartialKeymapOptions = {
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
 type PartialMarkOptions = Partial<ResolvedVimMarks>;
+type PartialSearchOptions = Partial<ResolvedVimSearch>;
 
 type PartialUiOptions = {
   status?: Partial<ResolvedVimUi["status"]>;
@@ -362,6 +380,9 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       tillCharBackward: [...keymap.commands.tillCharBackward],
       repeatCharSearch: [...keymap.commands.repeatCharSearch],
       repeatCharSearchReverse: [...keymap.commands.repeatCharSearchReverse],
+      startSearch: [...keymap.commands.startSearch],
+      repeatSearch: [...keymap.commands.repeatSearch],
+      repeatSearchReverse: [...keymap.commands.repeatSearchReverse],
       repeatChange: [...keymap.commands.repeatChange],
       undo: [...keymap.commands.undo],
     },
@@ -388,6 +409,10 @@ function cloneMarks(marks: ResolvedVimMarks = DEFAULT_VIM_MARKS): ResolvedVimMar
   };
 }
 
+function cloneSearch(search: ResolvedVimSearch = DEFAULT_VIM_SEARCH): ResolvedVimSearch {
+  return { ...search };
+}
+
 function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   return {
     status: { enabled: ui.status.enabled, items: [...ui.status.items] },
@@ -409,6 +434,7 @@ function cloneDefaultOptions(): VimEditorOptions {
     ui: cloneUi(),
     macros: cloneMacros(),
     marks: cloneMarks(),
+    search: cloneSearch(),
   };
 }
 
@@ -788,6 +814,37 @@ function parseMacros(
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
 }
 
+function parseSearch(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialSearchOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialSearchOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.search must be an object`);
+    return { warnings };
+  }
+
+  for (const field of ["highlight", "highlightCurrent", "clearOnCancel", "clearOnInsert"] as const) {
+    if (typeof value[field] === "boolean") partial[field] = value[field];
+    else if (value[field] !== undefined)
+      warnings.push(`${sourceLabel}: piVimMode.search.${field} must be a boolean`);
+  }
+
+  if (
+    typeof value.maxHighlights === "number" &&
+    Number.isInteger(value.maxHighlights) &&
+    value.maxHighlights >= 0
+  ) {
+    partial.maxHighlights = value.maxHighlights;
+  } else if (value.maxHighlights !== undefined) {
+    warnings.push(`${sourceLabel}: piVimMode.search.maxHighlights must be a non-negative integer`);
+  }
+
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
 function parseMarks(
   value: unknown,
   sourceLabel: string,
@@ -877,6 +934,10 @@ function parsePiVimMode(
   partial.marks = marks.partial;
   warnings.push(...marks.warnings);
 
+  const search = parseSearch(value.search, sourceLabel);
+  partial.search = search.partial;
+  warnings.push(...search.warnings);
+
   return { partial, warnings };
 }
 
@@ -900,6 +961,10 @@ function mergeMacros(target: ResolvedVimMacros, partial: PartialMacroOptions): v
 function mergeMarks(target: ResolvedVimMarks, partial: PartialMarkOptions): void {
   if (partial.enabled !== undefined) target.enabled = partial.enabled;
   if (partial.slots) target.slots = [...partial.slots];
+}
+
+function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): void {
+  Object.assign(target, partial);
 }
 
 function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
@@ -957,6 +1022,7 @@ function mergePartialOptions(target: VimEditorOptions, partial: PartialVimOption
   if (partial.ui) mergeUi(target.ui ?? cloneUi(), partial.ui);
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
   if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
+  if (partial.search) mergeSearch(target.search ?? cloneSearch(), partial.search);
 }
 
 export function resolveVimOptions(
@@ -1033,6 +1099,10 @@ export function macrosForOptions(options: VimEditorOptions): ResolvedVimMacros {
 
 export function marksForOptions(options: VimEditorOptions): ResolvedVimMarks {
   return options.marks ?? DEFAULT_VIM_MARKS;
+}
+
+export function searchForOptions(options: VimEditorOptions): ResolvedVimSearch {
+  return options.search ?? DEFAULT_VIM_SEARCH;
 }
 
 export function cursorStyleForMode(options: VimEditorOptions, mode: VimMode): CursorStyle {

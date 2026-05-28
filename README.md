@@ -197,6 +197,9 @@ Project settings override global settings field by field.
         "tillCharBackward": ["T"],
         "repeatCharSearch": [";"],
         "repeatCharSearchReverse": [","],
+        "startSearch": ["/"],
+        "repeatSearch": ["n"],
+        "repeatSearchReverse": ["N"],
         "repeatChange": ["."],
         "undo": ["u"],
         "visualChar": ["v"],
@@ -236,6 +239,13 @@ Project settings override global settings field by field.
         "q", "r", "s", "t", "u", "v", "w", "x",
         "y", "z"
       ]
+    },
+    "search": {
+      "highlight": true,
+      "highlightCurrent": true,
+      "clearOnCancel": true,
+      "clearOnInsert": true,
+      "maxHighlights": 200
     },
     "ui": {
       "status": {
@@ -319,11 +329,11 @@ Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`,
 
 `Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
 
-- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `repeatChange`, `undo`
+- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `repeatChange`, `undo`
 
 `operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `wordEnd`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
 
-Roadmap limitations: numeric adjustment currently supports signed integers; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; `/`, `?`, `n`, and `N` search are intentionally deferred. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
+Roadmap limitations: numeric adjustment currently supports signed integers; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; prompt search is literal and prompt-local only. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
 
 Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `zz`, then `zzzz` deletes the current line and `zz{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
 
@@ -354,6 +364,18 @@ If you remap macro controls, use the configured record key to stop recording and
 
 - `enabled`: enable/disable all mark set/jump controls. Defaults to `true`.
 - `slots`: allowed lowercase `a-z` local mark slots. Defaults to all lowercase letters.
+
+### `piVimMode.search`
+
+`search` configures prompt-local search highlighting without changing search motion behavior:
+
+- `highlight`: render literal matches after successful `/`, `n`, or `N`. Defaults to `true`.
+- `highlightCurrent`: render the current match with a distinct style. Defaults to `true`.
+- `clearOnCancel`: clear visible highlights when a pending `/` search is cancelled. Defaults to `true`.
+- `clearOnInsert`: clear visible highlights when entering insert mode. Defaults to `true`.
+- `maxHighlights`: maximum non-current matches to render. Defaults to `200`.
+
+Search highlight styles are fixed ANSI styles for now. Vim highlight groups, `:nohlsearch`, search history, and regex search are not supported.
 
 ### `piVimMode.ui`
 
@@ -391,6 +413,9 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 - `d`, `c`, and `y` accept mark jumps as motions: exact mark jumps are characterwise; line mark jumps are linewise.
 - Missing marks and invalid mark slots are safe no-ops. Stale mark positions are clamped to the current prompt.
 - Global marks, special/automatic marks, mark lists, persistence, and full Vim mark adjustment after edits are not supported.
+- `/` starts literal forward search within the current prompt; `n` repeats the last search direction and `N` searches the opposite direction. Matches wrap around the prompt.
+- Visual-mode search moves the active cursor while preserving the selection anchor. `d`, `c`, and `y` can use `/query<Enter>` as an operator motion.
+- Empty, cancelled, and missing-match searches are safe no-ops. Regex search, `?`, search history, offsets, Vim highlight groups, and search across previous prompts are not supported.
 - One unnamed register and named edit registers `a-z` are supported in memory for the editor session.
 - Yank/delete/change always update the unnamed register, even when a named register is targeted.
 - `"{a-z}` targets the next supported yank/delete/change/paste command with a named register.
@@ -419,7 +444,7 @@ The editor border/status area shows configurable feedback:
 
 - `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
 - `I`, `N`, `V`, and `VL` at narrow widths by default.
-- Pending operators/key prefixes, mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
+- Pending operators/key prefixes, search prompts (`/query…`), mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
 - Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
@@ -444,7 +469,7 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 
 ## Limitations
 
-- No prompt search (`/`, `?`, `n`, `N`), ex commands / command mode, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
+- No regex search, `?` backward search command, search history, Vim highlight groups, `:nohlsearch`, ex commands / command mode, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
 - Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No `.vimrc`, Vimscript, or Neovim Lua parsing.

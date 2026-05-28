@@ -52,6 +52,24 @@ export type CharSearchState = {
   target: string;
 };
 
+export type SearchDirection = "forward" | "backward";
+
+export type PendingSearchTarget = {
+  query: string;
+  direction: SearchDirection;
+  operator?: VimOperatorAction;
+};
+
+export type SearchState = {
+  query: string;
+  direction: SearchDirection;
+};
+
+export type SearchHighlightState = {
+  query: string;
+  current: Position;
+};
+
 export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
@@ -77,7 +95,10 @@ export type ModalState = {
   pendingRegister?: PendingRegisterTarget;
   marks?: MarkStore;
   pendingMark?: PendingMarkTarget;
+  pendingSearch?: PendingSearchTarget;
   lastCharSearch?: CharSearchState;
+  lastSearch?: SearchState;
+  searchHighlight?: SearchHighlightState;
   lastRepeatableChange?: RepeatableChange;
 };
 

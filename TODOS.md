@@ -34,5 +34,5 @@ Recommended next pick: `visual block` if selection scope matters next; extract l
 - [x] registers
 - [x] mark
 - [x] Ctrl+a, Ctrl+x, ...
-- [ ] `/` search
+- [x] `/` search
 - [ ] commands (grep, ...)

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { VimEditorOptions, VimMode } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
 function createEditor(options: VimEditorOptions = DEFAULT_VIM_OPTIONS) {
@@ -195,6 +196,43 @@ describe("vim editor integration", () => {
     editor.handleInput("r");
     editor.handleInput("x");
     expect(editor.getText()).toBe("A");
+  });
+
+  test("normal mode searches prompt text and repeats matches", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "/", "o", "n", "e", "\r"]);
+    expectEditorState(editor, { text: "one two one", cursor: { line: 0, col: 8 }, mode: "normal" });
+    expect(editor.render(20).join("\n")).toContain(SEARCH_CURRENT_START);
+    expect(editor.render(20).join("\n")).toContain(SEARCH_START);
+
+    editor.handleInput("n");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    editor.handleInput("N");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+  });
+
+  test("search highlight rendering can be disabled", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      search: { highlight: false, highlightCurrent: true, clearOnCancel: true, clearOnInsert: true, maxHighlights: 200 },
+    });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "/", "o", "n", "e", "\r"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+    expect(editor.render(20).join("\n")).not.toContain(SEARCH_START);
+  });
+
+  test("normal search can cancel and insert slash remains delegated", () => {
+    const { editor } = createEditor();
+    editor.handleInput("/");
+    expect(editor.getText()).toBe("/");
+    editor.handleInput("\x1b");
+    editor.handleInput("/");
+    editor.handleInput("z");
+    editor.handleInput("\x1b");
+    expectEditorState(editor, { text: "/", cursor: { line: 0, col: 1 }, mode: "normal" });
   });
 
   test("normal x deletes character under cursor into register", () => {

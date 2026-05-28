@@ -17,6 +17,7 @@ import type {
   ModalOptions,
   ModalState,
   ModalUpdate,
+  PendingSearchTarget,
   RepeatableChange,
 } from "./types.ts";
 
@@ -29,6 +30,8 @@ import {
   deleteLine,
   deleteTextObject,
   findCharOnLine,
+  findSearchMatch,
+  deleteSearchRange,
   deleteLineMarkRange,
   deleteLineRange,
   deleteMarkRange,
@@ -52,6 +55,7 @@ import {
   yankLineCount,
   yankLineMarkRange,
   yankMarkRange,
+  yankSearchRange,
   yankTextObject,
   yankVisualSelection,
 } from "../buffer.ts";
@@ -62,7 +66,7 @@ import {
   resolveNormalCommand,
   semanticMotionToLegacy,
 } from "../commands.ts";
-import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
+import { keymapForOptions, macrosForOptions, marksForOptions, searchForOptions } from "../config.ts";
 import {
   clearMarkTarget,
   isExactMarkJumpPrefixKey,
@@ -107,11 +111,26 @@ function delegate(state: ModalState, input: string): ModalUpdate {
   return withEffects(state, [{ type: "delegate", input }]);
 }
 
+function clearSearchHighlight(state: ModalState): ModalState {
+  const { searchHighlight: _searchHighlight, ...rest } = state;
+  return rest;
+}
+
+function withSearchHighlight(
+  state: ModalState,
+  options: ModalOptions,
+  query: string,
+  current: EditorSnapshot["cursor"],
+): ModalState {
+  return searchForOptions(options).highlight ? { ...state, searchHighlight: { query, current } } : state;
+}
+
 function clearCommandPending(state: ModalState): ModalState {
   const {
     pending: _pending,
     pendingMacro: _pendingMacro,
     pendingMark: _pendingMark,
+    pendingSearch: _pendingSearch,
     ...rest
   } = state;
   return rest;
@@ -492,6 +511,12 @@ function applyCommand(
       return repeatCharSearch(nextState, snapshot, false, count);
     case "repeatCharSearchReverse":
       return repeatCharSearch(nextState, snapshot, true, count);
+    case "startSearch":
+      return startSearchUpdate(nextState);
+    case "repeatSearch":
+      return repeatSearch(nextState, snapshot, options, false);
+    case "repeatSearchReverse":
+      return repeatSearch(nextState, snapshot, options, true);
     case "repeatChange":
       return repeatChange(state, snapshot, options);
     case "undo":
@@ -556,6 +581,100 @@ function repeatCharSearch(
     ? oppositeCharSearch(state.lastCharSearch.command)
     : state.lastCharSearch.command;
   return applyCharSearch(state, snapshot, command, state.lastCharSearch.target, count);
+}
+
+function oppositeSearchDirection(direction: "forward" | "backward"): "forward" | "backward" {
+  return direction === "forward" ? "backward" : "forward";
+}
+
+function startSearchUpdate(
+  state: ModalState,
+  direction: "forward" | "backward" = "forward",
+  operator?: VimOperatorAction,
+): ModalUpdate {
+  return invalidate({
+    ...clearRegisterTarget(state),
+    pendingSearch: { query: "", direction, operator },
+  });
+}
+
+function pendingSearchDisplay(target: PendingSearchTarget | undefined): string | undefined {
+  if (!target) return undefined;
+  return `/${target.query}`;
+}
+
+function completeSearch(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  search: PendingSearchTarget,
+): ModalUpdate {
+  const query = search.query;
+  const baseState = clearPending(state);
+  if (query.length === 0) return invalidate(baseState);
+
+  const target = findSearchMatch(snapshot.text, snapshot.cursor, query, search.direction);
+  if (!target) return invalidate(baseState);
+
+  const searchState = { query, direction: search.direction };
+  if (search.operator) {
+    if (search.operator === "yank") {
+      const register = yankSearchRange(snapshot.text, snapshot.cursor, target, query);
+      return yankUpdate(withSearchHighlight({ ...baseState, lastSearch: searchState }, options, query, target), register);
+    }
+
+    const result = deleteSearchRange(snapshot.text, snapshot.cursor, target, query);
+    const edited = clearSearchHighlight(editState({ ...baseState, lastSearch: searchState }, result));
+    const effects: ModalEffect[] = [{ type: "edit", result }];
+    if (search.operator === "change") return transitionMode(edited, "insert", options, effects);
+    return withEffects(edited, effects);
+  }
+
+  return withEffects(
+    withSearchHighlight({ ...baseState, lastSearch: searchState }, options, query, target),
+    [{ type: "restoreCursor", position: target }, { type: "invalidate" }],
+  );
+}
+
+function repeatSearch(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  reverse: boolean,
+): ModalUpdate {
+  if (!state.lastSearch) return invalidate(clearCommandPending(state));
+  const direction = reverse ? oppositeSearchDirection(state.lastSearch.direction) : state.lastSearch.direction;
+  const target = findSearchMatch(snapshot.text, snapshot.cursor, state.lastSearch.query, direction);
+  if (!target) return invalidate(clearCommandPending(state));
+  return withEffects(withSearchHighlight(clearCommandPending(state), options, state.lastSearch.query, target), [
+    { type: "restoreCursor", position: target },
+    { type: "invalidate" },
+  ]);
+}
+
+function handlePendingSearchInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate {
+  const search = state.pendingSearch;
+  if (!search) return invalidate(state);
+  if (matchesKey(data, "escape")) {
+    const cleared = clearPending(state);
+    return invalidate(searchForOptions(options).clearOnCancel ? clearSearchHighlight(cleared) : cleared);
+  }
+  if (matchesKey(data, "enter") || matchesKey(data, "return")) {
+    return completeSearch(state, snapshot, options, search);
+  }
+  if (matchesKey(data, "backspace")) {
+    if (search.query.length === 0) return invalidate(state);
+    return invalidate({ ...state, pendingSearch: { ...search, query: search.query.slice(0, -1) } });
+  }
+
+  const key = keySequence(data);
+  if (!key || key.length !== 1) return invalidate(state);
+  return invalidate({ ...state, pendingSearch: { ...search, query: search.query + key } });
 }
 
 function applyOperatorTextObject(
@@ -848,6 +967,7 @@ function handleNormalInput(
 
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   if (pendingOperator) {
+    if (key === "/") return startSearchUpdate(state, "forward", pendingOperator);
     const markTarget = markPendingForKey(key, options, pendingOperator, state.pending);
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
@@ -998,6 +1118,10 @@ function handleVisualInput(
     const registerAware = result.command === "deleteChar" || result.command === "pasteAfter";
     if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
 
+    if (result.command === "startSearch") return startSearchUpdate(state);
+    if (result.command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
+    if (result.command === "repeatSearchReverse") return repeatSearch(state, snapshot, options, true);
+
     if (result.command === "visualLine") {
       return state.mode === "visualLine"
         ? invalidate(state)
@@ -1125,6 +1249,7 @@ function routeModalInput(
   options: ModalOptions,
   data: string,
 ): ModalUpdate {
+  if (state.pendingSearch) return handlePendingSearchInput(state, snapshot, options, data);
   if (state.mode === "insert") return handleInsertInput(state, snapshot, options, data);
   if (state.mode === "visual" || state.mode === "visualLine" || state.mode === "visualBlock") {
     return handleVisualInput(state, snapshot, options, data);
@@ -1162,7 +1287,7 @@ function shouldRecordInput(
 }
 
 export function modalPendingDisplay(state: ModalState): string | undefined {
-  return pendingMarkDisplay(state.pendingMark);
+  return pendingSearchDisplay(state.pendingSearch) ?? pendingMarkDisplay(state.pendingMark);
 }
 
 export function handleModalInput(

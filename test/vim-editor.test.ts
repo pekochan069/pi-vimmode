@@ -189,6 +189,29 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
   });
 
+  test("local marks persist in editor session and restore cursor", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\n  two");
+    editor.handleInput("G");
+    editor.handleInput("m");
+    expect(editor.getPendingOperator()).toBe("m");
+    editor.handleInput("a");
+    expect(editor.getMark("a")).toEqual({ line: 1, col: 5 });
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    editor.handleInput("`");
+    editor.handleInput("a");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 5 });
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("'");
+    editor.handleInput("a");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 2 });
+  });
+
   test("named registers persist in editor session and stay separate from unnamed register", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one\ntwo");

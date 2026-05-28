@@ -1,8 +1,11 @@
 # vim-macro-recording Specification
 
 ## Purpose
+
 TBD - created by archiving change add-macro-recording-playback. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Macro recording uses a normal-mode lifecycle
 
 The editor SHALL support extension-local macro recording from normal mode using lowercase `a` through `z` macro slots.
@@ -131,4 +134,3 @@ The editor SHALL expose active macro recording state through Vim status feedback
 
 - **WHEN** project validation is executed
 - **THEN** automated tests cover macro parsing, recording, playback, repeat-last playback, configuration, recording feedback, guard behavior, and TypeScript type checking
-

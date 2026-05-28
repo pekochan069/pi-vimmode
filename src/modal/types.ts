@@ -6,6 +6,7 @@ import type {
   StartupMode,
   VimEditorOptions,
   VimMode,
+  VimOperatorAction,
   VimRegister,
 } from "../types.ts";
 
@@ -27,6 +28,14 @@ export type RegisterSlot = string;
 export type RegisterStore = Partial<Record<RegisterSlot, VimRegister>>;
 export type PendingRegisterTarget = { slot: RegisterSlot; append: boolean } | "awaitingSlot";
 
+export type MarkSlot = string;
+export type MarkStore = Partial<Record<MarkSlot, Position>>;
+export type PendingMarkTarget = {
+  kind: "set" | "jumpExact" | "jumpLine";
+  operator?: VimOperatorAction;
+  operatorKey?: string;
+};
+
 export type BlockInsertState = {
   anchor: Position;
   active: Position;
@@ -47,6 +56,8 @@ export type ModalState = {
   pendingMacro?: PendingMacroTarget;
   namedRegisters?: RegisterStore;
   pendingRegister?: PendingRegisterTarget;
+  marks?: MarkStore;
+  pendingMark?: PendingMarkTarget;
 };
 
 export type AdapterCommand =

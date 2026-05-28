@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change enhance-visual-modes-and-cursors. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Visual selections are highlighted inline
 
 The Vim editor SHALL render active visual selections with visible inline highlighting while preserving prompt text and terminal-width safety.
@@ -286,4 +288,3 @@ The change SHALL include tests and documentation for visual block keybindings, r
 
 - **WHEN** the user opens the project README
 - **THEN** it documents `Ctrl-v`, visual block highlighting, and supported blockwise operations
-

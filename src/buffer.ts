@@ -229,6 +229,34 @@ export function normalizeBufferPosition(text: string, cursor: Position): Positio
   return clampPosition(splitText(text), cursor);
 }
 
+export function exactMarkPosition(text: string, mark: Position): Position {
+  return normalizeBufferPosition(text, mark);
+}
+
+export function lineMarkPosition(text: string, mark: Position): Position {
+  return firstNonBlankPosition(text, mark);
+}
+
+export function deleteMarkRange(text: string, cursor: Position, mark: Position): EditResult {
+  return deleteRange(text, cursor, mark);
+}
+
+export function yankMarkRange(
+  text: string,
+  cursor: Position,
+  mark: Position,
+): VimRegister | undefined {
+  return yankVisualSelection(text, cursor, mark, "char");
+}
+
+export function deleteLineMarkRange(text: string, cursor: Position, mark: Position): EditResult {
+  return deleteLineRange(text, cursor, mark);
+}
+
+export function yankLineMarkRange(text: string, cursor: Position, mark: Position): VimRegister {
+  return yankLineRange(text, cursor, mark);
+}
+
 export function navigateBuffer(
   text: string,
   cursor: Position,

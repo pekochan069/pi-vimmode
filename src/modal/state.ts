@@ -14,6 +14,7 @@ export function resetTransientState(state: ModalState, mode: VimMode): ModalStat
   if (state.macros) nextState.macros = state.macros;
   if (state.recordingSlot) nextState.recordingSlot = state.recordingSlot;
   if (state.lastPlayedMacro) nextState.lastPlayedMacro = state.lastPlayedMacro;
+  if (state.marks) nextState.marks = state.marks;
   return nextState;
 }
 

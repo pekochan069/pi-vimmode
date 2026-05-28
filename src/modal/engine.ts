@@ -24,18 +24,24 @@ import {
   deleteByMotion,
   deleteCharAt,
   deleteLine,
+  deleteLineMarkRange,
   deleteLineRange,
+  deleteMarkRange,
   deleteRange,
+  exactMarkPosition,
   insertBlockText,
   joinLineWithNext,
   navigateBuffer,
   openLineAbove,
   openLineBelow,
+  lineMarkPosition,
   pasteRegister,
   pasteRegisterBefore,
   replaceLineRangeWithRegister,
   yankByMotion,
   yankLine,
+  yankLineMarkRange,
+  yankMarkRange,
   yankVisualSelection,
 } from "../buffer.ts";
 import {
@@ -46,6 +52,17 @@ import {
   semanticMotionToLegacy,
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions } from "../config.ts";
+import {
+  clearMarkTarget,
+  isExactMarkJumpPrefixKey,
+  isLineMarkJumpPrefixKey,
+  isMarkSetPrefixKey,
+  localMarkPosition,
+  markSlotForKey,
+  pendingMarkDisplay,
+  pendingMarkTarget,
+  setLocalMark,
+} from "./marks.ts";
 import {
   clearRegisterTarget,
   isRegisterPrefixKey,
@@ -80,12 +97,17 @@ function delegate(state: ModalState, input: string): ModalUpdate {
 }
 
 function clearCommandPending(state: ModalState): ModalState {
-  const { pending: _pending, pendingMacro: _pendingMacro, ...rest } = state;
+  const {
+    pending: _pending,
+    pendingMacro: _pendingMacro,
+    pendingMark: _pendingMark,
+    ...rest
+  } = state;
   return rest;
 }
 
 function clearPending(state: ModalState): ModalState {
-  return clearRegisterTarget(clearCommandPending(state));
+  return clearMarkTarget(clearRegisterTarget(clearCommandPending(state)));
 }
 
 function clearPendingMacro(state: ModalState): ModalState {
@@ -149,6 +171,7 @@ function modeUpdate(
         pending: undefined,
         pendingMacro: undefined,
         pendingRegister: undefined,
+        pendingMark: undefined,
       },
       effects: [
         ...extraEffects,
@@ -401,6 +424,91 @@ function handleInsertInput(
   return delegate(state, data);
 }
 
+function markJumpTarget(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  slot: string,
+  kind: "jumpExact" | "jumpLine",
+) {
+  const mark = localMarkPosition(state, slot);
+  if (!mark) return undefined;
+  return kind === "jumpExact"
+    ? exactMarkPosition(snapshot.text, mark)
+    : lineMarkPosition(snapshot.text, mark);
+}
+
+function jumpToMarkUpdate(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  slot: string,
+  kind: "jumpExact" | "jumpLine",
+): ModalUpdate {
+  const target = markJumpTarget(state, snapshot, slot, kind);
+  const nextState = clearMarkTarget(state);
+  return withEffects(
+    nextState,
+    target
+      ? [{ type: "restoreCursor", position: target }, { type: "invalidate" }]
+      : [{ type: "invalidate" }],
+  );
+}
+
+function applyOperatorMarkMotion(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  slot: string,
+  kind: "jumpExact" | "jumpLine",
+  operator: VimOperatorAction,
+): ModalUpdate {
+  const target = markJumpTarget(state, snapshot, slot, kind);
+  const baseState = clearPending(state);
+  if (!target) return invalidate(baseState);
+
+  if (operator === "yank") {
+    const register =
+      kind === "jumpLine"
+        ? yankLineMarkRange(snapshot.text, snapshot.cursor, target)
+        : yankMarkRange(snapshot.text, snapshot.cursor, target);
+    return yankUpdate(baseState, register);
+  }
+
+  const result =
+    kind === "jumpLine"
+      ? deleteLineMarkRange(snapshot.text, snapshot.cursor, target)
+      : deleteMarkRange(snapshot.text, snapshot.cursor, target);
+  const edited = editState(baseState, result);
+  const effects: ModalEffect[] = [{ type: "edit", result }];
+  if (operator === "change") return transitionMode(edited, "insert", options, effects);
+  return withEffects(edited, effects);
+}
+
+function handlePendingMarkTarget(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+): ModalUpdate {
+  const target = state.pendingMark;
+  if (!target) return invalidate(state);
+  const slot = markSlotForKey(key);
+  if (!slot) return invalidate(clearPending(state));
+  if (target.kind === "set") {
+    return invalidate(setLocalMark(state, slot, exactMarkPosition(snapshot.text, snapshot.cursor)));
+  }
+  if (target.operator) {
+    return applyOperatorMarkMotion(state, snapshot, options, slot, target.kind, target.operator);
+  }
+  return jumpToMarkUpdate(state, snapshot, slot, target.kind);
+}
+
+function markPendingForKey(key: string, operator?: VimOperatorAction, operatorKey?: string) {
+  if (!operator && isMarkSetPrefixKey(key)) return pendingMarkTarget("set");
+  if (isExactMarkJumpPrefixKey(key)) return pendingMarkTarget("jumpExact", operator, operatorKey);
+  if (isLineMarkJumpPrefixKey(key)) return pendingMarkTarget("jumpLine", operator, operatorKey);
+  return undefined;
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -433,6 +541,7 @@ function handleNormalInput(
       target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
     );
   }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   if (!state.pending && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
   }
@@ -468,6 +577,15 @@ function handleNormalInput(
       return playMacroUpdate(state, state.lastPlayedMacro, options);
     }
     if (macroResult.type === "invalid") return invalidate(clearPendingMacro(state));
+
+    const markTarget = markPendingForKey(key);
+    if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
+  }
+
+  const pendingOperator = operatorActionForSequence(state.pending, keymap);
+  if (pendingOperator) {
+    const markTarget = markPendingForKey(key, pendingOperator, state.pending);
+    if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
 
   const pendingResult = resolveNormalCommand(key, state.pending, keymap);
@@ -523,6 +641,7 @@ function startBlockInsert(
       pending: undefined,
       pendingMacro: undefined,
       pendingRegister: undefined,
+      pendingMark: undefined,
       visualAnchor: undefined,
       blockInsert: {
         anchor: state.visualAnchor,
@@ -563,8 +682,16 @@ function handleVisualInput(
       target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
     );
   }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   if (!state.pending && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+  if (!state.pending && !state.pendingRegister) {
+    const markTarget =
+      isExactMarkJumpPrefixKey(key) || isLineMarkJumpPrefixKey(key)
+        ? markPendingForKey(key)
+        : undefined;
+    if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
   }
 
   const keymap = keymapForOptions(options);
@@ -720,6 +847,10 @@ function shouldRecordInput(
     return false;
   }
   return true;
+}
+
+export function modalPendingDisplay(state: ModalState): string | undefined {
+  return pendingMarkDisplay(state.pendingMark);
 }
 
 export function handleModalInput(

@@ -1,8 +1,11 @@
 # vim-named-registers Specification
 
 ## Purpose
+
 TBD - created by archiving change add-named-registers. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode supports named register prefixes
 
 The Vim editor SHALL support Vim-style `"{slot}` register prefixes in normal mode for supported yank, delete, change, and paste commands.
@@ -150,4 +153,3 @@ The named register change SHALL include automated tests and user-facing document
 
 - **WHEN** the user opens the project README
 - **THEN** it documents supported named register syntax, append behavior, session-local storage, unsupported special registers, and separation from macro slots
-

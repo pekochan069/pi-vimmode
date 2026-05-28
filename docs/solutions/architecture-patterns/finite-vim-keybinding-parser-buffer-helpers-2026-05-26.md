@@ -136,15 +136,15 @@ Structural edits should call helpers rather than delegate terminal keys. For exa
 
 ### 5. Document smaller-than-Vim semantics
 
-Do not imply full Vim parity. Document exact support:
+Do not imply full Vim parity. Document exact support from the current prompt-buffer contract:
 
-- no counts,
-- no text objects,
-- no full Vim grammar,
+- counts are supported for the finite commands that implement them, not arbitrary Vim grammar,
+- text objects are supported only for the implemented prompt-buffer objects,
+- line-local character search is supported, but prompt search (`/`, `?`, `n`, `N`) is not,
 - finite operator motions only,
-- `%` supports `()`, `[]`, and `{}` under or after the cursor on the current line.
+- `%` supports `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 
-This keeps future bug reports and follow-up work anchored to the prompt-editor contract rather than full Vim behavior.
+Keep README limitations aligned with tests whenever the supported command set grows. Stale limitation docs create false bug reports just as quickly as missing docs.
 
 ### 6. Evolve heavy editor dispatch into a pure modal engine
 
@@ -156,7 +156,7 @@ When `VimEditor` starts owning mode transitions, register updates, pending opera
 - `src/modal/types.ts` defines the adapter boundary: snapshots, modal state, updates, and effects.
 - `src/modal/view.ts` derives mode labels, ordered status items, visual status text, and cursor position text without depending on Pi TUI objects.
 
-The core contract is: modal code returns adapter-applied intents; the adapter performs Pi runtime calls.
+The core contract is: modal code returns adapter-applied intents; the adapter performs Pi runtime calls. Repeatable edits follow the same rule: store the semantic operation, not a lossy approximation. For example, `dd` and `cc` repeat through a dedicated `lineCommand` repeat state instead of pretending to be character commands.
 
 ```ts
 export type ModalEffect =
@@ -288,4 +288,5 @@ Validation for the working implementation:
 - `src/modal/view.ts` — TUI-free mode/status derivation
 - `src/vim-editor.ts` — Pi `CustomEditor` adapter and effect interpreter
 - `test/commands.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts` — layered test coverage
+- `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — concrete bug where line-command repeat state and live option cloning drifted from this architecture
 - `docs/solutions/developer-experience/pi-vimmode-auto-activation-2026-05-26.md` — same editor component, focused on lifecycle/activation reliability rather than keybinding behavior

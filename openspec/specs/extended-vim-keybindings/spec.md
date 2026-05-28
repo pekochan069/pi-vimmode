@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change add-more-vim-keybindings. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Normal mode supports additional navigation bindings
 
 The Vim editor SHALL support additional normal-mode navigation bindings for common prompt movement.
@@ -263,7 +261,7 @@ The Vim editor SHALL support line-local character search commands `f`, `F`, `t`,
 
 ### Requirement: Normal mode repeats completed changes
 
-The Vim editor SHALL support `.` to repeat the last completed supported change command at the current cursor position.
+The Vim editor SHALL support `.` to repeat the last completed supported change command at the current cursor position, including documented line edit commands that changed the prompt.
 
 #### Scenario: Repeat character replacement
 
@@ -274,6 +272,16 @@ The Vim editor SHALL support `.` to repeat the last completed supported change c
 
 - **WHEN** the editor is in normal mode after a successful supported substitution and the user presses `.` at another valid location
 - **THEN** the same substitution command is applied at the new location
+
+#### Scenario: Repeat line delete
+
+- **WHEN** the editor is in normal mode after a successful `dd` or counted `dd` change and the user presses `.` at another valid line
+- **THEN** the same line delete command is applied at the new location and updates the unnamed line register
+
+#### Scenario: Repeat line change
+
+- **WHEN** the editor is in normal mode after a successful `cc` or `S` change returns to normal mode and the user presses `.` at another valid line
+- **THEN** the same line change command is applied at the new location and the editor enters insert mode
 
 #### Scenario: Repeat with no prior change is safe
 
@@ -316,7 +324,7 @@ The Vim editor SHALL support operator targets for inner word, around word, quote
 
 ### Requirement: Roadmap keybindings are documented and validated
 
-The change SHALL include automated tests and user-facing documentation for the new staged keybinding groups.
+The change SHALL include automated tests and user-facing documentation for the new staged keybinding groups and SHALL keep README limitations aligned with supported keybinding behavior.
 
 #### Scenario: Automated validation runs
 
@@ -332,3 +340,9 @@ The change SHALL include automated tests and user-facing documentation for the n
 
 - **WHEN** the user opens the project README
 - **THEN** it documents the newly supported keybindings, count behavior, repeat limitations, supported text objects, and deferred keybindings such as `/`, `?`, `n`, and `N`
+
+#### Scenario: README limitations do not contradict supported keybindings
+
+- **WHEN** the user reads README limitations
+- **THEN** the limitations do not list counts, text objects, line-local character search, or other supported roadmap keybindings as unsupported
+

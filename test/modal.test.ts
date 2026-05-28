@@ -20,6 +20,31 @@ const options = {
 };
 const snapshot = { text: "abc", lines: ["abc"], cursor };
 
+function applyModalKeys(
+  initialState: ModalState,
+  initialText: string,
+  initialCursor: { line: number; col: number },
+  keys: readonly string[],
+) {
+  let state = initialState;
+  let text = initialText;
+  let cursor = initialCursor;
+
+  for (const key of keys) {
+    const update = handleModalInput(state, { text, lines: text.split("\n"), cursor }, options, key);
+    state = update.state;
+    for (const effect of update.effects) {
+      if (effect.type === "edit") {
+        text = effect.result.text;
+        cursor = effect.result.cursor;
+      }
+      if (effect.type === "restoreCursor") cursor = effect.position;
+    }
+  }
+
+  return { state, text, cursor };
+}
+
 describe("modal contracts", () => {
   test("createModalState starts with configured mode and empty transient state", () => {
     expect(createModalState("normal")).toEqual({ mode: "normal" });
@@ -355,6 +380,43 @@ describe("modal engine", () => {
       ".",
     );
     expect(repeatedChange.effects[0]).toMatchObject({ type: "edit", result: { text: "zzc" } });
+  });
+
+  test("normal dot repeat applies line delete commands and updates line register", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree\nfour", cursor, ["d", "d"]);
+    expect(deleted.text).toBe("two\nthree\nfour");
+    expect(deleted.state.register).toEqual({ type: "line", text: "one" });
+
+    const repeated = applyModalKeys(deleted.state, deleted.text, { line: 1, col: 0 }, ["."]);
+    expect(repeated.text).toBe("two\nfour");
+    expect(repeated.state.register).toEqual({ type: "line", text: "three" });
+
+    const counted = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree\nfour", cursor, [
+      "2",
+      "d",
+      "d",
+    ]);
+    const countedRepeat = applyModalKeys(counted.state, counted.text, counted.cursor, ["."]);
+    expect(countedRepeat.text).toBe("");
+    expect(countedRepeat.state.register).toEqual({ type: "line", text: "three\nfour" });
+  });
+
+  test("normal dot repeat applies line change commands and keeps no-ops from replacing repeat", () => {
+    const changed = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", cursor, [
+      "c",
+      "c",
+      "\x1b",
+    ]);
+    expect(changed.text).toBe("\ntwo\nthree");
+    expect(changed.state.mode).toBe("normal");
+
+    const noNumber = applyModalKeys(changed.state, changed.text, { line: 1, col: 0 }, ["\x01"]);
+    expect(noNumber.text).toBe("\ntwo\nthree");
+
+    const repeated = applyModalKeys(noNumber.state, noNumber.text, noNumber.cursor, ["."]);
+    expect(repeated.text).toBe("\n\nthree");
+    expect(repeated.state.mode).toBe("insert");
+    expect(repeated.state.register).toEqual({ type: "line", text: "two" });
   });
 
   test("normal operators support text objects", () => {

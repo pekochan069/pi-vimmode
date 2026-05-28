@@ -1,6 +1,7 @@
 ---
 title: Pi Vim mode UI config as single source of truth
 date: 2026-05-27
+last_updated: 2026-05-28
 category: docs/solutions/tooling-decisions
 module: pi-vimmode
 problem_type: tooling_decision
@@ -10,7 +11,8 @@ applies_when:
   - "Adding extension settings that overlap with familiar external tool options"
   - "Choosing between compatibility aliases and one native JSON config schema"
   - "Debugging mode label, pending command, selection summary, or cursor position display"
-tags: [pi-extension, vim-mode, configuration, single-source-of-truth, user-settings]
+  - "Adding a new `VimEditorOptions` field that must survive live editor construction"
+tags: [pi-extension, vim-mode, configuration, single-source-of-truth, user-settings, options]
 ---
 
 # Pi Vim mode UI config as single source of truth
@@ -86,7 +88,7 @@ Keep public docs, OpenSpec specs, and tests aligned with that contract:
 - `README.md` documents `piVimMode.ui` and says `showmode`, `showcmd`, and `ruler` are unsupported.
 - `src/types.ts` exposes `ui` on `VimEditorOptions`, with no `VimOptionsAliases` type.
 - `src/config.ts` parses and deep-merges `ui`, warns on `vimOptions`, and leaves UI defaults intact.
-- `src/vim-editor.ts` passes only resolved `ui` into status rendering.
+- `src/vim-editor.ts` passes only resolved `ui` into status rendering and must clone every runtime option field used by live editor behavior.
 - `test/config.test.ts` covers legacy `vimOptions` rejection.
 - `openspec/specs/vim-ui-configuration/spec.md` states UI config is the single source of truth.
 
@@ -102,9 +104,12 @@ A single `ui` surface keeps status behavior:
 - Documentable: README examples map directly to implementation.
 - Testable: one acceptance test can prove aliases are rejected and `ui` remains effective.
 
+For non-UI behavior settings, the same source-of-truth rule applies across the adapter boundary. If a resolved field is added to `VimEditorOptions`, ensure `cloneOptions()` preserves it and add a live `VimEditor` test. Otherwise config parsing can pass while the live editor silently falls back to defaults.
+
 ## When to Apply
 
 - Adding new `piVimMode` settings that could overlap with existing config.
+- Adding new `VimEditorOptions` fields used by modal behavior.
 - Changing Vim status UI rendering or terminal-width handling.
 - Migrating user examples from Vim-style option names to Pi-native JSON config.
 - Reviewing archived OpenSpec docs that mention `VimOptionsAliases`; current source/specs supersede those archived design notes.
@@ -166,6 +171,23 @@ if (aliases.ruler !== undefined) ui.cursorPosition.enabled = aliases.ruler;
 ```
 
 That approach recreates precedence rules and suggests the extension supports a Vim option layer. Prefer direct `ui` config instead.
+
+Adapter option cloning follows the same principle:
+
+```ts
+function cloneOptions(options: VimEditorOptions): VimEditorOptions {
+  return {
+    startMode: options.startMode,
+    cursor: { ...options.cursor },
+    keymap: options.keymap,
+    ui: options.ui,
+    macros: options.macros,
+    marks: options.marks,
+  };
+}
+```
+
+When adding a new runtime option, update this clone and prove the live editor honors the field. Pure config tests alone do not catch adapter construction drift.
 
 ## Related
 

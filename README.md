@@ -444,7 +444,7 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 
 ## Limitations
 
-- No counts, text objects, search, ex commands, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
+- No prompt search (`/`, `?`, `n`, `N`), ex commands / command mode, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
 - Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No `.vimrc`, Vimscript, or Neovim Lua parsing.

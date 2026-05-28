@@ -325,11 +325,13 @@ function applyLineCommand(
   const nextState = clearCommandPending(state);
   if (operator === "delete") {
     const result = deleteLine(snapshot.text, snapshot.cursor, count);
-    const edited = withRepeatableChange(
-      editState(nextState, result),
-      { type: "command", command: "deleteChar", count },
-      false,
-    );
+    let edited = editState(nextState, result);
+    if (recordRepeat)
+      edited = withRepeatableChange(
+        edited,
+        { type: "lineCommand", operator, count },
+        result.changed,
+      );
     return withEffects(edited, [{ type: "edit", result }]);
   }
   if (operator === "change") {
@@ -338,7 +340,7 @@ function applyLineCommand(
     if (recordRepeat)
       edited = withRepeatableChange(
         edited,
-        { type: "command", command: "substituteLine", count },
+        { type: "lineCommand", operator, count },
         result.changed,
       );
     return modeUpdate(edited, "insert", options, [{ type: "edit", result }]);
@@ -591,6 +593,9 @@ function repeatChange(
   if (!change) return invalidate(clearCommandPending(state));
   if (change.type === "command") {
     return applyCommand(state, snapshot, options, change.command, change.count, change.char, false);
+  }
+  if (change.type === "lineCommand") {
+    return applyLineCommand(state, snapshot, options, change.operator, change.count, false);
   }
   if (change.type === "operatorMotion") {
     return applyOperatorMotion(

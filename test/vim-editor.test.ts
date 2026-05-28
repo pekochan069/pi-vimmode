@@ -1,7 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "bun:test";
 
-import type { VimEditorOptions } from "../src/types.ts";
+import type { VimEditorOptions, VimMode } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
@@ -32,6 +32,25 @@ function createEditor(options: VimEditorOptions = DEFAULT_VIM_OPTIONS) {
 
 function expectRenderedWidth(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+}
+
+function typeKeys(editor: VimEditor, keys: readonly string[]) {
+  for (const key of keys) editor.handleInput(key);
+}
+
+function expectEditorState(
+  editor: VimEditor,
+  expected: {
+    text?: string;
+    cursor?: { line: number; col: number };
+    mode?: VimMode;
+    pending?: string;
+  },
+) {
+  if (expected.text !== undefined) expect(editor.getText()).toBe(expected.text);
+  if (expected.cursor) expect(editor.getCursor()).toEqual(expected.cursor);
+  if (expected.mode) expect(editor.getVimMode()).toBe(expected.mode);
+  if (expected.pending !== undefined) expect(editor.getPendingOperator()).toBe(expected.pending);
 }
 
 describe("vim editor integration", () => {
@@ -201,9 +220,7 @@ describe("vim editor integration", () => {
     });
 
     editor.setText("one\n  two");
-    editor.handleInput("G");
-    editor.handleInput("m");
-    editor.handleInput("x");
+    typeKeys(editor, ["G", "m", "x"]);
     expect(editor.getMark("x")).toBeUndefined();
 
     editor.handleInput("s");
@@ -211,17 +228,60 @@ describe("vim editor integration", () => {
     editor.handleInput("x");
     expect(editor.getMark("x")).toEqual({ line: 1, col: 5 });
 
-    editor.handleInput("g");
-    editor.handleInput("g");
-    editor.handleInput("e");
-    editor.handleInput("x");
+    typeKeys(editor, ["g", "g", "e", "x"]);
     expect(editor.getCursor()).toEqual({ line: 1, col: 5 });
 
-    editor.handleInput("g");
-    editor.handleInput("g");
-    editor.handleInput("l");
-    editor.handleInput("x");
+    typeKeys(editor, ["g", "g", "l", "x"]);
     expect(editor.getCursor()).toEqual({ line: 1, col: 2 });
+  });
+
+  test("VimEditor honors disabled mark configuration", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      marks: { enabled: false, slots: ["a"] },
+    });
+
+    editor.setText("one\n  two");
+    typeKeys(editor, ["G", "m"]);
+    expectEditorState(editor, {
+      text: "one\n  two",
+      cursor: { line: 1, col: 5 },
+      mode: "normal",
+    });
+    expect(editor.getPendingOperator()).toBeUndefined();
+
+    expect(editor.getMark("a")).toBeUndefined();
+    editor.handleInput("`");
+    expect(editor.getPendingOperator()).toBeUndefined();
+    expectEditorState(editor, {
+      text: "one\n  two",
+      cursor: { line: 1, col: 5 },
+      mode: "normal",
+    });
+  });
+
+  test("VimEditor honors restricted mark slots", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      marks: { enabled: true, slots: ["x"] },
+    });
+
+    editor.setText("one\n  two");
+    typeKeys(editor, ["G", "m", "a"]);
+    expect(editor.getMark("a")).toBeUndefined();
+    expect(editor.getPendingOperator()).toBeUndefined();
+
+    typeKeys(editor, ["m", "x", "g", "g"]);
+    expect(editor.getMark("x")).toEqual({ line: 1, col: 5 });
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+    typeKeys(editor, ["`", "a"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+    typeKeys(editor, ["`", "x"]);
+    expect(editor.getCursor()).toEqual({ line: 1, col: 5 });
   });
 
   test("local marks persist in editor session and restore cursor", () => {

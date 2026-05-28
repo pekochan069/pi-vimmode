@@ -71,6 +71,7 @@ function cloneOptions(options: VimEditorOptions): VimEditorOptions {
     keymap: options.keymap,
     ui: options.ui,
     macros: options.macros,
+    marks: options.marks,
   };
 }
 

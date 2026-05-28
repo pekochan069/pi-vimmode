@@ -54,6 +54,7 @@ export type CharSearchState = {
 
 export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
+  | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
   | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction; count?: number }
   | {
       type: "operatorTextObject";

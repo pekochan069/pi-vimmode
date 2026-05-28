@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change add-marks. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Local marks can be set
 
 The Vim editor SHALL support in-memory local mark slots `a` through `z` set from the current cursor position with `m{slot}`.
@@ -154,3 +152,18 @@ The mark change SHALL include automated tests and user-facing documentation for 
 
 - **WHEN** the mark implementation and validation pass
 - **THEN** `TODOS.md` marks `mark` complete while leaving unrelated remaining TODO items unchanged
+
+### Requirement: Actual editor honors mark configuration
+
+The Vim editor SHALL preserve configured mark behavior from construction through the actual `VimEditor` adapter.
+
+#### Scenario: VimEditor honors disabled marks
+
+- **WHEN** `VimEditor` is constructed with `piVimMode.marks.enabled` resolved to `false`
+- **THEN** mark set and jump controls are ignored as mark controls in the live editor and do not set pending mark state
+
+#### Scenario: VimEditor honors restricted mark slots
+
+- **WHEN** `VimEditor` is constructed with `piVimMode.marks.slots` resolved to `["x"]`
+- **THEN** only local mark slot `x` can be set or jumped to in the live editor and other slot targets are ignored as invalid mark targets
+

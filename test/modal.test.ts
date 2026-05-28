@@ -341,6 +341,60 @@ describe("modal engine", () => {
     ).toEqual({ state: { mode: "normal" }, effects: [{ type: "invalidate" }] });
   });
 
+  test("mark behavior is configurable", () => {
+    const disabledOptions = { ...options, marks: { enabled: false, slots: ["a"] } };
+    expect(handleModalInput({ mode: "normal" }, snapshot, disabledOptions, "m").state).toEqual({
+      mode: "normal",
+    });
+
+    const restrictedOptions = { ...options, marks: { enabled: true, slots: ["x"] } };
+    const restricted = handleModalInput({ mode: "normal" }, snapshot, restrictedOptions, "m");
+    expect(restricted.state).toEqual({ mode: "normal", pendingMark: { kind: "set" } });
+    expect(handleModalInput(restricted.state, snapshot, restrictedOptions, "a").state).toEqual({
+      mode: "normal",
+    });
+    expect(handleModalInput(restricted.state, snapshot, restrictedOptions, "x").state).toEqual({
+      mode: "normal",
+      marks: { x: cursor },
+    });
+
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        marks: { set: ["s"], jumpExact: ["e"], jumpLine: ["l"] },
+      },
+      marks: { enabled: true, slots: ["x"] },
+    };
+    const setPrefix = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "s");
+    expect(setPrefix.state).toEqual({ mode: "normal", pendingMark: { kind: "set" } });
+    const marked = handleModalInput(
+      setPrefix.state,
+      { text: "abc", lines: ["abc"], cursor: { line: 0, col: 2 } },
+      configuredOptions,
+      "x",
+    );
+    const exactPrefix = handleModalInput(marked.state, snapshot, configuredOptions, "e");
+    expect(exactPrefix.state.pendingMark).toEqual({ kind: "jumpExact" });
+    const exactJump = handleModalInput(exactPrefix.state, snapshot, configuredOptions, "x");
+    expect(exactJump.effects).toContainEqual({
+      type: "restoreCursor",
+      position: { line: 0, col: 2 },
+    });
+
+    const operatorPrefix = handleModalInput(
+      { mode: "normal", pending: "y", marks: { x: { line: 0, col: 2 } } },
+      snapshot,
+      configuredOptions,
+      "e",
+    );
+    expect(operatorPrefix.state.pendingMark).toEqual({
+      kind: "jumpExact",
+      operator: "yank",
+      operatorKey: "y",
+    });
+  });
+
   test("visual modes jump to local marks while preserving anchors", () => {
     const state: ModalState = {
       mode: "visualBlock",

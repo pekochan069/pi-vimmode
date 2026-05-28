@@ -48,11 +48,18 @@ export type VimMacroKeymapOptions = {
   play: readonly string[];
 };
 
+export type VimMarkKeymapOptions = {
+  set: readonly string[];
+  jumpExact: readonly string[];
+  jumpLine: readonly string[];
+};
+
 export type VimKeymapOptions = {
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
   commands: Record<VimCommandAction, readonly string[]>;
   macros: VimMacroKeymapOptions;
+  marks: VimMarkKeymapOptions;
   operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
 };
 
@@ -89,12 +96,20 @@ export type VimMacroOptions = {
 
 export type ResolvedVimMacros = VimMacroOptions;
 
+export type VimMarkOptions = {
+  enabled: boolean;
+  slots: readonly string[];
+};
+
+export type ResolvedVimMarks = VimMarkOptions;
+
 export type VimEditorOptions = {
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;
   ui?: ResolvedVimUi;
   macros?: ResolvedVimMacros;
+  marks?: ResolvedVimMarks;
 };
 
 export type Position = {

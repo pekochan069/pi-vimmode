@@ -1,8 +1,11 @@
 # vim-marks Specification
 
 ## Purpose
+
 TBD - created by archiving change add-marks. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Local marks can be set
 
 The Vim editor SHALL support in-memory local mark slots `a` through `z` set from the current cursor position with `m{slot}`.
@@ -109,14 +112,33 @@ The Vim editor SHALL allow pending delete, change, and yank operators to consume
 - **WHEN** the editor is in normal mode with yank pending and the user presses backtick followed by `1`
 - **THEN** prompt text, cursor position, mode, register, and stored marks are unchanged, and pending operator state is cleared
 
+### Requirement: Mark behavior is configurable
+
+The Vim editor SHALL allow mark behavior to be configured with `piVimMode.marks.enabled`, `piVimMode.marks.slots`, and mark prefix keys under `piVimMode.keymap.marks`.
+
+#### Scenario: Disable mark controls
+
+- **WHEN** `piVimMode.marks.enabled` is `false`
+- **THEN** mark set and jump controls are ignored as mark controls and do not set pending mark state
+
+#### Scenario: Restrict mark slots
+
+- **WHEN** `piVimMode.marks.slots` is configured to `["x"]`
+- **THEN** only local mark slot `x` can be set or jumped to and other slot targets are ignored as invalid mark targets
+
+#### Scenario: Remap mark prefix keys
+
+- **WHEN** `piVimMode.keymap.marks` configures set, exact-jump, and line-jump prefix keys
+- **THEN** configured keys replace the default `m`, backtick, and single-quote mark prefixes for normal, visual, and operator mark behavior
+
 ### Requirement: Mark scope and validation are documented
 
-The mark change SHALL include automated tests and user-facing documentation for supported slots, set behavior, jump behavior, visual behavior, operator-motion behavior, stale-mark clamping, and limitations.
+The mark change SHALL include automated tests and user-facing documentation for supported slots, set behavior, jump behavior, visual behavior, operator-motion behavior, configuration, stale-mark clamping, and limitations.
 
 #### Scenario: Automated validation runs
 
 - **WHEN** `bun test` is executed
-- **THEN** tests cover setting marks, overwriting marks, normal jumps, visual jumps, operator mark motions, missing marks, invalid prefixes, stale mark clamping, and existing Vim behavior
+- **THEN** tests cover setting marks, overwriting marks, normal jumps, visual jumps, operator mark motions, mark configuration, missing marks, invalid prefixes, stale mark clamping, and existing Vim behavior
 
 #### Scenario: Typecheck runs
 
@@ -126,10 +148,9 @@ The mark change SHALL include automated tests and user-facing documentation for 
 #### Scenario: README documents marks
 
 - **WHEN** the user opens the project README
-- **THEN** it documents `m{slot}`, backtick mark jumps, single-quote mark jumps, supported lowercase local slots, in-memory scope, stale-mark clamping, and unsupported special/global marks
+- **THEN** it documents `m{slot}`, backtick mark jumps, single-quote mark jumps, configurable mark prefix keys, enabled state, allowed slots, supported lowercase local slots, in-memory scope, stale-mark clamping, and unsupported special/global marks
 
 #### Scenario: TODO is updated after implementation
 
 - **WHEN** the mark implementation and validation pass
 - **THEN** `TODOS.md` marks `mark` complete while leaving unrelated remaining TODO items unchanged
-

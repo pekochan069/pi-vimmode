@@ -33,7 +33,12 @@ function applyModalKeys(
   let cursor = initialCursor;
 
   for (const key of keys) {
-    const update = handleModalInput(state, { text, lines: text.split("\n"), cursor }, modalOptions, key);
+    const update = handleModalInput(
+      state,
+      { text, lines: text.split("\n"), cursor },
+      modalOptions,
+      key,
+    );
     state = update.state;
     for (const effect of update.effects) {
       if (effect.type === "edit") {
@@ -113,6 +118,124 @@ describe("modal contracts", () => {
       "invalidate",
       "terminalCursor",
     ]);
+  });
+});
+
+describe("Ex command-line modal behavior", () => {
+  test("normal entry opens Ex command-line and cancel closes it", () => {
+    const opened = handleModalInput({ mode: "normal" }, snapshot, options, ":");
+    expect(opened.state.pendingEx).toMatchObject({ command: "", sourceMode: "normal" });
+
+    const cancelled = handleModalInput(opened.state, snapshot, options, "\x1b");
+    expect(cancelled.state.pendingEx).toBeUndefined();
+    expect(cancelled.state.mode).toBe("normal");
+  });
+
+  test("count before Ex entry prefills a concrete clamped line range", () => {
+    const state = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(1, 0), ["3", ":"]).state;
+    expect(state.pendingEx).toMatchObject({ command: "2,3", sourceMode: "normal" });
+  });
+
+  test("visual entry captures selected lines and cancel restores visual selection", () => {
+    const opened = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    expect(opened.state.pendingEx).toMatchObject({
+      command: "'<,'>",
+      sourceMode: "visual",
+      visualAnchor: p(0, 1),
+      visualCursor: p(1, 2),
+      visualRange: { startLine: 0, endLine: 1 },
+    });
+
+    const cancelled = handleModalInput(opened.state, snapshot, options, "\x1b");
+    expect(cancelled.state.mode).toBe("visual");
+    expect(cancelled.state.visualAnchor).toEqual(p(0, 1));
+    expect(cancelled.state.pendingEx).toBeUndefined();
+  });
+
+  test("pending Ex command cancels and delegates Ctrl-C/Ctrl-G", () => {
+    for (const key of ["\x03", "\x07"]) {
+      const update = handleModalInput(
+        { mode: "normal", pendingEx: { command: "s/a/b/", sourceMode: "normal" } },
+        snapshot,
+        options,
+        key,
+      );
+      expect(update.state.pendingEx).toBeUndefined();
+      expect(update.state.mode).toBe("insert");
+      expect(update.effects).toContainEqual({ type: "delegate", input: key });
+    }
+  });
+
+  test("Ex input edits command text, executes substitution, and reports success", () => {
+    const result = applyModalKeys({ mode: "normal" }, "old old\nold", p(0, 0), [
+      ":",
+      "%",
+      "s",
+      "/",
+      "o",
+      "l",
+      "d",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "g",
+      "\r",
+    ]);
+    expect(result.text).toBe("new new\nnew");
+    expect(result.cursor).toEqual(p(0, 0));
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.state.exMessage).toEqual({ kind: "success", text: "3 substitutions" });
+  });
+
+  test("Ex errors and identical substitutions do not emit edit effects", () => {
+    const error = handleModalInput(
+      { mode: "normal", pendingEx: { command: "s/missing/new/", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(error.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(error.state.exMessage).toEqual({ kind: "error", text: "Pattern not found: missing" });
+
+    const identical = handleModalInput(
+      { mode: "normal", pendingEx: { command: "s/abc/abc/", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(identical.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(identical.state.exMessage).toEqual({ kind: "success", text: "1 substitution" });
+  });
+
+  test("Ex substitution clears search highlights only when text changes and preserves registers/repeat", () => {
+    const state: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "keep" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "old", current: p(0, 0) },
+      pendingEx: { command: "s/old/new/", sourceMode: "normal" },
+    };
+    const changed = handleModalInput(state, { text: "old", lines: ["old"], cursor }, options, "\r");
+    expect(changed.state.register).toEqual({ type: "char", text: "keep" });
+    expect(changed.state.lastRepeatableChange).toEqual({ type: "command", command: "deleteChar" });
+    expect(changed.state.searchHighlight).toBeUndefined();
+  });
+
+  test("transient Ex message clears on next handled input", () => {
+    const update = handleModalInput(
+      { mode: "normal", exMessage: { kind: "error", text: "E" } },
+      snapshot,
+      options,
+      "h",
+    );
+    expect(update.state.exMessage).toBeUndefined();
   });
 });
 
@@ -345,6 +468,10 @@ describe("modal engine", () => {
     const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
     expect(replaced.effects[0]).toMatchObject({ type: "edit", result: { text: "zbc" } });
 
+    const rejected = handleModalInput(replacePending.state, snapshot, options, "\x7f");
+    expect(rejected.state.pending).toBeUndefined();
+    expect(rejected.effects.some((effect) => effect.type === "edit")).toBe(false);
+
     const substituted = handleModalInput({ mode: "normal" }, snapshot, options, "s");
     expect(substituted.state.mode).toBe("insert");
     expect(substituted.effects[0]).toMatchObject({ type: "edit", result: { text: "bc" } });
@@ -357,6 +484,15 @@ describe("modal engine", () => {
       options,
       "f",
     );
+    const rejected = handleModalInput(
+      found.state,
+      { text: "a:b:c", lines: ["a:b:c"], cursor },
+      options,
+      "\x7f",
+    );
+    expect(rejected.state.pending).toBeUndefined();
+    expect(rejected.effects).toEqual([{ type: "invalidate" }]);
+
     const targeted = handleModalInput(
       found.state,
       { text: "a:b:c", lines: ["a:b:c"], cursor },
@@ -465,18 +601,40 @@ describe("modal engine", () => {
   });
 
   test("prompt search highlight state honors config and clear events", () => {
-    const noHighlight = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["/", "o", "n", "e", "\r"], {
-      ...options,
-      search: { highlight: false, highlightCurrent: true, clearOnCancel: true, clearOnInsert: true, maxHighlights: 200 },
-    });
+    const noHighlight = applyModalKeys(
+      { mode: "normal" },
+      "one two one",
+      p(0, 0),
+      ["/", "o", "n", "e", "\r"],
+      {
+        ...options,
+        search: {
+          highlight: false,
+          highlightCurrent: true,
+          clearOnCancel: true,
+          clearOnInsert: true,
+          maxHighlights: 200,
+        },
+      },
+    );
     expect(noHighlight.state.searchHighlight).toBeUndefined();
     expect(noHighlight.state.lastSearch).toEqual({ query: "one", direction: "forward" });
 
-    const highlighted = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["/", "o", "n", "e", "\r"]);
+    const highlighted = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), [
+      "/",
+      "o",
+      "n",
+      "e",
+      "\r",
+    ]);
     expect(highlighted.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
 
     const cancelled = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["/", "x", "\x1b"]);
     expect(cancelled.state.searchHighlight).toBeUndefined();
+
+    const edited = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["x"]);
+    expect(edited.text).toBe("one two ne");
+    expect(edited.state.searchHighlight).toBeUndefined();
 
     const insert = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["i"]);
     expect(insert.state.mode).toBe("insert");
@@ -484,9 +642,29 @@ describe("modal engine", () => {
 
     const preserveOnInsert = applyModalKeys(highlighted.state, "one two one", p(0, 8), ["i"], {
       ...options,
-      search: { highlight: true, highlightCurrent: true, clearOnCancel: true, clearOnInsert: false, maxHighlights: 200 },
+      search: {
+        highlight: true,
+        highlightCurrent: true,
+        clearOnCancel: true,
+        clearOnInsert: false,
+        maxHighlights: 200,
+      },
     });
     expect(preserveOnInsert.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+  });
+
+  test("pending prompt search cancels and delegates Ctrl-C/Ctrl-G", () => {
+    for (const key of ["\x03", "\x07"]) {
+      const update = handleModalInput(
+        { mode: "normal", pendingSearch: { query: "one", direction: "forward" } },
+        snapshot,
+        options,
+        key,
+      );
+      expect(update.state.pendingSearch).toBeUndefined();
+      expect(update.state.mode).toBe("insert");
+      expect(update.effects).toContainEqual({ type: "delegate", input: key });
+    }
   });
 
   test("normal prompt search handles cancellation empty and missing queries safely", () => {
@@ -513,36 +691,53 @@ describe("modal engine", () => {
     });
   });
 
-  test("visual mode supports prompt search motion", () => {
-    const result = applyModalKeys({ mode: "visual", visualAnchor: p(0, 0) }, "one two one", p(0, 0), [
-      "/",
-      "t",
-      "w",
-      "o",
-      "\r",
+  test("visual replace rejects non-printable character arguments", () => {
+    const result = applyModalKeys({ mode: "visual", visualAnchor: p(0, 0) }, "abc", p(0, 1), [
+      "r",
+      "\x7f",
     ]);
+    expect(result.text).toBe("abc");
+    expect(result.state).toMatchObject({ mode: "visual", visualAnchor: p(0, 0) });
+    expect(result.state.pending).toBeUndefined();
+  });
+
+  test("visual mode supports prompt search motion", () => {
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "one two one",
+      p(0, 0),
+      ["/", "t", "w", "o", "\r"],
+    );
 
     expect(result.cursor).toEqual(p(0, 4));
     expect(result.state).toMatchObject({ mode: "visual", visualAnchor: p(0, 0) });
   });
 
   test("operators accept prompt search motions", () => {
-    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["d", "/", "t", "w", "o", "\r"])).toMatchObject({
+    expect(
+      applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["d", "/", "t", "w", "o", "\r"]),
+    ).toMatchObject({
       text: " three",
       cursor: p(0, 0),
       state: { mode: "normal", register: { type: "char", text: "one two" } },
     });
-    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["y", "/", "t", "w", "o", "\r"])).toMatchObject({
+    expect(
+      applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["y", "/", "t", "w", "o", "\r"]),
+    ).toMatchObject({
       text: "one two three",
       cursor: p(0, 0),
       state: { mode: "normal", register: { type: "char", text: "one two" } },
     });
-    expect(applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["c", "/", "t", "w", "o", "\r"])).toMatchObject({
+    expect(
+      applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), ["c", "/", "t", "w", "o", "\r"]),
+    ).toMatchObject({
       text: " three",
       cursor: p(0, 0),
       state: { mode: "insert", register: { type: "char", text: "one two" } },
     });
-    expect(applyModalKeys({ mode: "normal" }, "one two", p(0, 0), ["d", "/", "z", "\r"])).toMatchObject({
+    expect(
+      applyModalKeys({ mode: "normal" }, "one two", p(0, 0), ["d", "/", "z", "\r"]),
+    ).toMatchObject({
       text: "one two",
       cursor: p(0, 0),
       state: { mode: "normal" },

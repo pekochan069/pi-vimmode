@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { VimEditorOptions } from "../src/types.ts";
+
 import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
 
 function tempSettings() {
@@ -20,6 +22,13 @@ function tempSettings() {
 }
 
 describe("vim config parsing", () => {
+  test("VimEditorOptions accepts partial consumer keymap config", () => {
+    const options = {
+      keymap: { commands: { replaceChar: ["R"] } },
+    } satisfies VimEditorOptions;
+    expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
+  });
+
   test("uses defaults when settings are absent", () => {
     expect(resolveVimOptions(undefined).options).toEqual(DEFAULT_VIM_OPTIONS);
   });
@@ -98,7 +107,11 @@ describe("vim config parsing", () => {
         keymap: {
           operators: { delete: ["q"], change: ["ctrl+c"] },
           motions: { wordForward: ["e"] },
-          commands: { openLineBelow: ["n"], visualBlock: ["<C-v>", "<A-x>"] },
+          commands: {
+            openLineBelow: ["n"],
+            visualBlock: ["<C-v>", "<A-x>"],
+            startExCommand: ["<A-;>"],
+          },
           macros: { record: ["m"], play: ["r"] },
           marks: { set: ["s"], jumpExact: ["<A-m>"], jumpLine: ["'"] },
           operatorMotions: { delete: ["wordForward"] },
@@ -111,6 +124,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
+    expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
     expect(result.options.keymap?.macros.play).toEqual(["r"]);
     expect(result.options.keymap?.marks.set).toEqual(["s"]);
@@ -126,6 +140,7 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.decrementNumber).toEqual(["ctrl+x"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
 
     const result = resolveVimOptions({
@@ -242,6 +257,24 @@ describe("vim config parsing", () => {
 
     expect(
       result.warnings.some((warning) => warning.includes("duplicate piVimMode.keymap binding x")),
+    ).toBe(true);
+  });
+
+  test("warns when exact keymap bindings are shadowed by longer prefixes", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          motions: { left: ["g"], bufferStart: ["gg"] },
+        },
+      },
+    });
+
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes(
+          "binding g for motions.left is shadowed by longer binding gg for motions.bufferStart",
+        ),
+      ),
     ).toBe(true);
   });
 

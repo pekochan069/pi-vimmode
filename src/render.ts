@@ -10,9 +10,8 @@ export const SEARCH_CURRENT_START = "\x1b[30;43m";
 export const CURSOR_BLOCK_START = "\x1b[4;7m";
 export const CURSOR_UNDERLINE_START = "\x1b[4m";
 export const CURSOR_BAR_START = "\x1b[1m";
+export const BAR_CURSOR_OVERLAY = "\u20d2";
 export const ANSI_RESET = "\x1b[0m";
-
-const BAR_CURSOR_GLYPH = "▌";
 
 type TextChunk = {
   text: string;
@@ -105,7 +104,7 @@ export function renderCursorCell(cell: string, style: CursorStyle): string {
   const safeCell = cell.length > 0 ? cell : " ";
   switch (style) {
     case "bar":
-      return `${CURSOR_BAR_START}${BAR_CURSOR_GLYPH}${ANSI_RESET}`;
+      return `${CURSOR_BAR_START}${safeCell}${BAR_CURSOR_OVERLAY}${ANSI_RESET}`;
     case "underline":
       return `${CURSOR_UNDERLINE_START}${safeCell}${ANSI_RESET}`;
     case "block":
@@ -155,7 +154,11 @@ function isCellInRange(range: TextRange, lineIndex: number, col: number): boolea
   return true;
 }
 
-function searchRangeAt(options: VisualRenderView, lineIndex: number, col: number): "current" | "other" | undefined {
+function searchRangeAt(
+  options: VisualRenderView,
+  lineIndex: number,
+  col: number,
+): "current" | "other" | undefined {
   const current = options.search?.current;
   if (options.search?.highlightCurrent && current) {
     const currentRange = {
@@ -164,7 +167,9 @@ function searchRangeAt(options: VisualRenderView, lineIndex: number, col: number
     };
     if (isCellInRange(currentRange, lineIndex, col)) return "current";
   }
-  return options.searchRanges.some((range) => isCellInRange(range, lineIndex, col)) ? "other" : undefined;
+  return options.searchRanges.some((range) => isCellInRange(range, lineIndex, col))
+    ? "other"
+    : undefined;
 }
 
 function wordWrapLine(line: string, width: number): TextChunk[] {
@@ -311,7 +316,10 @@ function scrollWindow(
   return { visible: layout.slice(offset, offset + maxVisible), offset };
 }
 
-function createSearchRanges(text: string, search: SearchHighlightRenderInput | undefined): TextRange[] {
+function createSearchRanges(
+  text: string,
+  search: SearchHighlightRenderInput | undefined,
+): TextRange[] {
   if (!search) return [];
   return findSearchHighlightRanges(text, search.query, Math.max(0, search.maxHighlights));
 }

@@ -54,6 +54,7 @@ export type VimCommandAction =
   | "startSearch"
   | "repeatSearch"
   | "repeatSearchReverse"
+  | "startExCommand"
   | "repeatChange"
   | "undo";
 
@@ -75,26 +76,36 @@ export type VimTextObject = {
 export type VimStatusItem = "mode" | "pendingOperator" | "selection" | "cursorPosition";
 
 export type VimMacroKeymapOptions = {
-  record: readonly string[];
-  play: readonly string[];
+  record?: readonly string[];
+  play?: readonly string[];
 };
 
 export type VimMarkKeymapOptions = {
-  set: readonly string[];
-  jumpExact: readonly string[];
-  jumpLine: readonly string[];
+  set?: readonly string[];
+  jumpExact?: readonly string[];
+  jumpLine?: readonly string[];
 };
 
 export type VimKeymapOptions = {
+  operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
+  motions?: Partial<Record<VimMotionAction, readonly string[]>>;
+  commands?: Partial<Record<VimCommandAction, readonly string[]>>;
+  macros?: VimMacroKeymapOptions;
+  marks?: VimMarkKeymapOptions;
+  operatorMotions?: Partial<Record<VimOperatorAction, readonly VimMotionAction[]>>;
+};
+
+export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
+export type ResolvedVimMarkKeymap = Required<VimMarkKeymapOptions>;
+
+export type ResolvedVimKeymap = {
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
   commands: Record<VimCommandAction, readonly string[]>;
-  macros: VimMacroKeymapOptions;
-  marks: VimMarkKeymapOptions;
+  macros: ResolvedVimMacroKeymap;
+  marks: ResolvedVimMarkKeymap;
   operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
 };
-
-export type ResolvedVimKeymap = VimKeymapOptions;
 
 export type VimSearchOptions = {
   highlight: boolean;
@@ -145,6 +156,16 @@ export type VimMarkOptions = {
 export type ResolvedVimMarks = VimMarkOptions;
 
 export type VimEditorOptions = {
+  startMode?: StartupMode;
+  cursor?: Partial<CursorStyles>;
+  keymap?: VimKeymapOptions;
+  ui?: Partial<ResolvedVimUi>;
+  macros?: Partial<ResolvedVimMacros>;
+  marks?: Partial<ResolvedVimMarks>;
+  search?: Partial<ResolvedVimSearch>;
+};
+
+export type ResolvedVimEditorOptions = {
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;

@@ -13,6 +13,7 @@
 ## Capabilities
 
 ### New Capabilities
+
 - `vim-search`: Vim-style prompt-buffer search behavior for `/`, repeat navigation, and integration with normal, visual, and operator-pending modes.
 
 ### Modified Capabilities

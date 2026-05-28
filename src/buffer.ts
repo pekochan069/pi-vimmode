@@ -78,6 +78,32 @@ function offsetToPosition(text: string, offset: number): Position {
   return { line: lastLine, col: lines[lastLine]?.length ?? 0 };
 }
 
+function offsetToPositionFromLineStarts(
+  lines: string[],
+  starts: number[],
+  offset: number,
+  textLength: number,
+): Position {
+  const safeOffset = Math.max(0, Math.min(offset, textLength));
+  let low = 0;
+  let high = Math.max(0, starts.length - 1);
+  let line = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if ((starts[mid] ?? 0) <= safeOffset) {
+      line = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const lineStart = starts[line] ?? 0;
+  const lineLength = lines[line]?.length ?? 0;
+  return { line, col: Math.max(0, Math.min(safeOffset - lineStart, lineLength)) };
+}
+
 function lineBoundsForPosition(
   text: string,
   position: Position,
@@ -257,6 +283,87 @@ export function matchingPairPosition(text: string, cursor: Position): Position |
 
 export function normalizeBufferPosition(text: string, cursor: Position): Position {
   return clampPosition(splitText(text), cursor);
+}
+
+export type SubstituteLineRangeOptions = {
+  range: LineRange;
+  pattern: string;
+  replacement: string;
+  global: boolean;
+  ignoreCase: boolean;
+  originalCursor: Position;
+};
+
+export type SubstituteLineRangeResult = {
+  edit: EditResult;
+  matches: number;
+};
+
+function literalIndexOf(
+  line: string,
+  pattern: string,
+  fromIndex: number,
+  ignoreCase: boolean,
+): number {
+  if (!ignoreCase) return line.indexOf(pattern, fromIndex);
+  return line.toLocaleLowerCase().indexOf(pattern.toLocaleLowerCase(), fromIndex);
+}
+
+function substituteLineLiteral(
+  line: string,
+  pattern: string,
+  replacement: string,
+  global: boolean,
+  ignoreCase: boolean,
+): { line: string; matches: number } {
+  let nextLine = "";
+  let cursor = 0;
+  let matches = 0;
+
+  while (cursor <= line.length) {
+    const match = literalIndexOf(line, pattern, cursor, ignoreCase);
+    if (match < 0) break;
+    matches++;
+    nextLine += line.slice(cursor, match) + replacement;
+    cursor = match + pattern.length;
+    if (!global) break;
+  }
+
+  if (matches === 0) return { line, matches };
+  return { line: nextLine + line.slice(cursor), matches };
+}
+
+export function substituteLineRangeLiteral(
+  text: string,
+  options: SubstituteLineRangeOptions,
+): SubstituteLineRangeResult {
+  const lines = splitText(text);
+  const startLine = Math.max(0, Math.min(options.range.startLine, lines.length - 1));
+  const endLine = Math.max(0, Math.min(options.range.endLine, lines.length - 1));
+  const nextLines = [...lines];
+  let matches = 0;
+
+  for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+    const result = substituteLineLiteral(
+      nextLines[lineIndex] ?? "",
+      options.pattern,
+      options.replacement,
+      options.global,
+      options.ignoreCase,
+    );
+    nextLines[lineIndex] = result.line;
+    matches += result.matches;
+  }
+
+  const nextText = joinLines(nextLines);
+  return {
+    matches,
+    edit: {
+      text: nextText,
+      cursor: clampPosition(nextLines, options.originalCursor),
+      changed: nextText !== text,
+    },
+  };
 }
 
 export function exactMarkPosition(text: string, mark: Position): Position {
@@ -675,13 +782,17 @@ export function findSearchHighlightRanges(
   maxRanges = Number.POSITIVE_INFINITY,
 ): TextRange[] {
   if (query.length === 0 || query.includes("\n") || maxRanges <= 0) return [];
+  const lines = splitText(text);
+  const starts = lineStartOffsets(lines);
+  const toPosition = (target: number) =>
+    offsetToPositionFromLineStarts(lines, starts, target, text.length);
   const ranges: TextRange[] = [];
   let offset = 0;
   while (ranges.length < maxRanges) {
     const match = text.indexOf(query, offset);
     if (match < 0) break;
     const end = Math.max(match, Math.min(text.length, match + query.length) - 1);
-    ranges.push({ start: offsetToPosition(text, match), end: offsetToPosition(text, end) });
+    ranges.push({ start: toPosition(match), end: toPosition(end) });
     offset = match + query.length;
   }
   return ranges;
@@ -720,7 +831,8 @@ export function deleteSearchRange(
   target: Position,
   query: string,
 ): EditResult {
-  const active = comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
+  const active =
+    comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
   return deleteRange(text, cursor, active);
 }
 
@@ -730,7 +842,8 @@ export function yankSearchRange(
   target: Position,
   query: string,
 ): VimRegister | undefined {
-  const active = comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
+  const active =
+    comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
   return yankVisualSelection(text, cursor, active, "char");
 }
 

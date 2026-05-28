@@ -1,6 +1,6 @@
 import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import type { VimEditorOptions } from "./types.ts";
+import type { ResolvedVimEditorOptions } from "./types.ts";
 
 import {
   DEFAULT_VIM_OPTIONS,
@@ -22,13 +22,13 @@ type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
   keybindings: ConstructorParameters<typeof VimEditor>[2],
-  options: VimEditorOptions,
+  options: ResolvedVimEditorOptions,
 ) => TrackedEditor;
 
 type Schedule = (callback: () => void) => void;
 
 export type VimLifecycleDependencies = {
-  defaultOptions?: VimEditorOptions;
+  defaultOptions?: ResolvedVimEditorOptions;
   loadOptions?: (paths: VimConfigPaths) => VimConfigLoadResult;
   createEditor?: CreateEditor;
   schedule?: Schedule;

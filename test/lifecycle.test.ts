@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { VimEditorOptions } from "../src/types.ts";
+import type { ResolvedVimEditorOptions } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
@@ -25,7 +25,7 @@ type FakeContext = {
 };
 
 type FakeEditor = {
-  options: VimEditorOptions;
+  options: ResolvedVimEditorOptions;
   resetCount: number;
   resetTerminalCursorStyle: () => void;
 };
@@ -51,7 +51,7 @@ function createContext(cwd = "/workspace"): FakeContext {
 }
 
 function createLifecycleHarness(
-  options: VimEditorOptions[] = [
+  options: ResolvedVimEditorOptions[] = [
     DEFAULT_VIM_OPTIONS,
     { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
   ],

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { CursorStyle, VimMode } from "../src/types.ts";
 
 import {
+  BAR_CURSOR_OVERLAY,
   CURSOR_BAR_START,
   CURSOR_BLOCK_START,
   CURSOR_UNDERLINE_START,
@@ -214,9 +215,21 @@ describe("cursor rendering", () => {
     expect(renderCursorCell("x", "underline")).toContain(CURSOR_UNDERLINE_START);
   });
 
+  test("bar cursor preserves the cell character width-safely", () => {
+    const rendered = renderCursorCell("x", "bar");
+    expect(rendered).toContain(CURSOR_BAR_START);
+    expect(rendered).toContain("x");
+    expect(rendered).toContain(BAR_CURSOR_OVERLAY);
+    expect(rendered).not.toContain("▌");
+    expect(visibleWidth(rendered)).toBe(1);
+    expect(visibleWidth(renderCursorCell("", "bar"))).toBe(1);
+  });
+
   test("restyles Pi cursor marker output when marker is available", () => {
     const restyled = restyleCursorMarker([`${CURSOR_MARKER}\x1b[7mx\x1b[0m`], "bar");
     expect(restyled[0]).toContain(CURSOR_MARKER);
     expect(restyled[0]).toContain(CURSOR_BAR_START);
+    expect(restyled[0]).toContain("x");
+    expect(restyled[0]).toContain(BAR_CURSOR_OVERLAY);
   });
 });

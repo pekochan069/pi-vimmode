@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-vimeditor-pi-adapter-modal-editing-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: VimEditor acts as the Pi adapter
 
 The Vim editor SHALL keep `VimEditor` as the Pi-facing `CustomEditor` adapter while moving modal editing semantics out of the adapter class.
@@ -156,4 +158,3 @@ The Vim editor SHALL include test-only scenarios that exercise behavior through 
 
 - **WHEN** behavior is validated through real-editor scenarios
 - **THEN** focused modal-engine tests still cover the underlying state and effect contracts needed to diagnose failures locally
-

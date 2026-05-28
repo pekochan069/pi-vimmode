@@ -5,6 +5,7 @@
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Add parsed, validated `piVimMode.search` options with safe defaults.
 - Render search matches after successful searches when highlighting is enabled.
 - Render the active match distinctly from other matches.
@@ -12,6 +13,7 @@
 - Keep rendering width-safe and bounded by `maxHighlights`.
 
 **Non-Goals:**
+
 - Vim highlight group compatibility, custom color schemes, `:nohlsearch`, regex search, `?`, search history, or cross-prompt search.
 - Highlighting overlapping matches beyond deterministic left-to-right non-overlapping literal matches.
 - New external dependencies.

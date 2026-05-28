@@ -92,6 +92,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `q`                         | stop recording from normal mode                     |
 | `@{a-z}`                    | replay a recorded macro slot                        |
 | `@@`                        | replay the last successfully played macro           |
+| `:`                         | enter Ex command-line mode                          |
 | `u`                         | delegate to Pi native undo                          |
 
 ### Visual mode
@@ -107,6 +108,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `c`                                           | delete selection and enter insert                           |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register |
 | `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark              |
+| `:`                                           | enter Ex command-line with `'<,'>` range prefilled           |
 | `Esc`                                         | cancel selection and return normal                          |
 
 ### Visual line mode
@@ -122,6 +124,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `c`                                           | delete selected lines into a linewise register and enter insert   |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change/paste with replace/append register |
 | `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark                    |
+| `:`                                           | enter Ex command-line with `'<,'>` range prefilled                |
 | `Esc`                                         | cancel selection and return normal                                |
 
 ### Visual block mode
@@ -139,6 +142,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `c`                                           | delete selected block slices into a character register and enter insert                            |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register                                        |
 | `` `{a-z}`` / `'{a-z}`                        | jump active block corner to exact/line local mark                                                  |
+| `:`                                           | enter Ex command-line with `'<,'>` range prefilled                                                 |
 | `Esc`                                         | cancel selection and return normal                                                                 |
 
 ## Settings
@@ -200,6 +204,7 @@ Project settings override global settings field by field.
         "startSearch": ["/"],
         "repeatSearch": ["n"],
         "repeatSearchReverse": ["N"],
+        "startExCommand": [":"],
         "repeatChange": ["."],
         "undo": ["u"],
         "visualChar": ["v"],
@@ -329,7 +334,7 @@ Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`,
 
 `Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
 
-- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `repeatChange`, `undo`
+- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `startExCommand`, `repeatChange`, `undo`
 
 `operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `wordEnd`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
 
@@ -376,6 +381,21 @@ If you remap macro controls, use the configured record key to stop recording and
 - `maxHighlights`: maximum non-current matches to render. Defaults to `200`.
 
 Search highlight styles are fixed ANSI styles for now. Vim highlight groups, `:nohlsearch`, search history, and regex search are not supported.
+
+## Ex command-line and substitution
+
+- Normal-mode `:` opens a dedicated Ex command-line row below the prompt box. While visible, the prompt viewport shrinks by one row so total render height stays bounded.
+- Visual, V-Line, and V-Block `:` opens Ex command-line with editable `'<,'>` prefilled and keeps the original visual selection highlighted while typing.
+- Supported commands are exact `s` and `substitute` only: `:s/old/new/`, `:%s/old/new/g`, `:2,4substitute#old/path#new/path#i`.
+- Supported ranges are omitted current line, `%`, visual `'<,'>` captured at Ex entry, numeric addresses, `.`, `$`, and comma ranges such as `2,4` or `.,$`.
+- A normal-mode count before Ex entry prefills a concrete clamped line range, e.g. `3:` on line 2 opens `:2,4` when possible.
+- Substitution is literal and line-local. It is not regex. `&`, `$1`, and `\1` in replacements insert literally.
+- Supported flags are lowercase `g` for all non-overlapping matches per line and `i` for case-insensitive literal matching. Unsupported flags produce an Ex error.
+- Delimiter can be any printable non-alphanumeric, non-whitespace, non-backslash character. Delimiter and backslash escapes decode in pattern/replacement.
+- Empty replacement is valid; empty pattern is an Ex error. Omitted final delimiter is allowed only as no-flags syntax, so `:s/old/newg` replaces with literal `newg`.
+- Successful substitutions show transient counts in the Ex row. Errors such as pattern-not-found or invalid ranges show transient Ex errors until next handled input.
+- Text-changing substitutions clear visible prompt search highlights, preserve cursor intent by clamping original cursor after edit, do not write registers, and do not update dot-repeat.
+- Deferred: regex substitution, command history, repeat substitution, `:nohlsearch`, offsets/semicolon ranges, and non-substitution Ex commands.
 
 ### `piVimMode.ui`
 
@@ -434,6 +454,7 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 - `@@` repeats the last successfully played macro by default.
 - Macro record/play keys, allowed slots, enabled state, and replay step cap are configurable.
 - Macro slots are separate from unnamed and named edit registers; `q{slot}` records input tokens, while `"{slot}` targets edit text.
+- Ex command-line entry, typed command text, `Enter`, and `Esc` are recorded and replayed through the same input-token path. Replay continues after Ex errors.
 - Pi-owned delegated shortcuts such as prompt submit/abort, autocomplete control, and playback commands are not recorded.
 - Macro playback is non-recursive: playback commands inside replay are ignored.
 - Macros are in-memory only and do not persist across sessions.
@@ -444,7 +465,7 @@ The editor border/status area shows configurable feedback:
 
 - `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
 - `I`, `N`, `V`, and `VL` at narrow widths by default.
-- Pending operators/key prefixes, search prompts (`/query…`), mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
+- Pending operators/key prefixes, search prompts (`/query…`), Ex command-line input/messages, mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
 - Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
 - Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
 
@@ -469,7 +490,7 @@ The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pu
 
 ## Limitations
 
-- No regex search, `?` backward search command, search history, Vim highlight groups, `:nohlsearch`, ex commands / command mode, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
+- No regex search/substitution, `?` backward search command, search history, Vim highlight groups, `:nohlsearch`, non-substitution Ex commands, command history, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
 - Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
 - `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 - No `.vimrc`, Vimscript, or Neovim Lua parsing.
@@ -499,4 +520,5 @@ Manual smoke checklist:
 9. Configure a custom `piVimMode.keymap` operator, motion, and UI status order, then confirm normal and visual mode use the custom mappings.
 10. Confirm next prompt returns to the configured startup mode.
 11. Record `qa`, type an insert/normal sequence, stop with normal-mode `q`, replay with `@a`, then repeat with `@@`.
-12. Confirm normal-mode `Esc` can still interrupt/abort Pi.
+12. Run `:%s/old/new/g` from normal mode and `:'<,'>s/old/new/` from visual mode; confirm Ex row messages and visual highlights.
+13. Confirm normal-mode `Esc` can still interrupt/abort Pi.

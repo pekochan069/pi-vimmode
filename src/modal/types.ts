@@ -1,10 +1,11 @@
 import type {
   CursorStyle,
   EditResult,
+  LineRange,
   PendingOperator,
   Position,
   StartupMode,
-  VimEditorOptions,
+  ResolvedVimEditorOptions,
   VimMode,
   VimCommandAction,
   VimMotionAction,
@@ -13,7 +14,7 @@ import type {
   VimTextObject,
 } from "../types.ts";
 
-export type ModalOptions = VimEditorOptions;
+export type ModalOptions = ResolvedVimEditorOptions;
 
 export type EditorSnapshot = {
   text: string;
@@ -70,6 +71,19 @@ export type SearchHighlightState = {
   current: Position;
 };
 
+export type PendingExCommand = {
+  command: string;
+  sourceMode: Extract<VimMode, "normal" | "visual" | "visualLine" | "visualBlock">;
+  visualAnchor?: Position;
+  visualCursor?: Position;
+  visualRange?: LineRange;
+};
+
+export type ExMessage = {
+  kind: "error" | "success";
+  text: string;
+};
+
 export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
@@ -96,6 +110,8 @@ export type ModalState = {
   marks?: MarkStore;
   pendingMark?: PendingMarkTarget;
   pendingSearch?: PendingSearchTarget;
+  pendingEx?: PendingExCommand;
+  exMessage?: ExMessage;
   lastCharSearch?: CharSearchState;
   lastSearch?: SearchState;
   searchHighlight?: SearchHighlightState;

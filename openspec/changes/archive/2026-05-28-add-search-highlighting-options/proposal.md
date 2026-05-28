@@ -16,6 +16,7 @@ Prompt-local `/` search now moves between matches, but users cannot keep search 
 ### New Capabilities
 
 ### Modified Capabilities
+
 - `vim-ui-configuration`: Add configurable prompt search highlighting and related UI behavior.
 - `extended-vim-keybindings`: Extend prompt search behavior so successful `/`, `n`, and `N` update visible search highlights.
 

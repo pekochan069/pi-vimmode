@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-marks. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Local marks can be set
 
 The Vim editor SHALL support in-memory local mark slots `a` through `z` set from the current cursor position with `m{slot}`.
@@ -166,4 +168,3 @@ The Vim editor SHALL preserve configured mark behavior from construction through
 
 - **WHEN** `VimEditor` is constructed with `piVimMode.marks.slots` resolved to `["x"]`
 - **THEN** only local mark slot `x` can be set or jumped to in the live editor and other slot targets are ignored as invalid mark targets
-

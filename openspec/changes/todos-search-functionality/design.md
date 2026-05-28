@@ -7,6 +7,7 @@ Search needs small cross-module state: active search input while collecting a qu
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Support normal-mode `/` query entry and forward search across the current prompt buffer.
 - Support `n` and `N` repeat search using the last completed query and direction.
 - Keep search no-op safe for empty queries, cancelled search, and missing matches.
@@ -15,6 +16,7 @@ Search needs small cross-module state: active search input while collecting a qu
 - Preserve Pi insert-mode slash-command/autocomplete behavior.
 
 **Non-Goals:**
+
 - Regex search, incremental highlighting, search history UI, `?` backward search, `*`/`#`, or global search across prior prompts.
 - Persisting search state across sessions.
 - Changing Pi core editor APIs or terminal rendering internals.

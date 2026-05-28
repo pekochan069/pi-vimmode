@@ -208,6 +208,10 @@ describe("normal command parser", () => {
   });
 
   test("resolves prompt search commands", () => {
+    expect(resolveNormalCommand(":", undefined)).toEqual({
+      type: "command",
+      command: "startExCommand",
+    });
     expect(resolveNormalCommand("/", undefined)).toEqual({
       type: "command",
       command: "startSearch",
@@ -235,6 +239,19 @@ describe("normal command parser", () => {
     expect(
       resolveNormalCommand(":", findPending.type === "pending" ? findPending.pending : ""),
     ).toEqual({ type: "charCommand", command: "findCharForward", char: ":" });
+
+    for (const key of ["up", "backspace", "ctrl+c"]) {
+      expect(
+        resolveNormalCommand(key, replacePending.type === "pending" ? replacePending.pending : ""),
+      ).toEqual({
+        type: "invalid",
+      });
+      expect(
+        resolveNormalCommand(key, findPending.type === "pending" ? findPending.pending : ""),
+      ).toEqual({
+        type: "invalid",
+      });
+    }
 
     const change = resolveNormalCommand("c", undefined);
     const inner = resolveNormalCommand("i", change.type === "pending" ? change.pending : "");

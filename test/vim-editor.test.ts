@@ -1,13 +1,13 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "bun:test";
 
-import type { VimEditorOptions, VimMode } from "../src/types.ts";
+import type { ResolvedVimEditorOptions, VimMode } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
-function createEditor(options: VimEditorOptions = DEFAULT_VIM_OPTIONS) {
+function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
   const writes: string[] = [];
   const tui = {
     terminal: { rows: 24, write: (data: string) => writes.push(data) },
@@ -70,6 +70,39 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("normal");
     editor.handleInput("q");
     expect(editor.getText()).toBe("");
+  });
+
+  test("renders active and transient Ex rows width-safely below prompt", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(20);
+    editor.handleInput(":");
+    typeKeys(editor, ["%", "s", "/", "x", "/", "y", "/", "g"]);
+    const active = editor.render(20);
+    expect(active.length).toBe(baseline.length + 1);
+    expect(active.at(-1)).toContain(":%s/x/y/g");
+    expectRenderedWidth(active, 20);
+
+    editor.handleInput("\r");
+    const message = editor.render(20);
+    expect(message.at(-1)).toContain("Pattern not found: x");
+    expectRenderedWidth(message, 20);
+  });
+
+  test("Ex row composes with visual selection and search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one old\ntwo old");
+    editor.handleInput("/");
+    typeKeys(editor, ["o", "l", "d", "\r"]);
+    editor.handleInput(":");
+    expect(editor.render(40).join("\n")).toContain(SEARCH_START);
+    editor.handleInput("\x1b");
+
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput(":");
+    const visualEx = editor.render(40).join("\n");
+    expect(visualEx).toContain("\u001b[7m");
+    expect(visualEx).toContain(":'<,'>");
   });
 
   test("renders configured mode labels", () => {
@@ -216,7 +249,13 @@ describe("vim editor integration", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
       startMode: "normal",
-      search: { highlight: false, highlightCurrent: true, clearOnCancel: true, clearOnInsert: true, maxHighlights: 200 },
+      search: {
+        highlight: false,
+        highlightCurrent: true,
+        clearOnCancel: true,
+        clearOnInsert: true,
+        maxHighlights: 200,
+      },
     });
     editor.setText("one two one");
     typeKeys(editor, ["g", "g", "/", "o", "n", "e", "\r"]);
@@ -366,6 +405,106 @@ describe("vim editor integration", () => {
     editor.handleInput("a");
     editor.handleInput("p");
     expect(editor.getText()).toBe("one\ntwo\none");
+  });
+
+  test("configured Ex keymap enters Ex from normal and delegates in insert", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: {
+          ...DEFAULT_VIM_OPTIONS.keymap!.commands,
+          repeatCharSearch: [],
+          startExCommand: [";"],
+        },
+      },
+    });
+    editor.handleInput(";");
+    expect(editor.getPendingOperator()).toBe(":");
+    editor.handleInput("\x1b");
+    editor.handleInput("i");
+    editor.handleInput(":");
+    expect(editor.getText()).toBe(":");
+  });
+
+  test("macro records and replays Ex substitutions and cancellation", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("old\nold");
+    typeKeys(editor, [
+      "q",
+      "a",
+      ":",
+      "%",
+      "s",
+      "/",
+      "o",
+      "l",
+      "d",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "\r",
+      "q",
+    ]);
+    expect(editor.getText()).toBe("new\nnew");
+    editor.setText("old\nold");
+    typeKeys(editor, ["@", "a"]);
+    expect(editor.getText()).toBe("new\nnew");
+
+    typeKeys(editor, [
+      "q",
+      "b",
+      ":",
+      "s",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "b",
+      "a",
+      "d",
+      "/",
+      "\x1b",
+      "q",
+    ]);
+    typeKeys(editor, ["@", "b"]);
+    expect(editor.getText()).toBe("new\nnew");
+  });
+
+  test("macro replay continues after Ex errors", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("old");
+    typeKeys(editor, [
+      "q",
+      "a",
+      ":",
+      "s",
+      "/",
+      "m",
+      "i",
+      "s",
+      "s",
+      "i",
+      "n",
+      "g",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "\r",
+      "A",
+      "!",
+      "\x1b",
+      "q",
+    ]);
+    editor.setText("old");
+    typeKeys(editor, ["@", "a"]);
+    expect(editor.getText()).toBe("old!");
   });
 
   test("normal mode uses configured keymap through the editor", () => {

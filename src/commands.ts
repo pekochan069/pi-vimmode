@@ -111,6 +111,10 @@ const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>([
   "tillCharBackward",
 ]);
 
+function isPrintableCharArgument(key: string): boolean {
+  return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
+}
+
 const TEXT_OBJECT_KIND_KEYS: Record<string, VimTextObjectKind> = { i: "inner", a: "around" };
 const TEXT_OBJECT_TARGET_KEYS: Record<string, VimTextObjectTarget> = {
   w: "word",
@@ -525,13 +529,15 @@ export function resolveNormalCommand(
     }
 
     const charCommand = decodeCharCommandPending(pending);
-    if (charCommand)
+    if (charCommand) {
+      if (!isPrintableCharArgument(key)) return { type: "invalid" };
       return {
         type: "charCommand",
         command: charCommand.command,
         char: key,
         count: charCommand.count,
       };
+    }
     const textObject = decodeTextObjectPending(pending);
     if (textObject) return resolveTextObjectPending(textObject, key, keymap);
     const operatorMotion = decodeOperatorMotionPending(pending);

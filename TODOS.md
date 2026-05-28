@@ -26,8 +26,6 @@
    - Solution: Only deepen when lifecycle changes again; keep config Module pure.
    - Benefits: Startup/reload bugs localize without over-abstracting current readable code.
 
-Recommended next pick: `visual block` if selection scope matters next; extract lifecycle/settings only if reload bugs recur.
-
 - [x] line, column number
 - [x] visual block
 - [x] macro
@@ -35,4 +33,20 @@ Recommended next pick: `visual block` if selection scope matters next; extract l
 - [x] mark
 - [x] Ctrl+a, Ctrl+x, ...
 - [x] `/` search
-- [ ] commands (grep, ...)
+- [ ] Ex commands (things starts with `:`)
+- [ ] `~`
+
+## Ex Commands
+
+- [ ] Add regex-capable Ex substitution after literal v1 ships
+- [ ] Add remaining Vim Ex substitution flags after v1 `g`/`i` support
+- [ ] Add Ex range offset addresses like `.+1` and `$-2`
+- [ ] Add Ex semicolon range support after comma-only v1
+- [ ] Add Ex command history and repeat-substitution commands after v1
+- [ ] Reuse full prompt editor for Ex command-line editing after minimal v1 ships
+
+- [ ] Extract oversized modal command handlers
+  - Files: `src/modal/engine.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts`
+  - Problem: `applyCommand`, `handleNormalInput`, and `handleVisualInput` exceed project 100-line guideline after Ex/search/keymap expansion, making state-machine changes harder to review.
+  - Solution: Extract command-specific branches/private helpers while preserving behavior and current tests.
+  - Benefits: Smaller review surface for modal bugs; less regression risk when adding Ex/search/visual behavior.

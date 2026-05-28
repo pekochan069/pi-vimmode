@@ -33,6 +33,7 @@ import {
   pasteRegister,
   pasteRegisterBefore,
   replaceVisualRangeChars,
+  substituteLineRangeLiteral,
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
@@ -62,6 +63,83 @@ describe("prompt buffer operation API", () => {
 
   test("normalizes cursor positions for adapter restoration", () => {
     expect(normalizeBufferPosition("one\ntwo", p(9, 9))).toEqual(p(1, 3));
+  });
+
+  test("substitutes literal text across a line range and reports counts", () => {
+    const result = substituteLineRangeLiteral("foo foo\nfoo\nbar", {
+      range: { startLine: 0, endLine: 1 },
+      pattern: "foo",
+      replacement: "qux",
+      global: false,
+      ignoreCase: false,
+      originalCursor: p(0, 7),
+    });
+    expect(result.matches).toBe(2);
+    expect(result.edit).toMatchObject({
+      text: "qux foo\nqux\nbar",
+      cursor: p(0, 7),
+      changed: true,
+    });
+    expect(result.edit.register).toBeUndefined();
+  });
+
+  test("supports global, case-insensitive, empty replacement, and non-overlapping matches", () => {
+    expect(
+      substituteLineRangeLiteral("Old old OLD", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "old",
+        replacement: "new",
+        global: true,
+        ignoreCase: true,
+        originalCursor: p(0, 99),
+      }),
+    ).toMatchObject({ matches: 3, edit: { text: "new new new", cursor: p(0, 11), changed: true } });
+
+    expect(
+      substituteLineRangeLiteral("aaaa", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "aa",
+        replacement: "b",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 4),
+      }),
+    ).toMatchObject({ matches: 2, edit: { text: "bb", cursor: p(0, 2), changed: true } });
+
+    expect(
+      substituteLineRangeLiteral("old old", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "old",
+        replacement: "",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 7),
+      }),
+    ).toMatchObject({ matches: 2, edit: { text: " ", cursor: p(0, 1), changed: true } });
+  });
+
+  test("reports identical replacements and pattern-not-found without edit effects", () => {
+    expect(
+      substituteLineRangeLiteral("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "foo",
+        replacement: "foo",
+        global: false,
+        ignoreCase: false,
+        originalCursor: p(0, 2),
+      }),
+    ).toMatchObject({ matches: 1, edit: { text: "foo", cursor: p(0, 2), changed: false } });
+
+    expect(
+      substituteLineRangeLiteral("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "bar",
+        replacement: "baz",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 2),
+      }),
+    ).toMatchObject({ matches: 0, edit: { text: "foo", cursor: p(0, 2), changed: false } });
   });
 
   test("resolves local mark positions safely", () => {
@@ -366,10 +444,13 @@ describe("roadmap buffer helpers", () => {
     expect(findSearchHighlightRanges("one\none", "one", 1)).toEqual([
       { start: p(0, 0), end: p(0, 2) },
     ]);
-    expect(findSearchHighlightRanges("aaa", "aa", 10)).toEqual([
-      { start: p(0, 0), end: p(0, 1) },
+    expect(findSearchHighlightRanges("aa\nbb\naa\nbb", "bb", 10)).toEqual([
+      { start: p(1, 0), end: p(1, 1) },
+      { start: p(3, 0), end: p(3, 1) },
     ]);
+    expect(findSearchHighlightRanges("aaa", "aa", 10)).toEqual([{ start: p(0, 0), end: p(0, 1) }]);
     expect(findSearchHighlightRanges("aaa", "", 10)).toEqual([]);
+    expect(findSearchHighlightRanges("one\ntwo", "one\ntwo", 10)).toEqual([]);
   });
 
   test("applies prompt search targets as operator ranges", () => {

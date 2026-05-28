@@ -49,6 +49,7 @@ import {
   replaceVisualRangeChars,
   replaceCharAt,
   substituteCharAt,
+  substituteLineRangeLiteral,
   wordEndPosition,
   yankByMotion,
   yankLine,
@@ -66,7 +67,13 @@ import {
   resolveNormalCommand,
   semanticMotionToLegacy,
 } from "../commands.ts";
-import { keymapForOptions, macrosForOptions, marksForOptions, searchForOptions } from "../config.ts";
+import {
+  keymapForOptions,
+  macrosForOptions,
+  marksForOptions,
+  searchForOptions,
+} from "../config.ts";
+import { parseExSubstitution } from "../ex.ts";
 import {
   clearMarkTarget,
   isExactMarkJumpPrefixKey,
@@ -116,13 +123,25 @@ function clearSearchHighlight(state: ModalState): ModalState {
   return rest;
 }
 
+function clearExMessage(state: ModalState): ModalState {
+  const { exMessage: _exMessage, ...rest } = state;
+  return rest;
+}
+
+function clearPendingEx(state: ModalState): ModalState {
+  const { pendingEx: _pendingEx, ...rest } = state;
+  return rest;
+}
+
 function withSearchHighlight(
   state: ModalState,
   options: ModalOptions,
   query: string,
   current: EditorSnapshot["cursor"],
 ): ModalState {
-  return searchForOptions(options).highlight ? { ...state, searchHighlight: { query, current } } : state;
+  return searchForOptions(options).highlight
+    ? { ...state, searchHighlight: { query, current } }
+    : state;
 }
 
 function clearCommandPending(state: ModalState): ModalState {
@@ -131,6 +150,8 @@ function clearCommandPending(state: ModalState): ModalState {
     pendingMacro: _pendingMacro,
     pendingMark: _pendingMark,
     pendingSearch: _pendingSearch,
+    pendingEx: _pendingEx,
+    exMessage: _exMessage,
     ...rest
   } = state;
   return rest;
@@ -180,7 +201,8 @@ function appendRecordedInput(state: ModalState, slot: string, input: string): Mo
 }
 
 function editState(state: ModalState, result: EditResult): ModalState {
-  return writeRegisters(state, result.register);
+  const nextState = result.changed ? clearSearchHighlight(state) : state;
+  return writeRegisters(nextState, result.register);
 }
 
 function editUpdate(state: ModalState, result: EditResult): ModalUpdate {
@@ -517,6 +539,8 @@ function applyCommand(
       return repeatSearch(nextState, snapshot, options, false);
     case "repeatSearchReverse":
       return repeatSearch(nextState, snapshot, options, true);
+    case "startExCommand":
+      return startExCommandUpdate(nextState, snapshot, count);
     case "repeatChange":
       return repeatChange(state, snapshot, options);
     case "undo":
@@ -620,11 +644,16 @@ function completeSearch(
   if (search.operator) {
     if (search.operator === "yank") {
       const register = yankSearchRange(snapshot.text, snapshot.cursor, target, query);
-      return yankUpdate(withSearchHighlight({ ...baseState, lastSearch: searchState }, options, query, target), register);
+      return yankUpdate(
+        withSearchHighlight({ ...baseState, lastSearch: searchState }, options, query, target),
+        register,
+      );
     }
 
     const result = deleteSearchRange(snapshot.text, snapshot.cursor, target, query);
-    const edited = clearSearchHighlight(editState({ ...baseState, lastSearch: searchState }, result));
+    const edited = clearSearchHighlight(
+      editState({ ...baseState, lastSearch: searchState }, result),
+    );
     const effects: ModalEffect[] = [{ type: "edit", result }];
     if (search.operator === "change") return transitionMode(edited, "insert", options, effects);
     return withEffects(edited, effects);
@@ -643,13 +672,15 @@ function repeatSearch(
   reverse: boolean,
 ): ModalUpdate {
   if (!state.lastSearch) return invalidate(clearCommandPending(state));
-  const direction = reverse ? oppositeSearchDirection(state.lastSearch.direction) : state.lastSearch.direction;
+  const direction = reverse
+    ? oppositeSearchDirection(state.lastSearch.direction)
+    : state.lastSearch.direction;
   const target = findSearchMatch(snapshot.text, snapshot.cursor, state.lastSearch.query, direction);
   if (!target) return invalidate(clearCommandPending(state));
-  return withEffects(withSearchHighlight(clearCommandPending(state), options, state.lastSearch.query, target), [
-    { type: "restoreCursor", position: target },
-    { type: "invalidate" },
-  ]);
+  return withEffects(
+    withSearchHighlight(clearCommandPending(state), options, state.lastSearch.query, target),
+    [{ type: "restoreCursor", position: target }, { type: "invalidate" }],
+  );
 }
 
 function handlePendingSearchInput(
@@ -662,8 +693,12 @@ function handlePendingSearchInput(
   if (!search) return invalidate(state);
   if (matchesKey(data, "escape")) {
     const cleared = clearPending(state);
-    return invalidate(searchForOptions(options).clearOnCancel ? clearSearchHighlight(cleared) : cleared);
+    return invalidate(
+      searchForOptions(options).clearOnCancel ? clearSearchHighlight(cleared) : cleared,
+    );
   }
+  if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g"))
+    return resetAndDelegate(state, options, data);
   if (matchesKey(data, "enter") || matchesKey(data, "return")) {
     return completeSearch(state, snapshot, options, search);
   }
@@ -675,6 +710,137 @@ function handlePendingSearchInput(
   const key = keySequence(data);
   if (!key || key.length !== 1) return invalidate(state);
   return invalidate({ ...state, pendingSearch: { ...search, query: search.query + key } });
+}
+
+function exLineRange(anchor: EditorSnapshot["cursor"], active: EditorSnapshot["cursor"]) {
+  return {
+    startLine: Math.min(anchor.line, active.line),
+    endLine: Math.max(anchor.line, active.line),
+  };
+}
+
+function startExCommandUpdate(state: ModalState, snapshot: EditorSnapshot, count = 1): ModalUpdate {
+  const command =
+    count > 1
+      ? `${snapshot.cursor.line + 1},${Math.min(snapshot.lines.length - 1, snapshot.cursor.line + count - 1) + 1}`
+      : "";
+  return invalidate({
+    ...clearPending(state),
+    pendingEx: { command, sourceMode: "normal" },
+  });
+}
+
+function startVisualExCommandUpdate(state: ModalState, snapshot: EditorSnapshot): ModalUpdate {
+  if (!state.visualAnchor) return invalidate(state);
+  return invalidate({
+    ...clearPending(state),
+    mode: state.mode,
+    visualAnchor: state.visualAnchor,
+    pendingEx: {
+      command: "'<,'>",
+      sourceMode: state.mode as "visual" | "visualLine" | "visualBlock",
+      visualAnchor: state.visualAnchor,
+      visualCursor: snapshot.cursor,
+      visualRange: exLineRange(state.visualAnchor, snapshot.cursor),
+    },
+  });
+}
+
+function finishExState(state: ModalState, kind?: "error" | "success", text?: string): ModalState {
+  const pendingEx = state.pendingEx;
+  const base: ModalState = {
+    ...clearPendingEx(state),
+    mode: "normal",
+    visualAnchor: undefined,
+  };
+  if (pendingEx?.sourceMode !== "normal") {
+    base.mode = "normal";
+  }
+  return kind && text ? { ...base, exMessage: { kind, text } } : base;
+}
+
+function cancelExCommand(state: ModalState): ModalUpdate {
+  const pendingEx = state.pendingEx;
+  if (!pendingEx) return invalidate(state);
+  if (pendingEx.sourceMode === "normal")
+    return invalidate({ ...clearPendingEx(state), mode: "normal" });
+  return withEffects(
+    {
+      ...clearPendingEx(state),
+      mode: pendingEx.sourceMode,
+      visualAnchor: pendingEx.visualAnchor,
+    },
+    [
+      ...(pendingEx.visualCursor
+        ? [{ type: "restoreCursor" as const, position: pendingEx.visualCursor }]
+        : []),
+      { type: "invalidate" },
+    ],
+  );
+}
+
+function substitutionMessage(matches: number): string {
+  return `${matches} ${matches === 1 ? "substitution" : "substitutions"}`;
+}
+
+function executeExCommand(state: ModalState, snapshot: EditorSnapshot): ModalUpdate {
+  const pendingEx = state.pendingEx;
+  if (!pendingEx) return invalidate(state);
+  const parsed = parseExSubstitution(pendingEx.command, {
+    lineCount: snapshot.lines.length,
+    cursorLine: snapshot.cursor.line,
+    visualRange: pendingEx.visualRange,
+  });
+  if (parsed.type === "empty") return invalidate(finishExState(state));
+  if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
+
+  const result = substituteLineRangeLiteral(snapshot.text, {
+    range: parsed.range,
+    pattern: parsed.pattern,
+    replacement: parsed.replacement,
+    global: parsed.global,
+    ignoreCase: parsed.ignoreCase,
+    originalCursor: snapshot.cursor,
+  });
+  if (result.matches === 0) {
+    return invalidate(finishExState(state, "error", `Pattern not found: ${parsed.pattern}`));
+  }
+
+  const finished = finishExState(
+    result.edit.changed ? clearSearchHighlight(state) : state,
+    "success",
+    substitutionMessage(result.matches),
+  );
+  const effects: ModalEffect[] = result.edit.changed
+    ? [{ type: "edit", result: result.edit }]
+    : [{ type: "invalidate" }];
+  return withEffects(finished, effects);
+}
+
+function handlePendingExInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate {
+  const pendingEx = state.pendingEx;
+  if (!pendingEx) return invalidate(state);
+  if (matchesKey(data, "escape")) return cancelExCommand(state);
+  if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g"))
+    return resetAndDelegate(state, options, data);
+  if (matchesKey(data, "enter") || matchesKey(data, "return"))
+    return executeExCommand(state, snapshot);
+  if (matchesKey(data, "backspace")) {
+    if (pendingEx.command.length === 0) return invalidate(state);
+    return invalidate({
+      ...state,
+      pendingEx: { ...pendingEx, command: pendingEx.command.slice(0, -1) },
+    });
+  }
+
+  const key = keySequence(data);
+  if (!key || key.length !== 1) return invalidate(state);
+  return invalidate({ ...state, pendingEx: { ...pendingEx, command: pendingEx.command + key } });
 }
 
 function applyOperatorTextObject(
@@ -1119,8 +1285,10 @@ function handleVisualInput(
     if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
 
     if (result.command === "startSearch") return startSearchUpdate(state);
+    if (result.command === "startExCommand") return startVisualExCommandUpdate(state, snapshot);
     if (result.command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
-    if (result.command === "repeatSearchReverse") return repeatSearch(state, snapshot, options, true);
+    if (result.command === "repeatSearchReverse")
+      return repeatSearch(state, snapshot, options, true);
 
     if (result.command === "visualLine") {
       return state.mode === "visualLine"
@@ -1249,12 +1417,19 @@ function routeModalInput(
   options: ModalOptions,
   data: string,
 ): ModalUpdate {
-  if (state.pendingSearch) return handlePendingSearchInput(state, snapshot, options, data);
-  if (state.mode === "insert") return handleInsertInput(state, snapshot, options, data);
-  if (state.mode === "visual" || state.mode === "visualLine" || state.mode === "visualBlock") {
-    return handleVisualInput(state, snapshot, options, data);
+  const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
+  if (routedState.pendingEx) return handlePendingExInput(routedState, snapshot, options, data);
+  if (routedState.pendingSearch)
+    return handlePendingSearchInput(routedState, snapshot, options, data);
+  if (routedState.mode === "insert") return handleInsertInput(routedState, snapshot, options, data);
+  if (
+    routedState.mode === "visual" ||
+    routedState.mode === "visualLine" ||
+    routedState.mode === "visualBlock"
+  ) {
+    return handleVisualInput(routedState, snapshot, options, data);
   }
-  return handleNormalInput(state, snapshot, options, data);
+  return handleNormalInput(routedState, snapshot, options, data);
 }
 
 function shouldRecordInput(
@@ -1266,7 +1441,7 @@ function shouldRecordInput(
 ): boolean {
   if (!state.recordingSlot) return false;
   if (snapshot.isMacroReplaying) return false;
-  if (isDelegatedResetKey(data)) return false;
+  if (!state.pendingEx && isDelegatedResetKey(data)) return false;
 
   const key = keySequence(data);
   const keymap = keymapForOptions(options);
@@ -1287,7 +1462,9 @@ function shouldRecordInput(
 }
 
 export function modalPendingDisplay(state: ModalState): string | undefined {
-  return pendingSearchDisplay(state.pendingSearch) ?? pendingMarkDisplay(state.pendingMark);
+  return state.pendingEx
+    ? `:${state.pendingEx.command}`
+    : (pendingSearchDisplay(state.pendingSearch) ?? pendingMarkDisplay(state.pendingMark));
 }
 
 export function handleModalInput(

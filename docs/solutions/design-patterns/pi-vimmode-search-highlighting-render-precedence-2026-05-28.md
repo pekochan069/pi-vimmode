@@ -50,7 +50,11 @@ function withSearchHighlight(
 Apply the same separation to clear behavior:
 
 ```ts
-function clearHighlightsForMode(state: ModalState, mode: VimMode, options: VimEditorOptions): ModalState {
+function clearHighlightsForMode(
+  state: ModalState,
+  mode: VimMode,
+  options: VimEditorOptions,
+): ModalState {
   if (mode !== "insert" || !searchForOptions(options).clearOnInsert) return state;
   const { searchHighlight: _searchHighlight, ...rest } = state;
   return rest;

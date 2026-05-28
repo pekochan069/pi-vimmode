@@ -12,7 +12,7 @@ import type {
   ResolvedVimUi,
   StartupMode,
   VimCommandAction,
-  VimEditorOptions,
+  ResolvedVimEditorOptions,
   VimMode,
   VimMotionAction,
   VimOperatorAction,
@@ -76,6 +76,7 @@ export const VIM_COMMAND_ACTIONS = [
   "startSearch",
   "repeatSearch",
   "repeatSearchReverse",
+  "startExCommand",
   "repeatChange",
   "undo",
 ] as const satisfies readonly VimCommandAction[];
@@ -177,6 +178,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     startSearch: Object.freeze(["/"]),
     repeatSearch: Object.freeze(["n"]),
     repeatSearchReverse: Object.freeze(["N"]),
+    startExCommand: Object.freeze([":"]),
     repeatChange: Object.freeze(["."]),
     undo: Object.freeze(["u"]),
   }),
@@ -260,7 +262,7 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   maxHighlights: 200,
 }) as unknown as ResolvedVimSearch;
 
-export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
+export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   startMode: "insert",
   cursor: Object.freeze({
     insert: "bar",
@@ -311,7 +313,7 @@ type PartialUiOptions = {
 };
 
 export type VimConfigLoadResult = {
-  options: VimEditorOptions;
+  options: ResolvedVimEditorOptions;
   warnings: string[];
 };
 
@@ -383,6 +385,7 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       startSearch: [...keymap.commands.startSearch],
       repeatSearch: [...keymap.commands.repeatSearch],
       repeatSearchReverse: [...keymap.commands.repeatSearchReverse],
+      startExCommand: [...keymap.commands.startExCommand],
       repeatChange: [...keymap.commands.repeatChange],
       undo: [...keymap.commands.undo],
     },
@@ -426,7 +429,7 @@ function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   };
 }
 
-function cloneDefaultOptions(): VimEditorOptions {
+function cloneDefaultOptions(): ResolvedVimEditorOptions {
   return {
     startMode: DEFAULT_VIM_OPTIONS.startMode,
     cursor: { ...DEFAULT_VIM_OPTIONS.cursor },
@@ -826,7 +829,12 @@ function parseSearch(
     return { warnings };
   }
 
-  for (const field of ["highlight", "highlightCurrent", "clearOnCancel", "clearOnInsert"] as const) {
+  for (const field of [
+    "highlight",
+    "highlightCurrent",
+    "clearOnCancel",
+    "clearOnInsert",
+  ] as const) {
     if (typeof value[field] === "boolean") partial[field] = value[field];
     else if (value[field] !== undefined)
       warnings.push(`${sourceLabel}: piVimMode.search.${field} must be a boolean`);
@@ -986,7 +994,9 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
 function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   const warnings: string[] = [];
   const seen = new Map<string, string>();
+  const bindings: Array<{ sequence: string; label: string }> = [];
   const add = (sequence: string, label: string) => {
+    bindings.push({ sequence, label });
     const previous = seen.get(sequence);
     if (previous && previous !== label) {
       warnings.push(
@@ -1012,10 +1022,23 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   for (const [mark, sequences] of Object.entries(keymap.marks)) {
     for (const sequence of sequences) add(sequence, `marks.${mark}`);
   }
+
+  for (const first of bindings) {
+    for (const second of bindings) {
+      if (first === second) continue;
+      if (second.sequence.length <= first.sequence.length) continue;
+      if (second.sequence.includes("+")) continue;
+      if (!second.sequence.startsWith(first.sequence)) continue;
+      warnings.push(
+        `resolved settings: piVimMode.keymap binding ${first.sequence} for ${first.label} is shadowed by longer binding ${second.sequence} for ${second.label}`,
+      );
+    }
+  }
+
   return warnings;
 }
 
-function mergePartialOptions(target: VimEditorOptions, partial: PartialVimOptions): void {
+function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialVimOptions): void {
   if (partial.startMode) target.startMode = partial.startMode;
   if (partial.cursor) target.cursor = { ...target.cursor, ...partial.cursor };
   if (partial.keymap) mergeKeymap(target.keymap ?? cloneKeymap(), partial.keymap);
@@ -1085,26 +1108,26 @@ export function loadVimOptions(paths: VimConfigPaths = {}): VimConfigLoadResult 
   };
 }
 
-export function keymapForOptions(options: VimEditorOptions): ResolvedVimKeymap {
+export function keymapForOptions(options: ResolvedVimEditorOptions): ResolvedVimKeymap {
   return options.keymap ?? DEFAULT_VIM_KEYMAP;
 }
 
-export function uiForOptions(options: VimEditorOptions): ResolvedVimUi {
+export function uiForOptions(options: ResolvedVimEditorOptions): ResolvedVimUi {
   return options.ui ?? DEFAULT_VIM_UI;
 }
 
-export function macrosForOptions(options: VimEditorOptions): ResolvedVimMacros {
+export function macrosForOptions(options: ResolvedVimEditorOptions): ResolvedVimMacros {
   return options.macros ?? DEFAULT_VIM_MACROS;
 }
 
-export function marksForOptions(options: VimEditorOptions): ResolvedVimMarks {
+export function marksForOptions(options: ResolvedVimEditorOptions): ResolvedVimMarks {
   return options.marks ?? DEFAULT_VIM_MARKS;
 }
 
-export function searchForOptions(options: VimEditorOptions): ResolvedVimSearch {
+export function searchForOptions(options: ResolvedVimEditorOptions): ResolvedVimSearch {
   return options.search ?? DEFAULT_VIM_SEARCH;
 }
 
-export function cursorStyleForMode(options: VimEditorOptions, mode: VimMode): CursorStyle {
+export function cursorStyleForMode(options: ResolvedVimEditorOptions, mode: VimMode): CursorStyle {
   return options.cursor[mode] ?? DEFAULT_VIM_OPTIONS.cursor[mode];
 }

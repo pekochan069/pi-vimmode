@@ -81,11 +81,7 @@ Record successful line deletes and changes only when they actually edit the prom
 
 ```ts
 if (recordRepeat)
-  edited = withRepeatableChange(
-    edited,
-    { type: "lineCommand", operator, count },
-    result.changed,
-  );
+  edited = withRepeatableChange(edited, { type: "lineCommand", operator, count }, result.changed);
 ```
 
 Replay line commands through the same semantic path, with repeat recording disabled so `.` does not churn its own repeat state:

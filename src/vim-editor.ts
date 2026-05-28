@@ -2,11 +2,22 @@ import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding
 import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 
 import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
-import type { CursorStyle, EditResult, Position, VimEditorOptions, VimMode } from "./types.ts";
+import type {
+  CursorStyle,
+  EditResult,
+  Position,
+  ResolvedVimEditorOptions,
+  VimMode,
+} from "./types.ts";
 
 import { normalizeBufferPosition } from "./buffer.ts";
 import { pendingDisplay } from "./commands.ts";
-import { cursorStyleForMode, DEFAULT_VIM_OPTIONS, searchForOptions, uiForOptions } from "./config.ts";
+import {
+  cursorStyleForMode,
+  DEFAULT_VIM_OPTIONS,
+  searchForOptions,
+  uiForOptions,
+} from "./config.ts";
 import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
@@ -29,6 +40,18 @@ const KEY = {
   wordRight: "\x1bf",
   undo: "\x1f",
 } as const satisfies Record<AdapterCommand, string>;
+
+function fitWidth(text: string, width: number): string {
+  if (width <= 0) return "";
+  const truncated = truncateToWidth(text, width, "");
+  return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
+}
+
+function renderExRow(state: ModalState, width: number): string | undefined {
+  if (width <= 0) return undefined;
+  const text = state.pendingEx ? `:${state.pendingEx.command}` : state.exMessage?.text;
+  return text === undefined ? undefined : fitWidth(text, width);
+}
 
 export function fitStatusBorder(
   left: string,
@@ -65,7 +88,7 @@ export function fitStatusBorder(
   return `${border("─")}${leftText}${border("─".repeat(gapWidth))}${rightText}${border("─")}`;
 }
 
-function cloneOptions(options: VimEditorOptions): VimEditorOptions {
+function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
   return {
     startMode: options.startMode,
     cursor: { ...options.cursor },
@@ -79,7 +102,7 @@ function cloneOptions(options: VimEditorOptions): VimEditorOptions {
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private readonly options: VimEditorOptions;
+  private readonly options: ResolvedVimEditorOptions;
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private isMacroReplaying = false;
 
@@ -87,7 +110,7 @@ export class VimEditor extends CustomEditor {
     tui: TUI,
     theme: EditorTheme,
     keybindings: KeybindingsManager,
-    options: VimEditorOptions = DEFAULT_VIM_OPTIONS,
+    options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   ) {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
@@ -126,7 +149,9 @@ export class VimEditor extends CustomEditor {
   }
 
   override render(width: number): string[] {
-    const lines = this.renderEditorLines(width);
+    const exRow = renderExRow(this.modalState, width);
+    const terminalRows = exRow ? Math.max(1, (this.terminalRows() ?? 24) - 1) : this.terminalRows();
+    const lines = this.renderEditorLines(width, terminalRows);
     if (lines.length === 0 || width <= 0) return lines;
 
     const last = lines.length - 1;
@@ -141,6 +166,7 @@ export class VimEditor extends CustomEditor {
       ui: uiForOptions(this.options),
     });
     lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    if (exRow) lines.push(exRow);
     return lines;
   }
 
@@ -166,7 +192,7 @@ export class VimEditor extends CustomEditor {
     };
   }
 
-  private renderEditorLines(width: number): string[] {
+  private renderEditorLines(width: number, terminalRows = this.terminalRows()): string[] {
     if (
       (this.modalState.mode === "visual" ||
         this.modalState.mode === "visualLine" ||
@@ -186,7 +212,7 @@ export class VimEditor extends CustomEditor {
         cursorStyle: this.getCurrentCursorStyle(),
         viewport: {
           width,
-          terminalRows: this.terminalRows(),
+          terminalRows,
           focused: this.focused,
         },
         search: this.searchRenderInput(),
@@ -196,7 +222,7 @@ export class VimEditor extends CustomEditor {
       });
     }
 
-    if (this.searchRenderInput()) {
+    if (this.searchRenderInput() || this.modalState.pendingEx || this.modalState.exMessage) {
       return renderPromptEditor({
         snapshot: {
           lines: this.getLines(),
@@ -206,7 +232,7 @@ export class VimEditor extends CustomEditor {
         cursorStyle: this.getCurrentCursorStyle(),
         viewport: {
           width,
-          terminalRows: this.terminalRows(),
+          terminalRows,
           focused: this.focused,
         },
         search: this.searchRenderInput(),

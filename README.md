@@ -182,6 +182,11 @@ Project settings override global settings field by field.
         "record": ["q"],
         "play": ["@"]
       },
+      "marks": {
+        "set": ["m"],
+        "jumpExact": ["`"],
+        "jumpLine": ["'"]
+      },
       "operatorMotions": {
         "delete": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
         "change": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
@@ -191,34 +196,21 @@ Project settings override global settings field by field.
     "macros": {
       "enabled": true,
       "slots": [
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z"
+        "a", "b", "c", "d", "e", "f", "g", "h",
+        "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x",
+        "y", "z"
       ],
       "maxReplaySteps": 1000
+    },
+    "marks": {
+      "enabled": true,
+      "slots": [
+        "a", "b", "c", "d", "e", "f", "g", "h",
+        "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x",
+        "y", "z"
+      ]
     },
     "ui": {
       "status": {
@@ -313,6 +305,12 @@ Macro controls are configured under `keymap.macros`:
 - `record`: normal-mode prefix keys for starting/stopping recording. Defaults to `q`.
 - `play`: normal-mode prefix keys for playback/repeat. Defaults to `@`.
 
+Mark controls are configured under `keymap.marks`:
+
+- `set`: normal-mode prefix keys for setting local marks. Defaults to `m`.
+- `jumpExact`: normal/operator/visual prefix keys for exact mark jumps. Defaults to backtick.
+- `jumpLine`: normal/operator/visual prefix keys for line mark jumps. Defaults to single quote.
+
 If you remap macro controls, use the configured record key to stop recording and the configured play key twice to repeat the last macro.
 
 ### `piVimMode.macros`
@@ -322,6 +320,13 @@ If you remap macro controls, use the configured record key to stop recording and
 - `enabled`: enable/disable all macro recording and playback. Defaults to `true`.
 - `slots`: allowed lowercase `a-z` macro slots. Defaults to all lowercase letters.
 - `maxReplaySteps`: maximum input tokens replayed from one macro invocation. Defaults to `1000`.
+
+### `piVimMode.marks`
+
+`marks` configures mark behavior:
+
+- `enabled`: enable/disable all mark set/jump controls. Defaults to `true`.
+- `slots`: allowed lowercase `a-z` local mark slots. Defaults to all lowercase letters.
 
 ### `piVimMode.ui`
 
@@ -352,6 +357,7 @@ Unknown control/non-printable keys delegate to Pi. In particular:
 ## Marks, registers, and undo
 
 - Local marks `a-z` are supported in memory for the editor session.
+- Mark set/jump prefix keys, enabled state, and allowed slots are configurable.
 - `m{slot}` stores the current cursor position in a lowercase local mark slot.
 - Backtick + `{slot}` jumps to the stored line/column; single quote + `{slot}` jumps to the first non-blank column on the stored line.
 - Visual mode mark jumps preserve the selection anchor and move the active cursor/corner.

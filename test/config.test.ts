@@ -100,6 +100,7 @@ describe("vim config parsing", () => {
           motions: { wordForward: ["e"] },
           commands: { openLineBelow: ["n"], visualBlock: ["<C-v>", "<A-x>"] },
           macros: { record: ["m"], play: ["r"] },
+          marks: { set: ["s"], jumpExact: ["<A-m>"], jumpLine: ["'"] },
           operatorMotions: { delete: ["wordForward"] },
         },
       },
@@ -112,6 +113,9 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
     expect(result.options.keymap?.macros.play).toEqual(["r"]);
+    expect(result.options.keymap?.marks.set).toEqual(["s"]);
+    expect(result.options.keymap?.marks.jumpExact).toEqual(["alt+m"]);
+    expect(result.options.keymap?.marks.jumpLine).toEqual(["'"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
@@ -127,6 +131,20 @@ describe("vim config parsing", () => {
       enabled: false,
       slots: ["x", "y"],
       maxReplaySteps: 12,
+    });
+    expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
+  });
+
+  test("parses mark behavior options", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        marks: { enabled: false, slots: ["x", "y", "bad"] },
+      },
+    });
+
+    expect(result.options.marks).toMatchObject({
+      enabled: false,
+      slots: ["x", "y"],
     });
     expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
   });
@@ -148,6 +166,7 @@ describe("vim config parsing", () => {
         keymap: {
           operators: { delete: ["x"] },
           commands: { deleteChar: ["x"] },
+          marks: { set: ["x"] },
         },
       },
     });

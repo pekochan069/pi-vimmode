@@ -7,6 +7,7 @@ import type {
   CursorStyles,
   ResolvedVimKeymap,
   ResolvedVimMacros,
+  ResolvedVimMarks,
   ResolvedVimUi,
   StartupMode,
   VimCommandAction,
@@ -71,7 +72,7 @@ export const VIM_STATUS_ITEMS = [
 const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
 const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
 const COMMAND_ACTION_SET = new Set<string>(VIM_COMMAND_ACTIONS);
-const MACRO_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
+const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTION_SET = new Set<string>([
   "wordForward",
   "wordBackward",
@@ -120,6 +121,11 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
   macros: Object.freeze({
     record: Object.freeze(["q"]),
     play: Object.freeze(["@"]),
+  }),
+  marks: Object.freeze({
+    set: Object.freeze(["m"]),
+    jumpExact: Object.freeze(["`"]),
+    jumpLine: Object.freeze(["'"]),
   }),
   commands: Object.freeze({
     insertBefore: Object.freeze(["i"]),
@@ -182,9 +188,14 @@ export const DEFAULT_VIM_UI = Object.freeze({
 
 export const DEFAULT_VIM_MACROS = Object.freeze({
   enabled: true,
-  slots: Object.freeze(MACRO_SLOT_KEYS),
+  slots: Object.freeze(LOWERCASE_SLOT_KEYS),
   maxReplaySteps: 1000,
 }) as unknown as ResolvedVimMacros;
+
+export const DEFAULT_VIM_MARKS = Object.freeze({
+  enabled: true,
+  slots: Object.freeze(LOWERCASE_SLOT_KEYS),
+}) as unknown as ResolvedVimMarks;
 
 export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
   startMode: "insert",
@@ -198,6 +209,7 @@ export const DEFAULT_VIM_OPTIONS: VimEditorOptions = Object.freeze({
   keymap: DEFAULT_VIM_KEYMAP,
   ui: DEFAULT_VIM_UI,
   macros: DEFAULT_VIM_MACROS,
+  marks: DEFAULT_VIM_MARKS,
 });
 
 type PartialVimOptions = {
@@ -206,6 +218,7 @@ type PartialVimOptions = {
   keymap?: PartialKeymapOptions;
   ui?: PartialUiOptions;
   macros?: PartialMacroOptions;
+  marks?: PartialMarkOptions;
 };
 
 type PartialKeymapOptions = {
@@ -213,10 +226,12 @@ type PartialKeymapOptions = {
   motions?: Partial<Record<VimMotionAction, string[]>>;
   commands?: Partial<Record<VimCommandAction, string[]>>;
   macros?: Partial<Record<keyof ResolvedVimKeymap["macros"], string[]>>;
+  marks?: Partial<Record<keyof ResolvedVimKeymap["marks"], string[]>>;
   operatorMotions?: Partial<Record<VimOperatorAction, VimMotionAction[]>>;
 };
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
+type PartialMarkOptions = Partial<ResolvedVimMarks>;
 
 type PartialUiOptions = {
   status?: Partial<ResolvedVimUi["status"]>;
@@ -265,6 +280,11 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       record: [...keymap.macros.record],
       play: [...keymap.macros.play],
     },
+    marks: {
+      set: [...keymap.marks.set],
+      jumpExact: [...keymap.marks.jumpExact],
+      jumpLine: [...keymap.marks.jumpLine],
+    },
     commands: {
       insertBefore: [...keymap.commands.insertBefore],
       insertAfter: [...keymap.commands.insertAfter],
@@ -300,6 +320,13 @@ function cloneMacros(macros: ResolvedVimMacros = DEFAULT_VIM_MACROS): ResolvedVi
   };
 }
 
+function cloneMarks(marks: ResolvedVimMarks = DEFAULT_VIM_MARKS): ResolvedVimMarks {
+  return {
+    enabled: marks.enabled,
+    slots: [...marks.slots],
+  };
+}
+
 function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   return {
     status: { enabled: ui.status.enabled, items: [...ui.status.items] },
@@ -320,6 +347,7 @@ function cloneDefaultOptions(): VimEditorOptions {
     keymap: cloneKeymap(),
     ui: cloneUi(),
     macros: cloneMacros(),
+    marks: cloneMarks(),
   };
 }
 
@@ -477,6 +505,13 @@ function parseKeymap(
     new Set(["record", "play"]),
     sourceLabel,
     "macros",
+    warnings,
+  );
+  partial.marks = parseKeyBindings<keyof ResolvedVimKeymap["marks"]>(
+    value.marks,
+    new Set(["set", "jumpExact", "jumpLine"]),
+    sourceLabel,
+    "marks",
     warnings,
   );
 
@@ -638,6 +673,22 @@ function parseUi(
   return { partial, warnings };
 }
 
+function parseLowercaseSlots(
+  value: unknown,
+  label: string,
+  warnings: string[],
+): string[] | undefined {
+  if (!Array.isArray(value)) {
+    warnings.push(`${label} must be an array`);
+    return undefined;
+  }
+  const slots = value.filter(
+    (slot): slot is string => typeof slot === "string" && /^[a-z]$/.test(slot),
+  );
+  if (slots.length !== value.length) warnings.push(`${label} only supports lowercase a-z slots`);
+  return slots.length > 0 ? [...new Set(slots)] : undefined;
+}
+
 function parseMacros(
   value: unknown,
   sourceLabel: string,
@@ -655,17 +706,12 @@ function parseMacros(
     warnings.push(`${sourceLabel}: piVimMode.macros.enabled must be a boolean`);
 
   if (value.slots !== undefined) {
-    if (!Array.isArray(value.slots)) {
-      warnings.push(`${sourceLabel}: piVimMode.macros.slots must be an array`);
-    } else {
-      const slots = value.slots.filter(
-        (slot): slot is string => typeof slot === "string" && /^[a-z]$/.test(slot),
-      );
-      if (slots.length > 0) partial.slots = [...new Set(slots)];
-      if (slots.length !== value.slots.length) {
-        warnings.push(`${sourceLabel}: piVimMode.macros.slots only supports lowercase a-z slots`);
-      }
-    }
+    const slots = parseLowercaseSlots(
+      value.slots,
+      `${sourceLabel}: piVimMode.macros.slots`,
+      warnings,
+    );
+    if (slots) partial.slots = slots;
   }
 
   if (
@@ -676,6 +722,34 @@ function parseMacros(
     partial.maxReplaySteps = value.maxReplaySteps;
   } else if (value.maxReplaySteps !== undefined) {
     warnings.push(`${sourceLabel}: piVimMode.macros.maxReplaySteps must be a positive integer`);
+  }
+
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
+function parseMarks(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialMarkOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialMarkOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.marks must be an object`);
+    return { warnings };
+  }
+
+  if (typeof value.enabled === "boolean") partial.enabled = value.enabled;
+  else if (value.enabled !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.marks.enabled must be a boolean`);
+
+  if (value.slots !== undefined) {
+    const slots = parseLowercaseSlots(
+      value.slots,
+      `${sourceLabel}: piVimMode.marks.slots`,
+      warnings,
+    );
+    if (slots) partial.slots = slots;
   }
 
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
@@ -738,6 +812,10 @@ function parsePiVimMode(
   partial.macros = macros.partial;
   warnings.push(...macros.warnings);
 
+  const marks = parseMarks(value.marks, sourceLabel);
+  partial.marks = marks.partial;
+  warnings.push(...marks.warnings);
+
   return { partial, warnings };
 }
 
@@ -746,6 +824,7 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
   if (partial.macros) target.macros = { ...target.macros, ...partial.macros };
+  if (partial.marks) target.marks = { ...target.marks, ...partial.marks };
   if (partial.operatorMotions) {
     target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
   }
@@ -755,6 +834,11 @@ function mergeMacros(target: ResolvedVimMacros, partial: PartialMacroOptions): v
   if (partial.enabled !== undefined) target.enabled = partial.enabled;
   if (partial.slots) target.slots = [...partial.slots];
   if (partial.maxReplaySteps) target.maxReplaySteps = partial.maxReplaySteps;
+}
+
+function mergeMarks(target: ResolvedVimMarks, partial: PartialMarkOptions): void {
+  if (partial.enabled !== undefined) target.enabled = partial.enabled;
+  if (partial.slots) target.slots = [...partial.slots];
 }
 
 function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
@@ -799,6 +883,9 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   for (const [macro, sequences] of Object.entries(keymap.macros)) {
     for (const sequence of sequences) add(sequence, `macros.${macro}`);
   }
+  for (const [mark, sequences] of Object.entries(keymap.marks)) {
+    for (const sequence of sequences) add(sequence, `marks.${mark}`);
+  }
   return warnings;
 }
 
@@ -808,6 +895,7 @@ function mergePartialOptions(target: VimEditorOptions, partial: PartialVimOption
   if (partial.keymap) mergeKeymap(target.keymap ?? cloneKeymap(), partial.keymap);
   if (partial.ui) mergeUi(target.ui ?? cloneUi(), partial.ui);
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
+  if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
 }
 
 export function resolveVimOptions(
@@ -880,6 +968,10 @@ export function uiForOptions(options: VimEditorOptions): ResolvedVimUi {
 
 export function macrosForOptions(options: VimEditorOptions): ResolvedVimMacros {
   return options.macros ?? DEFAULT_VIM_MACROS;
+}
+
+export function marksForOptions(options: VimEditorOptions): ResolvedVimMarks {
+  return options.marks ?? DEFAULT_VIM_MARKS;
 }
 
 export function cursorStyleForMode(options: VimEditorOptions, mode: VimMode): CursorStyle {

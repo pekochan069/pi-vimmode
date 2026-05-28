@@ -189,6 +189,41 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
   });
 
+  test("mark keys and behavior are configurable", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        marks: { set: ["s"], jumpExact: ["e"], jumpLine: ["l"] },
+      },
+      marks: { enabled: true, slots: ["x"] },
+    });
+
+    editor.setText("one\n  two");
+    editor.handleInput("G");
+    editor.handleInput("m");
+    editor.handleInput("x");
+    expect(editor.getMark("x")).toBeUndefined();
+
+    editor.handleInput("s");
+    expect(editor.getPendingOperator()).toBe("m");
+    editor.handleInput("x");
+    expect(editor.getMark("x")).toEqual({ line: 1, col: 5 });
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("e");
+    editor.handleInput("x");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 5 });
+
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("l");
+    editor.handleInput("x");
+    expect(editor.getCursor()).toEqual({ line: 1, col: 2 });
+  });
+
   test("local marks persist in editor session and restore cursor", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one\n  two");

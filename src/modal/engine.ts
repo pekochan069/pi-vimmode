@@ -51,7 +51,7 @@ import {
   resolveNormalCommand,
   semanticMotionToLegacy,
 } from "../commands.ts";
-import { keymapForOptions, macrosForOptions } from "../config.ts";
+import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import {
   clearMarkTarget,
   isExactMarkJumpPrefixKey,
@@ -491,7 +491,7 @@ function handlePendingMarkTarget(
 ): ModalUpdate {
   const target = state.pendingMark;
   if (!target) return invalidate(state);
-  const slot = markSlotForKey(key);
+  const slot = markSlotForKey(key, marksForOptions(options).slots);
   if (!slot) return invalidate(clearPending(state));
   if (target.kind === "set") {
     return invalidate(setLocalMark(state, slot, exactMarkPosition(snapshot.text, snapshot.cursor)));
@@ -502,10 +502,21 @@ function handlePendingMarkTarget(
   return jumpToMarkUpdate(state, snapshot, slot, target.kind);
 }
 
-function markPendingForKey(key: string, operator?: VimOperatorAction, operatorKey?: string) {
-  if (!operator && isMarkSetPrefixKey(key)) return pendingMarkTarget("set");
-  if (isExactMarkJumpPrefixKey(key)) return pendingMarkTarget("jumpExact", operator, operatorKey);
-  if (isLineMarkJumpPrefixKey(key)) return pendingMarkTarget("jumpLine", operator, operatorKey);
+function markPendingForKey(
+  key: string,
+  options: ModalOptions,
+  operator?: VimOperatorAction,
+  operatorKey?: string,
+) {
+  if (!marksForOptions(options).enabled) return undefined;
+  const keymap = keymapForOptions(options).marks;
+  if (!operator && isMarkSetPrefixKey(key, keymap.set)) return pendingMarkTarget("set");
+  if (isExactMarkJumpPrefixKey(key, keymap.jumpExact)) {
+    return pendingMarkTarget("jumpExact", operator, operatorKey);
+  }
+  if (isLineMarkJumpPrefixKey(key, keymap.jumpLine)) {
+    return pendingMarkTarget("jumpLine", operator, operatorKey);
+  }
   return undefined;
 }
 
@@ -578,13 +589,13 @@ function handleNormalInput(
     }
     if (macroResult.type === "invalid") return invalidate(clearPendingMacro(state));
 
-    const markTarget = markPendingForKey(key);
+    const markTarget = markPendingForKey(key, options);
     if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
   }
 
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   if (pendingOperator) {
-    const markTarget = markPendingForKey(key, pendingOperator, state.pending);
+    const markTarget = markPendingForKey(key, options, pendingOperator, state.pending);
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
 
@@ -687,11 +698,10 @@ function handleVisualInput(
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
   }
   if (!state.pending && !state.pendingRegister) {
-    const markTarget =
-      isExactMarkJumpPrefixKey(key) || isLineMarkJumpPrefixKey(key)
-        ? markPendingForKey(key)
-        : undefined;
-    if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
+    const markTarget = markPendingForKey(key, options);
+    if (markTarget?.kind === "jumpExact" || markTarget?.kind === "jumpLine") {
+      return invalidate({ ...clearPending(state), pendingMark: markTarget });
+    }
   }
 
   const keymap = keymapForOptions(options);

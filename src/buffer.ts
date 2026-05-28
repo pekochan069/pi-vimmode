@@ -5,6 +5,7 @@ import type {
   TextRange,
   VimMotion,
   VimRegister,
+  VimTextObject,
 } from "./types.ts";
 
 export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
@@ -105,6 +106,23 @@ function nextWordStartOffset(text: string, offset: number): number {
   return index;
 }
 
+function wordEndOffset(text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (text.length === 0) return 0;
+  if (index >= text.length) return text.length;
+
+  if (!isWhitespace(text[index]) && index + 1 < text.length && !isWhitespace(text[index + 1])) {
+    while (index + 1 < text.length && !isWhitespace(text[index + 1])) index++;
+    return index;
+  }
+
+  if (!isWhitespace(text[index])) index++;
+  while (index < text.length && isWhitespace(text[index])) index++;
+  if (index >= text.length) return text.length;
+  while (index + 1 < text.length && !isWhitespace(text[index + 1])) index++;
+  return index;
+}
+
 function previousWordStartOffset(text: string, offset: number): number {
   let index = Math.max(0, Math.min(offset, text.length));
   if (index === 0) return 0;
@@ -123,22 +141,34 @@ function orderedOffsetRange(
   return ordered.start === ordered.end ? undefined : ordered;
 }
 
+function motionTargetOffset(text: string, offset: number, motion: VimMotion): number {
+  const cursor = offsetToPosition(text, offset);
+  const bounds = lineBoundsForPosition(text, cursor);
+  if (motion === "$") return bounds.end;
+  if (motion === "0") return bounds.start;
+  if (motion === "^") return bounds.start + firstNonBlankColumn(bounds.line);
+  if (motion === "w") return nextWordStartOffset(text, offset);
+  if (motion === "e") return wordEndOffset(text, offset);
+  return previousWordStartOffset(text, offset);
+}
+
 function motionOffsetRange(
   text: string,
   cursor: Position,
   motion: VimMotion,
+  count = 1,
 ): { start: number; end: number } | undefined {
   const current = positionToOffset(text, cursor);
-  const bounds = lineBoundsForPosition(text, cursor);
-
-  if (motion === "$") return orderedOffsetRange(current, bounds.end);
-  if (motion === "0") return orderedOffsetRange(bounds.start, current);
-  if (motion === "^") {
-    const target = bounds.start + firstNonBlankColumn(bounds.line);
-    return orderedOffsetRange(current, target);
+  let target = current;
+  const repetitions = Math.max(1, count);
+  for (let index = 0; index < repetitions; index++) {
+    const next = motionTargetOffset(text, target, motion);
+    if (next === target) break;
+    target = next;
   }
-  if (motion === "w") return orderedOffsetRange(current, nextWordStartOffset(text, current));
-  return orderedOffsetRange(previousWordStartOffset(text, current), current);
+  if (motion === "e" && target >= current)
+    return orderedOffsetRange(current, Math.min(text.length, target + 1));
+  return orderedOffsetRange(current, target);
 }
 
 function deleteOffsetRange(text: string, start: number, end: number): EditResult {
@@ -479,6 +509,73 @@ export function deleteLineRange(text: string, anchor: Position, active: Position
   };
 }
 
+export function replaceVisualRangeChars(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: "char" | "line" | "block",
+  char: string,
+): EditResult {
+  const lines = splitText(text);
+  if (char.length === 0 || char === "\n") {
+    return { text, cursor: normalizeBufferPosition(text, anchor), changed: false };
+  }
+
+  if (kind === "line") {
+    const range = normalizeLineRange(lines, anchor, active);
+    const selected = linewiseSelectionText(text, anchor, active);
+    const nextLines = [...lines];
+    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+      const line = nextLines[lineIndex] ?? "";
+      nextLines[lineIndex] = char.repeat(line.length);
+    }
+    const nextText = joinLines(nextLines);
+    return {
+      text: nextText,
+      cursor: { line: range.startLine, col: 0 },
+      register: { type: "line", text: selected },
+      changed: nextText !== text,
+    };
+  }
+
+  if (kind === "block") {
+    const range = normalizeBlockRange(lines, anchor, active);
+    const selected = blockSelectionText(text, anchor, active);
+    const nextLines = [...lines];
+    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+      const line = nextLines[lineIndex] ?? "";
+      const start = Math.min(range.startCol, line.length);
+      const end = Math.min(range.endCol + 1, line.length);
+      nextLines[lineIndex] = line.slice(0, start) + char.repeat(end - start) + line.slice(end);
+    }
+    const nextText = joinLines(nextLines);
+    return {
+      text: nextText,
+      cursor: clampPosition(nextLines, { line: range.startLine, col: range.startCol }),
+      register: selected.length > 0 ? { type: "char", text: selected } : undefined,
+      changed: nextText !== text,
+    };
+  }
+
+  const range = normalizeRange(lines, anchor, active);
+  const selected = selectionText(text, range.start, range.end);
+  const nextLines = [...lines];
+  for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
+    const line = nextLines[lineIndex] ?? "";
+    const start = lineIndex === range.start.line ? Math.min(range.start.col, line.length) : 0;
+    const end =
+      lineIndex === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
+    nextLines[lineIndex] = line.slice(0, start) + char.repeat(end - start) + line.slice(end);
+  }
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: clampPosition(nextLines, range.start),
+    register: selected.length > 0 ? { type: "char", text: selected } : undefined,
+    changed: nextText !== text,
+  };
+}
+
 export function replaceLineRangeWithRegister(
   text: string,
   anchor: Position,
@@ -513,18 +610,117 @@ export function replaceLineRangeWithRegister(
   };
 }
 
-export function deleteCharAt(text: string, cursor: Position): EditResult {
+export function deleteCharAt(text: string, cursor: Position, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
   const line = lines[pos.line] ?? "";
   if (pos.col >= line.length) {
     return { text, cursor: pos, changed: false };
   }
-  return deleteRange(text, pos, pos);
+  const endCol = Math.min(line.length - 1, pos.col + Math.max(1, count) - 1);
+  return deleteRange(text, pos, { line: pos.line, col: endCol });
 }
 
-export function deleteByMotion(text: string, cursor: Position, motion: VimMotion): EditResult {
-  const range = motionOffsetRange(text, cursor, motion);
+export function replaceCharAt(text: string, cursor: Position, char: string, count = 1): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  if (pos.col >= line.length || char.length === 0 || char === "\n") {
+    return { text, cursor: pos, changed: false };
+  }
+  const length = Math.min(Math.max(1, count), line.length - pos.col);
+  const nextLine = line.slice(0, pos.col) + char.repeat(length) + line.slice(pos.col + length);
+  const nextLines = [...lines];
+  nextLines[pos.line] = nextLine;
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: pos,
+    register: { type: "char", text: line.slice(pos.col, pos.col + length) },
+    changed: nextText !== text,
+  };
+}
+
+export function substituteCharAt(text: string, cursor: Position, count = 1): EditResult {
+  return deleteCharAt(text, cursor, count);
+}
+
+export function adjustNumberAtOrAfterCursor(
+  text: string,
+  cursor: Position,
+  delta: number,
+): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  const search = line.slice(pos.col);
+  const match = /[+-]?\d+/.exec(search);
+  if (!match || match.index === undefined) return { text, cursor: pos, changed: false };
+  const startCol = pos.col + match.index;
+  const raw = match[0] ?? "";
+  const nextNumber = String(Number.parseInt(raw, 10) + delta);
+  const nextLine = line.slice(0, startCol) + nextNumber + line.slice(startCol + raw.length);
+  const nextLines = [...lines];
+  nextLines[pos.line] = nextLine;
+  const nextText = joinLines(nextLines);
+  return { text: nextText, cursor: { line: pos.line, col: startCol }, changed: nextText !== text };
+}
+
+export type CharSearchKind = "findForward" | "findBackward" | "tillForward" | "tillBackward";
+
+export function findCharOnLine(
+  text: string,
+  cursor: Position,
+  kind: CharSearchKind,
+  target: string,
+  count = 1,
+): Position | undefined {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  if (target.length !== 1 || target === "\n") return undefined;
+  const forward = kind === "findForward" || kind === "tillForward";
+  let found = -1;
+  let remaining = Math.max(1, count);
+
+  if (forward) {
+    for (let index = pos.col + 1; index < line.length; index++) {
+      if (line[index] === target && --remaining === 0) {
+        found = index;
+        break;
+      }
+    }
+  } else {
+    for (let index = pos.col - 1; index >= 0; index--) {
+      if (line[index] === target && --remaining === 0) {
+        found = index;
+        break;
+      }
+    }
+  }
+
+  if (found < 0) return undefined;
+  const tillOffset = kind === "tillForward" ? -1 : kind === "tillBackward" ? 1 : 0;
+  return { line: pos.line, col: Math.max(0, Math.min(line.length, found + tillOffset)) };
+}
+
+export function wordEndPosition(text: string, cursor: Position, count = 1): Position {
+  let offset = positionToOffset(text, cursor);
+  for (let index = 0; index < Math.max(1, count); index++) {
+    const next = wordEndOffset(text, offset);
+    if (next === offset) break;
+    offset = next;
+  }
+  return offsetToPosition(text, offset);
+}
+
+export function deleteByMotion(
+  text: string,
+  cursor: Position,
+  motion: VimMotion,
+  count = 1,
+): EditResult {
+  const range = motionOffsetRange(text, cursor, motion, count);
   if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
   return deleteOffsetRange(text, range.start, range.end);
 }
@@ -533,8 +729,9 @@ export function yankByMotion(
   text: string,
   cursor: Position,
   motion: VimMotion,
+  count = 1,
 ): VimRegister | undefined {
-  const range = motionOffsetRange(text, cursor, motion);
+  const range = motionOffsetRange(text, cursor, motion, count);
   if (!range) return undefined;
   const selected = text.slice(range.start, range.end);
   if (selected.length === 0) return undefined;
@@ -577,37 +774,19 @@ export function visualSelectionText(
   return selectionText(text, anchor, active);
 }
 
-export function deleteLine(text: string, cursor: Position): EditResult {
+export function deleteLine(text: string, cursor: Position, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
-  const removed = lines[pos.line] ?? "";
-
-  if (lines.length === 1) {
-    return {
-      text: "",
-      cursor: { line: 0, col: 0 },
-      register: { type: "line", text: removed },
-      changed: text !== "",
-    };
-  }
-
-  const nextLines = [...lines.slice(0, pos.line), ...lines.slice(pos.line + 1)];
-  const nextLine = Math.min(pos.line, nextLines.length - 1);
-  const nextCursor = clampPosition(nextLines, { line: nextLine, col: pos.col });
-  return {
-    text: joinLines(nextLines),
-    cursor: nextCursor,
-    register: { type: "line", text: removed },
-    changed: true,
-  };
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  return deleteLineRange(text, pos, { line: endLine, col: 0 });
 }
 
-export function changeLine(text: string, cursor: Position): EditResult {
+export function changeLine(text: string, cursor: Position, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
-  const removed = lines[pos.line] ?? "";
-  const nextLines = [...lines];
-  nextLines[pos.line] = "";
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  const removed = lines.slice(pos.line, endLine + 1).join("\n");
+  const nextLines = [...lines.slice(0, pos.line), "", ...lines.slice(endLine + 1)];
   const nextText = joinLines(nextLines);
   return {
     text: nextText,
@@ -615,6 +794,13 @@ export function changeLine(text: string, cursor: Position): EditResult {
     register: { type: "line", text: removed },
     changed: nextText !== text,
   };
+}
+
+export function yankLineCount(text: string, cursor: Position, count = 1): VimRegister {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  return { type: "line", text: lines.slice(pos.line, endLine + 1).join("\n") };
 }
 
 export function openLineBelow(text: string, cursor: Position): EditResult {
@@ -828,6 +1014,123 @@ export function visualLineSelectionSummary(
   const range = normalizeLineRange(lines, anchor, active);
   const count = range.endLine - range.startLine + 1;
   return `${count} ${count === 1 ? "line" : "lines"}`;
+}
+
+function wordRangeAtOffset(
+  text: string,
+  offset: number,
+): { start: number; end: number } | undefined {
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  let index = clamped;
+  if (index >= text.length) index = text.length - 1;
+  if (index < 0) return undefined;
+  if (isWhitespace(text[index])) {
+    if (index > 0 && !isWhitespace(text[index - 1])) index--;
+    else return undefined;
+  }
+  let start = index;
+  while (start > 0 && !isWhitespace(text[start - 1])) start--;
+  let end = index + 1;
+  while (end < text.length && !isWhitespace(text[end])) end++;
+  return start < end ? { start, end } : undefined;
+}
+
+function quoteRangeAtOffset(
+  text: string,
+  cursor: Position,
+  quote: string,
+): { start: number; end: number } | undefined {
+  const current = positionToOffset(text, cursor);
+  const bounds = lineBoundsForPosition(text, cursor);
+  const before = text.lastIndexOf(quote, Math.max(bounds.start, current - 1));
+  if (before < bounds.start) return undefined;
+  const after = text.indexOf(quote, current);
+  if (after < 0 || after > bounds.end || after <= before) return undefined;
+  return { start: before, end: after + 1 };
+}
+
+function bracketRangeAtOffset(
+  text: string,
+  cursor: Position,
+  open: string,
+  close: string,
+): { start: number; end: number } | undefined {
+  const current = positionToOffset(text, cursor);
+  let start: number | undefined;
+  let depth = 0;
+  for (let offset = current; offset >= 0; offset--) {
+    const char = text[offset];
+    if (char === close) depth++;
+    if (char === open) {
+      if (depth === 0) {
+        start = offset;
+        break;
+      }
+      depth--;
+    }
+  }
+  if (start === undefined) return undefined;
+
+  depth = 0;
+  for (let offset = start; offset < text.length; offset++) {
+    const char = text[offset];
+    if (char === open) depth++;
+    if (char === close) depth--;
+    if (depth === 0) return { start, end: offset + 1 };
+  }
+  return undefined;
+}
+
+export function textObjectRange(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+): { start: Position; end: Position } | undefined {
+  const current = positionToOffset(text, cursor);
+  let range: { start: number; end: number } | undefined;
+  if (textObject.target === "word") {
+    range = wordRangeAtOffset(text, current);
+    if (range && textObject.kind === "around") {
+      let end = range.end;
+      while (end < text.length && isWhitespace(text[end]) && text[end] !== "\n") end++;
+      if (end === range.end) {
+        let start = range.start;
+        while (start > 0 && isWhitespace(text[start - 1]) && text[start - 1] !== "\n") start--;
+        range = { start, end: range.end };
+      } else range = { start: range.start, end };
+    }
+  } else if (textObject.target === "singleQuote") range = quoteRangeAtOffset(text, cursor, "'");
+  else if (textObject.target === "doubleQuote") range = quoteRangeAtOffset(text, cursor, '"');
+  else if (textObject.target === "paren") range = bracketRangeAtOffset(text, cursor, "(", ")");
+  else if (textObject.target === "bracket") range = bracketRangeAtOffset(text, cursor, "[", "]");
+  else if (textObject.target === "brace") range = bracketRangeAtOffset(text, cursor, "{", "}");
+
+  if (!range) return undefined;
+  const inner = textObject.kind === "inner" && textObject.target !== "word";
+  const start = inner ? range.start + 1 : range.start;
+  const endExclusive = inner ? range.end - 1 : range.end;
+  if (start >= endExclusive) return undefined;
+  return { start: offsetToPosition(text, start), end: offsetToPosition(text, endExclusive - 1) };
+}
+
+export function yankTextObject(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+): VimRegister | undefined {
+  const range = textObjectRange(text, cursor, textObject);
+  if (!range) return undefined;
+  return yankVisualSelection(text, range.start, range.end, "char");
+}
+
+export function deleteTextObject(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+): EditResult {
+  const range = textObjectRange(text, cursor, textObject);
+  if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+  return deleteRange(text, range.start, range.end);
 }
 
 export function visualBlockSelectionSummary(

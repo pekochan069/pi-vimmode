@@ -6,8 +6,11 @@ import type {
   StartupMode,
   VimEditorOptions,
   VimMode,
+  VimCommandAction,
+  VimMotionAction,
   VimOperatorAction,
   VimRegister,
+  VimTextObject,
 } from "../types.ts";
 
 export type ModalOptions = VimEditorOptions;
@@ -44,6 +47,21 @@ export type BlockInsertState = {
   text: string;
 };
 
+export type CharSearchState = {
+  command: "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward";
+  target: string;
+};
+
+export type RepeatableChange =
+  | { type: "command"; command: VimCommandAction; count?: number; char?: string }
+  | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction; count?: number }
+  | {
+      type: "operatorTextObject";
+      operator: VimOperatorAction;
+      textObject: VimTextObject;
+      count?: number;
+    };
+
 export type ModalState = {
   mode: VimMode;
   visualAnchor?: Position;
@@ -58,6 +76,8 @@ export type ModalState = {
   pendingRegister?: PendingRegisterTarget;
   marks?: MarkStore;
   pendingMark?: PendingMarkTarget;
+  lastCharSearch?: CharSearchState;
+  lastRepeatableChange?: RepeatableChange;
 };
 
 export type AdapterCommand =

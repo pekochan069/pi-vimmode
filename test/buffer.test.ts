@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  adjustNumberAtOrAfterCursor,
   bufferEndPosition,
   bufferStartPosition,
   changeLine,
   deleteBlockRange,
   deleteByMotion,
+  deleteTextObject,
+  findCharOnLine,
   insertBlockText,
   deleteCharAt,
   deleteLine,
@@ -26,15 +29,18 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  replaceVisualRangeChars,
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
   visualSelectionText,
+  wordEndPosition,
   yankByMotion,
   yankLine,
   yankLineMarkRange,
   yankLineRange,
   yankMarkRange,
+  yankTextObject,
   yankVisualSelection,
 } from "../src/buffer.ts";
 
@@ -214,6 +220,25 @@ describe("linewise visual operations", () => {
   });
 });
 
+describe("visual replacement operations", () => {
+  test("replaces selected characterwise text while preserving line breaks", () => {
+    const result = replaceVisualRangeChars("abc\ndef", p(0, 1), p(1, 1), "char", "X");
+    expect(result.text).toBe("aXX\nXXf");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.register).toEqual({ type: "char", text: "bc\nde" });
+  });
+
+  test("replaces visual line and block ranges in place", () => {
+    const line = replaceVisualRangeChars("abc\ndef", p(0, 0), p(1, 0), "line", "Z");
+    expect(line.text).toBe("ZZZ\nZZZ");
+    expect(line.register).toEqual({ type: "line", text: "abc\ndef" });
+
+    const block = replaceVisualRangeChars("abcd\nef", p(0, 1), p(1, 2), "block", "Q");
+    expect(block.text).toBe("aQQd\neQ");
+    expect(block.register).toEqual({ type: "char", text: "bc\nf" });
+  });
+});
+
 describe("linewise register operations", () => {
   test("yanks and pastes current line below cursor line", () => {
     const register = yankLine("one\ntwo", p(0, 0));
@@ -293,6 +318,63 @@ describe("operator-motion helpers", () => {
     expect(result.text).toBe("hello");
     expect(result.changed).toBe(false);
     expect(yankByMotion("hello", p(0, 0), "0")).toBeUndefined();
+  });
+
+  test("supports word-end motion and counted ranges", () => {
+    expect(wordEndPosition("hello world", p(0, 0))).toEqual(p(0, 4));
+    expect(wordEndPosition("hello world", p(0, 0), 2)).toEqual(p(0, 10));
+    expect(deleteByMotion("hello world", p(0, 0), "e")).toMatchObject({
+      text: " world",
+      register: { type: "char", text: "hello" },
+    });
+  });
+});
+
+describe("roadmap buffer helpers", () => {
+  test("adjusts signed integers at or after cursor", () => {
+    expect(adjustNumberAtOrAfterCursor("v2 count -3", p(0, 0), 1)).toMatchObject({
+      text: "v3 count -3",
+      cursor: p(0, 1),
+      changed: true,
+    });
+    expect(adjustNumberAtOrAfterCursor("v2 count -3", p(0, 3), -5)).toMatchObject({
+      text: "v2 count -8",
+      cursor: p(0, 9),
+    });
+    expect(adjustNumberAtOrAfterCursor("none", p(0, 0), 1).changed).toBe(false);
+  });
+
+  test("finds characters on the current line", () => {
+    expect(findCharOnLine("a:b:c", p(0, 0), "findForward", ":")).toEqual(p(0, 1));
+    expect(findCharOnLine("a:b:c", p(0, 0), "findForward", ":", 2)).toEqual(p(0, 3));
+    expect(findCharOnLine("a:b:c", p(0, 4), "findBackward", ":")).toEqual(p(0, 3));
+    expect(findCharOnLine("a:b:c", p(0, 0), "tillForward", ":", 2)).toEqual(p(0, 2));
+    expect(findCharOnLine("a:b:c", p(0, 0), "findForward", "z")).toBeUndefined();
+  });
+
+  test("resolves word and delimiter text objects", () => {
+    expect(
+      deleteTextObject("hello world", p(0, 7), { kind: "inner", target: "word" }),
+    ).toMatchObject({
+      text: "hello ",
+      register: { type: "char", text: "world" },
+    });
+    expect(
+      deleteTextObject("hello world next", p(0, 7), { kind: "around", target: "word" }),
+    ).toMatchObject({
+      text: "hello next",
+      register: { type: "char", text: "world " },
+    });
+    expect(
+      yankTextObject('say "hello" now', p(0, 6), { kind: "inner", target: "doubleQuote" }),
+    ).toEqual({
+      type: "char",
+      text: "hello",
+    });
+    expect(yankTextObject("call(one)", p(0, 5), { kind: "around", target: "paren" })).toEqual({
+      type: "char",
+      text: "(one)",
+    });
   });
 });
 

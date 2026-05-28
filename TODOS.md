@@ -33,4 +33,6 @@ Recommended next pick: `visual block` if selection scope matters next; extract l
 - [x] macro
 - [x] registers
 - [x] mark
-- [ ] Ctrl+a, Ctrl+x, ...
+- [x] Ctrl+a, Ctrl+x, ...
+- [ ] `/` search
+- [ ] commands (grep, ...)

@@ -53,7 +53,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | --------------------------- | --------------------------------------------------- |
 | `h` / `j` / `k` / `l`       | move left / down / up / right                       |
 | `0` / `$`                   | line start / line end                               |
-| `w` / `b`                   | word forward / word backward                        |
+| `w` / `b` / `e`             | word forward / word backward / word end             |
 | `gg` / `G`                  | buffer start / buffer end                           |
 | `^` / `_`                   | first non-blank character on current line           |
 | `%`                         | jump to matching `()`, `[]`, or `{}` pair           |
@@ -64,13 +64,22 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `v`                         | enter characterwise visual mode                     |
 | `V`                         | enter visual line mode                              |
 | `Ctrl-v`                    | enter visual block mode                             |
+| `{count}{cmd}`              | repeat supported motions/edits, e.g. `3w`, `2dd`    |
 | `x`                         | delete character under cursor                       |
+| `Ctrl-a` / `Ctrl-x`         | increment/decrement number under or after cursor    |
+| `r{char}`                   | replace character under cursor and stay normal      |
+| `s` / `S`                   | substitute character/current line and enter insert  |
 | `dd` / `cc` / `yy`          | delete/change/yank current line                     |
 | `D` / `C`                   | delete/change from cursor through line end          |
 | `Y`                         | yank current line into linewise register            |
-| `d{motion}`                 | delete by `w`, `b`, `0`, `^`, or `$`                |
-| `c{motion}`                 | change by `w`, `b`, `0`, `^`, or `$`                |
-| `y{motion}`                 | yank by `w`, `b`, `0`, `^`, or `$`                  |
+| `d{motion}`                 | delete by `w`, `b`, `e`, `0`, `^`, or `$`           |
+| `c{motion}`                 | change by `w`, `b`, `e`, `0`, `^`, or `$`           |
+| `y{motion}`                 | yank by `w`, `b`, `e`, `0`, `^`, or `$`             |
+| `f/F/t/T{char}`             | find/till character on current line                 |
+| `;` / `,`                   | repeat last character search same/opposite way      |
+| `.`                         | repeat last supported completed change              |
+| `{op}iw` / `{op}aw`         | operate on inner/around word text object            |
+| `{op}i"` / `{op}a)` etc.    | operate on quote/bracket text objects               |
 | `m{a-z}`                    | set a local mark at the current cursor position     |
 | `` `{a-z}``                 | jump to a local mark's exact cursor position        |
 | `'{a-z}`                    | jump to first non-blank column on marked line       |
@@ -89,10 +98,11 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 | Key                                           | Behavior                                                    |
 | --------------------------------------------- | ----------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend characterwise selection                              |
+| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend characterwise selection                         |
 | `V`                                           | switch to visual line mode without resetting the anchor     |
 | `Ctrl-v`                                      | switch to visual block mode without resetting the anchor    |
 | `y`                                           | yank selection and return normal                            |
+| `r{char}`                                     | replace selected characters with `char` and return normal   |
 | `d` / `x`                                     | delete selection and return normal                          |
 | `c`                                           | delete selection and enter insert                           |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register |
@@ -103,10 +113,11 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 | Key                                           | Behavior                                                          |
 | --------------------------------------------- | ----------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend the selected line range                                    |
+| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend the selected line range                               |
 | `v`                                           | switch to characterwise visual mode without resetting the anchor  |
 | `Ctrl-v`                                      | switch to visual block mode without resetting the anchor          |
 | `y`                                           | yank selected lines into a linewise register and return normal    |
+| `r{char}`                                     | replace selected line characters with `char` and return normal   |
 | `d` / `x`                                     | delete selected lines into a linewise register and return normal  |
 | `c`                                           | delete selected lines into a linewise register and enter insert   |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change/paste with replace/append register |
@@ -117,12 +128,13 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 
 | Key                                           | Behavior                                                                                           |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` | extend the selected rectangular block                                                              |
+| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend the selected rectangular block                                                         |
 | `v`                                           | switch to characterwise visual mode without resetting the anchor                                   |
 | `V`                                           | switch to visual line mode without resetting the anchor                                            |
 | `I`                                           | collect inserted text, then insert it before the block on each selected line when `Esc` is pressed |
 | `A`                                           | collect inserted text, then insert it after the block on each selected line when `Esc` is pressed  |
 | `y`                                           | yank selected block slices joined by newlines and return normal                                    |
+| `r{char}`                                     | replace selected block cells with `char` and return normal                                        |
 | `d` / `x`                                     | delete selected block slices into a character register and return normal                           |
 | `c`                                           | delete selected block slices into a character register and enter insert                            |
 | `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register                                        |
@@ -158,6 +170,7 @@ Project settings override global settings field by field.
         "right": ["l"],
         "wordForward": ["w"],
         "wordBackward": ["b"],
+        "wordEnd": ["e"],
         "lineStart": ["0"],
         "lineEnd": ["$"],
         "firstNonBlank": ["^", "_"],
@@ -173,6 +186,18 @@ Project settings override global settings field by field.
         "pasteAfter": ["p"],
         "pasteBefore": ["P"],
         "joinLine": ["J"],
+        "incrementNumber": ["<C-a>"],
+        "decrementNumber": ["<C-x>"],
+        "replaceChar": ["r"],
+        "substituteChar": ["s"],
+        "substituteLine": ["S"],
+        "findCharForward": ["f"],
+        "findCharBackward": ["F"],
+        "tillCharForward": ["t"],
+        "tillCharBackward": ["T"],
+        "repeatCharSearch": [";"],
+        "repeatCharSearchReverse": [","],
+        "repeatChange": ["."],
         "undo": ["u"],
         "visualChar": ["v"],
         "visualLine": ["V"],
@@ -188,9 +213,9 @@ Project settings override global settings field by field.
         "jumpLine": ["'"]
       },
       "operatorMotions": {
-        "delete": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
-        "change": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"],
-        "yank": ["wordForward", "wordBackward", "lineStart", "firstNonBlank", "lineEnd"]
+        "delete": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"],
+        "change": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"],
+        "yank": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"]
       }
     },
     "macros": {
@@ -281,7 +306,7 @@ Supported operator actions:
 Supported motion actions:
 
 - `left`, `down`, `up`, `right`
-- `wordForward`, `wordBackward`
+- `wordForward`, `wordBackward`, `wordEnd`
 - `lineStart`, `lineEnd`, `firstNonBlank`
 - `bufferStart`, `bufferEnd`, `matchingPair`
 
@@ -294,9 +319,11 @@ Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`,
 
 `Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
 
-- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `undo`
+- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `repeatChange`, `undo`
 
-`operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
+`operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `wordEnd`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
+
+Roadmap limitations: numeric adjustment currently supports signed integers; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; `/`, `?`, `n`, and `N` search are intentionally deferred. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
 
 Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `zz`, then `zzzz` deletes the current line and `zz{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
 

@@ -8,21 +8,34 @@ import type {
   VimMotionAction,
   VimOperator,
   VimOperatorAction,
+  VimTextObject,
+  VimTextObjectKind,
+  VimTextObjectTarget,
 } from "./types.ts";
 
 import { DEFAULT_VIM_KEYMAP } from "./config.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(["d", "c", "y"]);
-const LEGACY_OPERATOR_MOTIONS = new Set<string>(["w", "b", "0", "^", "$"]);
+const LEGACY_OPERATOR_MOTIONS = new Set<string>(["w", "b", "e", "0", "^", "$"]);
 const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
 const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
+const COUNT_SEPARATOR = "\u0000count\u0000";
+const CHAR_COMMAND_SEPARATOR = "\u0000char\u0000";
+const TEXT_OBJECT_SEPARATOR = "\u0000textobj\u0000";
 
 export type SemanticCommandResult =
   | { type: "pending"; pending: string }
-  | { type: "motion"; motion: VimMotionAction }
-  | { type: "command"; command: VimCommandAction }
-  | { type: "lineCommand"; operator: VimOperatorAction }
-  | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction }
+  | { type: "motion"; motion: VimMotionAction; count?: number }
+  | { type: "command"; command: VimCommandAction; count?: number }
+  | { type: "charCommand"; command: VimCommandAction; char: string; count?: number }
+  | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
+  | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction; count?: number }
+  | {
+      type: "operatorTextObject";
+      operator: VimOperatorAction;
+      textObject: VimTextObject;
+      count?: number;
+    }
   | { type: "invalid" }
   | { type: "none" };
 
@@ -42,16 +55,25 @@ type Binding =
   | { sequence: string; kind: "motion"; motion: VimMotionAction }
   | { sequence: string; kind: "command"; command: VimCommandAction };
 
+type EncodedCountPending = { type: "count"; count: string; inner: string };
+type EncodedCharCommandPending = { type: "charCommand"; command: VimCommandAction; count?: number };
+type EncodedTextObjectPending = {
+  type: "textObject";
+  operatorSequence: string;
+  kind: VimTextObjectKind;
+  count?: number;
+};
 type EncodedOperatorMotionPending = {
   type: "operatorMotion";
   operatorSequence: string;
   motionPrefix: string;
+  count?: number;
 };
-
 type EncodedOperatorLinePending = {
   type: "operatorLine";
   operatorSequence: string;
   repeatPrefix: string;
+  count?: number;
 };
 
 const LEGACY_OPERATOR_TO_ACTION: Record<VimOperator, VimOperatorAction> = {
@@ -67,6 +89,7 @@ const ACTION_TO_LEGACY_OPERATOR: Record<VimOperatorAction, VimOperator> = {
 const LEGACY_MOTION_TO_ACTION: Record<VimMotion, VimMotionAction> = {
   w: "wordForward",
   b: "wordBackward",
+  e: "wordEnd",
   "0": "lineStart",
   "^": "firstNonBlank",
   $: "lineEnd",
@@ -74,9 +97,31 @@ const LEGACY_MOTION_TO_ACTION: Record<VimMotion, VimMotionAction> = {
 const ACTION_TO_LEGACY_MOTION: Partial<Record<VimMotionAction, VimMotion>> = {
   wordForward: "w",
   wordBackward: "b",
+  wordEnd: "e",
   lineStart: "0",
   firstNonBlank: "^",
   lineEnd: "$",
+};
+
+const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>([
+  "replaceChar",
+  "findCharForward",
+  "findCharBackward",
+  "tillCharForward",
+  "tillCharBackward",
+]);
+
+const TEXT_OBJECT_KIND_KEYS: Record<string, VimTextObjectKind> = { i: "inner", a: "around" };
+const TEXT_OBJECT_TARGET_KEYS: Record<string, VimTextObjectTarget> = {
+  w: "word",
+  "'": "singleQuote",
+  '"': "doubleQuote",
+  "(": "paren",
+  ")": "paren",
+  "[": "bracket",
+  "]": "bracket",
+  "{": "brace",
+  "}": "brace",
 };
 
 function isLegacyVimOperator(key: string): key is VimOperator {
@@ -174,6 +219,12 @@ export function resolveMacroCommand(
 
 export function pendingDisplay(pending: string | undefined): string | undefined {
   if (!pending) return undefined;
+  const count = decodeCountPending(pending);
+  if (count) return `${count.count}${pendingDisplay(count.inner) ?? count.inner}`;
+  const charCommand = decodeCharCommandPending(pending);
+  if (charCommand) return commandSequenceFor(charCommand.command, DEFAULT_VIM_KEYMAP);
+  const textObject = decodeTextObjectPending(pending);
+  if (textObject) return `${textObject.operatorSequence}${textObject.kind === "inner" ? "i" : "a"}`;
   const operatorMotion = decodeOperatorMotionPending(pending);
   if (operatorMotion) return `${operatorMotion.operatorSequence}${operatorMotion.motionPrefix}`;
   const operatorLine = decodeOperatorLinePending(pending);
@@ -181,24 +232,98 @@ export function pendingDisplay(pending: string | undefined): string | undefined 
   return pending;
 }
 
-function encodeOperatorMotionPending(operatorSequence: string, motionPrefix: string): string {
-  return `${operatorSequence}${OPERATOR_MOTION_SEPARATOR}${motionPrefix}`;
+function encodeCountPending(count: string, inner = ""): string {
+  return `${count}${COUNT_SEPARATOR}${inner}`;
 }
 
-function encodeOperatorLinePending(operatorSequence: string, repeatPrefix: string): string {
-  return `${operatorSequence}${OPERATOR_LINE_SEPARATOR}${repeatPrefix}`;
+function decodeCountPending(pending: string): EncodedCountPending | undefined {
+  const index = pending.indexOf(COUNT_SEPARATOR);
+  if (index < 0) return undefined;
+  return {
+    type: "count",
+    count: pending.slice(0, index),
+    inner: pending.slice(index + COUNT_SEPARATOR.length),
+  };
+}
+
+function encodeCharCommandPending(command: VimCommandAction, count?: number): string {
+  return `${command}${CHAR_COMMAND_SEPARATOR}${count ?? ""}`;
+}
+
+function decodeCharCommandPending(pending: string): EncodedCharCommandPending | undefined {
+  const parts = pending.split(CHAR_COMMAND_SEPARATOR);
+  if (parts.length !== 2) return undefined;
+  const command = parts[0] as VimCommandAction;
+  return { type: "charCommand", command, count: parts[1] ? Number(parts[1]) : undefined };
+}
+
+function encodeTextObjectPending(
+  operatorSequence: string,
+  kind: VimTextObjectKind,
+  count?: number,
+): string {
+  return `${operatorSequence}${TEXT_OBJECT_SEPARATOR}${kind}${TEXT_OBJECT_SEPARATOR}${count ?? ""}`;
+}
+
+function decodeTextObjectPending(pending: string): EncodedTextObjectPending | undefined {
+  const parts = pending.split(TEXT_OBJECT_SEPARATOR);
+  if (parts.length !== 3) return undefined;
+  const kind = parts[1] as VimTextObjectKind;
+  if (kind !== "inner" && kind !== "around") return undefined;
+  return {
+    type: "textObject",
+    operatorSequence: parts[0] ?? "",
+    kind,
+    count: parts[2] ? Number(parts[2]) : undefined,
+  };
+}
+
+function encodeOperatorMotionPending(
+  operatorSequence: string,
+  motionPrefix: string,
+  count?: number,
+): string {
+  return `${operatorSequence}${OPERATOR_MOTION_SEPARATOR}${motionPrefix}${OPERATOR_MOTION_SEPARATOR}${count ?? ""}`;
+}
+
+function encodeOperatorLinePending(
+  operatorSequence: string,
+  repeatPrefix: string,
+  count?: number,
+): string {
+  return `${operatorSequence}${OPERATOR_LINE_SEPARATOR}${repeatPrefix}${OPERATOR_LINE_SEPARATOR}${count ?? ""}`;
 }
 
 function decodeOperatorMotionPending(pending: string): EncodedOperatorMotionPending | undefined {
   const parts = pending.split(OPERATOR_MOTION_SEPARATOR);
-  if (parts.length !== 2) return undefined;
-  return { type: "operatorMotion", operatorSequence: parts[0] ?? "", motionPrefix: parts[1] ?? "" };
+  if (parts.length === 2) {
+    return {
+      type: "operatorMotion",
+      operatorSequence: parts[0] ?? "",
+      motionPrefix: parts[1] ?? "",
+    };
+  }
+  if (parts.length !== 3) return undefined;
+  return {
+    type: "operatorMotion",
+    operatorSequence: parts[0] ?? "",
+    motionPrefix: parts[1] ?? "",
+    count: parts[2] ? Number(parts[2]) : undefined,
+  };
 }
 
 function decodeOperatorLinePending(pending: string): EncodedOperatorLinePending | undefined {
   const parts = pending.split(OPERATOR_LINE_SEPARATOR);
-  if (parts.length !== 2) return undefined;
-  return { type: "operatorLine", operatorSequence: parts[0] ?? "", repeatPrefix: parts[1] ?? "" };
+  if (parts.length === 2) {
+    return { type: "operatorLine", operatorSequence: parts[0] ?? "", repeatPrefix: parts[1] ?? "" };
+  }
+  if (parts.length !== 3) return undefined;
+  return {
+    type: "operatorLine",
+    operatorSequence: parts[0] ?? "",
+    repeatPrefix: parts[1] ?? "",
+    count: parts[2] ? Number(parts[2]) : undefined,
+  };
 }
 
 export function operatorActionForSequence(
@@ -206,8 +331,17 @@ export function operatorActionForSequence(
   keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP,
 ): VimOperatorAction | undefined {
   if (!sequence) return undefined;
+  const count = decodeCountPending(sequence);
+  if (count) return operatorActionForSequence(count.inner, keymap);
   const binding = exactBinding(sequence, keymap);
   return binding?.kind === "operator" ? binding.operator : undefined;
+}
+
+function commandSequenceFor(
+  command: VimCommandAction,
+  keymap: ResolvedVimKeymap,
+): string | undefined {
+  return keymap.commands[command]?.[0];
 }
 
 function motionForSequence(
@@ -246,6 +380,16 @@ function operatorSequenceMatches(
   return keymap.operators[operator].includes(sequence);
 }
 
+function withCount<T extends SemanticCommandResult>(
+  result: T,
+  count?: number,
+): SemanticCommandResult {
+  if (!count || result.type === "pending" || result.type === "invalid" || result.type === "none") {
+    return result;
+  }
+  return { ...result, count };
+}
+
 function resolveOperatorMotionPending(
   pending: EncodedOperatorMotionPending,
   key: string,
@@ -256,12 +400,12 @@ function resolveOperatorMotionPending(
   const motionSequence = pending.motionPrefix + key;
   const motion = motionForSequence(motionSequence, keymap);
   if (motion && keymap.operatorMotions[operator].includes(motion)) {
-    return { type: "operatorMotion", operator, motion };
+    return { type: "operatorMotion", operator, motion, count: pending.count };
   }
   if (hasMotionPrefix(motionSequence, keymap)) {
     return {
       type: "pending",
-      pending: encodeOperatorMotionPending(pending.operatorSequence, motionSequence),
+      pending: encodeOperatorMotionPending(pending.operatorSequence, motionSequence, pending.count),
     };
   }
   return { type: "invalid" };
@@ -276,38 +420,85 @@ function resolveOperatorLinePending(
   if (!operator) return { type: "invalid" };
   const repeatSequence = pending.repeatPrefix + key;
   if (operatorSequenceMatches(repeatSequence, keymap, operator)) {
-    return { type: "lineCommand", operator };
+    return { type: "lineCommand", operator, count: pending.count };
   }
   if (hasOperatorPrefix(repeatSequence, keymap, operator)) {
     return {
       type: "pending",
-      pending: encodeOperatorLinePending(pending.operatorSequence, repeatSequence),
+      pending: encodeOperatorLinePending(pending.operatorSequence, repeatSequence, pending.count),
     };
   }
   return { type: "invalid" };
+}
+
+function resolveTextObjectPending(
+  pending: EncodedTextObjectPending,
+  key: string,
+  keymap: ResolvedVimKeymap,
+): SemanticCommandResult {
+  const operator = operatorActionForSequence(pending.operatorSequence, keymap);
+  const target = TEXT_OBJECT_TARGET_KEYS[key];
+  if (!operator || !target) return { type: "invalid" };
+  return {
+    type: "operatorTextObject",
+    operator,
+    textObject: { kind: pending.kind, target },
+    count: pending.count,
+  };
 }
 
 function resolveAfterOperator(
   operatorSequence: string,
   key: string,
   keymap: ResolvedVimKeymap,
+  count?: number,
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(operatorSequence, keymap);
   if (!operator) return { type: "invalid" };
 
-  if (operatorSequenceMatches(key, keymap, operator)) return { type: "lineCommand", operator };
+  if (operatorSequenceMatches(key, keymap, operator))
+    return { type: "lineCommand", operator, count };
   if (hasOperatorPrefix(key, keymap, operator)) {
-    return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key) };
+    return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key, count) };
   }
 
+  const textObjectKind = TEXT_OBJECT_KIND_KEYS[key];
+  if (textObjectKind) {
+    return {
+      type: "pending",
+      pending: encodeTextObjectPending(operatorSequence, textObjectKind, count),
+    };
+  }
+
+  if (hasMotionPrefix(key, keymap)) {
+    return { type: "pending", pending: encodeOperatorMotionPending(operatorSequence, key, count) };
+  }
   const motion = motionForSequence(key, keymap);
   if (motion && keymap.operatorMotions[operator].includes(motion)) {
-    return { type: "operatorMotion", operator, motion };
-  }
-  if (hasMotionPrefix(key, keymap)) {
-    return { type: "pending", pending: encodeOperatorMotionPending(operatorSequence, key) };
+    return { type: "operatorMotion", operator, motion, count };
   }
   return { type: "invalid" };
+}
+
+function resolveWithoutPending(
+  key: string,
+  keymap: ResolvedVimKeymap,
+  count?: number,
+): SemanticCommandResult {
+  if (!count && /^[1-9]$/.test(key)) return { type: "pending", pending: encodeCountPending(key) };
+  if (hasLongerPrefix(key, keymap))
+    return { type: "pending", pending: count ? encodeCountPending(String(count), key) : key };
+  const binding = exactBinding(key, keymap);
+  if (binding?.kind === "operator")
+    return { type: "pending", pending: count ? encodeCountPending(String(count), key) : key };
+  if (binding?.kind === "motion") return { type: "motion", motion: binding.motion, count };
+  if (binding?.kind === "command") {
+    if (CHAR_ARGUMENT_COMMANDS.has(binding.command)) {
+      return { type: "pending", pending: encodeCharCommandPending(binding.command, count) };
+    }
+    return { type: "command", command: binding.command, count };
+  }
+  return { type: "none" };
 }
 
 export function resolveNormalCommand(
@@ -316,31 +507,57 @@ export function resolveNormalCommand(
   keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP,
 ): SemanticCommandResult {
   if (pending) {
+    const count = decodeCountPending(pending);
+    if (count) {
+      if (count.inner === "" && /^\d$/.test(key)) {
+        return { type: "pending", pending: encodeCountPending(count.count + key) };
+      }
+      if (count.inner === "")
+        return withCount(
+          resolveWithoutPending(key, keymap, Number(count.count)),
+          Number(count.count),
+        );
+      const innerResult = resolveNormalCommand(key, count.inner, keymap);
+      if (innerResult.type === "pending") {
+        return { type: "pending", pending: encodeCountPending(count.count, innerResult.pending) };
+      }
+      return withCount(innerResult, Number(count.count));
+    }
+
+    const charCommand = decodeCharCommandPending(pending);
+    if (charCommand)
+      return {
+        type: "charCommand",
+        command: charCommand.command,
+        char: key,
+        count: charCommand.count,
+      };
+    const textObject = decodeTextObjectPending(pending);
+    if (textObject) return resolveTextObjectPending(textObject, key, keymap);
     const operatorMotion = decodeOperatorMotionPending(pending);
     if (operatorMotion) return resolveOperatorMotionPending(operatorMotion, key, keymap);
     const operatorLine = decodeOperatorLinePending(pending);
     if (operatorLine) return resolveOperatorLinePending(operatorLine, key, keymap);
 
     const combined = pending + key;
+    if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
     const combinedBinding = exactBinding(combined, keymap);
     if (combinedBinding?.kind === "motion")
       return { type: "motion", motion: combinedBinding.motion };
-    if (combinedBinding?.kind === "command")
+    if (combinedBinding?.kind === "command") {
+      if (CHAR_ARGUMENT_COMMANDS.has(combinedBinding.command)) {
+        return { type: "pending", pending: encodeCharCommandPending(combinedBinding.command) };
+      }
       return { type: "command", command: combinedBinding.command };
+    }
     if (combinedBinding?.kind === "operator") return { type: "pending", pending: combined };
-    if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
 
     const pendingOperator = operatorActionForSequence(pending, keymap);
     if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
     return { type: "invalid" };
   }
 
-  const binding = exactBinding(key, keymap);
-  if (binding?.kind === "operator") return { type: "pending", pending: key };
-  if (binding?.kind === "motion") return { type: "motion", motion: binding.motion };
-  if (binding?.kind === "command") return { type: "command", command: binding.command };
-  if (hasLongerPrefix(key, keymap)) return { type: "pending", pending: key };
-  return { type: "none" };
+  return resolveWithoutPending(key, keymap);
 }
 
 export function semanticOperatorToLegacy(operator: VimOperatorAction): VimOperator {
@@ -369,7 +586,7 @@ export function parseNormalCommand(key: string, pending?: PendingOperator): Comm
 }
 
 export function isPendingOperatorKey(key: string): key is PendingOperator {
-  return key === "g" || isLegacyVimOperator(key);
+  return key === "g" || isLegacyVimOperator(key) || /^[1-9]$/.test(key);
 }
 
 export function isDefaultOperatorKey(key: string): key is VimOperator {

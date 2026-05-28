@@ -176,4 +176,57 @@ describe("normal command parser", () => {
       operator: "delete",
     });
   });
+
+  test("resolves counts for motions, line commands, and operator motions", () => {
+    const count = resolveNormalCommand("3", undefined);
+    expect(count.type).toBe("pending");
+    const pending = count.type === "pending" ? count.pending : "";
+    expect(resolveNormalCommand("w", pending)).toEqual({
+      type: "motion",
+      motion: "wordForward",
+      count: 3,
+    });
+
+    const countDelete = resolveNormalCommand("2", undefined);
+    const deletePending = resolveNormalCommand(
+      "d",
+      countDelete.type === "pending" ? countDelete.pending : "",
+    );
+    expect(deletePending.type).toBe("pending");
+    expect(
+      resolveNormalCommand("d", deletePending.type === "pending" ? deletePending.pending : ""),
+    ).toEqual({ type: "lineCommand", operator: "delete", count: 2 });
+
+    const countedOperator = resolveNormalCommand("4", undefined);
+    const operatorPending = resolveNormalCommand(
+      "d",
+      countedOperator.type === "pending" ? countedOperator.pending : "",
+    );
+    expect(
+      resolveNormalCommand("e", operatorPending.type === "pending" ? operatorPending.pending : ""),
+    ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordEnd", count: 4 });
+  });
+
+  test("resolves char commands and operator text objects", () => {
+    const replacePending = resolveNormalCommand("r", undefined);
+    expect(replacePending.type).toBe("pending");
+    expect(
+      resolveNormalCommand("x", replacePending.type === "pending" ? replacePending.pending : ""),
+    ).toEqual({ type: "charCommand", command: "replaceChar", char: "x" });
+
+    const findPending = resolveNormalCommand("f", undefined);
+    expect(findPending.type).toBe("pending");
+    expect(
+      resolveNormalCommand(":", findPending.type === "pending" ? findPending.pending : ""),
+    ).toEqual({ type: "charCommand", command: "findCharForward", char: ":" });
+
+    const change = resolveNormalCommand("c", undefined);
+    const inner = resolveNormalCommand("i", change.type === "pending" ? change.pending : "");
+    expect(inner.type).toBe("pending");
+    expect(resolveNormalCommand("w", inner.type === "pending" ? inner.pending : "")).toEqual({
+      type: "operatorTextObject",
+      operator: "change",
+      textObject: { kind: "inner", target: "word" },
+    });
+  });
 });

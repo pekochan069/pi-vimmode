@@ -15,6 +15,7 @@ export type VimMotionAction =
   | "right"
   | "wordForward"
   | "wordBackward"
+  | "wordEnd"
   | "lineStart"
   | "lineEnd"
   | "firstNonBlank"
@@ -39,7 +40,34 @@ export type VimCommandAction =
   | "joinLine"
   | "pasteAfter"
   | "pasteBefore"
+  | "incrementNumber"
+  | "decrementNumber"
+  | "replaceChar"
+  | "substituteChar"
+  | "substituteLine"
+  | "findCharForward"
+  | "findCharBackward"
+  | "tillCharForward"
+  | "tillCharBackward"
+  | "repeatCharSearch"
+  | "repeatCharSearchReverse"
+  | "repeatChange"
   | "undo";
+
+export type VimTextObjectKind = "inner" | "around";
+
+export type VimTextObjectTarget =
+  | "word"
+  | "singleQuote"
+  | "doubleQuote"
+  | "paren"
+  | "bracket"
+  | "brace";
+
+export type VimTextObject = {
+  kind: VimTextObjectKind;
+  target: VimTextObjectTarget;
+};
 
 export type VimStatusItem = "mode" | "pendingOperator" | "selection" | "cursorPosition";
 
@@ -143,7 +171,7 @@ export type EditResult = {
 
 export type VimOperator = "d" | "c" | "y";
 
-export type VimMotion = "w" | "b" | "0" | "^" | "$";
+export type VimMotion = "w" | "b" | "e" | "0" | "^" | "$";
 
 export type PendingOperator = string;
 

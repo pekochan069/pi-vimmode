@@ -35,6 +35,8 @@ describe("modal contracts", () => {
       namedRegisters: { a: { type: "line", text: "one" } },
       marks: { a: cursor },
       pendingMark: { kind: "jumpExact" },
+      lastCharSearch: { command: "findCharForward", target: ":" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
     };
 
     expect(resetTransientState(state, "insert")).toEqual({
@@ -42,6 +44,8 @@ describe("modal contracts", () => {
       register: { type: "char", text: "x" },
       namedRegisters: { a: { type: "line", text: "one" } },
       marks: { a: cursor },
+      lastCharSearch: { command: "findCharForward", target: ":" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
     });
   });
 
@@ -280,6 +284,100 @@ describe("modal engine", () => {
         },
       },
     ]);
+  });
+
+  test("normal mode supports counts, numeric adjustment, replacement, and substitution", () => {
+    const counted = handleModalInput({ mode: "normal" }, snapshot, options, "2");
+    const deleted = handleModalInput(
+      counted.state,
+      { text: "abcd", lines: ["abcd"], cursor },
+      options,
+      "x",
+    );
+    expect(deleted.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "cd",
+        cursor,
+        register: { type: "char", text: "ab" },
+        changed: true,
+      },
+    });
+
+    const incremented = handleModalInput(
+      { mode: "normal" },
+      { text: "v2", lines: ["v2"], cursor },
+      options,
+      "\x01",
+    );
+    expect(incremented.effects[0]).toMatchObject({ type: "edit", result: { text: "v3" } });
+
+    const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
+    const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
+    expect(replaced.effects[0]).toMatchObject({ type: "edit", result: { text: "zbc" } });
+
+    const substituted = handleModalInput({ mode: "normal" }, snapshot, options, "s");
+    expect(substituted.state.mode).toBe("insert");
+    expect(substituted.effects[0]).toMatchObject({ type: "edit", result: { text: "bc" } });
+  });
+
+  test("normal mode supports character search repeat and dot repeat", () => {
+    const found = handleModalInput(
+      { mode: "normal" },
+      { text: "a:b:c", lines: ["a:b:c"], cursor },
+      options,
+      "f",
+    );
+    const targeted = handleModalInput(
+      found.state,
+      { text: "a:b:c", lines: ["a:b:c"], cursor },
+      options,
+      ":",
+    );
+    expect(targeted.effects).toEqual([
+      { type: "restoreCursor", position: { line: 0, col: 1 } },
+      { type: "invalidate" },
+    ]);
+    const repeated = handleModalInput(
+      targeted.state,
+      { text: "a:b:c", lines: ["a:b:c"], cursor: { line: 0, col: 1 } },
+      options,
+      ";",
+    );
+    expect(repeated.effects[0]).toEqual({ type: "restoreCursor", position: { line: 0, col: 3 } });
+
+    const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
+    const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
+    const repeatedChange = handleModalInput(
+      replaced.state,
+      { text: "zbc", lines: ["zbc"], cursor: { line: 0, col: 1 } },
+      options,
+      ".",
+    );
+    expect(repeatedChange.effects[0]).toMatchObject({ type: "edit", result: { text: "zzc" } });
+  });
+
+  test("normal operators support text objects", () => {
+    const change = handleModalInput(
+      { mode: "normal" },
+      { text: "hello world", lines: ["hello world"], cursor: { line: 0, col: 6 } },
+      options,
+      "c",
+    );
+    const inner = handleModalInput(
+      change.state,
+      { text: "hello world", lines: ["hello world"], cursor: { line: 0, col: 6 } },
+      options,
+      "i",
+    );
+    const changed = handleModalInput(
+      inner.state,
+      { text: "hello world", lines: ["hello world"], cursor: { line: 0, col: 6 } },
+      options,
+      "w",
+    );
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.effects[0]).toMatchObject({ type: "edit", result: { text: "hello " } });
   });
 
   test("normal mode sets and jumps to local marks", () => {
@@ -697,6 +795,53 @@ describe("modal engine", () => {
     );
     expect(yanked.state.register).toEqual({ type: "char", text: "ab" });
     expect(yanked.state.mode).toBe("normal");
+  });
+
+  test("visual replace changes selected text with a typed character", () => {
+    const pending = handleModalInput(
+      { mode: "visual", visualAnchor: { line: 0, col: 1 } },
+      { text: "abc", lines: ["abc"], cursor: { line: 0, col: 2 } },
+      options,
+      "r",
+    );
+    expect(pending.state.pending).toBeDefined();
+
+    const replaced = handleModalInput(
+      pending.state,
+      { text: "abc", lines: ["abc"], cursor: { line: 0, col: 2 } },
+      options,
+      "X",
+    );
+    expect(replaced.state.mode).toBe("normal");
+    expect(replaced.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "aXX",
+        cursor: { line: 0, col: 1 },
+        register: { type: "char", text: "bc" },
+        changed: true,
+      },
+    });
+  });
+
+  test("visual block replace changes selected rectangle with a typed character", () => {
+    const pending = handleModalInput(
+      { mode: "visualBlock", visualAnchor: { line: 0, col: 1 } },
+      { text: "abcd\nef", lines: ["abcd", "ef"], cursor: { line: 1, col: 2 } },
+      options,
+      "r",
+    );
+    const replaced = handleModalInput(
+      pending.state,
+      { text: "abcd\nef", lines: ["abcd", "ef"], cursor: { line: 1, col: 2 } },
+      options,
+      "Q",
+    );
+    expect(replaced.state.mode).toBe("normal");
+    expect(replaced.effects[0]).toMatchObject({
+      type: "edit",
+      result: { text: "aQQd\neQ", cursor: { line: 0, col: 1 }, changed: true },
+    });
   });
 
   test("visual named register prefix yanks selected text", () => {

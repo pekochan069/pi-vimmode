@@ -120,6 +120,28 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
 
+  test("default keymap includes roadmap actions and configurable word-end", () => {
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.decrementNumber).toEqual(["ctrl+x"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
+
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          motions: { wordEnd: ["E"] },
+          commands: { incrementNumber: ["+"] },
+          operatorMotions: { change: ["wordEnd"] },
+        },
+      },
+    });
+    expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
+    expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
+    expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd"]);
+  });
+
   test("parses macro behavior options", () => {
     const result = resolveVimOptions({
       piVimMode: {

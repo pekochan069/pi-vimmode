@@ -67,6 +67,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 | `{count}{cmd}`              | repeat supported motions/edits, e.g. `3w`, `2dd`    |
 | `x`                         | delete character under cursor                       |
 | `Ctrl-a` / `Ctrl-x`         | increment/decrement number under or after cursor    |
+| `~`                         | toggle case under cursor; count toggles current line span |
 | `r{char}`                   | replace character under cursor and stay normal      |
 | `s` / `S`                   | substitute character/current line and enter insert  |
 | `dd` / `cc` / `yy`          | delete/change/yank current line                     |
@@ -192,6 +193,7 @@ Project settings override global settings field by field.
         "joinLine": ["J"],
         "incrementNumber": ["<C-a>"],
         "decrementNumber": ["<C-x>"],
+        "toggleCase": ["~"],
         "replaceChar": ["r"],
         "substituteChar": ["s"],
         "substituteLine": ["S"],
@@ -334,11 +336,11 @@ Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`,
 
 `Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
 
-- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `startExCommand`, `repeatChange`, `undo`
+- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `toggleCase`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `startExCommand`, `repeatChange`, `undo`
 
 `operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `wordEnd`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
 
-Roadmap limitations: numeric adjustment currently supports signed integers; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; prompt search is literal and prompt-local only. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
+Roadmap limitations: numeric adjustment currently supports signed integers; `~` toggles single-code-point JavaScript uppercase/lowercase mappings within the current line and in visual selections, but skips expanding case mappings and does not implement operator case transforms; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; prompt search is literal and prompt-local only. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
 
 Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `zz`, then `zzzz` deletes the current line and `zz{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
 

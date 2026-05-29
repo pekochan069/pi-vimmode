@@ -1,18 +1,6 @@
 import type { Position, VimOperatorAction } from "../types.ts";
 import type { MarkSlot, ModalState, PendingMarkTarget } from "./types.ts";
 
-export function isMarkSetPrefixKey(key: string, keys: readonly string[] = ["m"]): boolean {
-  return keys.includes(key);
-}
-
-export function isExactMarkJumpPrefixKey(key: string, keys: readonly string[] = ["`"]): boolean {
-  return keys.includes(key);
-}
-
-export function isLineMarkJumpPrefixKey(key: string, keys: readonly string[] = ["'"]): boolean {
-  return keys.includes(key);
-}
-
 export function markSlotForKey(
   key: string,
   slots: readonly string[] = "abcdefghijklmnopqrstuvwxyz".split(""),

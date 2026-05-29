@@ -33,8 +33,8 @@
 - [x] mark
 - [x] Ctrl+a, Ctrl+x, ...
 - [x] `/` search
-- [ ] Ex commands (things starts with `:`)
-- [ ] `~`
+- [x] Ex commands (things starts with `:`)
+- [x] `~`
 
 ## Ex Commands
 
@@ -50,3 +50,5 @@
   - Problem: `applyCommand`, `handleNormalInput`, and `handleVisualInput` exceed project 100-line guideline after Ex/search/keymap expansion, making state-machine changes harder to review.
   - Solution: Extract command-specific branches/private helpers while preserving behavior and current tests.
   - Benefits: Smaller review surface for modal bugs; less regression risk when adding Ex/search/visual behavior.
+
+- [ ] reserve ex command display section just like in real vim, also make it configurable (like reserve 2 lines for ex command display section)

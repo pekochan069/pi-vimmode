@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change enhance-visual-modes-and-cursors. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Visual selections are highlighted inline
 
 The Vim editor SHALL render active visual selections with visible inline highlighting while preserving prompt text and terminal-width safety.
@@ -115,6 +113,16 @@ The Vim editor SHALL support settings-driven cursor styles for insert, normal, c
 
 - **WHEN** `piVimMode.cursor.<mode>` is set to `block`, `bar`, or `underline`
 - **THEN** the Vim editor renders that cursor style whenever the corresponding mode is active
+
+#### Scenario: Bar cursor preserves current character
+
+- **WHEN** the active cursor style is `bar` and the cursor is positioned over a non-empty character cell
+- **THEN** the rendered cursor cell includes the underlying character, applies bar cursor styling, and remains one visible cell wide
+
+#### Scenario: Bar cursor handles empty cursor cells
+
+- **WHEN** the active cursor style is `bar` and the cursor is positioned at the end of a line or another empty cursor cell
+- **THEN** the Vim editor renders a visible one-cell bar cursor placeholder without hiding adjacent text
 
 #### Scenario: Cursor style updates on mode transition
 
@@ -288,3 +296,4 @@ The change SHALL include tests and documentation for visual block keybindings, r
 
 - **WHEN** the user opens the project README
 - **THEN** it documents `Ctrl-v`, visual block highlighting, and supported blockwise operations
+

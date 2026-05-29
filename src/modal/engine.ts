@@ -50,6 +50,8 @@ import {
   replaceCharAt,
   substituteCharAt,
   substituteLineRangeLiteral,
+  toggleCaseAt,
+  toggleCaseVisualRange,
   wordEndPosition,
   yankByMotion,
   yankLine,
@@ -76,9 +78,6 @@ import {
 import { parseExSubstitution } from "../ex.ts";
 import {
   clearMarkTarget,
-  isExactMarkJumpPrefixKey,
-  isLineMarkJumpPrefixKey,
-  isMarkSetPrefixKey,
   localMarkPosition,
   markSlotForKey,
   pendingMarkDisplay,
@@ -494,6 +493,13 @@ function applyCommand(
     case "decrementNumber": {
       const delta = (command === "incrementNumber" ? 1 : -1) * Math.max(1, count);
       const result = adjustNumberAtOrAfterCursor(snapshot.text, snapshot.cursor, delta);
+      let edited = editState(nextState, result);
+      if (recordRepeat)
+        edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
+      return withEffects(edited, [{ type: "edit", result }]);
+    }
+    case "toggleCase": {
+      const result = toggleCaseAt(snapshot.text, snapshot.cursor, count);
       let edited = editState(nextState, result);
       if (recordRepeat)
         edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
@@ -1048,11 +1054,11 @@ function markPendingForKey(
 ) {
   if (!marksForOptions(options).enabled) return undefined;
   const keymap = keymapForOptions(options).marks;
-  if (!operator && isMarkSetPrefixKey(key, keymap.set)) return pendingMarkTarget("set");
-  if (isExactMarkJumpPrefixKey(key, keymap.jumpExact)) {
+  if (!operator && keymap.set.includes(key)) return pendingMarkTarget("set");
+  if (keymap.jumpExact.includes(key)) {
     return pendingMarkTarget("jumpExact", operator, operatorKey);
   }
-  if (isLineMarkJumpPrefixKey(key, keymap.jumpLine)) {
+  if (keymap.jumpLine.includes(key)) {
     return pendingMarkTarget("jumpLine", operator, operatorKey);
   }
   return undefined;
@@ -1318,6 +1324,9 @@ function handleVisualInput(
         visualKindForMode(state.mode),
       );
     }
+    if (result.command === "toggleCase") {
+      return toggleVisualSelection(state, snapshot, options, visualKindForMode(state.mode));
+    }
     if (result.command === "pasteAfter") {
       if (state.mode === "visualLine") return pasteVisualLineSelection(state, snapshot, options);
       return invalidate(state.pendingRegister ? clearPending(state) : state);
@@ -1376,6 +1385,17 @@ function deleteVisualSelection(
         ? deleteBlockRange(snapshot.text, state.visualAnchor, snapshot.cursor)
         : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
   return modeUpdate(editState(state, result), nextMode, options, [{ type: "edit", result }]);
+}
+
+function toggleVisualSelection(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  kind: "char" | "line" | "block",
+): ModalUpdate {
+  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+  const result = toggleCaseVisualRange(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
+  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
 }
 
 function replaceVisualSelection(

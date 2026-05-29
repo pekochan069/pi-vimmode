@@ -752,6 +752,113 @@ export function substituteCharAt(text: string, cursor: Position, count = 1): Edi
   return deleteCharAt(text, cursor, count);
 }
 
+function toggleCaseChar(char: string): string {
+  const upper = char.toUpperCase();
+  const lower = char.toLowerCase();
+  const toggled =
+    char === lower && char !== upper ? upper : char === upper && char !== lower ? lower : char;
+  return Array.from(toggled).length === 1 ? toggled : char;
+}
+
+function codePointSpans(line: string): Array<{ start: number; end: number }> {
+  const spans: Array<{ start: number; end: number }> = [];
+  let offset = 0;
+  for (const char of line) {
+    const start = offset;
+    offset += char.length;
+    spans.push({ start, end: offset });
+  }
+  return spans;
+}
+
+export function toggleCaseAt(text: string, cursor: Position, count = 1): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  if (pos.col >= line.length) return { text, cursor: pos, changed: false };
+
+  const spans = codePointSpans(line);
+  const startIndex = spans.findIndex((span) => pos.col >= span.start && pos.col < span.end);
+  if (startIndex < 0) return { text, cursor: pos, changed: false };
+  const selected = spans.slice(startIndex, startIndex + Math.max(1, count));
+  const end = selected.at(-1)?.end ?? spans[startIndex]?.end ?? pos.col;
+  const start = spans[startIndex]?.start ?? pos.col;
+  const target = line.slice(start, end);
+  const toggled = toggleCaseText(target);
+  const nextLine = line.slice(0, start) + toggled + line.slice(end);
+  const nextLines = [...lines];
+  nextLines[pos.line] = nextLine;
+  const nextText = joinLines(nextLines);
+  const nextCursorCol = start + toggled.length - (Array.from(toggled).at(-1)?.length ?? 1);
+  return {
+    text: nextText,
+    cursor: { line: pos.line, col: nextCursorCol },
+    changed: nextText !== text,
+  };
+}
+
+function toggleCaseText(text: string): string {
+  return [...text].map(toggleCaseChar).join("");
+}
+
+export function toggleCaseVisualRange(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: "char" | "line" | "block",
+): EditResult {
+  const lines = splitText(text);
+
+  if (kind === "line") {
+    const range = normalizeLineRange(lines, anchor, active);
+    const nextLines = [...lines];
+    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+      nextLines[lineIndex] = toggleCaseText(nextLines[lineIndex] ?? "");
+    }
+    const nextText = joinLines(nextLines);
+    return {
+      text: nextText,
+      cursor: { line: range.startLine, col: 0 },
+      changed: nextText !== text,
+    };
+  }
+
+  if (kind === "block") {
+    const range = normalizeBlockRange(lines, anchor, active);
+    const nextLines = [...lines];
+    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
+      const line = nextLines[lineIndex] ?? "";
+      const start = Math.min(range.startCol, line.length);
+      const end = Math.min(range.endCol + 1, line.length);
+      nextLines[lineIndex] =
+        line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+    }
+    const nextText = joinLines(nextLines);
+    return {
+      text: nextText,
+      cursor: clampPosition(nextLines, { line: range.startLine, col: range.startCol }),
+      changed: nextText !== text,
+    };
+  }
+
+  const range = normalizeRange(lines, anchor, active);
+  const nextLines = [...lines];
+  for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
+    const line = nextLines[lineIndex] ?? "";
+    const start = lineIndex === range.start.line ? Math.min(range.start.col, line.length) : 0;
+    const end =
+      lineIndex === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
+    nextLines[lineIndex] =
+      line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+  }
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: clampPosition(nextLines, range.start),
+    changed: nextText !== text,
+  };
+}
+
 export function adjustNumberAtOrAfterCursor(
   text: string,
   cursor: Position,

@@ -34,6 +34,8 @@ import {
   pasteRegisterBefore,
   replaceVisualRangeChars,
   substituteLineRangeLiteral,
+  toggleCaseAt,
+  toggleCaseVisualRange,
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
@@ -225,6 +227,82 @@ describe("charwise edits", () => {
     const result = deleteCharAt("abc", p(0, 3));
     expect(result.text).toBe("abc");
     expect(result.changed).toBe(false);
+  });
+
+  test("toggles character case within the current line", () => {
+    expect(toggleCaseAt("AbC", p(0, 0), 3)).toMatchObject({
+      text: "aBc",
+      cursor: p(0, 2),
+      changed: true,
+    });
+
+    expect(toggleCaseAt("a1B", p(0, 0), 3)).toMatchObject({
+      text: "A1b",
+      cursor: p(0, 2),
+      changed: true,
+    });
+  });
+
+  test("toggle case clamps counts and no-ops at line boundaries", () => {
+    expect(toggleCaseAt("ab\nCD", p(0, 1), 5)).toMatchObject({
+      text: "aB\nCD",
+      cursor: p(0, 1),
+      changed: true,
+    });
+    expect(toggleCaseAt("abc", p(0, 3))).toMatchObject({
+      text: "abc",
+      cursor: p(0, 3),
+      changed: false,
+    });
+    expect(toggleCaseAt("123", p(0, 0), 3)).toMatchObject({
+      text: "123",
+      cursor: p(0, 2),
+      changed: false,
+    });
+  });
+
+  test("toggle case counts code points without landing inside surrogate pairs", () => {
+    expect(toggleCaseAt("ab😀cd", p(0, 0), 4)).toMatchObject({
+      text: "AB😀Cd",
+      cursor: p(0, 4),
+      changed: true,
+    });
+    expect(toggleCaseAt("ab😀cd", p(0, 3), 1)).toMatchObject({
+      text: "ab😀cd",
+      cursor: p(0, 2),
+      changed: false,
+    });
+  });
+
+  test("toggle case skips expanding JavaScript case mappings", () => {
+    expect(toggleCaseAt("ßa", p(0, 0), 1)).toMatchObject({
+      text: "ßa",
+      cursor: p(0, 0),
+      changed: false,
+    });
+    expect(toggleCaseAt("İx", p(0, 0), 1)).toMatchObject({
+      text: "İx",
+      cursor: p(0, 0),
+      changed: false,
+    });
+  });
+
+  test("toggles visual case by selection kind", () => {
+    expect(toggleCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "char")).toMatchObject({
+      text: "aBc\ndEF",
+      cursor: p(0, 1),
+      changed: true,
+    });
+    expect(toggleCaseVisualRange("abC\nDeF", p(0, 0), p(1, 0), "line")).toMatchObject({
+      text: "ABc\ndEf",
+      cursor: p(0, 0),
+      changed: true,
+    });
+    expect(toggleCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "block")).toMatchObject({
+      text: "aBC\nDEF",
+      cursor: p(0, 1),
+      changed: true,
+    });
   });
 });
 

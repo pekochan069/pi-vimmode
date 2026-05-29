@@ -103,7 +103,12 @@ describe("normal command parser", () => {
       ...DEFAULT_VIM_KEYMAP,
       operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
       motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
-      commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"], visualBlock: ["ctrl+v"] },
+      commands: {
+        ...DEFAULT_VIM_KEYMAP.commands,
+        openLineBelow: ["n"],
+        toggleCase: ["~"],
+        visualBlock: ["ctrl+v"],
+      },
     };
 
     expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
@@ -118,6 +123,10 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("n", undefined, keymap)).toEqual({
       type: "command",
       command: "openLineBelow",
+    });
+    expect(resolveNormalCommand("~", undefined, keymap)).toEqual({
+      type: "command",
+      command: "toggleCase",
     });
     expect(resolveNormalCommand("ctrl+v", undefined, keymap)).toEqual({
       type: "command",
@@ -184,6 +193,15 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("w", pending)).toEqual({
       type: "motion",
       motion: "wordForward",
+      count: 3,
+    });
+
+    const countToggle = resolveNormalCommand("3", undefined);
+    expect(
+      resolveNormalCommand("~", countToggle.type === "pending" ? countToggle.pending : ""),
+    ).toEqual({
+      type: "command",
+      command: "toggleCase",
       count: 3,
     });
 

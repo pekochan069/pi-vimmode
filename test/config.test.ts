@@ -24,9 +24,10 @@ function tempSettings() {
 describe("vim config parsing", () => {
   test("VimEditorOptions accepts partial consumer keymap config", () => {
     const options = {
-      keymap: { commands: { replaceChar: ["R"] } },
+      keymap: { commands: { replaceChar: ["R"], toggleCase: ["~"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
+    expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
   });
 
   test("uses defaults when settings are absent", () => {
@@ -109,6 +110,7 @@ describe("vim config parsing", () => {
           motions: { wordForward: ["e"] },
           commands: {
             openLineBelow: ["n"],
+            toggleCase: ["~"],
             visualBlock: ["<C-v>", "<A-x>"],
             startExCommand: ["<A-;>"],
           },
@@ -123,6 +125,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.operators.change).toEqual(["c"]);
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
+    expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
@@ -139,6 +142,7 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.decrementNumber).toEqual(["ctrl+x"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
@@ -147,13 +151,14 @@ describe("vim config parsing", () => {
       piVimMode: {
         keymap: {
           motions: { wordEnd: ["E"] },
-          commands: { incrementNumber: ["+"] },
+          commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"] },
           operatorMotions: { change: ["wordEnd"] },
         },
       },
     });
     expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
+    expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
     expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd"]);
   });
 

@@ -103,6 +103,7 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
+  private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private isMacroReplaying = false;
 
@@ -115,6 +116,7 @@ export class VimEditor extends CustomEditor {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
     this.modalState = createModalState(this.options.startMode);
+    this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
   }
 
@@ -287,6 +289,7 @@ export class VimEditor extends CustomEditor {
 
   private applyEdit(result: EditResult): void {
     if (!result.changed) {
+      this.restoreCursor(result.cursor);
       this.invalidate();
       return;
     }
@@ -324,7 +327,29 @@ export class VimEditor extends CustomEditor {
     }
   }
 
+  private getHardwareCursorVisibility(): boolean | undefined {
+    const getShowHardwareCursor = (this.tui as unknown as { getShowHardwareCursor?: unknown })
+      .getShowHardwareCursor;
+    if (typeof getShowHardwareCursor !== "function") return undefined;
+    return getShowHardwareCursor.call(this.tui) as boolean;
+  }
+
+  private setHardwareCursorVisibility(visible: boolean): void {
+    const setShowHardwareCursor = (this.tui as unknown as { setShowHardwareCursor?: unknown })
+      .setShowHardwareCursor;
+    if (typeof setShowHardwareCursor !== "function") return;
+    if (this.getHardwareCursorVisibility() === visible) return;
+    setShowHardwareCursor.call(this.tui, visible);
+  }
+
+  private syncHardwareCursorVisibility(style: CursorStyle): void {
+    this.setHardwareCursorVisibility(
+      style === "bar" || this.originalHardwareCursorVisible === true,
+    );
+  }
+
   private applyTerminalCursorStyle(style: CursorStyle): void {
+    this.syncHardwareCursorVisibility(style);
     if (style === this.lastTerminalCursorStyle) return;
     this.lastTerminalCursorStyle = style;
     this.terminalWrite(cursorShapeEscape(style));
@@ -332,6 +357,9 @@ export class VimEditor extends CustomEditor {
 
   resetTerminalCursorStyle(): void {
     this.lastTerminalCursorStyle = undefined;
+    if (this.originalHardwareCursorVisible !== undefined) {
+      this.setHardwareCursorVisibility(this.originalHardwareCursorVisible);
+    }
     this.terminalWrite(RESET_CURSOR_SHAPE);
   }
 }

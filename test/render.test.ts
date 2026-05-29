@@ -4,7 +4,6 @@ import { describe, expect, test } from "bun:test";
 import type { CursorStyle, VimMode } from "../src/types.ts";
 
 import {
-  BAR_CURSOR_OVERLAY,
   CURSOR_BAR_START,
   CURSOR_BLOCK_START,
   CURSOR_UNDERLINE_START,
@@ -219,7 +218,7 @@ describe("cursor rendering", () => {
     const rendered = renderCursorCell("x", "bar");
     expect(rendered).toContain(CURSOR_BAR_START);
     expect(rendered).toContain("x");
-    expect(rendered).toContain(BAR_CURSOR_OVERLAY);
+    expect(rendered).not.toContain("\u20d2");
     expect(rendered).not.toContain("▌");
     expect(visibleWidth(rendered)).toBe(1);
     expect(visibleWidth(renderCursorCell("", "bar"))).toBe(1);
@@ -230,6 +229,6 @@ describe("cursor rendering", () => {
     expect(restyled[0]).toContain(CURSOR_MARKER);
     expect(restyled[0]).toContain(CURSOR_BAR_START);
     expect(restyled[0]).toContain("x");
-    expect(restyled[0]).toContain(BAR_CURSOR_OVERLAY);
+    expect(restyled[0]).not.toContain("\u20d2");
   });
 });

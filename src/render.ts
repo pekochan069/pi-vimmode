@@ -10,7 +10,6 @@ export const SEARCH_CURRENT_START = "\x1b[30;43m";
 export const CURSOR_BLOCK_START = "\x1b[4;7m";
 export const CURSOR_UNDERLINE_START = "\x1b[4m";
 export const CURSOR_BAR_START = "\x1b[1m";
-export const BAR_CURSOR_OVERLAY = "\u20d2";
 export const ANSI_RESET = "\x1b[0m";
 
 type TextChunk = {
@@ -104,7 +103,7 @@ export function renderCursorCell(cell: string, style: CursorStyle): string {
   const safeCell = cell.length > 0 ? cell : " ";
   switch (style) {
     case "bar":
-      return `${CURSOR_BAR_START}${safeCell}${BAR_CURSOR_OVERLAY}${ANSI_RESET}`;
+      return `${CURSOR_BAR_START}${safeCell}${ANSI_RESET}`;
     case "underline":
       return `${CURSOR_UNDERLINE_START}${safeCell}${ANSI_RESET}`;
     case "block":

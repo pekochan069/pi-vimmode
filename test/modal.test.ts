@@ -438,7 +438,7 @@ describe("modal engine", () => {
     ]);
   });
 
-  test("normal mode supports counts, numeric adjustment, replacement, and substitution", () => {
+  test("normal mode supports counts, numeric adjustment, replacement, toggle case, and substitution", () => {
     const counted = handleModalInput({ mode: "normal" }, snapshot, options, "2");
     const deleted = handleModalInput(
       counted.state,
@@ -463,6 +463,15 @@ describe("modal engine", () => {
       "\x01",
     );
     expect(incremented.effects[0]).toMatchObject({ type: "edit", result: { text: "v3" } });
+
+    const toggled = applyModalKeys({ mode: "normal" }, "aBc", cursor, ["3", "~"]);
+    expect(toggled.text).toBe("AbC");
+    expect(toggled.cursor).toEqual(p(0, 2));
+    expect(toggled.state.mode).toBe("normal");
+
+    const unicodeToggled = applyModalKeys({ mode: "normal" }, "ab😀cd", cursor, ["4", "~"]);
+    expect(unicodeToggled.text).toBe("AB😀Cd");
+    expect(unicodeToggled.cursor).toEqual(p(0, 4));
 
     const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
     const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
@@ -520,6 +529,14 @@ describe("modal engine", () => {
       ".",
     );
     expect(repeatedChange.effects[0]).toMatchObject({ type: "edit", result: { text: "zzc" } });
+
+    const toggled = applyModalKeys({ mode: "normal" }, "abCD", cursor, ["2", "~"]);
+    const repeatedToggle = applyModalKeys(toggled.state, toggled.text, p(0, 2), ["."]);
+    expect(repeatedToggle.text).toBe("ABcd");
+
+    const noOp = applyModalKeys(toggled.state, toggled.text, p(0, 4), ["~"]);
+    const preservedRepeat = applyModalKeys(noOp.state, noOp.text, p(0, 2), ["."]);
+    expect(preservedRepeat.text).toBe("ABcd");
   });
 
   test("normal dot repeat applies line delete commands and updates line register", () => {
@@ -1159,6 +1176,24 @@ describe("modal engine", () => {
     );
     expect(yanked.state.register).toEqual({ type: "char", text: "ab" });
     expect(yanked.state.mode).toBe("normal");
+  });
+
+  test("visual toggle case changes selected text and returns normal", () => {
+    const result = handleModalInput(
+      { mode: "visual", visualAnchor: { line: 0, col: 1 } },
+      { text: "aBc", lines: ["aBc"], cursor: { line: 0, col: 2 } },
+      options,
+      "~",
+    );
+    expect(result.state.mode).toBe("normal");
+    expect(result.effects[0]).toEqual({
+      type: "edit",
+      result: {
+        text: "abC",
+        cursor: { line: 0, col: 1 },
+        changed: true,
+      },
+    });
   });
 
   test("visual replace changes selected text with a typed character", () => {

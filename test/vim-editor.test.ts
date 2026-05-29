@@ -9,9 +9,18 @@ import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
 function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
   const writes: string[] = [];
+  const hardwareCursorChanges: boolean[] = [];
+  let hardwareCursorVisible = false;
   const tui = {
     terminal: { rows: 24, write: (data: string) => writes.push(data) },
     requestRender() {},
+    getShowHardwareCursor() {
+      return hardwareCursorVisible;
+    },
+    setShowHardwareCursor(visible: boolean) {
+      hardwareCursorVisible = visible;
+      hardwareCursorChanges.push(visible);
+    },
   } as any;
   const theme = { borderColor: (text: string) => text, selectList: {} } as any;
   const keybindings = {
@@ -28,7 +37,12 @@ function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
       return [];
     },
   } as any;
-  return { editor: new VimEditor(tui, theme, keybindings, options), writes };
+  return {
+    editor: new VimEditor(tui, theme, keybindings, options),
+    writes,
+    hardwareCursorChanges,
+    getHardwareCursorVisible: () => hardwareCursorVisible,
+  };
 }
 
 function expectRenderedWidth(lines: string[], width: number) {
@@ -147,6 +161,46 @@ describe("vim editor integration", () => {
     editor.handleInput("\x1b");
     editor.handleInput("z");
     expect(editor.getText()).toBe("a");
+  });
+
+  test("insert render avoids combining bar overlay at wrap boundary", () => {
+    const { editor } = createEditor();
+    editor.focused = true;
+    for (const char of "abcdefghij") editor.handleInput(char);
+    const lines = editor.render(10);
+    expect(lines.join("\n")).not.toContain("\u20d2");
+    expectRenderedWidth(lines, 10);
+  });
+
+  test("visual mode toggles selected case and returns normal", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("aBc");
+    editor.handleInput("0");
+    editor.handleInput("v");
+    editor.handleInput("l");
+    editor.handleInput("~");
+    expectEditorState(editor, { text: "Abc", cursor: { line: 0, col: 0 }, mode: "normal" });
+  });
+
+  test("normal mode toggles case while insert mode keeps literal tilde", () => {
+    const { editor } = createEditor();
+    editor.handleInput("a");
+    editor.handleInput("~");
+    expect(editor.getText()).toBe("a~");
+
+    editor.handleInput("B");
+    editor.handleInput("c");
+    editor.handleInput("\x1b");
+    editor.handleInput("0");
+    editor.handleInput("2");
+    editor.handleInput("~");
+    expectEditorState(editor, { text: "A~Bc", cursor: { line: 0, col: 1 }, mode: "normal" });
+
+    editor.setText("123");
+    editor.handleInput("0");
+    editor.handleInput("3");
+    editor.handleInput("~");
+    expectEditorState(editor, { text: "123", cursor: { line: 0, col: 2 }, mode: "normal" });
   });
 
   test("records and replays a macro through the editor path", () => {
@@ -800,7 +854,7 @@ describe("vim editor integration", () => {
   });
 
   test("configured cursor styles write terminal hints on mode changes", () => {
-    const { editor, writes } = createEditor({
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
       startMode: "insert",
       cursor: {
         insert: "bar",
@@ -811,12 +865,17 @@ describe("vim editor integration", () => {
       },
     });
     expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(true);
     editor.handleInput("\x1b");
     expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(getHardwareCursorVisible()).toBe(false);
     editor.handleInput("V");
     expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(true);
     editor.resetTerminalCursorStyle();
     expect(writes.at(-1)).toBe("\x1b[0 q");
+    expect(getHardwareCursorVisible()).toBe(false);
+    expect(hardwareCursorChanges).toEqual([true, false, true, false]);
   });
 });
 

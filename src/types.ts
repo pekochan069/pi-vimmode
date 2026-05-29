@@ -42,6 +42,7 @@ export type VimCommandAction =
   | "pasteBefore"
   | "incrementNumber"
   | "decrementNumber"
+  | "toggleCase"
   | "replaceChar"
   | "substituteChar"
   | "substituteLine"

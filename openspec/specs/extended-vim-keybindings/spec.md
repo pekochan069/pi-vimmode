@@ -155,9 +155,9 @@ The change SHALL include tests and documentation for each new keybinding group.
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: README documents extended keymap
+#### Scenario: Feature guide documents extended keymap
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/features.md`
 - **THEN** it documents the added normal-mode commands, supported operator-motion combinations, and current limitations
 
 ### Requirement: Normal mode supports counted commands
@@ -326,7 +326,7 @@ The Vim editor SHALL support operator targets for inner word, around word, quote
 
 ### Requirement: Roadmap keybindings are documented and validated
 
-The change SHALL include automated tests and user-facing documentation for the new staged keybinding groups and SHALL keep README limitations aligned with supported keybinding behavior.
+The change SHALL include automated tests and user-facing documentation for the new staged keybinding groups and SHALL keep canonical feature-guide limitations aligned with supported keybinding behavior.
 
 #### Scenario: Automated validation runs
 
@@ -338,14 +338,14 @@ The change SHALL include automated tests and user-facing documentation for the n
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: README documents roadmap keybindings
+#### Scenario: Feature guide documents roadmap keybindings
 
-- **WHEN** the user opens the project README
-- **THEN** it documents the newly supported keybindings, count behavior, repeat limitations, supported text objects, and deferred keybindings such as `/`, `?`, `n`, and `N`
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents the newly supported keybindings, count behavior, repeat limitations, supported text objects, supported prompt search keys such as `/`, `n`, and `N`, and still-deferred keybindings such as `?`
 
-#### Scenario: README limitations do not contradict supported keybindings
+#### Scenario: Feature guide limitations do not contradict supported keybindings
 
-- **WHEN** the user reads README limitations
+- **WHEN** the user reads `docs/features.md` limitations
 - **THEN** the limitations do not list counts, text objects, line-local character search, or other supported roadmap keybindings as unsupported
 
 ### Requirement: Prompt search commands update highlight state

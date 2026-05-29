@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Status UI items are configurable
 
 The Vim editor SHALL read `piVimMode.ui.status` to determine which status items are rendered and in what order while preserving the current status UI by default.
@@ -113,9 +115,9 @@ The Vim editor MUST keep rendered output width-safe for every supported UI confi
 - **WHEN** `bun test` is executed
 - **THEN** tests cover default UI, configured labels, disabled items, item ordering, cursor position formatting, legacy Vim option rejection, invalid config fallback, and narrow-width rendering
 
-#### Scenario: README documents UI config
+#### Scenario: Settings reference documents UI config
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/settings.md`
 - **THEN** it documents `piVimMode.ui`, supported status items, label examples, cursor position examples, and unsupported full Vimscript/Neovim Lua import
 
 ### Requirement: Search highlight behavior is configurable
@@ -218,4 +220,3 @@ The Vim editor SHALL render the dedicated Ex command-line row without breaking w
 
 - **WHEN** a transient Ex error or success message is visible in the dedicated Ex row
 - **THEN** the next handled input clears the message and restores the prompt viewport to its normal height unless Ex command-line mode is active again
-

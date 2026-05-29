@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-macro-recording-playback. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Macro recording uses a normal-mode lifecycle
 
 The editor SHALL support extension-local macro recording from normal mode using lowercase `a` through `z` macro slots.
@@ -123,10 +125,10 @@ The editor SHALL expose active macro recording state through Vim status feedback
 - **WHEN** status UI is enabled and macro recording is active for slot `a`
 - **THEN** the rendered status includes a width-safe recording indicator for slot `a`
 
-#### Scenario: README documents macro support
+#### Scenario: Canonical docs document macro support
 
-- **WHEN** the user opens the project README
-- **THEN** it documents `q{slot}`, normal-mode `q` stop, `@{slot}`, `@@`, macro configuration, supported slot scope, and limitations around named registers, delegated shortcuts, recursion, and persistence
+- **WHEN** the user opens `docs/features.md` and `docs/settings.md`
+- **THEN** they document `q{slot}`, normal-mode `q` stop, `@{slot}`, `@@`, macro configuration, supported slot scope, and limitations around named registers, delegated shortcuts, recursion, and persistence
 
 #### Scenario: Macro validation runs
 
@@ -156,4 +158,3 @@ The editor SHALL record and replay Ex command-line keystrokes through the existi
 
 - **WHEN** a replayed macro executes an Ex command that reports an Ex error
 - **THEN** prompt text remains unchanged for that Ex command and subsequent recorded macro tokens continue through the existing macro replay path
-

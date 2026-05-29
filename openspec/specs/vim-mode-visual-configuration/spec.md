@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change enhance-visual-modes-and-cursors. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Visual selections are highlighted inline
 
 The Vim editor SHALL render active visual selections with visible inline highlighting while preserving prompt text and terminal-width safety.
@@ -172,10 +174,10 @@ The change SHALL include tests and documentation for visual highlighting, visual
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: README documents settings and keymap
+#### Scenario: Canonical docs document visual settings and keymap
 
-- **WHEN** the user opens the project README
-- **THEN** it documents `V`, visual line operations, visual selection highlighting, `piVimMode.startMode`, and `piVimMode.cursor` settings
+- **WHEN** the user opens `docs/features.md` and `docs/settings.md`
+- **THEN** they document `V`, visual line operations, visual selection highlighting, `piVimMode.startMode`, and `piVimMode.cursor` settings
 
 ### Requirement: Visual block mode selects rectangular text regions
 
@@ -292,8 +294,7 @@ The change SHALL include tests and documentation for visual block keybindings, r
 - **WHEN** the repository typecheck command is executed
 - **THEN** the Vim mode extension compiles without TypeScript errors
 
-#### Scenario: README documents visual block mode
+#### Scenario: Feature guide documents visual block mode
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/features.md`
 - **THEN** it documents `Ctrl-v`, visual block highlighting, and supported blockwise operations
-

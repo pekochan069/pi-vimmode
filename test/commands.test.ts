@@ -242,7 +242,11 @@ describe("normal command parser", () => {
       type: "command",
       command: "repeatSearchReverse",
     });
-    expect(resolveNormalCommand("/", "d")).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand("/", "d")).toEqual({
+      type: "operatorSearch",
+      operator: "delete",
+      count: undefined,
+    });
   });
 
   test("resolves char commands and operator text objects", () => {

@@ -12,6 +12,7 @@ pi-vimmode now has enough modes, editing primitives, settings, and UI behavior t
 ## Capabilities
 
 ### New Capabilities
+
 - `pi-vimmode-documentation`: User-facing documentation for pi-vimmode features, settings, examples, source-of-truth rules, and docs maintenance expectations.
 
 ### Modified Capabilities

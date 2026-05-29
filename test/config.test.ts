@@ -113,6 +113,7 @@ describe("vim config parsing", () => {
             toggleCase: ["~"],
             visualBlock: ["<C-v>", "<A-x>"],
             startExCommand: ["<A-;>"],
+            openLineAbove: ["<C-S-p>"],
           },
           macros: { record: ["m"], play: ["r"] },
           marks: { set: ["s"], jumpExact: ["<A-m>"], jumpLine: ["'"] },
@@ -128,6 +129,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
+    expect(result.options.keymap?.commands.openLineAbove).toEqual(["O"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
     expect(result.options.keymap?.macros.play).toEqual(["r"]);
     expect(result.options.keymap?.marks.set).toEqual(["s"]);

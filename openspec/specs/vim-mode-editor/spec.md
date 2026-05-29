@@ -196,4 +196,4 @@ The change SHALL include automated tests for pure Vim editing logic and user-fac
 #### Scenario: User reads README
 
 - **WHEN** the user opens the project README
-- **THEN** it documents install/loading instructions, supported keymap, validation commands, and v1 limitations
+- **THEN** it documents install/loading instructions, links to the supported keymap and limitations, and includes validation commands

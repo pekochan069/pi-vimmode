@@ -145,10 +145,10 @@ The mark change SHALL include automated tests and user-facing documentation for 
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: README documents marks
+#### Scenario: Canonical docs document marks
 
-- **WHEN** the user opens the project README
-- **THEN** it documents `m{slot}`, backtick mark jumps, single-quote mark jumps, configurable mark prefix keys, enabled state, allowed slots, supported lowercase local slots, in-memory scope, stale-mark clamping, and unsupported special/global marks
+- **WHEN** the user opens `docs/features.md` and `docs/settings.md`
+- **THEN** they document `m{slot}`, backtick mark jumps, single-quote mark jumps, configurable mark prefix keys, enabled state, allowed slots, supported lowercase local slots, in-memory scope, stale-mark clamping, and unsupported special/global marks
 
 #### Scenario: TODO is updated after implementation
 

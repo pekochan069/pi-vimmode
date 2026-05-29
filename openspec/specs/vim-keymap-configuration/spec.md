@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -99,9 +101,9 @@ The change SHALL include automated validation and user documentation for keymap 
 - **WHEN** `bun run check-types` is executed
 - **THEN** the TypeScript project compiles without type errors
 
-#### Scenario: README documents keymap config
+#### Scenario: Settings reference documents keymap config
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/settings.md`
 - **THEN** it documents `piVimMode.keymap`, supported semantic actions, default mappings, protected shortcut behavior, and non-goals such as recursive mappings and full Vimscript support
 
 ### Requirement: Roadmap keybindings participate in semantic keymap configuration
@@ -166,10 +168,10 @@ The change SHALL include tests and documentation for configurable roadmap keybin
 - **WHEN** `bun run check-types` is executed
 - **THEN** the TypeScript project compiles without type errors
 
-#### Scenario: README documents configurable roadmap actions
+#### Scenario: Canonical docs document configurable roadmap actions
 
-- **WHEN** the user opens the project README
-- **THEN** it documents which roadmap keybindings are configurable, which remain fixed or deferred, and how `Ctrl+A` / `Ctrl+X` interact with protected Pi shortcuts
+- **WHEN** the user opens `docs/features.md` and `docs/settings.md`
+- **THEN** they document which roadmap keybindings are configurable, which remain fixed or deferred, and how `Ctrl+A` / `Ctrl+X` interact with protected Pi shortcuts
 
 ### Requirement: Ex command-line entry is configurable
 
@@ -204,4 +206,3 @@ The Vim keymap configuration SHALL expose Ex command-line entry as a semantic no
 
 - **WHEN** the editor is in normal mode with a pending numeric count and receives the resolved Ex command-line entry key
 - **THEN** Ex command-line mode opens with a concrete clamped numeric range derived from the current prompt line and count
-

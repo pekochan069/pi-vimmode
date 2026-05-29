@@ -5,6 +5,7 @@
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
+    "types": ["bun-types"],
     "allowJs": true,
 
     // Bundler mode

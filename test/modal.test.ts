@@ -1126,6 +1126,80 @@ describe("modal engine", () => {
     });
   });
 
+  test("protected Pi shortcuts delegate from normal and visual modes", () => {
+    const normal = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x04");
+    expect(normal.state).toEqual({ mode: "normal" });
+    expect(normal.effects).toContainEqual({ type: "delegate", input: "\x04" });
+
+    const ctrlShiftP = handleModalInput(
+      { mode: "normal", pending: "d" },
+      snapshot,
+      options,
+      "ctrl+shift+p",
+    );
+    expect(ctrlShiftP.state).toEqual({ mode: "normal" });
+    expect(ctrlShiftP.effects).toContainEqual({ type: "delegate", input: "ctrl+shift+p" });
+
+    const visual = handleModalInput(
+      { mode: "visual", pending: "d", visualAnchor: cursor },
+      snapshot,
+      options,
+      "\x14",
+    );
+    expect(visual.state).toEqual({ mode: "visual", visualAnchor: cursor });
+    expect(visual.effects).toContainEqual({ type: "delegate", input: "\x14" });
+  });
+
+  test("configured startSearch key starts operator search", () => {
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, startSearch: ["?"] },
+      },
+    };
+
+    const update = handleModalInput(
+      { mode: "normal", pending: "d" },
+      snapshot,
+      configuredOptions,
+      "?",
+    );
+    expect(update.state.pendingSearch).toEqual({
+      query: "",
+      direction: "forward",
+      operator: "delete",
+    });
+    expect(update.effects).toEqual([{ type: "invalidate" }]);
+  });
+
+  test("configured multi-key startSearch starts operator search", () => {
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, startSearch: ["gs"] },
+      },
+    };
+
+    const pending = handleModalInput(
+      { mode: "normal", pending: "d" },
+      snapshot,
+      configuredOptions,
+      "g",
+    );
+    expect(pending.state.pending).toBeDefined();
+
+    const update = handleModalInput(pending.state, snapshot, configuredOptions, "s");
+    expect(update.state.pending).toBeUndefined();
+    expect(update.state.pendingSearch).toEqual({
+      query: "",
+      direction: "forward",
+      operator: "delete",
+    });
+    expect(update.effects).toEqual([{ type: "invalidate" }]);
+  });
+
   test("visual mode uses configured motion keys", () => {
     const configuredOptions = {
       ...options,
@@ -1481,6 +1555,27 @@ describe("modal engine", () => {
       type: "edit",
       result: { text: "abcYd\nefgYh", cursor: { line: 0, col: 4 }, changed: true },
     });
+  });
+
+  test("visual block insert delegates reset and protected shortcuts", () => {
+    const blockInsertState: ModalState = {
+      mode: "insert",
+      blockInsert: {
+        anchor: { line: 0, col: 1 },
+        active: { line: 1, col: 2 },
+        placement: "start",
+        previewLine: 0,
+        text: "X",
+      },
+    };
+
+    const reset = handleModalInput(blockInsertState, snapshot, options, "\x03");
+    expect(reset.state).toEqual({ mode: "insert" });
+    expect(reset.effects).toContainEqual({ type: "delegate", input: "\x03" });
+
+    const protectedShortcut = handleModalInput(blockInsertState, snapshot, options, "\x04");
+    expect(protectedShortcut.state).toEqual(blockInsertState);
+    expect(protectedShortcut.effects).toContainEqual({ type: "delegate", input: "\x04" });
   });
 
   test("macro recording starts, captures handled inputs, and stops in normal mode", () => {

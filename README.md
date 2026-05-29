@@ -2,7 +2,7 @@
 
 Vim-style prompt editing for [Pi](https://github.com/earendil-works/pi-coding-agent).
 
-`pi-vimmode` replaces Pi's main input editor with a `CustomEditor`-based modal editor. It targets practical prompt editing, not full Vim parity.
+`pi-vimmode` replaces Pi's main input editor with a `CustomEditor`-based modal editor. It targets practical prompt editing for agent prompts, not full Vim parity.
 
 ## Install / load
 
@@ -30,446 +30,80 @@ Pi discovers the extension through `package.json`:
 
 For local testing, load this package as a Pi extension using Pi's normal extension loading flow.
 
-## Modes
+## Quick start
 
-- **INSERT**: default mode unless configured otherwise. Text entry, autocomplete, submit, newlines, image paste, external editor, and app shortcuts use Pi's default editor behavior.
-- **NORMAL**: Vim command mode. Printable keys are interpreted as supported Vim commands or ignored.
-- **VISUAL**: characterwise selection mode. Selected text is highlighted inline while selection operations use an extension-local unnamed register.
-- **V-LINE**: linewise visual selection mode. Whole selected lines are highlighted and linewise operations use the unnamed line register.
-- **V-BLOCK**: blockwise visual selection mode. Rectangular cells are highlighted and blockwise operations use newline-joined character registers.
+1. Start Pi with the extension loaded.
+2. Type normally in insert mode.
+3. Press `Esc` to enter normal mode when autocomplete is inactive.
+4. Use supported Vim commands such as `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `i`, `a`, `x`, `dd`, `cw`, `p`, `/`, `n`, `N`, `v`, `V`, `Ctrl-v`, `:`, `q`, `@`, and `@@`.
+5. Press `i`, `a`, `I`, `A`, `o`, `O`, `C`, `s`, or `S` to return to insert mode after edits; use operator forms such as `cw`, `cc`, or `c$` when changing by motion.
 
-### Escape behavior
+Default modes:
 
-- Insert + inactive autocomplete: `Esc` enters normal mode.
-- Insert + active autocomplete: `Esc` delegates to Pi and remains insert mode.
-- Normal: `Esc` delegates to Pi so interrupt/abort behavior still works.
-- Visual / V-Line / V-Block: `Esc` cancels selection and returns to normal mode.
+- **INSERT**: Pi-like text entry. Autocomplete, submit, newlines, image paste, external editor, and app shortcuts use Pi's default behavior.
+- **NORMAL**: supported Vim command mode. Unsupported printable keys are ignored.
+- **VISUAL**: characterwise selection.
+- **V-LINE**: linewise selection.
+- **V-BLOCK**: rectangular block selection.
 
-## Keymap
+`Esc` in normal mode delegates to Pi so interrupt/abort behavior still works. `Esc` in visual modes cancels the selection and returns to normal mode.
 
-### Normal mode
+## Documentation
 
-| Key                         | Behavior                                            |
-| --------------------------- | --------------------------------------------------- |
-| `h` / `j` / `k` / `l`       | move left / down / up / right                       |
-| `0` / `$`                   | line start / line end                               |
-| `w` / `b` / `e`             | word forward / word backward / word end             |
-| `gg` / `G`                  | buffer start / buffer end                           |
-| `^` / `_`                   | first non-blank character on current line           |
-| `%`                         | jump to matching `()`, `[]`, or `{}` pair           |
-| `i`                         | insert at cursor                                    |
-| `a`                         | move right, then insert                             |
-| `I` / `A`                   | line start/end, then insert                         |
-| `o` / `O`                   | open blank line below/above, then insert            |
-| `v`                         | enter characterwise visual mode                     |
-| `V`                         | enter visual line mode                              |
-| `Ctrl-v`                    | enter visual block mode                             |
-| `{count}{cmd}`              | repeat supported motions/edits, e.g. `3w`, `2dd`    |
-| `x`                         | delete character under cursor                       |
-| `Ctrl-a` / `Ctrl-x`         | increment/decrement number under or after cursor    |
-| `~`                         | toggle case under cursor; count toggles current line span |
-| `r{char}`                   | replace character under cursor and stay normal      |
-| `s` / `S`                   | substitute character/current line and enter insert  |
-| `dd` / `cc` / `yy`          | delete/change/yank current line                     |
-| `D` / `C`                   | delete/change from cursor through line end          |
-| `Y`                         | yank current line into linewise register            |
-| `d{motion}`                 | delete by `w`, `b`, `e`, `0`, `^`, or `$`           |
-| `c{motion}`                 | change by `w`, `b`, `e`, `0`, `^`, or `$`           |
-| `y{motion}`                 | yank by `w`, `b`, `e`, `0`, `^`, or `$`             |
-| `f/F/t/T{char}`             | find/till character on current line                 |
-| `;` / `,`                   | repeat last character search same/opposite way      |
-| `.`                         | repeat last supported completed change              |
-| `{op}iw` / `{op}aw`         | operate on inner/around word text object            |
-| `{op}i"` / `{op}a)` etc.    | operate on quote/bracket text objects               |
-| `m{a-z}`                    | set a local mark at the current cursor position     |
-| `` `{a-z}``                 | jump to a local mark's exact cursor position        |
-| `'{a-z}`                    | jump to first non-blank column on marked line       |
-| `d` / `c` / `y` + mark jump | operate to a local mark as charwise/linewise motion |
-| `J`                         | join current line with next line                    |
-| `p` / `P`                   | paste unnamed register after/before cursor/line     |
-| `"{a-z}{cmd}`               | run yank/delete/change/paste with named register    |
-| `"{A-Z}{cmd}`               | append yank/delete/change into named register       |
-| `q{a-z}`                    | start recording an in-memory macro slot             |
-| `q`                         | stop recording from normal mode                     |
-| `@{a-z}`                    | replay a recorded macro slot                        |
-| `@@`                        | replay the last successfully played macro           |
-| `:`                         | enter Ex command-line mode                          |
-| `u`                         | delegate to Pi native undo                          |
+Canonical user-facing docs live under `docs/`:
 
-### Visual mode
+- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, text objects, character search, prompt search, visual modes, Ex substitution, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
+- [`docs/settings.md`](docs/settings.md): every supported `piVimMode` setting, defaults, accepted value shapes, merge behavior, key sequence syntax, protected-key validation, warnings, troubleshooting, and practical config examples.
+- [`docs/adr/0002-user-facing-pi-vimmode-docs.md`](docs/adr/0002-user-facing-pi-vimmode-docs.md): documentation source-of-truth decision and maintenance rules.
 
-| Key                                           | Behavior                                                    |
-| --------------------------------------------- | ----------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend characterwise selection                         |
-| `V`                                           | switch to visual line mode without resetting the anchor     |
-| `Ctrl-v`                                      | switch to visual block mode without resetting the anchor    |
-| `y`                                           | yank selection and return normal                            |
-| `r{char}`                                     | replace selected characters with `char` and return normal   |
-| `d` / `x`                                     | delete selection and return normal                          |
-| `c`                                           | delete selection and enter insert                           |
-| `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register |
-| `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark              |
-| `:`                                           | enter Ex command-line with `'<,'>` range prefilled           |
-| `Esc`                                         | cancel selection and return normal                          |
+README is the quickstart and index. Keep detailed behavior and settings reference in the canonical docs above.
 
-### Visual line mode
+## Common configuration
 
-| Key                                           | Behavior                                                          |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend the selected line range                               |
-| `v`                                           | switch to characterwise visual mode without resetting the anchor  |
-| `Ctrl-v`                                      | switch to visual block mode without resetting the anchor          |
-| `y`                                           | yank selected lines into a linewise register and return normal    |
-| `r{char}`                                     | replace selected line characters with `char` and return normal   |
-| `d` / `x`                                     | delete selected lines into a linewise register and return normal  |
-| `c`                                           | delete selected lines into a linewise register and enter insert   |
-| `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change/paste with replace/append register |
-| `` `{a-z}`` / `'{a-z}`                        | jump active selection to exact/line local mark                    |
-| `:`                                           | enter Ex command-line with `'<,'>` range prefilled                |
-| `Esc`                                         | cancel selection and return normal                                |
-
-### Visual block mode
-
-| Key                                           | Behavior                                                                                           |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` / `0` / `$` / `w` / `b` / `e` | extend the selected rectangular block                                                         |
-| `v`                                           | switch to characterwise visual mode without resetting the anchor                                   |
-| `V`                                           | switch to visual line mode without resetting the anchor                                            |
-| `I`                                           | collect inserted text, then insert it before the block on each selected line when `Esc` is pressed |
-| `A`                                           | collect inserted text, then insert it after the block on each selected line when `Esc` is pressed  |
-| `y`                                           | yank selected block slices joined by newlines and return normal                                    |
-| `r{char}`                                     | replace selected block cells with `char` and return normal                                        |
-| `d` / `x`                                     | delete selected block slices into a character register and return normal                           |
-| `c`                                           | delete selected block slices into a character register and enter insert                            |
-| `"{a-z}` / `"{A-Z}`                           | target next yank/delete/change with replace/append register                                        |
-| `` `{a-z}`` / `'{a-z}`                        | jump active block corner to exact/line local mark                                                  |
-| `:`                                           | enter Ex command-line with `'<,'>` range prefilled                                                 |
-| `Esc`                                         | cancel selection and return normal                                                                 |
-
-## Settings
-
-Add a `piVimMode` object to your Pi global settings or project `.pi/settings.json`.
-Project settings override global settings field by field.
+Minimal startup override:
 
 ```json
 {
   "piVimMode": {
-    "startMode": "insert",
+    "startMode": "normal"
+  }
+}
+```
+
+Example keymap/UI override:
+
+```json
+{
+  "piVimMode": {
     "cursor": {
-      "insert": "bar",
       "normal": "block",
-      "visual": "block",
-      "visualLine": "block",
-      "visualBlock": "block"
+      "insert": "bar"
     },
     "keymap": {
-      "operators": {
-        "delete": ["d"],
-        "change": ["c"],
-        "yank": ["y"]
-      },
-      "motions": {
-        "left": ["h"],
-        "down": ["j"],
-        "up": ["k"],
-        "right": ["l"],
-        "wordForward": ["w"],
-        "wordBackward": ["b"],
-        "wordEnd": ["e"],
-        "lineStart": ["0"],
-        "lineEnd": ["$"],
-        "firstNonBlank": ["^", "_"],
-        "bufferStart": ["gg"],
-        "bufferEnd": ["G"],
-        "matchingPair": ["%"]
-      },
       "commands": {
-        "insertBefore": ["i"],
-        "insertAfter": ["a"],
-        "openLineBelow": ["o"],
-        "openLineAbove": ["O"],
-        "pasteAfter": ["p"],
-        "pasteBefore": ["P"],
-        "joinLine": ["J"],
-        "incrementNumber": ["<C-a>"],
-        "decrementNumber": ["<C-x>"],
-        "toggleCase": ["~"],
-        "replaceChar": ["r"],
-        "substituteChar": ["s"],
-        "substituteLine": ["S"],
-        "findCharForward": ["f"],
-        "findCharBackward": ["F"],
-        "tillCharForward": ["t"],
-        "tillCharBackward": ["T"],
-        "repeatCharSearch": [";"],
-        "repeatCharSearchReverse": [","],
-        "startSearch": ["/"],
-        "repeatSearch": ["n"],
-        "repeatSearchReverse": ["N"],
-        "startExCommand": [":"],
-        "repeatChange": ["."],
-        "undo": ["u"],
-        "visualChar": ["v"],
-        "visualLine": ["V"],
-        "visualBlock": ["<C-v>"]
-      },
-      "macros": {
-        "record": ["q"],
-        "play": ["@"]
-      },
-      "marks": {
-        "set": ["m"],
-        "jumpExact": ["`"],
-        "jumpLine": ["'"]
-      },
-      "operatorMotions": {
-        "delete": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"],
-        "change": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"],
-        "yank": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"]
+        "startSearch": ["/"]
       }
-    },
-    "macros": {
-      "enabled": true,
-      "slots": [
-        "a", "b", "c", "d", "e", "f", "g", "h",
-        "i", "j", "k", "l", "m", "n", "o", "p",
-        "q", "r", "s", "t", "u", "v", "w", "x",
-        "y", "z"
-      ],
-      "maxReplaySteps": 1000
-    },
-    "marks": {
-      "enabled": true,
-      "slots": [
-        "a", "b", "c", "d", "e", "f", "g", "h",
-        "i", "j", "k", "l", "m", "n", "o", "p",
-        "q", "r", "s", "t", "u", "v", "w", "x",
-        "y", "z"
-      ]
-    },
-    "search": {
-      "highlight": true,
-      "highlightCurrent": true,
-      "clearOnCancel": true,
-      "clearOnInsert": true,
-      "maxHighlights": 200
     },
     "ui": {
       "status": {
-        "enabled": true,
-        "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
-      },
-      "mode": {
-        "enabled": true,
-        "labels": {
-          "insert": "INSERT",
-          "normal": "NORMAL",
-          "visual": "VISUAL",
-          "visualLine": "V-LINE",
-          "visualBlock": "V-BLOCK"
-        },
-        "narrowLabels": {
-          "insert": "I",
-          "normal": "N",
-          "visual": "V",
-          "visualLine": "VL",
-          "visualBlock": "VB"
-        }
-      },
-      "selection": {
-        "enabled": true,
-        "previewMaxChars": 16
-      },
-      "cursorPosition": {
-        "enabled": false,
-        "base": 1,
-        "format": "{line}:{column}"
+        "items": ["mode", "pending", "search", "macro", "cursorPosition", "warnings"]
       }
     }
   }
 }
 ```
 
-### `piVimMode.startMode`
+See [`docs/settings.md`](docs/settings.md) for the full default reference and all settings.
 
-Supported values:
+## Recover or disable
 
-- `insert` (default)
-- `normal`
+If the extension blocks editing or configuration goes wrong:
 
-Visual modes are not valid startup modes because they need a selection anchor. Invalid values fall back to `insert`.
-
-### `piVimMode.cursor`
-
-Supported cursor styles per mode:
-
-- `block`
-- `bar`
-- `underline`
-
-Invalid cursor styles fall back per mode, so one bad value does not discard the rest of the config.
-Terminal cursor-shape escape support is best-effort; the editor also renders a mode-specific fake cursor where it can do so safely.
-
-### `piVimMode.keymap`
-
-`keymap` maps printable key sequences to supported semantic actions. Invalid fields fall back per field, so one bad mapping does not discard the rest of the keymap.
-
-Supported operator actions:
-
-- `delete`
-- `change`
-- `yank`
-
-Supported motion actions:
-
-- `left`, `down`, `up`, `right`
-- `wordForward`, `wordBackward`, `wordEnd`
-- `lineStart`, `lineEnd`, `firstNonBlank`
-- `bufferStart`, `bufferEnd`, `matchingPair`
-
-Supported command actions:
-
-- Insert/open: `insertBefore`, `insertAfter`, `insertLineStart`, `insertLineEnd`, `openLineBelow`, `openLineAbove`
-- Visual: `visualChar`, `visualLine`, `visualBlock`
-
-Use Vim/Neovim-style angle notation for modifier keys: `<C-v>` becomes `ctrl+v`, `<A-x>` becomes `alt+x`, and `<S-tab>` becomes `shift+tab`.
-
-`Ctrl-v` always enters/switches visual block mode as a built-in shortcut. Add `commands.visualBlock` to make that binding explicit or provide additional bindings such as `B` / `<A-x>`.
-
-- Edit: `deleteChar`, `deleteToLineEnd`, `changeToLineEnd`, `yankLine`, `joinLine`, `pasteAfter`, `pasteBefore`, `incrementNumber`, `decrementNumber`, `toggleCase`, `replaceChar`, `substituteChar`, `substituteLine`, `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, `repeatCharSearchReverse`, `startSearch`, `repeatSearch`, `repeatSearchReverse`, `startExCommand`, `repeatChange`, `undo`
-
-`operatorMotions` controls which range motions are valid after each operator. Valid operator motions are `wordForward`, `wordBackward`, `wordEnd`, `lineStart`, `firstNonBlank`, and `lineEnd`; motions such as `right`, `bufferStart`, or `matchingPair` remain normal/visual motions only because they do not yet have operator range semantics. Omitting a motion disables that operator-motion combination.
-
-Roadmap limitations: numeric adjustment currently supports signed integers; `~` toggles single-code-point JavaScript uppercase/lowercase mappings within the current line and in visual selections, but skips expanding case mappings and does not implement operator case transforms; dot-repeat is limited to supported completed change commands and does not replay arbitrary insert-mode text or macros; text objects support words, quotes, parentheses, brackets, and braces; prompt search is literal and prompt-local only. `Ctrl-a` / `Ctrl-x` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, while insert mode and other protected Pi shortcuts continue to delegate.
-
-Multi-key sequences such as `gg` are supported through a finite matcher. Multi-key operators also work: if `delete` is mapped to `zz`, then `zzzz` deletes the current line and `zz{motion}` performs a delete operator-motion. There is no recursive mapping or timeout behavior.
-
-Macro controls are configured under `keymap.macros`:
-
-- `record`: normal-mode prefix keys for starting/stopping recording. Defaults to `q`.
-- `play`: normal-mode prefix keys for playback/repeat. Defaults to `@`.
-
-Mark controls are configured under `keymap.marks`:
-
-- `set`: normal-mode prefix keys for setting local marks. Defaults to `m`.
-- `jumpExact`: normal/operator/visual prefix keys for exact mark jumps. Defaults to backtick.
-- `jumpLine`: normal/operator/visual prefix keys for line mark jumps. Defaults to single quote.
-
-If you remap macro controls, use the configured record key to stop recording and the configured play key twice to repeat the last macro.
-
-### `piVimMode.macros`
-
-`macros` configures macro behavior:
-
-- `enabled`: enable/disable all macro recording and playback. Defaults to `true`.
-- `slots`: allowed lowercase `a-z` macro slots. Defaults to all lowercase letters.
-- `maxReplaySteps`: maximum input tokens replayed from one macro invocation. Defaults to `1000`.
-
-### `piVimMode.marks`
-
-`marks` configures mark behavior:
-
-- `enabled`: enable/disable all mark set/jump controls. Defaults to `true`.
-- `slots`: allowed lowercase `a-z` local mark slots. Defaults to all lowercase letters.
-
-### `piVimMode.search`
-
-`search` configures prompt-local search highlighting without changing search motion behavior:
-
-- `highlight`: render literal matches after successful `/`, `n`, or `N`. Defaults to `true`.
-- `highlightCurrent`: render the current match with a distinct style. Defaults to `true`.
-- `clearOnCancel`: clear visible highlights when a pending `/` search is cancelled. Defaults to `true`.
-- `clearOnInsert`: clear visible highlights when entering insert mode. Defaults to `true`.
-- `maxHighlights`: maximum non-current matches to render. Defaults to `200`.
-
-Search highlight styles are fixed ANSI styles for now. Vim highlight groups, `:nohlsearch`, search history, and regex search are not supported.
-
-## Ex command-line and substitution
-
-- Normal-mode `:` opens a dedicated Ex command-line row below the prompt box. While visible, the prompt viewport shrinks by one row so total render height stays bounded.
-- Visual, V-Line, and V-Block `:` opens Ex command-line with editable `'<,'>` prefilled and keeps the original visual selection highlighted while typing.
-- Supported commands are exact `s` and `substitute` only: `:s/old/new/`, `:%s/old/new/g`, `:2,4substitute#old/path#new/path#i`.
-- Supported ranges are omitted current line, `%`, visual `'<,'>` captured at Ex entry, numeric addresses, `.`, `$`, and comma ranges such as `2,4` or `.,$`.
-- A normal-mode count before Ex entry prefills a concrete clamped line range, e.g. `3:` on line 2 opens `:2,4` when possible.
-- Substitution is literal and line-local. It is not regex. `&`, `$1`, and `\1` in replacements insert literally.
-- Supported flags are lowercase `g` for all non-overlapping matches per line and `i` for case-insensitive literal matching. Unsupported flags produce an Ex error.
-- Delimiter can be any printable non-alphanumeric, non-whitespace, non-backslash character. Delimiter and backslash escapes decode in pattern/replacement.
-- Empty replacement is valid; empty pattern is an Ex error. Omitted final delimiter is allowed only as no-flags syntax, so `:s/old/newg` replaces with literal `newg`.
-- Successful substitutions show transient counts in the Ex row. Errors such as pattern-not-found or invalid ranges show transient Ex errors until next handled input.
-- Text-changing substitutions clear visible prompt search highlights, preserve cursor intent by clamping original cursor after edit, do not write registers, and do not update dot-repeat.
-- Deferred: regex substitution, command history, repeat substitution, `:nohlsearch`, offsets/semicolon ranges, and non-substitution Ex commands.
-
-### `piVimMode.ui`
-
-`ui` configures the Vim status area without changing editing behavior.
-
-Supported status items:
-
-- `mode`: current mode label
-- `pendingOperator`: pending operator or key-sequence prefix such as `d…` or `g…`
-- `selection`: visual selection summary and preview
-- `cursorPosition`: line and column using `cursorPosition.format`
-
-`mode.labels` and `mode.narrowLabels` customize mode names. `selection.previewMaxChars` controls selection preview width. `cursorPosition.base` supports `0` or `1`, and `cursorPosition.format` must include `{line}` and `{column}`.
-
-The UI config is the single source of truth for status display. Vim/Neovim alias options such as `showmode`, `showcmd`, and `ruler` are not supported; configure `ui.status.items`, `ui.mode.enabled`, and `ui.cursorPosition.enabled` directly instead.
-
-The extension does not execute or parse `.vimrc`, Vimscript, or Neovim Lua.
-
-## Pi shortcut compatibility
-
-Unknown control/non-printable keys delegate to Pi. In particular:
-
-- `Enter` submits in all modes. Normal/visual/V-Line/V-Block submit resets Vim transient state and returns to the configured startup mode for the next prompt.
-- `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model/thinking shortcuts, autocomplete controls, external-editor shortcuts, and image paste stay Pi-owned.
-- Protected Pi shortcut names are rejected from `piVimMode.keymap` with a warning.
-- Unmapped printable keys in normal/visual mode are ignored instead of inserted.
-
-## Marks, registers, and undo
-
-- Local marks `a-z` are supported in memory for the editor session.
-- Mark set/jump prefix keys, enabled state, and allowed slots are configurable.
-- `m{slot}` stores the current cursor position in a lowercase local mark slot.
-- Backtick + `{slot}` jumps to the stored line/column; single quote + `{slot}` jumps to the first non-blank column on the stored line.
-- Visual mode mark jumps preserve the selection anchor and move the active cursor/corner.
-- `d`, `c`, and `y` accept mark jumps as motions: exact mark jumps are characterwise; line mark jumps are linewise.
-- Missing marks and invalid mark slots are safe no-ops. Stale mark positions are clamped to the current prompt.
-- Global marks, special/automatic marks, mark lists, persistence, and full Vim mark adjustment after edits are not supported.
-- `/` starts literal forward search within the current prompt; `n` repeats the last search direction and `N` searches the opposite direction. Matches wrap around the prompt.
-- Visual-mode search moves the active cursor while preserving the selection anchor. `d`, `c`, and `y` can use `/query<Enter>` as an operator motion.
-- Empty, cancelled, and missing-match searches are safe no-ops. Regex search, `?`, search history, offsets, Vim highlight groups, and search across previous prompts are not supported.
-- One unnamed register and named edit registers `a-z` are supported in memory for the editor session.
-- Yank/delete/change always update the unnamed register, even when a named register is targeted.
-- `"{a-z}` targets the next supported yank/delete/change/paste command with a named register.
-- `"{A-Z}` appends yank/delete/change text to the lowercase named register; uppercase paste reads the lowercase register.
-- Linewise `p` inserts below the current line; linewise `P` inserts above it.
-- Charwise `p` inserts after the cursor; charwise `P` inserts before it.
-- Empty or missing register paste is a no-op.
-- Special registers, numbered registers, expression registers, and system clipboard registers are not supported.
-- `u` delegates to Pi native undo. Pi's editor records programmatic text changes made through `setText()`.
-
-## Macros
-
-- `q{a-z}` starts recording an in-memory macro slot and replaces any previous macro in that slot by default.
-- Normal-mode `q` stops the active recording by default. Insert-mode `q` inserts and records literal text.
-- `@{a-z}` replays a recorded macro through the same Vim input path used for live input by default.
-- `@@` repeats the last successfully played macro by default.
-- Macro record/play keys, allowed slots, enabled state, and replay step cap are configurable.
-- Macro slots are separate from unnamed and named edit registers; `q{slot}` records input tokens, while `"{slot}` targets edit text.
-- Ex command-line entry, typed command text, `Enter`, and `Esc` are recorded and replayed through the same input-token path. Replay continues after Ex errors.
-- Pi-owned delegated shortcuts such as prompt submit/abort, autocomplete control, and playback commands are not recorded.
-- Macro playback is non-recursive: playback commands inside replay are ignored.
-- Macros are in-memory only and do not persist across sessions.
-
-## Feedback
-
-The editor border/status area shows configurable feedback:
-
-- `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` at normal widths by default.
-- `I`, `N`, `V`, and `VL` at narrow widths by default.
-- Pending operators/key prefixes, search prompts (`/query…`), Ex command-line input/messages, mark prefixes (`m…`, `` `… ``, `'…`), active macro recording (`REC a`), and visual selection summaries show when enabled and space allows.
-- Optional cursor position can show line and column, e.g. `12:4` or `L12:C4`.
-- Active visual selections are highlighted inline. Selected empty lines in V-Line mode show a highlighted blank cell when width permits.
+- Start with [`docs/features.md#disable-or-recover`](docs/features.md#disable-or-recover).
+- Use `pi list` to inspect installed extensions.
+- Use `pi remove` or `pi uninstall` with the installed extension identifier to remove it.
+- Use `pi config` or edit Pi config files to remove `piVimMode` overrides.
+- Restart Pi after changing extension or config state.
 
 ## Architecture
 
@@ -481,24 +115,16 @@ Modal editing behavior lives under `src/modal/`:
 - `types.ts` defines adapter-applied effects such as delegation, edits, macro replay, cursor restoration, invalidation, and terminal cursor hints.
 - `view.ts` derives mode labels, status items, visual status text, and cursor position text without needing Pi TUI objects.
 
-The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. Config maps keys to supported semantic actions; it does not add private Pi APIs or full Vim parity.
+The parser in `src/commands.ts` and text transforms in `src/buffer.ts` remain pure helpers. Config maps keys to supported semantic actions; it does not add private Pi APIs, recursive mappings, `.vimrc`, Vimscript, or Neovim Lua support.
 
 ## Project docs
 
-- `TODOS.md`: remaining follow-up work and completed architecture deepening notes.
-- `docs/plans/`: historical implementation plans for the Vim editor work.
+- `docs/features.md`: canonical feature guide.
+- `docs/settings.md`: canonical settings reference.
+- `docs/adr/`: documentation and architecture decisions.
+- `docs/plans/`: implementation plans for Vim editor work.
 - `docs/solutions/`: reusable learnings for parser, buffer, lifecycle, and visual-mode bugs.
 - `openspec/specs/`: durable OpenSpec requirements for supported Vim behavior.
-
-## Limitations
-
-- No regex search/substitution, `?` backward search command, search history, Vim highlight groups, `:nohlsearch`, non-substitution Ex commands, command history, leader maps, recursive mappings, persistent marks/macros, global/special marks, numbered/special registers, or system clipboard integration.
-- Operator motions are limited to `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd`; no full Vim grammar.
-- `%` supports matching `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
-- No `.vimrc`, Vimscript, or Neovim Lua parsing.
-- No full Neovim cursor option parity: blink timing and terminal-specific cursor negotiation are out of scope.
-- Terminal cursor-shape hints are best-effort; unsupported terminals may show Pi's default cursor shape in some non-visual states.
-- Editing uses Pi's cursor coordinates, not full grapheme-cluster Vim semantics. Complex Unicode may not behave exactly like Vim.
 
 ## Validate
 
@@ -514,13 +140,8 @@ Manual smoke checklist:
 1. Load extension in Pi.
 2. Type text in insert mode.
 3. Press `Esc`, use normal-mode motions and edits.
-4. Use `v`, select text, confirm inline highlight, then `y`, `d`, `x`, and `c`.
-5. Use `V`, select lines, then `y`, `d`, `x`, and `c`.
-6. Configure `piVimMode.startMode` and confirm a new editor starts in that mode.
-7. Configure `piVimMode.cursor` and confirm cursor style changes by mode where the terminal supports it.
-8. Submit from insert and normal modes.
-9. Configure a custom `piVimMode.keymap` operator, motion, and UI status order, then confirm normal and visual mode use the custom mappings.
-10. Confirm next prompt returns to the configured startup mode.
-11. Record `qa`, type an insert/normal sequence, stop with normal-mode `q`, replay with `@a`, then repeat with `@@`.
-12. Run `:%s/old/new/g` from normal mode and `:'<,'>s/old/new/` from visual mode; confirm Ex row messages and visual highlights.
-13. Confirm normal-mode `Esc` can still interrupt/abort Pi.
+4. Use `v`, `V`, and `Ctrl-v`; confirm visual highlighting and selection operations.
+5. Configure `piVimMode.startMode`, `piVimMode.cursor`, a keymap binding, and UI status items; confirm behavior changes.
+6. Confirm insert/normal submit and normal-mode `Esc` still delegate to Pi where expected.
+7. Record and replay a macro with `q{slot}`, `@{slot}`, and `@@`.
+8. Run `/query`, `n`, `N`, and `:%s/old/new/g`; confirm prompt-local search/Ex behavior.

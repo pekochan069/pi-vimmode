@@ -1,8 +1,11 @@
 # vim-search Specification
 
 ## Purpose
+
 TBD - created by archiving change todos-search-functionality. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode starts forward prompt search
 
 The Vim editor SHALL support `/` in normal mode as a pending literal search query over the current prompt buffer.
@@ -122,13 +125,12 @@ The change SHALL include automated tests and user-facing documentation for suppo
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: Documentation describes search
+#### Scenario: Feature guide describes search
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/features.md`
 - **THEN** it documents `/`, `n`, `N`, prompt-local literal search behavior, and current search limitations
 
 #### Scenario: TODO marks search complete after validation
 
 - **WHEN** the search implementation and validation pass
 - **THEN** `TODOS.md` marks `/` search complete while leaving unrelated remaining TODO items unchanged
-

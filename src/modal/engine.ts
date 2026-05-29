@@ -105,6 +105,22 @@ export function isDelegatedResetKey(data: string): boolean {
   return matchesKey(data, "enter") || matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g");
 }
 
+const PROTECTED_PI_DELEGATE_KEYS = [
+  "tab",
+  "shift+enter",
+  "ctrl+d",
+  "ctrl+l",
+  "ctrl+p",
+  "shift+ctrl+p",
+  "ctrl+shift+p",
+  "ctrl+t",
+  "shift+tab",
+] as const;
+
+function isProtectedPiDelegateKey(data: string): boolean {
+  return PROTECTED_PI_DELEGATE_KEYS.some((key) => matchesKey(data, key));
+}
+
 function withEffects(state: ModalState, effects: ModalEffect[]): ModalUpdate {
   return { state, effects };
 }
@@ -115,6 +131,10 @@ function invalidate(state: ModalState): ModalUpdate {
 
 function delegate(state: ModalState, input: string): ModalUpdate {
   return withEffects(state, [{ type: "delegate", input }]);
+}
+
+function delegateProtectedShortcut(state: ModalState, input: string): ModalUpdate {
+  return withEffects(clearPending(state), [{ type: "delegate", input }, { type: "invalidate" }]);
 }
 
 function clearSearchHighlight(state: ModalState): ModalState {
@@ -623,7 +643,7 @@ function startSearchUpdate(
   operator?: VimOperatorAction,
 ): ModalUpdate {
   return invalidate({
-    ...clearRegisterTarget(state),
+    ...clearPending(clearRegisterTarget(state)),
     pendingSearch: { query: "", direction, operator },
   });
 }
@@ -930,6 +950,9 @@ function handleBlockInsertInput(
     return modeUpdate(editState(nextState, result), "normal", options, [{ type: "edit", result }]);
   }
 
+  if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  if (isProtectedPiDelegateKey(data)) return delegate(state, data);
+
   if (matchesKey(data, "backspace")) {
     if (state.blockInsert.text.length === 0) return invalidate(state);
     return withEffects(
@@ -1083,6 +1106,7 @@ function handleNormalInput(
       options,
     );
   }
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, data);
 
   const key = keySequence(data);
   if (!key) {
@@ -1139,7 +1163,10 @@ function handleNormalInput(
 
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   if (pendingOperator) {
-    if (key === "/") return startSearchUpdate(state, "forward", pendingOperator);
+    const searchCommand = resolveNormalCommand(key, undefined, keymap);
+    if (searchCommand.type === "command" && searchCommand.command === "startSearch") {
+      return startSearchUpdate(state, "forward", pendingOperator);
+    }
     const markTarget = markPendingForKey(key, options, pendingOperator, state.pending);
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
@@ -1177,6 +1204,9 @@ function handleNormalInput(
       options,
       pendingResult.count,
     );
+  }
+  if (pendingResult.type === "operatorSearch") {
+    return startSearchUpdate(state, "forward", pendingResult.operator);
   }
   if (pendingResult.type === "operatorTextObject") {
     return applyOperatorTextObject(
@@ -1248,6 +1278,7 @@ function handleVisualInput(
       ? invalidate(state)
       : modeUpdate(state, "visualBlock", options);
   }
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, data);
 
   const key = keySequence(data);
   if (!key) return delegate(state, data);

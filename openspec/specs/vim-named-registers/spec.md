@@ -149,7 +149,7 @@ The named register change SHALL include automated tests and user-facing document
 - **WHEN** `bun run check-types` is executed
 - **THEN** the extension TypeScript compiles without type errors
 
-#### Scenario: README documents named registers
+#### Scenario: Feature guide documents named registers
 
-- **WHEN** the user opens the project README
+- **WHEN** the user opens `docs/features.md`
 - **THEN** it documents supported named register syntax, append behavior, session-local storage, unsupported special registers, and separation from macro slots

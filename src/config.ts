@@ -114,6 +114,7 @@ const PROTECTED_KEY_NAMES = new Set([
   "ctrl+l",
   "ctrl+p",
   "shift+ctrl+p",
+  "ctrl+shift+p",
   "ctrl+t",
   "shift+tab",
 ]);

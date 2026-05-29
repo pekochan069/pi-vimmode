@@ -3,7 +3,6 @@
     // Environment setup & latest features
     "lib": ["ESNext"],
     "target": "ESNext",
-    "types": ["bun-types"],
     "module": "Preserve",
     "moduleDetection": "force",
     "allowJs": true,

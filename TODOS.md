@@ -35,6 +35,7 @@
 - [x] `/` search
 - [x] Ex commands (things starts with `:`)
 - [x] `~`
+- [x] more Ex commands
 
 ## Ex Commands
 
@@ -43,6 +44,7 @@
 - [ ] Add Ex range offset addresses like `.+1` and `$-2`
 - [ ] Add Ex semicolon range support after comma-only v1
 - [ ] Add Ex command history and repeat-substitution commands after v1
+- [ ] Add Ex register operands for `:delete`, `:yank`, and `:put`
 - [ ] Reuse full prompt editor for Ex command-line editing after minimal v1 ships
 
 - [ ] Extract oversized modal command handlers

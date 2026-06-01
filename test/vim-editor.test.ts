@@ -53,6 +53,12 @@ function typeKeys(editor: VimEditor, keys: readonly string[]) {
   for (const key of keys) editor.handleInput(key);
 }
 
+function runEx(editor: VimEditor, command: string) {
+  editor.handleInput(":");
+  for (const char of command) editor.handleInput(char);
+  editor.handleInput("\r");
+}
+
 function expectEditorState(
   editor: VimEditor,
   expected: {
@@ -480,6 +486,86 @@ describe("vim editor integration", () => {
     editor.handleInput("i");
     editor.handleInput(":");
     expect(editor.getText()).toBe(":");
+  });
+
+  test("executes finite Ex line commands and aliases from normal mode", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo\nthree\nfour");
+
+    runEx(editor, "2,3copy$");
+    expect(editor.getText()).toBe("one\ntwo\nthree\nfour\ntwo\nthree");
+    expect(editor.render(80).join("\n")).toContain("2 lines copied");
+
+    runEx(editor, "5,6m0");
+    expect(editor.getText()).toBe("two\nthree\none\ntwo\nthree\nfour");
+    expect(editor.render(80).join("\n")).toContain("2 lines moved");
+
+    runEx(editor, "%j");
+    expect(editor.getText()).toBe("two three one two three four");
+    expect(editor.render(80).join("\n")).toContain("6 lines joined");
+
+    editor.setText("one\ntwo\nthree");
+    runEx(editor, "2y");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "two" });
+    expect(editor.render(80).join("\n")).toContain("1 line yanked");
+
+    runEx(editor, "1pu");
+    expect(editor.getText()).toBe("one\ntwo\ntwo\nthree");
+    expect(editor.render(80).join("\n")).toContain("1 line put");
+
+    runEx(editor, "2d");
+    expect(editor.getText()).toBe("one\ntwo\nthree");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "two" });
+    expect(editor.render(80).join("\n")).toContain("1 line deleted");
+  });
+
+  test("Ex line commands preserve bounded side effects", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("alpha\nbeta\ngamma");
+    typeKeys(editor, ["g", "g", '"', "a", "y", "y"]);
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "alpha" });
+
+    runEx(editor, "2delete");
+    expect(editor.getText()).toBe("alpha\ngamma");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "beta" });
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "alpha" });
+
+    editor.setText("abc\ndef");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("x");
+    expect(editor.getText()).toBe("bc\ndef");
+    runEx(editor, "2delete");
+    editor.handleInput(".");
+    expect(editor.getText()).toBe("c");
+  });
+
+  test("Ex visual delete and nohlsearch interact with selection and search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo\nthree");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput(":");
+    typeKeys(editor, ["d", "e", "l", "e", "t", "e", "\r"]);
+    expect(editor.getText()).toBe("three");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "one\ntwo" });
+
+    editor.setText("foo bar foo");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    typeKeys(editor, ["/", "f", "o", "o", "\r"]);
+    expect(editor.render(80).join("\n")).toContain(SEARCH_START);
+    runEx(editor, "noh");
+    expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
+    editor.handleInput("n");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+    typeKeys(editor, ["/", "f", "o", "o", "\r"]);
+    expect(editor.render(80).join("\n")).toContain(SEARCH_START);
+    runEx(editor, "delete");
+    expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
   });
 
   test("macro records and replays Ex substitutions and cancellation", () => {

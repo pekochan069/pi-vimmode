@@ -5,14 +5,18 @@ import {
   bufferEndPosition,
   bufferStartPosition,
   changeLine,
+  copyExLineRange,
   deleteBlockRange,
   deleteByMotion,
+  deleteExLineRange,
   deleteTextObject,
   findCharOnLine,
   findSearchHighlightRanges,
   findSearchMatch,
   deleteSearchRange,
   insertBlockText,
+  joinExLineRange,
+  moveExLineRange,
   deleteCharAt,
   deleteLine,
   deleteLineMarkRange,
@@ -32,6 +36,7 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  putExRegisterAfterRange,
   replaceVisualRangeChars,
   substituteLineRangeLiteral,
   toggleCaseAt,
@@ -42,6 +47,7 @@ import {
   visualSelectionText,
   wordEndPosition,
   yankByMotion,
+  yankExLineRange,
   yankLine,
   yankLineMarkRange,
   yankLineRange,
@@ -615,5 +621,89 @@ describe("paste before", () => {
     const result = pasteRegisterBefore("one\ntwo", p(1, 0), { type: "line", text: "alpha\nbeta" });
     expect(result.text).toBe("one\nalpha\nbeta\ntwo");
     expect(result.cursor).toEqual(p(1, 0));
+  });
+});
+
+describe("Ex line operations", () => {
+  test("deletes and yanks addressed line ranges", () => {
+    const deleted = deleteExLineRange("one\ntwo\nthree", { startLine: 1, endLine: 2 });
+    expect(deleted).toMatchObject({
+      ok: true,
+      lines: 2,
+      edit: { text: "one", cursor: p(0, 0), register: { type: "line", text: "two\nthree" } },
+    });
+
+    expect(yankExLineRange("one\ntwo\nthree", { startLine: 0, endLine: 1 })).toEqual({
+      lines: 2,
+      register: { type: "line", text: "one\ntwo" },
+    });
+  });
+
+  test("puts unnamed register text as lines after range end", () => {
+    expect(
+      putExRegisterAfterRange(
+        "one\ntwo",
+        { startLine: 0, endLine: 0 },
+        {
+          type: "char",
+          text: "alpha\nbeta",
+        },
+      ),
+    ).toMatchObject({
+      ok: true,
+      lines: 2,
+      edit: { text: "one\nalpha\nbeta\ntwo", cursor: p(1, 0) },
+    });
+    expect(putExRegisterAfterRange("one", { startLine: 0, endLine: 0 }, undefined)).toEqual({
+      ok: false,
+      message: "Register is empty",
+    });
+  });
+
+  test("copies and moves ranges relative to destination addresses", () => {
+    expect(copyExLineRange("one\ntwo\nthree", { startLine: 1, endLine: 1 }, -1)).toMatchObject({
+      ok: true,
+      edit: { text: "two\none\ntwo\nthree", cursor: p(0, 0) },
+    });
+    expect(copyExLineRange("one\ntwo\nthree", { startLine: 0, endLine: 1 }, 2)).toMatchObject({
+      ok: true,
+      lines: 2,
+      edit: { text: "one\ntwo\nthree\none\ntwo", cursor: p(3, 0) },
+    });
+    expect(
+      moveExLineRange("one\ntwo\nthree\nfour", { startLine: 2, endLine: 3 }, -1),
+    ).toMatchObject({
+      ok: true,
+      edit: { text: "three\nfour\none\ntwo", cursor: p(0, 0) },
+    });
+    expect(moveExLineRange("one\ntwo\nthree\nfour", { startLine: 0, endLine: 0 }, 2)).toMatchObject(
+      {
+        ok: true,
+        edit: { text: "two\nthree\none\nfour", cursor: p(2, 0) },
+      },
+    );
+    expect(moveExLineRange("one\ntwo\nthree", { startLine: 0, endLine: 1 }, 1)).toEqual({
+      ok: false,
+      message: "Ex move destination overlaps range",
+    });
+  });
+
+  test("joins omitted and explicit Ex line ranges", () => {
+    expect(
+      joinExLineRange("one   \n   two\nthree", { startLine: 0, endLine: 0 }, false),
+    ).toMatchObject({
+      ok: true,
+      lines: 2,
+      edit: { text: "one two\nthree", cursor: p(0, 3) },
+    });
+    expect(joinExLineRange("one\n two \nthree", { startLine: 0, endLine: 2 }, true)).toMatchObject({
+      ok: true,
+      lines: 3,
+      edit: { text: "one two  three", cursor: p(0, 3) },
+    });
+    expect(joinExLineRange("one", { startLine: 0, endLine: 0 }, false)).toEqual({
+      ok: false,
+      message: "Not enough lines to join",
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseExSubstitution } from "../src/ex.ts";
+import { parseExCommand, parseExSubstitution } from "../src/ex.ts";
 
 const context = {
   lineCount: 5,
@@ -121,6 +121,71 @@ describe("Ex substitution parser", () => {
     expect(parseExSubstitution("s//new/g", context)).toEqual({
       type: "error",
       message: "Substitution pattern cannot be empty",
+    });
+  });
+});
+
+describe("Ex command parser", () => {
+  test("parses finite non-substitution command aliases", () => {
+    expect(parseExCommand("2,4delete", context)).toMatchObject({
+      type: "delete",
+      command: "delete",
+      range: { startLine: 1, endLine: 3 },
+      rangeExplicit: true,
+    });
+    expect(parseExCommand("%y", context)).toMatchObject({
+      type: "yank",
+      command: "y",
+      range: { startLine: 0, endLine: 4 },
+    });
+    expect(parseExCommand("put", context)).toMatchObject({
+      type: "put",
+      command: "put",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+    expect(parseExCommand("join", context)).toMatchObject({ type: "join", command: "join" });
+    expect(parseExCommand("noh", context)).toEqual({ type: "nohlsearch", command: "noh" });
+  });
+
+  test("parses copy and move destination addresses", () => {
+    expect(parseExCommand("2,3copy$", context)).toMatchObject({
+      type: "copy",
+      range: { startLine: 1, endLine: 2 },
+      destination: 4,
+    });
+    expect(parseExCommand("2t0", context)).toMatchObject({
+      type: "copy",
+      range: { startLine: 1, endLine: 1 },
+      destination: -1,
+    });
+    expect(parseExCommand("3,4m.", context)).toMatchObject({
+      type: "move",
+      range: { startLine: 2, endLine: 3 },
+      destination: 1,
+    });
+  });
+
+  test("rejects invalid Ex commands and arguments", () => {
+    expect(parseExCommand("0delete", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("2copy", context)).toEqual({
+      type: "error",
+      message: "Missing Ex destination",
+    });
+    expect(parseExCommand("2copy999", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex destination",
+    });
+    expect(parseExCommand("co$", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: co",
+    });
+    expect(parseExCommand("delete a", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
     });
   });
 });

@@ -35,7 +35,7 @@ For local testing, load this package as a Pi extension using Pi's normal extensi
 1. Start Pi with the extension loaded.
 2. Type normally in insert mode.
 3. Press `Esc` to enter normal mode when autocomplete is inactive.
-4. Use supported Vim commands such as `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `i`, `a`, `x`, `dd`, `cw`, `p`, `/`, `n`, `N`, `v`, `V`, `Ctrl-v`, `:`, `q`, `@`, and `@@`.
+4. Use supported Vim commands such as `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `i`, `a`, `x`, `dd`, `cw`, `p`, `/`, `n`, `N`, `v`, `V`, `Ctrl-v`, `:s`, `:d`, `:y`, `:pu`, `:t`, `:m`, `:j`, `:noh`, `q`, `@`, and `@@`.
 5. Press `i`, `a`, `I`, `A`, `o`, `O`, `C`, `s`, or `S` to return to insert mode after edits; use operator forms such as `cw`, `cc`, or `c$` when changing by motion.
 
 Default modes:
@@ -52,7 +52,7 @@ Default modes:
 
 Canonical user-facing docs live under `docs/`:
 
-- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, text objects, character search, prompt search, visual modes, Ex substitution, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
+- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, text objects, character search, prompt search, visual modes, Ex command-line commands, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
 - [`docs/settings.md`](docs/settings.md): every supported `piVimMode` setting, defaults, accepted value shapes, merge behavior, key sequence syntax, protected-key validation, warnings, troubleshooting, and practical config examples.
 - [`docs/adr/0002-user-facing-pi-vimmode-docs.md`](docs/adr/0002-user-facing-pi-vimmode-docs.md): documentation source-of-truth decision and maintenance rules.
 
@@ -144,4 +144,4 @@ Manual smoke checklist:
 5. Configure `piVimMode.startMode`, `piVimMode.cursor`, a keymap binding, and UI status items; confirm behavior changes.
 6. Confirm insert/normal submit and normal-mode `Esc` still delegate to Pi where expected.
 7. Record and replay a macro with `q{slot}`, `@{slot}`, and `@@`.
-8. Run `/query`, `n`, `N`, and `:%s/old/new/g`; confirm prompt-local search/Ex behavior.
+8. Run `/query`, `n`, `N`, `:%s/old/new/g`, `:2,3copy$`, `:move0`, and `:noh`; confirm prompt-local search/Ex behavior.

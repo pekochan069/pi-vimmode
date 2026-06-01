@@ -366,6 +366,171 @@ export function substituteLineRangeLiteral(
   };
 }
 
+export type ExLineEditResult =
+  | { ok: true; edit: EditResult; lines: number }
+  | { ok: false; message: string };
+
+export type ExLineYankResult = { register: VimRegister; lines: number };
+
+function clampLineRange(lines: string[], range: LineRange): LineRange {
+  const last = Math.max(0, lines.length - 1);
+  return {
+    startLine: Math.max(0, Math.min(range.startLine, last)),
+    endLine: Math.max(0, Math.min(range.endLine, last)),
+  };
+}
+
+function lineCountForRange(range: LineRange): number {
+  return range.endLine - range.startLine + 1;
+}
+
+export function deleteExLineRange(text: string, range: LineRange): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  return {
+    ok: true,
+    edit: deleteLineRange(
+      text,
+      { line: safeRange.startLine, col: 0 },
+      { line: safeRange.endLine, col: 0 },
+    ),
+    lines: lineCountForRange(safeRange),
+  };
+}
+
+export function yankExLineRange(text: string, range: LineRange): ExLineYankResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  return {
+    register: yankLineRange(
+      text,
+      { line: safeRange.startLine, col: 0 },
+      { line: safeRange.endLine, col: 0 },
+    ),
+    lines: lineCountForRange(safeRange),
+  };
+}
+
+export function putExRegisterAfterRange(
+  text: string,
+  range: LineRange,
+  register: VimRegister | undefined,
+): ExLineEditResult {
+  if (!register || register.text.length === 0) return { ok: false, message: "Register is empty" };
+
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  const inserted = register.text.split("\n");
+  const insertAt = Math.min(lines.length, safeRange.endLine + 1);
+  const nextLines = [...lines.slice(0, insertAt), ...inserted, ...lines.slice(insertAt)];
+  const nextText = joinLines(nextLines);
+  return {
+    ok: true,
+    lines: inserted.length,
+    edit: {
+      text: nextText,
+      cursor: { line: insertAt, col: 0 },
+      changed: nextText !== text,
+    },
+  };
+}
+
+export function copyExLineRange(
+  text: string,
+  range: LineRange,
+  destination: number,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  if (destination < -1 || destination >= lines.length)
+    return { ok: false, message: "Invalid Ex destination" };
+
+  const copied = lines.slice(safeRange.startLine, safeRange.endLine + 1);
+  const insertAt = destination + 1;
+  const nextLines = [...lines.slice(0, insertAt), ...copied, ...lines.slice(insertAt)];
+  const nextText = joinLines(nextLines);
+  return {
+    ok: true,
+    lines: copied.length,
+    edit: {
+      text: nextText,
+      cursor: { line: insertAt, col: 0 },
+      changed: nextText !== text,
+    },
+  };
+}
+
+export function moveExLineRange(
+  text: string,
+  range: LineRange,
+  destination: number,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  if (destination < -1 || destination >= lines.length)
+    return { ok: false, message: "Invalid Ex destination" };
+  if (destination >= safeRange.startLine && destination <= safeRange.endLine)
+    return { ok: false, message: "Ex move destination overlaps range" };
+
+  const moved = lines.slice(safeRange.startLine, safeRange.endLine + 1);
+  const remaining = [...lines.slice(0, safeRange.startLine), ...lines.slice(safeRange.endLine + 1)];
+  let insertAt = destination + 1;
+  if (destination > safeRange.endLine) insertAt -= moved.length;
+  const nextLines = [...remaining.slice(0, insertAt), ...moved, ...remaining.slice(insertAt)];
+  const nextText = joinLines(nextLines);
+  return {
+    ok: true,
+    lines: moved.length,
+    edit: {
+      text: nextText,
+      cursor: { line: insertAt, col: 0 },
+      changed: nextText !== text,
+    },
+  };
+}
+
+export function joinExLineRange(
+  text: string,
+  range: LineRange,
+  rangeExplicit: boolean,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = rangeExplicit
+    ? clampLineRange(lines, range)
+    : clampLineRange(lines, {
+        startLine: range.startLine,
+        endLine: Math.min(lines.length - 1, range.startLine + 1),
+      });
+  const count = lineCountForRange(safeRange);
+  if (count < 2) return { ok: false, message: "Not enough lines to join" };
+
+  const [first = "", ...rest] = lines.slice(safeRange.startLine, safeRange.endLine + 1);
+  let joined = first.trimEnd();
+  for (const line of rest) {
+    const right = line.trimStart();
+    const separator = joined.length > 0 && right.length > 0 ? " " : "";
+    joined = `${joined}${separator}${right}`;
+  }
+  const nextLines = [
+    ...lines.slice(0, safeRange.startLine),
+    joined,
+    ...lines.slice(safeRange.endLine + 1),
+  ];
+  const nextText = joinLines(nextLines);
+  return {
+    ok: true,
+    lines: count,
+    edit: {
+      text: nextText,
+      cursor: {
+        line: safeRange.startLine,
+        col: Math.min((first ?? "").trimEnd().length, joined.length),
+      },
+      changed: nextText !== text,
+    },
+  };
+}
+
 export function exactMarkPosition(text: string, mark: Position): Position {
   return normalizeBufferPosition(text, mark);
 }

@@ -32,19 +32,24 @@ import {
   findCharOnLine,
   findSearchMatch,
   deleteSearchRange,
+  deleteExLineRange,
   deleteLineMarkRange,
   deleteLineRange,
   deleteMarkRange,
   deleteRange,
   exactMarkPosition,
   insertBlockText,
+  joinExLineRange,
   joinLineWithNext,
+  moveExLineRange,
   navigateBuffer,
   openLineAbove,
   openLineBelow,
   lineMarkPosition,
   pasteRegister,
   pasteRegisterBefore,
+  putExRegisterAfterRange,
+  copyExLineRange,
   replaceLineRangeWithRegister,
   replaceVisualRangeChars,
   replaceCharAt,
@@ -54,6 +59,7 @@ import {
   toggleCaseVisualRange,
   wordEndPosition,
   yankByMotion,
+  yankExLineRange,
   yankLine,
   yankLineCount,
   yankLineMarkRange,
@@ -75,7 +81,7 @@ import {
   marksForOptions,
   searchForOptions,
 } from "../config.ts";
-import { parseExSubstitution } from "../ex.ts";
+import { parseExCommand } from "../ex.ts";
 import {
   clearMarkTarget,
   localMarkPosition,
@@ -809,10 +815,29 @@ function substitutionMessage(matches: number): string {
   return `${matches} ${matches === 1 ? "substitution" : "substitutions"}`;
 }
 
+function lineMessage(lines: number, verb: string): string {
+  return `${lines} ${lines === 1 ? "line" : "lines"} ${verb}`;
+}
+
+function finishExEdit(
+  state: ModalState,
+  result: { edit: EditResult; lines: number },
+  message: string,
+  register?: VimRegister,
+): ModalUpdate {
+  const base = result.edit.changed ? clearSearchHighlight(state) : state;
+  const next = register ? { ...base, register } : base;
+  const finished = finishExState(next, "success", message);
+  const effects: ModalEffect[] = result.edit.changed
+    ? [{ type: "edit", result: result.edit }]
+    : [{ type: "invalidate" }];
+  return withEffects(finished, effects);
+}
+
 function executeExCommand(state: ModalState, snapshot: EditorSnapshot): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
-  const parsed = parseExSubstitution(pendingEx.command, {
+  const parsed = parseExCommand(pendingEx.command, {
     lineCount: snapshot.lines.length,
     cursorLine: snapshot.cursor.line,
     visualRange: pendingEx.visualRange,
@@ -820,27 +845,72 @@ function executeExCommand(state: ModalState, snapshot: EditorSnapshot): ModalUpd
   if (parsed.type === "empty") return invalidate(finishExState(state));
   if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
 
-  const result = substituteLineRangeLiteral(snapshot.text, {
-    range: parsed.range,
-    pattern: parsed.pattern,
-    replacement: parsed.replacement,
-    global: parsed.global,
-    ignoreCase: parsed.ignoreCase,
-    originalCursor: snapshot.cursor,
-  });
-  if (result.matches === 0) {
-    return invalidate(finishExState(state, "error", `Pattern not found: ${parsed.pattern}`));
+  if (parsed.type === "substitute") {
+    const result = substituteLineRangeLiteral(snapshot.text, {
+      range: parsed.range,
+      pattern: parsed.pattern,
+      replacement: parsed.replacement,
+      global: parsed.global,
+      ignoreCase: parsed.ignoreCase,
+      originalCursor: snapshot.cursor,
+    });
+    if (result.matches === 0) {
+      return invalidate(finishExState(state, "error", `Pattern not found: ${parsed.pattern}`));
+    }
+
+    const finished = finishExState(
+      result.edit.changed ? clearSearchHighlight(state) : state,
+      "success",
+      substitutionMessage(result.matches),
+    );
+    const effects: ModalEffect[] = result.edit.changed
+      ? [{ type: "edit", result: result.edit }]
+      : [{ type: "invalidate" }];
+    return withEffects(finished, effects);
   }
 
-  const finished = finishExState(
-    result.edit.changed ? clearSearchHighlight(state) : state,
-    "success",
-    substitutionMessage(result.matches),
-  );
-  const effects: ModalEffect[] = result.edit.changed
-    ? [{ type: "edit", result: result.edit }]
-    : [{ type: "invalidate" }];
-  return withEffects(finished, effects);
+  if (parsed.type === "nohlsearch") {
+    return invalidate(finishExState(clearSearchHighlight(state)));
+  }
+
+  if (parsed.type === "yank") {
+    const result = yankExLineRange(snapshot.text, parsed.range);
+    return invalidate(
+      finishExState(
+        { ...state, register: result.register },
+        "success",
+        lineMessage(result.lines, "yanked"),
+      ),
+    );
+  }
+
+  if (parsed.type === "delete") {
+    const result = deleteExLineRange(snapshot.text, parsed.range);
+    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    return finishExEdit(state, result, lineMessage(result.lines, "deleted"), result.edit.register);
+  }
+
+  if (parsed.type === "put") {
+    const result = putExRegisterAfterRange(snapshot.text, parsed.range, state.register);
+    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    return finishExEdit(state, result, lineMessage(result.lines, "put"));
+  }
+
+  if (parsed.type === "copy") {
+    const result = copyExLineRange(snapshot.text, parsed.range, parsed.destination);
+    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    return finishExEdit(state, result, lineMessage(result.lines, "copied"));
+  }
+
+  if (parsed.type === "move") {
+    const result = moveExLineRange(snapshot.text, parsed.range, parsed.destination);
+    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    return finishExEdit(state, result, lineMessage(result.lines, "moved"));
+  }
+
+  const result = joinExLineRange(snapshot.text, parsed.range, parsed.rangeExplicit);
+  if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+  return finishExEdit(state, result, lineMessage(result.lines, "joined"));
 }
 
 function handlePendingExInput(

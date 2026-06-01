@@ -303,7 +303,7 @@ Ctrl-v jj I- Esc
 
 Adds `-` before the selected block column on three lines.
 
-## Ex command-line and substitution
+## Ex command-line
 
 Normal-mode `:` opens a dedicated Ex row below the prompt. Visual `:` opens the same row with `'<,'>` prefilled and keeps the original selection highlighted while editing the command.
 
@@ -315,6 +315,13 @@ Supported commands:
 :2,4s#old/path#new/path#g
 :.,$substitute/old/new/i
 :'<,'>s/old/new/g
+:delete     " alias :d
+:yank       " alias :y
+:put        " alias :pu
+:2,4copy$   " alias :t
+:3,4move0   " alias :m
+:join       " alias :j
+:nohlsearch " alias :noh
 ```
 
 Supported ranges:
@@ -328,7 +335,14 @@ Supported ranges:
 - comma range, e.g. `2,4`, `.,$`
 - normal-mode count before `:`, e.g. `3:` pre-fills a concrete clamped range
 
-Supported flags:
+Supported destination addresses for `:copy`/`:t` and `:move`/`:m`:
+
+- `0`: before the first prompt line
+- numeric line address, e.g. `4`: after that line
+- `.`: after current line
+- `$`: after last line
+
+Supported substitution flags:
 
 - `g`: replace every non-overlapping literal match per line
 - `i`: case-insensitive literal match
@@ -340,16 +354,23 @@ Important semantics:
 - Empty replacement is valid.
 - Empty pattern is an error.
 - Delimiter can be any printable non-alphanumeric, non-whitespace, non-backslash character.
+- `:delete` removes addressed lines and writes the deleted linewise text to the unnamed register.
+- `:yank` copies addressed lines to the unnamed register without editing prompt text.
+- `:put` inserts unnamed register text as prompt-buffer lines after the addressed range.
+- `:copy` duplicates addressed lines after the destination address; destination `0` inserts before line 1.
+- `:move` moves addressed lines after the destination address and rejects destinations inside the moved range.
+- `:join` with no explicit range joins current line with next line; explicit ranges join all addressed lines with normalized boundary whitespace.
+- `:nohlsearch` clears visible prompt search highlights but keeps repeat-search state for `n`/`N`.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - Enter on an empty command closes the Ex row without a message.
-- Unsupported command, range, delimiter, or flag produces transient Ex error text.
-- Successful substitution shows transient count text such as `2 substitutions`.
+- Unsupported command, range, destination, delimiter, argument, or flag produces transient Ex error text.
+- Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, or `3 lines moved`.
 - Success/error messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
-- Substitution clears visible prompt search highlights when it changes text.
-- Substitution does not write registers and does not update dot-repeat.
+- Text-changing Ex commands clear visible prompt search highlights.
+- Ex commands do not write named registers and do not update dot-repeat.
 
-Limitations: no regex substitution, command history, repeat substitution, `:nohlsearch`, offsets, semicolon ranges, confirmation flag, or non-substitution Ex commands.
+Limitations: no regex substitution, command history, repeat substitution, range offsets, semicolon ranges, confirmation flag, Ex register operands, `:global`, shell/file/window/buffer commands, or Vimscript evaluation.
 
 ## Registers
 

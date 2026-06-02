@@ -196,6 +196,41 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.marks.jumpExact` | `["`"]` | Prefix for exact mark jump, e.g. `` `a ``. Works in normal/operator/visual contexts. |
 | `piVimMode.keymap.marks.jumpLine`  | `["'"]` | Prefix for line mark jump, e.g. `'a`. Works in normal/operator/visual contexts.      |
 
+### Text object keymap
+
+Text object keys are only read after an operator and a text-object kind key. Defaults preserve Vim-style `iw`, `aw`, plus prompt-native objects.
+
+| Path                                                  | Default      | Effect                                               |
+| ----------------------------------------------------- | ------------ | ---------------------------------------------------- |
+| `piVimMode.keymap.textObjects.kinds.inner`            | `["i"]`      | Kind key for inner text objects, e.g. `diw`, `cif`.  |
+| `piVimMode.keymap.textObjects.kinds.around`           | `["a"]`      | Kind key for around text objects, e.g. `daw`, `yaf`. |
+| `piVimMode.keymap.textObjects.targets.word`           | `["w"]`      | Word text object target.                             |
+| `piVimMode.keymap.textObjects.targets.singleQuote`    | `["'"]`      | Single-quoted string target.                         |
+| `piVimMode.keymap.textObjects.targets.doubleQuote`    | `["\""]`     | Double-quoted string target.                         |
+| `piVimMode.keymap.textObjects.targets.paren`          | `["(", ")"]` | Parenthesized target.                                |
+| `piVimMode.keymap.textObjects.targets.bracket`        | `["[", "]"]` | Bracketed target.                                    |
+| `piVimMode.keymap.textObjects.targets.brace`          | `["{", "}"]` | Braced target.                                       |
+| `piVimMode.keymap.textObjects.targets.codeFence`      | `["f"]`      | Markdown code fence target.                          |
+| `piVimMode.keymap.textObjects.targets.headingSection` | `["h"]`      | Markdown heading section target.                     |
+| `piVimMode.keymap.textObjects.targets.listItem`       | `["l"]`      | Markdown list item target.                           |
+| `piVimMode.keymap.textObjects.targets.tag`            | `["t"]`      | XML-ish tag block target.                            |
+| `piVimMode.keymap.textObjects.targets.errorBlock`     | `["e"]`      | Pasted error/stack-trace block target.               |
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "textObjects": {
+        "kinds": { "inner": ["I"], "around": ["A"] },
+        "targets": { "codeFence": ["F"], "tag": ["X"] }
+      }
+    }
+  }
+}
+```
+
 ### Operator motion allow-list
 
 These settings decide which semantic motions are valid after each operator. Accepted motion action names:
@@ -252,7 +287,53 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
-Search is literal and prompt-local. Regex search, `?`, search history, Vim highlight groups, and `:nohlsearch` are not supported.
+Search is literal and prompt-local. Regex search, `?`, search history, and Vim highlight groups are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
+
+## Prompt-native structure settings
+
+These settings enable/disable prompt-native structure text objects after parsing. Disabled structures become safe no-ops; classic word/quote/bracket text objects still work.
+
+| Path                                                | Default | Effect                                 |
+| --------------------------------------------------- | ------- | -------------------------------------- |
+| `piVimMode.promptStructures.enabled`                | `true`  | Enables all prompt-native structures.  |
+| `piVimMode.promptStructures.targets.codeFence`      | `true`  | Enables code fence text object target. |
+| `piVimMode.promptStructures.targets.headingSection` | `true`  | Enables heading section target.        |
+| `piVimMode.promptStructures.targets.listItem`       | `true`  | Enables list item target.              |
+| `piVimMode.promptStructures.targets.tag`            | `true`  | Enables XML-ish tag target.            |
+| `piVimMode.promptStructures.targets.errorBlock`     | `true`  | Enables pasted error block target.     |
+
+## Prompt transform settings
+
+These settings enable/disable finite prompt transform Ex commands and configure command names.
+
+| Path                                           | Default     | Effect                                 |
+| ---------------------------------------------- | ----------- | -------------------------------------- |
+| `piVimMode.promptTransforms.enabled`           | `true`      | Enables all prompt transform commands. |
+| `piVimMode.promptTransforms.actions.quote`     | `true`      | Enables quote transform.               |
+| `piVimMode.promptTransforms.actions.unquote`   | `true`      | Enables unquote transform.             |
+| `piVimMode.promptTransforms.actions.bulletize` | `true`      | Enables bulletize transform.           |
+| `piVimMode.promptTransforms.actions.fence`     | `true`      | Enables fence transform.               |
+| `piVimMode.promptTransforms.actions.indent`    | `true`      | Enables indent transform.              |
+| `piVimMode.promptTransforms.actions.dedent`    | `true`      | Enables dedent transform.              |
+| `piVimMode.promptTransforms.actions.reflow`    | `true`      | Enables reflow transform.              |
+| `piVimMode.promptTransforms.commands.quote`    | `["quote"]` | Ex command names that run quote.       |
+| `piVimMode.promptTransforms.commands.fence`    | `["fence"]` | Ex command names that run fence.       |
+
+Command-name arrays exist for every transform action: `quote`, `unquote`, `bulletize`, `fence`, `indent`, `dedent`, `reflow`.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "promptStructures": { "targets": { "tag": false } },
+    "promptTransforms": {
+      "actions": { "reflow": false },
+      "commands": { "quote": ["qte"], "fence": ["wrap"] }
+    }
+  }
+}
+```
 
 ## UI settings
 

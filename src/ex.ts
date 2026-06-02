@@ -1,9 +1,15 @@
-import type { LineRange } from "./types.ts";
+import type {
+  LineRange,
+  PromptTransform,
+  PromptTransformAction,
+  ResolvedVimPromptTransforms,
+} from "./types.ts";
 
 export type ExParseContext = {
   lineCount: number;
   cursorLine: number;
   visualRange?: LineRange;
+  promptTransforms?: ResolvedVimPromptTransforms;
 };
 
 export type ParsedExSubstitution = {
@@ -32,10 +38,19 @@ export type ParsedExDestinationCommand = {
   destination: number;
 };
 
+export type ParsedExTransformCommand = {
+  type: "transform";
+  command: string;
+  range: LineRange;
+  rangeExplicit: boolean;
+  transform: PromptTransform;
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
   | ParsedExLineCommand
   | ParsedExDestinationCommand
+  | ParsedExTransformCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | { type: "empty" }
   | { type: "error"; message: string };
@@ -61,6 +76,13 @@ type ParsedCommandName =
   | "move"
   | "j"
   | "join"
+  | "quote"
+  | "unquote"
+  | "bulletize"
+  | "fence"
+  | "indent"
+  | "dedent"
+  | "reflow"
   | "noh"
   | "nohlsearch";
 
@@ -137,7 +159,37 @@ type ParsedCommandType =
   | "copy"
   | "move"
   | "join"
+  | "transform"
   | "nohlsearch";
+
+type ParsedCommand = {
+  name: string;
+  type: ParsedCommandType;
+  transformAction?: PromptTransformAction;
+};
+
+function transformActionForCommand(
+  command: string,
+  promptTransforms: ResolvedVimPromptTransforms | undefined,
+): PromptTransformAction | undefined {
+  const config = promptTransforms;
+  if (config?.enabled === false) return undefined;
+  const commands = config?.commands;
+  for (const action of [
+    "quote",
+    "unquote",
+    "bulletize",
+    "fence",
+    "indent",
+    "dedent",
+    "reflow",
+  ] as const) {
+    if (config?.actions[action] === false) continue;
+    const names = commands?.[action] ?? [action];
+    if (names.includes(command)) return action;
+  }
+  return undefined;
+}
 
 function commandType(command: ParsedCommandName): ParsedCommandType {
   switch (command) {
@@ -162,6 +214,14 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "j":
     case "join":
       return "join";
+    case "quote":
+    case "unquote":
+    case "bulletize":
+    case "fence":
+    case "indent":
+    case "dedent":
+    case "reflow":
+      return "transform";
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
@@ -170,7 +230,8 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
 
 function parseCommand(
   source: string,
-): { ok: true; command: ParsedCommandName; rest: string } | { ok: false; message: string } {
+  context: ExParseContext,
+): { ok: true; command: ParsedCommand; rest: string } | { ok: false; message: string } {
   const trimmed = source.trimStart();
   const name = /^[A-Za-z]+/.exec(trimmed)?.[0];
   if (!name) return { ok: false, message: `Unsupported Ex command: ${trimmed[0] ?? ""}` };
@@ -190,11 +251,30 @@ function parseCommand(
     "move",
     "j",
     "join",
+    "quote",
+    "unquote",
+    "bulletize",
+    "fence",
+    "indent",
+    "dedent",
+    "reflow",
     "noh",
     "nohlsearch",
   ]);
-  if (!supported.has(name)) return { ok: false, message: `Unsupported Ex command: ${name}` };
-  return { ok: true, command: name as ParsedCommandName, rest: trimmed.slice(name.length) };
+  if (supported.has(name)) {
+    const type = commandType(name as ParsedCommandName);
+    if (type !== "transform")
+      return { ok: true, command: { name, type }, rest: trimmed.slice(name.length) };
+  }
+  const transformAction = transformActionForCommand(name, context.promptTransforms);
+  if (transformAction) {
+    return {
+      ok: true,
+      command: { name, type: "transform", transformAction },
+      rest: trimmed.slice(name.length),
+    };
+  }
+  return { ok: false, message: `Unsupported Ex command: ${name}` };
 }
 
 function isValidDelimiter(delimiter: string | undefined): delimiter is string {
@@ -294,6 +374,38 @@ function rejectTrailingArgs(rest: string): ExParseResult | undefined {
     : undefined;
 }
 
+function parseTransformArgs(
+  action: PromptTransformAction,
+  rest: string,
+): { ok: true; transform: PromptTransform } | { ok: false; message: string } {
+  const args = rest.trim();
+  if (action === "fence") {
+    if (/\s/.test(args)) return { ok: false, message: "Invalid fence language" };
+    return {
+      ok: true,
+      transform: args ? { action: "fence", language: args } : { action: "fence" },
+    };
+  }
+  if (action === "reflow") {
+    if (args.length === 0) return { ok: true, transform: { action: "reflow" } };
+    if (!/^\d+$/.test(args)) return { ok: false, message: "Invalid reflow width" };
+    const width = Number(args);
+    if (width < 20 || width > 240) return { ok: false, message: "Invalid reflow width" };
+    return { ok: true, transform: { action: "reflow", width } };
+  }
+  if (args.length > 0) return { ok: false, message: "Unexpected Ex command arguments" };
+  if (
+    action === "quote" ||
+    action === "unquote" ||
+    action === "bulletize" ||
+    action === "indent" ||
+    action === "dedent"
+  ) {
+    return { ok: true, transform: { action } };
+  }
+  return { ok: false, message: "Unsupported Ex command" };
+}
+
 export function parseExCommand(commandLine: string, context: ExParseContext): ExParseResult {
   const source = commandLine.trim();
   if (source.length === 0) return { type: "empty" };
@@ -301,16 +413,16 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   const range = parseRange(source, context);
   if (!range.ok) return { type: "error", message: range.message };
 
-  const command = parseCommand(range.rest);
+  const command = parseCommand(range.rest, context);
   if (!command.ok) return { type: "error", message: command.message };
 
-  const type = commandType(command.command);
+  const type = command.command.type;
   if (type === "substitute") {
     const args = parseSubstitutionArgs(command.rest);
     if (!args.ok) return { type: "error", message: args.message };
     return {
       type,
-      command: command.command as "s" | "substitute",
+      command: command.command.name as "s" | "substitute",
       range: range.range,
       rangeExplicit: range.explicit,
       pattern: args.pattern,
@@ -325,10 +437,24 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     if (!destination.ok) return { type: "error", message: destination.message };
     return {
       type,
-      command: command.command,
+      command: command.command.name,
       range: range.range,
       rangeExplicit: range.explicit,
       destination: destination.destination,
+    };
+  }
+
+  if (type === "transform") {
+    const transformAction = command.command.transformAction;
+    if (!transformAction) return { type: "error", message: "Unsupported Ex command" };
+    const transform = parseTransformArgs(transformAction, command.rest);
+    if (!transform.ok) return { type: "error", message: transform.message };
+    return {
+      type,
+      command: command.command.name,
+      range: range.range,
+      rangeExplicit: range.explicit,
+      transform: transform.transform,
     };
   }
 
@@ -336,12 +462,12 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   if (trailingError) return trailingError;
 
   if (type === "nohlsearch") {
-    return { type, command: command.command as "noh" | "nohlsearch" };
+    return { type, command: command.command.name as "noh" | "nohlsearch" };
   }
 
   return {
     type,
-    command: command.command,
+    command: command.command.name,
     range: range.range,
     rangeExplicit: range.explicit,
   };

@@ -123,18 +123,31 @@ function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
 }
 
-const TEXT_OBJECT_KIND_KEYS: Record<string, VimTextObjectKind> = { i: "inner", a: "around" };
-const TEXT_OBJECT_TARGET_KEYS: Record<string, VimTextObjectTarget> = {
-  w: "word",
-  "'": "singleQuote",
-  '"': "doubleQuote",
-  "(": "paren",
-  ")": "paren",
-  "[": "bracket",
-  "]": "bracket",
-  "{": "brace",
-  "}": "brace",
-};
+function textObjectKindForKey(
+  key: string,
+  keymap: ResolvedVimKeymap,
+): VimTextObjectKind | undefined {
+  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds) as [
+    VimTextObjectKind,
+    readonly string[],
+  ][]) {
+    if (sequences.includes(key)) return kind;
+  }
+  return undefined;
+}
+
+function textObjectTargetForKey(
+  key: string,
+  keymap: ResolvedVimKeymap,
+): VimTextObjectTarget | undefined {
+  for (const [target, sequences] of Object.entries(keymap.textObjects.targets) as [
+    VimTextObjectTarget,
+    readonly string[],
+  ][]) {
+    if (sequences.includes(key)) return target;
+  }
+  return undefined;
+}
 
 function isLegacyVimOperator(key: string): key is VimOperator {
   return LEGACY_VIM_OPERATORS.has(key);
@@ -501,7 +514,7 @@ function resolveTextObjectPending(
   keymap: ResolvedVimKeymap,
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
-  const target = TEXT_OBJECT_TARGET_KEYS[key];
+  const target = textObjectTargetForKey(key, keymap);
   if (!operator || !target) return { type: "invalid" };
   return {
     type: "operatorTextObject",
@@ -532,7 +545,7 @@ function resolveAfterOperator(
     return { type: "pending", pending: encodeOperatorSearchPending(operatorSequence, key, count) };
   }
 
-  const textObjectKind = TEXT_OBJECT_KIND_KEYS[key];
+  const textObjectKind = textObjectKindForKey(key, keymap);
   if (textObjectKind) {
     return {
       type: "pending",

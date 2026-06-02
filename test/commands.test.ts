@@ -284,4 +284,35 @@ describe("normal command parser", () => {
       textObject: { kind: "inner", target: "word" },
     });
   });
+
+  test("resolves configured text object kind and target keys", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      textObjects: {
+        kinds: { ...DEFAULT_VIM_KEYMAP.textObjects.kinds, inner: ["I"] },
+        targets: { ...DEFAULT_VIM_KEYMAP.textObjects.targets, codeFence: ["F"] },
+      },
+    };
+    const change = resolveNormalCommand("c", undefined, keymap);
+    const inner = resolveNormalCommand(
+      "I",
+      change.type === "pending" ? change.pending : "",
+      keymap,
+    );
+    expect(inner.type).toBe("pending");
+    expect(
+      resolveNormalCommand("F", inner.type === "pending" ? inner.pending : "", keymap),
+    ).toEqual({
+      type: "operatorTextObject",
+      operator: "change",
+      textObject: { kind: "inner", target: "codeFence" },
+    });
+  });
+
+  test("keeps operator motions distinct from text object targets", () => {
+    const deletePending = resolveNormalCommand("d", undefined);
+    expect(
+      resolveNormalCommand("w", deletePending.type === "pending" ? deletePending.pending : ""),
+    ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordForward" });
+  });
 });

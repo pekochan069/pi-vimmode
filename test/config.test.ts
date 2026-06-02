@@ -22,12 +22,17 @@ function tempSettings() {
 }
 
 describe("vim config parsing", () => {
-  test("VimEditorOptions accepts partial consumer keymap config", () => {
+  test("VimEditorOptions accepts partial consumer config shapes", () => {
     const options = {
       keymap: { commands: { replaceChar: ["R"], toggleCase: ["~"] } },
+      promptStructures: { targets: { codeFence: false } },
+      promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
+    expect(options.promptStructures.targets?.codeFence).toBe(false);
+    expect(options.promptTransforms.actions?.reflow).toBe(false);
+    expect(options.promptTransforms.commands?.quote).toEqual(["qte"]);
   });
 
   test("uses defaults when settings are absent", () => {
@@ -240,6 +245,34 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
   });
 
+  test("parses prompt structure and transform options", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          textObjects: {
+            kinds: { inner: ["Z"], around: ["Q"] },
+            targets: { codeFence: ["R"], tag: ["X"] },
+          },
+        },
+        promptStructures: { enabled: true, targets: { tag: false, errorBlock: false } },
+        promptTransforms: {
+          enabled: true,
+          actions: { reflow: false },
+          commands: { quote: ["qte"], fence: ["wrap"] },
+        },
+      },
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.textObjects.kinds.inner).toEqual(["Z"]);
+    expect(result.options.keymap?.textObjects.targets.codeFence).toEqual(["R"]);
+    expect(result.options.promptStructures?.targets.tag).toBe(false);
+    expect(result.options.promptStructures?.targets.codeFence).toBe(true);
+    expect(result.options.promptTransforms?.actions.reflow).toBe(false);
+    expect(result.options.promptTransforms?.commands.quote).toEqual(["qte"]);
+    expect(result.options.promptTransforms?.commands.fence).toEqual(["wrap"]);
+  });
+
   test("rejects operator motions without range semantics", () => {
     const result = resolveVimOptions({
       piVimMode: { keymap: { operatorMotions: { delete: ["right", "wordForward"] } } },
@@ -256,8 +289,10 @@ describe("vim config parsing", () => {
       piVimMode: {
         keymap: {
           operators: { delete: ["x"] },
+          motions: { left: ["x"] },
           commands: { deleteChar: ["x"] },
           marks: { set: ["x"] },
+          textObjects: { targets: { word: ["x"] } },
         },
       },
     });
@@ -265,6 +300,35 @@ describe("vim config parsing", () => {
     expect(
       result.warnings.some((warning) => warning.includes("duplicate piVimMode.keymap binding x")),
     ).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("textObjects.targets.word"))).toBe(
+      true,
+    );
+
+    const hijack = resolveVimOptions({
+      piVimMode: { keymap: { textObjects: { kinds: { inner: ["w"] } } } },
+    });
+    expect(
+      hijack.warnings.some((warning) =>
+        warning.includes("motions.wordForward and textObjects.kinds.inner"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects multi-key text object bindings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          textObjects: { kinds: { inner: ["ii", "I"] }, targets: { codeFence: ["ff"] } },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.textObjects.kinds.inner).toEqual(["I"]);
+    expect(result.options.keymap?.textObjects.targets.codeFence).toEqual(["f"]);
+    expect(
+      result.warnings.filter((warning) => warning.includes("unsupported multi-key text object"))
+        .length,
+    ).toBe(2);
   });
 
   test("warns when exact keymap bindings are shadowed by longer prefixes", () => {

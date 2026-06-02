@@ -2,11 +2,16 @@ import type {
   EditResult,
   LineRange,
   Position,
+  PromptStructureTarget,
+  PromptTransform,
+  ResolvedVimPromptStructures,
   TextRange,
   VimMotion,
   VimRegister,
   VimTextObject,
 } from "./types.ts";
+
+import { isErrorBlockLine, resolvePromptStructureRange } from "./prompt-structures.ts";
 
 export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
 export type VisualSelectionKind = "char" | "line" | "block";
@@ -487,6 +492,152 @@ export function moveExLineRange(
       changed: nextText !== text,
     },
   };
+}
+
+function replaceLineRange(
+  text: string,
+  range: LineRange,
+  replacement: readonly string[],
+  cursor: Position,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  const nextLines = [
+    ...lines.slice(0, safeRange.startLine),
+    ...replacement,
+    ...lines.slice(safeRange.endLine + 1),
+  ];
+  const nextText = joinLines(nextLines.length === 0 ? [""] : nextLines);
+  return {
+    ok: true,
+    lines: lineCountForRange(safeRange),
+    edit: {
+      text: nextText,
+      cursor: clampPosition(splitText(nextText), cursor),
+      changed: nextText !== text,
+    },
+  };
+}
+
+function bulletizeLine(line: string): string {
+  if (line.trim().length === 0) return line;
+  const indent = /^\s*/.exec(line)?.[0] ?? "";
+  const content = line.slice(indent.length).replace(/^(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "");
+  return `${indent}- ${content}`;
+}
+
+function dedentLine(line: string): string {
+  if (line.startsWith("  ")) return line.slice(2);
+  if (line.startsWith("\t")) return line.slice(1);
+  if (line.startsWith(" ")) return line.slice(1);
+  return line;
+}
+
+function wrapWords(words: string[], width: number): string[] {
+  const output: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current.length === 0) {
+      current = word;
+      continue;
+    }
+    if (current.length + 1 + word.length <= width) current = `${current} ${word}`;
+    else {
+      output.push(current);
+      current = word;
+    }
+  }
+  if (current.length > 0) output.push(current);
+  return output;
+}
+
+function reflowLines(lines: readonly string[], width: number, initialInFence = false): string[] {
+  const output: string[] = [];
+  let paragraph: string[] = [];
+  let inFence = initialInFence;
+
+  const flush = () => {
+    if (paragraph.length === 0) return;
+    const indent = /^\s*/.exec(paragraph[0] ?? "")?.[0] ?? "";
+    const words = paragraph.flatMap((line) => line.trim().split(/\s+/).filter(Boolean));
+    const wrapped = wrapWords(words, Math.max(10, width - indent.length)).map(
+      (line) => `${indent}${line}`,
+    );
+    output.push(...wrapped);
+    paragraph = [];
+  };
+
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      flush();
+      inFence = !inFence;
+      output.push(line);
+      continue;
+    }
+    if (
+      inFence ||
+      isErrorBlockLine(line) ||
+      line.trim().length === 0 ||
+      /^\s*[-+*]\s+/.test(line)
+    ) {
+      flush();
+      output.push(line);
+      continue;
+    }
+    paragraph.push(line);
+  }
+  flush();
+  return output;
+}
+
+function startsInsideFence(lines: readonly string[], startLine: number): boolean {
+  let inFence = false;
+  for (let index = 0; index < startLine; index++) {
+    if (/^\s*(```|~~~)/.test(lines[index] ?? "")) inFence = !inFence;
+  }
+  return inFence;
+}
+
+export function applyPromptTransform(
+  text: string,
+  range: LineRange,
+  transform: PromptTransform,
+  originalCursor: Position,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const safeRange = clampLineRange(lines, range);
+  const selected = lines.slice(safeRange.startLine, safeRange.endLine + 1);
+  let replacement: string[];
+
+  switch (transform.action) {
+    case "quote":
+      replacement = selected.map((line) => `> ${line}`);
+      break;
+    case "unquote":
+      replacement = selected.map((line) => line.replace(/^\s*> ?/, ""));
+      break;
+    case "bulletize":
+      replacement = selected.map(bulletizeLine);
+      break;
+    case "fence":
+      replacement = [`${"```"}${transform.language ?? ""}`, ...selected, "```"];
+      break;
+    case "indent":
+      replacement = selected.map((line) => `  ${line}`);
+      break;
+    case "dedent":
+      replacement = selected.map(dedentLine);
+      break;
+    case "reflow":
+      replacement = reflowLines(
+        selected,
+        transform.width ?? 80,
+        startsInsideFence(lines, safeRange.startLine),
+      );
+      break;
+  }
+
+  return replaceLineRange(text, safeRange, replacement, originalCursor);
 }
 
 export function joinExLineRange(
@@ -1536,6 +1687,7 @@ export function textObjectRange(
   text: string,
   cursor: Position,
   textObject: VimTextObject,
+  promptStructures?: ResolvedVimPromptStructures,
 ): { start: Position; end: Position } | undefined {
   const current = positionToOffset(text, cursor);
   let range: { start: number; end: number } | undefined;
@@ -1555,31 +1707,99 @@ export function textObjectRange(
   else if (textObject.target === "paren") range = bracketRangeAtOffset(text, cursor, "(", ")");
   else if (textObject.target === "bracket") range = bracketRangeAtOffset(text, cursor, "[", "]");
   else if (textObject.target === "brace") range = bracketRangeAtOffset(text, cursor, "{", "}");
+  else if (
+    isPromptStructureTarget(textObject.target) &&
+    (promptStructures?.enabled ?? true) &&
+    (promptStructures?.targets[textObject.target] ?? true)
+  ) {
+    const structureRange = resolvePromptStructureRange(text, cursor, {
+      kind: textObject.kind,
+      target: textObject.target,
+    });
+    if (structureRange) range = { start: structureRange.start, end: structureRange.endExclusive };
+  }
 
   if (!range) return undefined;
-  const inner = textObject.kind === "inner" && textObject.target !== "word";
+  const delimiterTarget = ["singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(
+    textObject.target,
+  );
+  const inner = textObject.kind === "inner" && delimiterTarget;
   const start = inner ? range.start + 1 : range.start;
   const endExclusive = inner ? range.end - 1 : range.end;
   if (start >= endExclusive) return undefined;
   return { start: offsetToPosition(text, start), end: offsetToPosition(text, endExclusive - 1) };
 }
 
+function isPromptStructureTarget(target: VimTextObject["target"]): target is PromptStructureTarget {
+  return !["word", "singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(target);
+}
+
+function promptStructureTextObjectRange(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+  promptStructures?: ResolvedVimPromptStructures,
+) {
+  if (!isPromptStructureTarget(textObject.target)) return undefined;
+  if (
+    promptStructures?.enabled === false ||
+    promptStructures?.targets[textObject.target] === false
+  ) {
+    return undefined;
+  }
+  return resolvePromptStructureRange(text, cursor, {
+    kind: textObject.kind,
+    target: textObject.target,
+  });
+}
+
 export function yankTextObject(
   text: string,
   cursor: Position,
   textObject: VimTextObject,
+  promptStructures?: ResolvedVimPromptStructures,
 ): VimRegister | undefined {
-  const range = textObjectRange(text, cursor, textObject);
+  const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
+  if (structureRange)
+    return { type: "char", text: text.slice(structureRange.start, structureRange.endExclusive) };
+  const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return undefined;
   return yankVisualSelection(text, range.start, range.end, "char");
+}
+
+function isWholeLineRange(text: string, start: number, endExclusive: number): boolean {
+  const startsAtLineStart = start === 0 || text[start - 1] === "\n";
+  const endsAtLineEnd = endExclusive >= text.length || text[endExclusive] === "\n";
+  return startsAtLineStart && endsAtLineEnd;
 }
 
 export function deleteTextObject(
   text: string,
   cursor: Position,
   textObject: VimTextObject,
+  promptStructures?: ResolvedVimPromptStructures,
 ): EditResult {
-  const range = textObjectRange(text, cursor, textObject);
+  const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
+  if (structureRange) {
+    let endExclusive = structureRange.endExclusive;
+    if (
+      isWholeLineRange(text, structureRange.start, structureRange.endExclusive) &&
+      endExclusive < text.length &&
+      text[endExclusive] === "\n"
+    )
+      endExclusive++;
+    const nextText = text.slice(0, structureRange.start) + text.slice(endExclusive);
+    return {
+      text: nextText,
+      cursor: offsetToPosition(nextText, structureRange.start),
+      register: {
+        type: "char",
+        text: text.slice(structureRange.start, structureRange.endExclusive),
+      },
+      changed: nextText !== text,
+    };
+  }
+  const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
   return deleteRange(text, range.start, range.end);
 }

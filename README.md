@@ -52,7 +52,7 @@ Default modes:
 
 Canonical user-facing docs live under `docs/`:
 
-- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, text objects, character search, prompt search, visual modes, Ex command-line commands, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
+- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, prompt-native text objects, prompt transforms, character search, prompt search, visual modes, Ex command-line commands, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
 - [`docs/settings.md`](docs/settings.md): every supported `piVimMode` setting, defaults, accepted value shapes, merge behavior, key sequence syntax, protected-key validation, warnings, troubleshooting, and practical config examples.
 - [`docs/adr/0002-user-facing-pi-vimmode-docs.md`](docs/adr/0002-user-facing-pi-vimmode-docs.md): documentation source-of-truth decision and maintenance rules.
 

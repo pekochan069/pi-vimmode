@@ -54,3 +54,45 @@
   - Benefits: Smaller review surface for modal bugs; less regression risk when adding Ex/search/visual behavior.
 
 - [ ] reserve ex command display section just like in real vim, also make it configurable (like reserve 2 lines for ex command display section)
+
+## Custom keybindings
+
+## Next feature candidates from ideation (2026-06-01)
+
+- [x] Prompt-native structure objects and transforms
+  - Add first-class prompt structures: Markdown code fences, headings/sections, list items, XML-ish tags, pasted error blocks.
+  - Add transforms: quote/unquote, bulletize, wrap in code fence, indent/dedent, reflow selection.
+  - Goal: make pi-vimmode better for agent prompt editing, not just broader Vim parity.
+  - Complexity: Medium-High. Confidence: 88%.
+
+- [ ] Safe Ex/Search workbench
+  - Add shared `/` and `:` mini-editor with history, backward `?`, previous-query recall, bounded regex/literal modes, substitution preview/counts.
+  - Keep finite scope; no full Ex/Vimscript parity.
+  - Complexity: High. Confidence: 84%.
+
+- [ ] Self-explaining customization suite
+  - Add `:vimdoctor`, `:keymap`, `:mapcheck`, protected Pi shortcut explanations, curated presets (`minimal`, `prompt-safe`, `vim-heavy`), optional no-op feedback, and searchable `:actions` palette.
+  - Goal: make custom keybindings/debugging usable without hidden `vim ⚠` confusion.
+  - Complexity: Medium. Confidence: 82%.
+
+- [ ] Prompt range algebra kernel
+  - Extract reusable range resolver for Ex ranges, operator motions, marks, visual captures, search targets, offsets (`.+1`, `$-2`), and semicolon ranges.
+  - Goal: unlock operator coverage, Ex operands, marks integration, and safer substitution without one-off parser branches.
+  - Complexity: High. Confidence: 78%.
+
+- [ ] Runtime help and docs/spec drift guard
+  - Generate or validate feature matrix from action registry, config schema, OpenSpec, and tests.
+  - Expose runtime help/limits via `:help`, `:features`, `:messages`.
+  - Fail checks when docs contradict source, like stale `:nohlsearch` claims.
+  - Complexity: Medium. Confidence: 76%.
+
+- [ ] Architecture runway sprint with inspectability
+  - Split modal/search/Ex/visual/macro handlers into feature modules with semantic action/effect contracts.
+  - Add golden effect tests.
+  - Expose optional `:vimmode inspect` / `:messages` for mode, cursor, selection, registers, marks, macros, search, and render layers.
+  - Complexity: Medium-High. Confidence: 75%.
+
+- [ ] Prompt waypoint timeline
+  - Record searches, marks, paragraph moves, Ex targets, macro starts, and jump points with snippet previews.
+  - Keep scope prompt-local; do not promise full Vim jumplist parity.
+  - Complexity: Medium. Confidence: 68%.

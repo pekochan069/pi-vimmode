@@ -166,6 +166,89 @@ describe("Ex command parser", () => {
     });
   });
 
+  test("parses prompt transform commands with ranges and arguments", () => {
+    expect(parseExCommand("quote", context)).toMatchObject({
+      type: "transform",
+      command: "quote",
+      range: { startLine: 1, endLine: 1 },
+      transform: { action: "quote" },
+    });
+    expect(parseExCommand("2,4bulletize", context)).toMatchObject({
+      type: "transform",
+      command: "bulletize",
+      range: { startLine: 1, endLine: 3 },
+      rangeExplicit: true,
+      transform: { action: "bulletize" },
+    });
+    expect(
+      parseExCommand("'<,'>fence ts", { ...context, visualRange: { startLine: 2, endLine: 4 } }),
+    ).toMatchObject({
+      type: "transform",
+      command: "fence",
+      range: { startLine: 2, endLine: 4 },
+      transform: { action: "fence", language: "ts" },
+    });
+    expect(parseExCommand("reflow 72", context)).toMatchObject({
+      type: "transform",
+      transform: { action: "reflow", width: 72 },
+    });
+  });
+
+  test("honors configured prompt transform commands", () => {
+    expect(
+      parseExCommand("qte", {
+        ...context,
+        promptTransforms: {
+          enabled: true,
+          actions: {
+            quote: true,
+            unquote: true,
+            bulletize: true,
+            fence: true,
+            indent: true,
+            dedent: true,
+            reflow: false,
+          },
+          commands: {
+            quote: ["qte"],
+            unquote: ["unquote"],
+            bulletize: ["bulletize"],
+            fence: ["wrap"],
+            indent: ["indent"],
+            dedent: ["dedent"],
+            reflow: ["reflow"],
+          },
+        },
+      }),
+    ).toMatchObject({ type: "transform", transform: { action: "quote" } });
+    expect(
+      parseExCommand("reflow", {
+        ...context,
+        promptTransforms: {
+          enabled: true,
+          actions: {
+            quote: true,
+            unquote: true,
+            bulletize: true,
+            fence: true,
+            indent: true,
+            dedent: true,
+            reflow: false,
+          },
+          commands: {
+            quote: ["quote"],
+            unquote: ["unquote"],
+            bulletize: ["bulletize"],
+            fence: ["fence"],
+            indent: ["indent"],
+            dedent: ["dedent"],
+            reflow: ["reflow"],
+          },
+        },
+      }),
+    ).toEqual({ type: "error", message: "Unsupported Ex command: reflow" });
+  });
+
   test("rejects invalid Ex commands and arguments", () => {
     expect(parseExCommand("0delete", context)).toEqual({
       type: "error",
@@ -186,6 +269,14 @@ describe("Ex command parser", () => {
     expect(parseExCommand("delete a", context)).toEqual({
       type: "error",
       message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("reflow wide", context)).toEqual({
+      type: "error",
+      message: "Invalid reflow width",
+    });
+    expect(parseExCommand("fence ts extra", context)).toEqual({
+      type: "error",
+      message: "Invalid fence language",
     });
   });
 });

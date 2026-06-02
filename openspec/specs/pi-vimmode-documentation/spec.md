@@ -1,8 +1,11 @@
 # pi-vimmode-documentation Specification
 
 ## Purpose
+
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -53,4 +56,3 @@ The change SHALL keep the primary documentation deliverables under `docs/` and t
 
 - **WHEN** documentation review identifies runtime behavior, test coverage, or durable OpenSpec specs that contradict the new canonical docs
 - **THEN** the change may include minimal source, test, or durable-spec edits that directly resolve the drift and are validated with focused tests and OpenSpec validation
-

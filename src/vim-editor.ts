@@ -97,6 +97,8 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
     macros: options.macros,
     marks: options.marks,
     search: options.search,
+    promptStructures: options.promptStructures,
+    promptTransforms: options.promptTransforms,
   };
 }
 

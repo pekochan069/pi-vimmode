@@ -171,6 +171,11 @@ Text objects work after `d`, `c`, or `y`.
 | `i(` / `a(` / `i)` / `a)` | inside/around parentheses                   |
 | `i[` / `a[` / `i]` / `a]` | inside/around brackets                      |
 | `i{` / `a{` / `i}` / `a}` | inside/around braces                        |
+| `if` / `af`               | inner/around Markdown code fence            |
+| `ih` / `ah`               | inner/around Markdown heading section       |
+| `il` / `al`               | inner/around Markdown list item             |
+| `it` / `at`               | inner/around XML-ish tag                    |
+| `ie` / `ae`               | inner/around pasted error block             |
 
 Examples:
 
@@ -179,6 +184,9 @@ diw   delete current word
 ci"   change text inside nearest double quotes on current line
 da)   delete parenthesized expression including delimiters
 ya{   yank braced block including braces
+daf   delete whole Markdown code fence
+cih   change body of current Markdown heading section
+yal   yank current Markdown list item
 ```
 
 Limitations:
@@ -186,6 +194,9 @@ Limitations:
 - Word objects use whitespace boundaries.
 - Quote objects search current line.
 - Bracket objects balance delimiters in prompt text, but do not implement Vim's full syntax awareness.
+- Prompt-native objects use conservative line-oriented scanning, not full Markdown/XML parsing.
+- XML-ish tags support matching `<name ...>` / `</name>` pairs and ignore self-closing tags.
+- Error block detection is heuristic and stops at blank or unrelated prose lines.
 
 ## Character search
 
@@ -322,6 +333,13 @@ Supported commands:
 :3,4move0   " alias :m
 :join       " alias :j
 :nohlsearch " alias :noh
+:quote
+:unquote
+:bulletize
+:fence ts
+:indent
+:dedent
+:reflow 72
 ```
 
 Supported ranges:
@@ -360,17 +378,33 @@ Important semantics:
 - `:copy` duplicates addressed lines after the destination address; destination `0` inserts before line 1.
 - `:move` moves addressed lines after the destination address and rejects destinations inside the moved range.
 - `:join` with no explicit range joins current line with next line; explicit ranges join all addressed lines with normalized boundary whitespace.
+- `:quote` prefixes addressed lines with Markdown quote syntax `> `.
+- `:unquote` removes one leading Markdown quote marker from each addressed quoted line.
+- `:bulletize` converts each nonblank addressed line to a Markdown bullet while preserving indentation.
+- `:fence [language]` wraps addressed lines in a Markdown code fence with optional language tag.
+- `:indent` adds two spaces to each addressed line.
+- `:dedent` removes at most one tab, two spaces, or one leading space from each addressed line without deleting content.
+- `:reflow [width]` rewraps prose paragraphs to the given width or 80 columns; fenced code, error blocks, blank lines, and bullet lines are preserved.
 - `:nohlsearch` clears visible prompt search highlights but keeps repeat-search state for `n`/`N`.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - Enter on an empty command closes the Ex row without a message.
 - Unsupported command, range, destination, delimiter, argument, or flag produces transient Ex error text.
-- Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, or `3 lines moved`.
+- Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
 - Success/error messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
 - Ex commands do not write named registers and do not update dot-repeat.
 
-Limitations: no regex substitution, command history, repeat substitution, range offsets, semicolon ranges, confirmation flag, Ex register operands, `:global`, shell/file/window/buffer commands, or Vimscript evaluation.
+Transform examples:
+
+```vim
+:'<,'>quote
+:2,4bulletize
+:'<,'>fence ts
+:reflow 72
+```
+
+Limitations: no regex substitution, command history, repeat substitution, range offsets, semicolon ranges, confirmation flag, Ex register operands, `:global`, shell/file/window/buffer commands, or Vimscript evaluation. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
 
 ## Registers
 
@@ -504,6 +538,7 @@ Examples of configurable features:
 - startup mode
 - cursor style per mode
 - semantic key bindings for supported actions
+- text object kind/target keys
 - allowed operator motions
 - status item order
 - mode labels and narrow labels
@@ -512,6 +547,8 @@ Examples of configurable features:
 - macro enablement, slots, replay cap
 - mark enablement and slots
 - search highlight behavior
+- prompt-native structure enablement per target
+- prompt transform enablement and command names
 
 See [`settings.md`](./settings.md) for complete settings reference.
 

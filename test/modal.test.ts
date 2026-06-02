@@ -228,6 +228,58 @@ describe("Ex command-line modal behavior", () => {
     expect(changed.state.searchHighlight).toBeUndefined();
   });
 
+  test("Ex transforms current, explicit, and visual ranges", () => {
+    const quoted = applyModalKeys({ mode: "normal" }, "one\ntwo", p(0, 0), [
+      ":",
+      "q",
+      "u",
+      "o",
+      "t",
+      "e",
+      "\r",
+    ]);
+    expect(quoted.text).toBe("> one\ntwo");
+    expect(quoted.state.exMessage).toEqual({ kind: "success", text: "1 line transformed" });
+
+    const bulletized = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), [
+      ":",
+      "2",
+      ",",
+      "3",
+      "b",
+      "u",
+      "l",
+      "l",
+      "e",
+      "t",
+      "i",
+      "z",
+      "e",
+      "\r",
+    ]);
+    expect(bulletized.text).toBe("one\n- two\n- three");
+
+    const fenced = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(0, 0) },
+      "const x = 1;\nconst y = 2;",
+      p(1, 0),
+      [":", "f", "e", "n", "c", "e", " ", "t", "s", "\r"],
+    );
+    expect(fenced.text).toBe("```ts\nconst x = 1;\nconst y = 2;\n```");
+    expect(fenced.state.mode).toBe("normal");
+  });
+
+  test("Ex transform argument errors do not edit text", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEx: { command: "reflow wide", sourceMode: "normal" } },
+      { text: "alpha beta", lines: ["alpha beta"], cursor },
+      options,
+      "\r",
+    );
+    expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(update.state.exMessage).toEqual({ kind: "error", text: "Invalid reflow width" });
+  });
+
   test("transient Ex message clears on next handled input", () => {
     const update = handleModalInput(
       { mode: "normal", exMessage: { kind: "error", text: "E" } },
@@ -597,6 +649,64 @@ describe("modal engine", () => {
     );
     expect(changed.state.mode).toBe("insert");
     expect(changed.effects[0]).toMatchObject({ type: "edit", result: { text: "hello " } });
+  });
+
+  test("normal operators support prompt-native text objects and repeat", () => {
+    const deletedFence = applyModalKeys(
+      { mode: "normal" },
+      "before\n```\nbody\n```\nafter",
+      p(2, 0),
+      ["d", "a", "f"],
+    );
+    expect(deletedFence.text).toBe("before\nafter");
+    expect(deletedFence.state.register).toEqual({ type: "char", text: "```\nbody\n```" });
+
+    const changedHeading = applyModalKeys({ mode: "normal" }, "# A\none\n# B\ntwo", p(1, 0), [
+      "c",
+      "i",
+      "h",
+    ]);
+    expect(changedHeading.text).toBe("# A\n# B\ntwo");
+    expect(changedHeading.state.mode).toBe("insert");
+
+    const yankedList = applyModalKeys({ mode: "normal" }, "- one\n  more\n- two", p(1, 2), [
+      "y",
+      "a",
+      "l",
+    ]);
+    expect(yankedList.text).toBe("- one\n  more\n- two");
+    expect(yankedList.state.register).toEqual({ type: "char", text: "- one\n  more" });
+
+    const deletedInnerList = applyModalKeys({ mode: "normal" }, "- one\n- two", p(0, 3), [
+      "d",
+      "i",
+      "l",
+    ]);
+    expect(deletedInnerList.text).toBe("- \n- two");
+
+    const deletedTag = applyModalKeys({ mode: "normal" }, "<x>body</x>", p(0, 4), ["d", "i", "t"]);
+    expect(deletedTag.text).toBe("<x></x>");
+
+    const yankedError = applyModalKeys(
+      { mode: "normal" },
+      "intro\nTypeError: boom\n    at fn (x.ts:1:1)\noutro",
+      p(2, 4),
+      ["y", "a", "e"],
+    );
+    expect(yankedError.state.register).toEqual({
+      type: "char",
+      text: "TypeError: boom\n    at fn (x.ts:1:1)",
+    });
+
+    const missing = applyModalKeys({ mode: "normal" }, "plain", p(0, 0), ["d", "a", "f"]);
+    expect(missing.text).toBe("plain");
+    expect(missing.state.pending).toBeUndefined();
+
+    const repeated = applyModalKeys(changedHeading.state, changedHeading.text, p(2, 0), [
+      "\x1b",
+      ".",
+    ]);
+    expect(repeated.text).toBe("# A\n# B\n");
   });
 
   test("normal mode supports prompt search and repeat", () => {

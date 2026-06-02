@@ -5,9 +5,13 @@ import { join } from "node:path";
 import type {
   CursorStyle,
   CursorStyles,
+  PromptStructureTarget,
+  PromptTransformAction,
   ResolvedVimKeymap,
   ResolvedVimMacros,
   ResolvedVimMarks,
+  ResolvedVimPromptStructures,
+  ResolvedVimPromptTransforms,
   ResolvedVimSearch,
   ResolvedVimUi,
   StartupMode,
@@ -17,6 +21,8 @@ import type {
   VimMotionAction,
   VimOperatorAction,
   VimStatusItem,
+  VimTextObjectKind,
+  VimTextObjectTarget,
 } from "./types.ts";
 
 const VIM_MODES = [
@@ -87,6 +93,39 @@ export const VIM_STATUS_ITEMS = [
   "selection",
   "cursorPosition",
 ] as const satisfies readonly VimStatusItem[];
+export const VIM_TEXT_OBJECT_KINDS = [
+  "inner",
+  "around",
+] as const satisfies readonly VimTextObjectKind[];
+export const VIM_TEXT_OBJECT_TARGETS = [
+  "word",
+  "singleQuote",
+  "doubleQuote",
+  "paren",
+  "bracket",
+  "brace",
+  "codeFence",
+  "headingSection",
+  "listItem",
+  "tag",
+  "errorBlock",
+] as const satisfies readonly VimTextObjectTarget[];
+export const PROMPT_STRUCTURE_TARGETS = [
+  "codeFence",
+  "headingSection",
+  "listItem",
+  "tag",
+  "errorBlock",
+] as const satisfies readonly PromptStructureTarget[];
+export const PROMPT_TRANSFORM_ACTIONS = [
+  "quote",
+  "unquote",
+  "bulletize",
+  "fence",
+  "indent",
+  "dedent",
+  "reflow",
+] as const satisfies readonly PromptTransformAction[];
 
 const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
 const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
@@ -101,6 +140,10 @@ const OPERATOR_MOTION_ACTION_SET = new Set<string>([
   "lineEnd",
 ]);
 const STATUS_ITEM_SET = new Set<string>(VIM_STATUS_ITEMS);
+const TEXT_OBJECT_KIND_SET = new Set<string>(VIM_TEXT_OBJECT_KINDS);
+const TEXT_OBJECT_TARGET_SET = new Set<string>(VIM_TEXT_OBJECT_TARGETS);
+const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
+const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
 const PROTECTED_KEY_NAMES = new Set([
   "enter",
   "return",
@@ -148,6 +191,25 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     set: Object.freeze(["m"]),
     jumpExact: Object.freeze(["`"]),
     jumpLine: Object.freeze(["'"]),
+  }),
+  textObjects: Object.freeze({
+    kinds: Object.freeze({
+      inner: Object.freeze(["i"]),
+      around: Object.freeze(["a"]),
+    }),
+    targets: Object.freeze({
+      word: Object.freeze(["w"]),
+      singleQuote: Object.freeze(["'"]),
+      doubleQuote: Object.freeze(['"']),
+      paren: Object.freeze(["(", ")"]),
+      bracket: Object.freeze(["[", "]"]),
+      brace: Object.freeze(["{", "}"]),
+      codeFence: Object.freeze(["f"]),
+      headingSection: Object.freeze(["h"]),
+      listItem: Object.freeze(["l"]),
+      tag: Object.freeze(["t"]),
+      errorBlock: Object.freeze(["e"]),
+    }),
   }),
   commands: Object.freeze({
     insertBefore: Object.freeze(["i"]),
@@ -265,6 +327,39 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   maxHighlights: 200,
 }) as unknown as ResolvedVimSearch;
 
+export const DEFAULT_VIM_PROMPT_STRUCTURES = Object.freeze({
+  enabled: true,
+  targets: Object.freeze({
+    codeFence: true,
+    headingSection: true,
+    listItem: true,
+    tag: true,
+    errorBlock: true,
+  }),
+}) as unknown as ResolvedVimPromptStructures;
+
+export const DEFAULT_VIM_PROMPT_TRANSFORMS = Object.freeze({
+  enabled: true,
+  actions: Object.freeze({
+    quote: true,
+    unquote: true,
+    bulletize: true,
+    fence: true,
+    indent: true,
+    dedent: true,
+    reflow: true,
+  }),
+  commands: Object.freeze({
+    quote: Object.freeze(["quote"]),
+    unquote: Object.freeze(["unquote"]),
+    bulletize: Object.freeze(["bulletize"]),
+    fence: Object.freeze(["fence"]),
+    indent: Object.freeze(["indent"]),
+    dedent: Object.freeze(["dedent"]),
+    reflow: Object.freeze(["reflow"]),
+  }),
+}) as unknown as ResolvedVimPromptTransforms;
+
 export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   startMode: "insert",
   cursor: Object.freeze({
@@ -279,6 +374,8 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
   search: DEFAULT_VIM_SEARCH,
+  promptStructures: DEFAULT_VIM_PROMPT_STRUCTURES,
+  promptTransforms: DEFAULT_VIM_PROMPT_TRANSFORMS,
 });
 
 type PartialVimOptions = {
@@ -289,6 +386,8 @@ type PartialVimOptions = {
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
   search?: PartialSearchOptions;
+  promptStructures?: PartialPromptStructureOptions;
+  promptTransforms?: PartialPromptTransformOptions;
 };
 
 type PartialKeymapOptions = {
@@ -297,12 +396,25 @@ type PartialKeymapOptions = {
   commands?: Partial<Record<VimCommandAction, string[]>>;
   macros?: Partial<Record<keyof ResolvedVimKeymap["macros"], string[]>>;
   marks?: Partial<Record<keyof ResolvedVimKeymap["marks"], string[]>>;
+  textObjects?: {
+    kinds?: Partial<Record<VimTextObjectKind, string[]>>;
+    targets?: Partial<Record<VimTextObjectTarget, string[]>>;
+  };
   operatorMotions?: Partial<Record<VimOperatorAction, VimMotionAction[]>>;
 };
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
 type PartialMarkOptions = Partial<ResolvedVimMarks>;
 type PartialSearchOptions = Partial<ResolvedVimSearch>;
+type PartialPromptStructureOptions = {
+  enabled?: boolean;
+  targets?: Partial<Record<PromptStructureTarget, boolean>>;
+};
+type PartialPromptTransformOptions = {
+  enabled?: boolean;
+  actions?: Partial<Record<PromptTransformAction, boolean>>;
+  commands?: Partial<Record<PromptTransformAction, string[]>>;
+};
 
 type PartialUiOptions = {
   status?: Partial<ResolvedVimUi["status"]>;
@@ -356,6 +468,25 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       set: [...keymap.marks.set],
       jumpExact: [...keymap.marks.jumpExact],
       jumpLine: [...keymap.marks.jumpLine],
+    },
+    textObjects: {
+      kinds: {
+        inner: [...keymap.textObjects.kinds.inner],
+        around: [...keymap.textObjects.kinds.around],
+      },
+      targets: {
+        word: [...keymap.textObjects.targets.word],
+        singleQuote: [...keymap.textObjects.targets.singleQuote],
+        doubleQuote: [...keymap.textObjects.targets.doubleQuote],
+        paren: [...keymap.textObjects.targets.paren],
+        bracket: [...keymap.textObjects.targets.bracket],
+        brace: [...keymap.textObjects.targets.brace],
+        codeFence: [...keymap.textObjects.targets.codeFence],
+        headingSection: [...keymap.textObjects.targets.headingSection],
+        listItem: [...keymap.textObjects.targets.listItem],
+        tag: [...keymap.textObjects.targets.tag],
+        errorBlock: [...keymap.textObjects.targets.errorBlock],
+      },
     },
     commands: {
       insertBefore: [...keymap.commands.insertBefore],
@@ -420,6 +551,30 @@ function cloneSearch(search: ResolvedVimSearch = DEFAULT_VIM_SEARCH): ResolvedVi
   return { ...search };
 }
 
+function clonePromptStructures(
+  promptStructures: ResolvedVimPromptStructures = DEFAULT_VIM_PROMPT_STRUCTURES,
+): ResolvedVimPromptStructures {
+  return { enabled: promptStructures.enabled, targets: { ...promptStructures.targets } };
+}
+
+function clonePromptTransforms(
+  promptTransforms: ResolvedVimPromptTransforms = DEFAULT_VIM_PROMPT_TRANSFORMS,
+): ResolvedVimPromptTransforms {
+  return {
+    enabled: promptTransforms.enabled,
+    actions: { ...promptTransforms.actions },
+    commands: {
+      quote: [...promptTransforms.commands.quote],
+      unquote: [...promptTransforms.commands.unquote],
+      bulletize: [...promptTransforms.commands.bulletize],
+      fence: [...promptTransforms.commands.fence],
+      indent: [...promptTransforms.commands.indent],
+      dedent: [...promptTransforms.commands.dedent],
+      reflow: [...promptTransforms.commands.reflow],
+    },
+  };
+}
+
 function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   return {
     status: { enabled: ui.status.enabled, items: [...ui.status.items] },
@@ -442,6 +597,8 @@ function cloneDefaultOptions(): ResolvedVimEditorOptions {
     macros: cloneMacros(),
     marks: cloneMarks(),
     search: cloneSearch(),
+    promptStructures: clonePromptStructures(),
+    promptTransforms: clonePromptTransforms(),
   };
 }
 
@@ -480,7 +637,12 @@ function isProtectedKeySequence(sequence: string): boolean {
   return PROTECTED_KEY_NAMES.has(sequence.toLowerCase());
 }
 
-function parseStringArray(value: unknown, label: string, warnings: string[]): string[] | undefined {
+function parseStringArray(
+  value: unknown,
+  label: string,
+  warnings: string[],
+  options: { singleKeyOnly?: boolean } = {},
+): string[] | undefined {
   if (!Array.isArray(value)) {
     warnings.push(`${label} must be an array of key strings`);
     return undefined;
@@ -489,11 +651,15 @@ function parseStringArray(value: unknown, label: string, warnings: string[]): st
   const parsed: string[] = [];
   for (const item of value) {
     const sequence = normalizeVimKeySequence(item);
-    if (sequence && !isProtectedKeySequence(sequence)) {
-      parsed.push(sequence);
-    } else {
+    if (!sequence || isProtectedKeySequence(sequence)) {
       warnings.push(`${label} contains unsupported or protected key`);
+      continue;
     }
+    if (options.singleKeyOnly && sequence.length !== 1) {
+      warnings.push(`${label} contains unsupported multi-key text object binding ${sequence}`);
+      continue;
+    }
+    parsed.push(sequence);
   }
 
   return parsed.length > 0 ? parsed : undefined;
@@ -525,6 +691,7 @@ function parseKeyBindings<T extends string>(
   sourceLabel: string,
   group: string,
   warnings: string[],
+  options: { singleKeyOnly?: boolean } = {},
 ): Partial<Record<T, string[]>> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
@@ -543,6 +710,7 @@ function parseKeyBindings<T extends string>(
       bindings,
       `${sourceLabel}: piVimMode.keymap.${group}.${action}`,
       warnings,
+      options,
     );
     if (!keys) continue;
     parsed[action as T] = keys;
@@ -608,6 +776,31 @@ function parseKeymap(
     "marks",
     warnings,
   );
+
+  if (value.textObjects !== undefined) {
+    if (!isRecord(value.textObjects)) {
+      warnings.push(`${sourceLabel}: piVimMode.keymap.textObjects must be an object`);
+    } else {
+      const textObjects: NonNullable<PartialKeymapOptions["textObjects"]> = {};
+      textObjects.kinds = parseKeyBindings<VimTextObjectKind>(
+        value.textObjects.kinds,
+        TEXT_OBJECT_KIND_SET,
+        sourceLabel,
+        "textObjects.kinds",
+        warnings,
+        { singleKeyOnly: true },
+      );
+      textObjects.targets = parseKeyBindings<VimTextObjectTarget>(
+        value.textObjects.targets,
+        TEXT_OBJECT_TARGET_SET,
+        sourceLabel,
+        "textObjects.targets",
+        warnings,
+        { singleKeyOnly: true },
+      );
+      if (textObjects.kinds || textObjects.targets) partial.textObjects = textObjects;
+    }
+  }
 
   if (value.operatorMotions !== undefined) {
     if (!isRecord(value.operatorMotions)) {
@@ -857,6 +1050,29 @@ function parseSearch(
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
 }
 
+function parseBooleanMap<T extends string>(
+  value: unknown,
+  allowed: Set<string>,
+  label: string,
+  warnings: string[],
+): Partial<Record<T, boolean>> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${label} must be an object`);
+    return undefined;
+  }
+  const parsed: Partial<Record<T, boolean>> = {};
+  for (const [key, enabled] of Object.entries(value)) {
+    if (!allowed.has(key)) {
+      warnings.push(`${label}.${key} is unsupported`);
+      continue;
+    }
+    if (typeof enabled === "boolean") parsed[key as T] = enabled;
+    else warnings.push(`${label}.${key} must be a boolean`);
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function parseMarks(
   value: unknown,
   sourceLabel: string,
@@ -880,6 +1096,83 @@ function parseMarks(
       warnings,
     );
     if (slots) partial.slots = slots;
+  }
+
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
+function parsePromptStructures(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialPromptStructureOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialPromptStructureOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.promptStructures must be an object`);
+    return { warnings };
+  }
+
+  if (typeof value.enabled === "boolean") partial.enabled = value.enabled;
+  else if (value.enabled !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.promptStructures.enabled must be a boolean`);
+
+  const targets = parseBooleanMap<PromptStructureTarget>(
+    value.targets,
+    PROMPT_STRUCTURE_TARGET_SET,
+    `${sourceLabel}: piVimMode.promptStructures.targets`,
+    warnings,
+  );
+  if (targets) partial.targets = targets;
+
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
+function parsePromptTransforms(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialPromptTransformOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialPromptTransformOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.promptTransforms must be an object`);
+    return { warnings };
+  }
+
+  if (typeof value.enabled === "boolean") partial.enabled = value.enabled;
+  else if (value.enabled !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.promptTransforms.enabled must be a boolean`);
+
+  const actions = parseBooleanMap<PromptTransformAction>(
+    value.actions,
+    PROMPT_TRANSFORM_ACTION_SET,
+    `${sourceLabel}: piVimMode.promptTransforms.actions`,
+    warnings,
+  );
+  if (actions) partial.actions = actions;
+
+  if (value.commands !== undefined) {
+    if (!isRecord(value.commands)) {
+      warnings.push(`${sourceLabel}: piVimMode.promptTransforms.commands must be an object`);
+    } else {
+      const commands: Partial<Record<PromptTransformAction, string[]>> = {};
+      for (const [action, commandNames] of Object.entries(value.commands)) {
+        if (!PROMPT_TRANSFORM_ACTION_SET.has(action)) {
+          warnings.push(
+            `${sourceLabel}: unsupported piVimMode.promptTransforms.commands.${action}`,
+          );
+          continue;
+        }
+        const names = parseStringArray(
+          commandNames,
+          `${sourceLabel}: piVimMode.promptTransforms.commands.${action}`,
+          warnings,
+        )?.filter((name) => /^[A-Za-z]+$/.test(name));
+        if (names) commands[action as PromptTransformAction] = names;
+      }
+      if (Object.keys(commands).length > 0) partial.commands = commands;
+    }
   }
 
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
@@ -950,6 +1243,14 @@ function parsePiVimMode(
   partial.search = search.partial;
   warnings.push(...search.warnings);
 
+  const promptStructures = parsePromptStructures(value.promptStructures, sourceLabel);
+  partial.promptStructures = promptStructures.partial;
+  warnings.push(...promptStructures.warnings);
+
+  const promptTransforms = parsePromptTransforms(value.promptTransforms, sourceLabel);
+  partial.promptTransforms = promptTransforms.partial;
+  warnings.push(...promptTransforms.warnings);
+
   return { partial, warnings };
 }
 
@@ -959,6 +1260,12 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
   if (partial.macros) target.macros = { ...target.macros, ...partial.macros };
   if (partial.marks) target.marks = { ...target.marks, ...partial.marks };
+  if (partial.textObjects) {
+    target.textObjects = {
+      kinds: { ...target.textObjects.kinds, ...partial.textObjects.kinds },
+      targets: { ...target.textObjects.targets, ...partial.textObjects.targets },
+    };
+  }
   if (partial.operatorMotions) {
     target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
   }
@@ -977,6 +1284,23 @@ function mergeMarks(target: ResolvedVimMarks, partial: PartialMarkOptions): void
 
 function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): void {
   Object.assign(target, partial);
+}
+
+function mergePromptStructures(
+  target: ResolvedVimPromptStructures,
+  partial: PartialPromptStructureOptions,
+): void {
+  if (partial.enabled !== undefined) target.enabled = partial.enabled;
+  if (partial.targets) target.targets = { ...target.targets, ...partial.targets };
+}
+
+function mergePromptTransforms(
+  target: ResolvedVimPromptTransforms,
+  partial: PartialPromptTransformOptions,
+): void {
+  if (partial.enabled !== undefined) target.enabled = partial.enabled;
+  if (partial.actions) target.actions = { ...target.actions, ...partial.actions };
+  if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
 }
 
 function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
@@ -1026,6 +1350,42 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   for (const [mark, sequences] of Object.entries(keymap.marks)) {
     for (const sequence of sequences) add(sequence, `marks.${mark}`);
   }
+  const primaryBindings = bindings.filter(
+    (binding) =>
+      binding.label.startsWith("operators.") ||
+      binding.label.startsWith("motions.") ||
+      binding.label.startsWith("commands."),
+  );
+  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds)) {
+    const defaultSequences =
+      DEFAULT_VIM_KEYMAP.textObjects.kinds[
+        kind as keyof typeof DEFAULT_VIM_KEYMAP.textObjects.kinds
+      ] ?? [];
+    for (const sequence of sequences) {
+      if (defaultSequences.includes(sequence)) continue;
+      const binding = primaryBindings.find((candidate) => candidate.sequence === sequence);
+      if (binding) {
+        warnings.push(
+          `resolved settings: duplicate piVimMode.keymap binding ${sequence} for ${binding.label} and textObjects.kinds.${kind}`,
+        );
+      }
+    }
+  }
+  for (const [target, sequences] of Object.entries(keymap.textObjects.targets)) {
+    const defaultSequences =
+      DEFAULT_VIM_KEYMAP.textObjects.targets[
+        target as keyof typeof DEFAULT_VIM_KEYMAP.textObjects.targets
+      ] ?? [];
+    for (const sequence of sequences) {
+      if (defaultSequences.includes(sequence)) continue;
+      const binding = primaryBindings.find((candidate) => candidate.sequence === sequence);
+      if (binding) {
+        warnings.push(
+          `resolved settings: duplicate piVimMode.keymap binding ${sequence} for ${binding.label} and textObjects.targets.${target}`,
+        );
+      }
+    }
+  }
 
   for (const first of bindings) {
     for (const second of bindings) {
@@ -1050,6 +1410,18 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
   if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
   if (partial.search) mergeSearch(target.search ?? cloneSearch(), partial.search);
+  if (partial.promptStructures) {
+    mergePromptStructures(
+      target.promptStructures ?? clonePromptStructures(),
+      partial.promptStructures,
+    );
+  }
+  if (partial.promptTransforms) {
+    mergePromptTransforms(
+      target.promptTransforms ?? clonePromptTransforms(),
+      partial.promptTransforms,
+    );
+  }
 }
 
 export function resolveVimOptions(
@@ -1130,6 +1502,18 @@ export function marksForOptions(options: ResolvedVimEditorOptions): ResolvedVimM
 
 export function searchForOptions(options: ResolvedVimEditorOptions): ResolvedVimSearch {
   return options.search ?? DEFAULT_VIM_SEARCH;
+}
+
+export function promptStructuresForOptions(
+  options: ResolvedVimEditorOptions,
+): ResolvedVimPromptStructures {
+  return options.promptStructures ?? DEFAULT_VIM_PROMPT_STRUCTURES;
+}
+
+export function promptTransformsForOptions(
+  options: ResolvedVimEditorOptions,
+): ResolvedVimPromptTransforms {
+  return options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS;
 }
 
 export function cursorStyleForMode(options: ResolvedVimEditorOptions, mode: VimMode): CursorStyle {

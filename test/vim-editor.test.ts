@@ -488,6 +488,36 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe(":");
   });
 
+  test("honors prompt-native structure and transform config through live editor", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      promptStructures: {
+        ...DEFAULT_VIM_OPTIONS.promptStructures!,
+        targets: { ...DEFAULT_VIM_OPTIONS.promptStructures!.targets, codeFence: false },
+      },
+      promptTransforms: {
+        ...DEFAULT_VIM_OPTIONS.promptTransforms!,
+        actions: { ...DEFAULT_VIM_OPTIONS.promptTransforms!.actions, reflow: false },
+        commands: { ...DEFAULT_VIM_OPTIONS.promptTransforms!.commands, quote: ["qte"] },
+      },
+    });
+
+    editor.setText("```ts\nconst x = 1;\n```\nplain words here");
+    typeKeys(editor, ["g", "g", "j", "d", "i", "f"]);
+    expect(editor.getText()).toBe("```ts\nconst x = 1;\n```\nplain words here");
+
+    runEx(editor, "quote");
+    expect(editor.getText()).toBe("```ts\nconst x = 1;\n```\nplain words here");
+
+    typeKeys(editor, ["g", "g"]);
+    runEx(editor, "qte");
+    expect(editor.getText()).toBe("> ```ts\nconst x = 1;\n```\nplain words here");
+
+    runEx(editor, "4reflow 10");
+    expect(editor.getText()).toBe("> ```ts\nconst x = 1;\n```\nplain words here");
+  });
+
   test("executes finite Ex line commands and aliases from normal mode", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one\ntwo\nthree\nfour");

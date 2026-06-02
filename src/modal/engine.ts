@@ -23,6 +23,7 @@ import type {
 
 import {
   adjustNumberAtOrAfterCursor,
+  applyPromptTransform,
   changeLine,
   deleteBlockRange,
   deleteByMotion,
@@ -79,6 +80,8 @@ import {
   keymapForOptions,
   macrosForOptions,
   marksForOptions,
+  promptStructuresForOptions,
+  promptTransformsForOptions,
   searchForOptions,
 } from "../config.ts";
 import { parseExCommand } from "../ex.ts";
@@ -834,13 +837,18 @@ function finishExEdit(
   return withEffects(finished, effects);
 }
 
-function executeExCommand(state: ModalState, snapshot: EditorSnapshot): ModalUpdate {
+function executeExCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
   const parsed = parseExCommand(pendingEx.command, {
     lineCount: snapshot.lines.length,
     cursorLine: snapshot.cursor.line,
     visualRange: pendingEx.visualRange,
+    promptTransforms: promptTransformsForOptions(options),
   });
   if (parsed.type === "empty") return invalidate(finishExState(state));
   if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
@@ -871,6 +879,17 @@ function executeExCommand(state: ModalState, snapshot: EditorSnapshot): ModalUpd
 
   if (parsed.type === "nohlsearch") {
     return invalidate(finishExState(clearSearchHighlight(state)));
+  }
+
+  if (parsed.type === "transform") {
+    const result = applyPromptTransform(
+      snapshot.text,
+      parsed.range,
+      parsed.transform,
+      snapshot.cursor,
+    );
+    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    return finishExEdit(state, result, lineMessage(result.lines, "transformed"));
   }
 
   if (parsed.type === "yank") {
@@ -925,7 +944,7 @@ function handlePendingExInput(
   if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g"))
     return resetAndDelegate(state, options, data);
   if (matchesKey(data, "enter") || matchesKey(data, "return"))
-    return executeExCommand(state, snapshot);
+    return executeExCommand(state, snapshot, options);
   if (matchesKey(data, "backspace")) {
     if (pendingEx.command.length === 0) return invalidate(state);
     return invalidate({
@@ -949,9 +968,13 @@ function applyOperatorTextObject(
   recordRepeat = true,
 ): ModalUpdate {
   const baseState = clearCommandPending(state);
+  const promptStructures = promptStructuresForOptions(options);
   if (operator === "yank")
-    return yankUpdate(baseState, yankTextObject(snapshot.text, snapshot.cursor, textObject));
-  const result = deleteTextObject(snapshot.text, snapshot.cursor, textObject);
+    return yankUpdate(
+      baseState,
+      yankTextObject(snapshot.text, snapshot.cursor, textObject, promptStructures),
+    );
+  const result = deleteTextObject(snapshot.text, snapshot.cursor, textObject, promptStructures);
   let edited = editState(baseState, result);
   if (recordRepeat) {
     edited = withRepeatableChange(

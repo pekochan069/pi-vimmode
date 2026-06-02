@@ -1,8 +1,11 @@
 # vim-ex-command-line Specification
 
 ## Purpose
+
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -423,4 +426,3 @@ The Vim editor SHALL keep non-substitution Ex command side effects explicit and 
 
 - **WHEN** named register `a` contains text and the editor executes `:delete`, `:yank`, or `:put`
 - **THEN** named register `a` remains unchanged while the unnamed-register behavior follows the specific Ex command semantics
-

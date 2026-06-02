@@ -61,13 +61,21 @@ export type VimCommandAction =
 
 export type VimTextObjectKind = "inner" | "around";
 
+export type PromptStructureTarget =
+  | "codeFence"
+  | "headingSection"
+  | "listItem"
+  | "tag"
+  | "errorBlock";
+
 export type VimTextObjectTarget =
   | "word"
   | "singleQuote"
   | "doubleQuote"
   | "paren"
   | "bracket"
-  | "brace";
+  | "brace"
+  | PromptStructureTarget;
 
 export type VimTextObject = {
   kind: VimTextObjectKind;
@@ -87,17 +95,27 @@ export type VimMarkKeymapOptions = {
   jumpLine?: readonly string[];
 };
 
+export type VimTextObjectKeymapOptions = {
+  kinds?: Partial<Record<VimTextObjectKind, readonly string[]>>;
+  targets?: Partial<Record<VimTextObjectTarget, readonly string[]>>;
+};
+
 export type VimKeymapOptions = {
   operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
   motions?: Partial<Record<VimMotionAction, readonly string[]>>;
   commands?: Partial<Record<VimCommandAction, readonly string[]>>;
   macros?: VimMacroKeymapOptions;
   marks?: VimMarkKeymapOptions;
+  textObjects?: VimTextObjectKeymapOptions;
   operatorMotions?: Partial<Record<VimOperatorAction, readonly VimMotionAction[]>>;
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
 export type ResolvedVimMarkKeymap = Required<VimMarkKeymapOptions>;
+export type ResolvedVimTextObjectKeymap = {
+  kinds: Record<VimTextObjectKind, readonly string[]>;
+  targets: Record<VimTextObjectTarget, readonly string[]>;
+};
 
 export type ResolvedVimKeymap = {
   operators: Record<VimOperatorAction, readonly string[]>;
@@ -105,6 +123,7 @@ export type ResolvedVimKeymap = {
   commands: Record<VimCommandAction, readonly string[]>;
   macros: ResolvedVimMacroKeymap;
   marks: ResolvedVimMarkKeymap;
+  textObjects: ResolvedVimTextObjectKeymap;
   operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
 };
 
@@ -156,6 +175,32 @@ export type VimMarkOptions = {
 
 export type ResolvedVimMarks = VimMarkOptions;
 
+export type VimPromptStructureOptions = {
+  enabled: boolean;
+  targets: Record<PromptStructureTarget, boolean>;
+};
+
+export type ResolvedVimPromptStructures = VimPromptStructureOptions;
+
+export type VimPromptTransformOptions = {
+  enabled: boolean;
+  actions: Record<PromptTransformAction, boolean>;
+  commands: Record<PromptTransformAction, readonly string[]>;
+};
+
+export type ResolvedVimPromptTransforms = VimPromptTransformOptions;
+
+export type VimPromptStructureEditorOptions = {
+  enabled?: boolean;
+  targets?: Partial<Record<PromptStructureTarget, boolean>>;
+};
+
+export type VimPromptTransformEditorOptions = {
+  enabled?: boolean;
+  actions?: Partial<Record<PromptTransformAction, boolean>>;
+  commands?: Partial<Record<PromptTransformAction, readonly string[]>>;
+};
+
 export type VimEditorOptions = {
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
@@ -164,6 +209,8 @@ export type VimEditorOptions = {
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;
+  promptStructures?: VimPromptStructureEditorOptions;
+  promptTransforms?: VimPromptTransformEditorOptions;
 };
 
 export type ResolvedVimEditorOptions = {
@@ -174,6 +221,8 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  promptStructures?: ResolvedVimPromptStructures;
+  promptTransforms?: ResolvedVimPromptTransforms;
 };
 
 export type Position = {
@@ -203,6 +252,21 @@ export type EditResult = {
   cursor: Position;
   register?: VimRegister;
   changed: boolean;
+};
+
+export type PromptTransformAction =
+  | "quote"
+  | "unquote"
+  | "bulletize"
+  | "fence"
+  | "indent"
+  | "dedent"
+  | "reflow";
+
+export type PromptTransform = {
+  action: PromptTransformAction;
+  language?: string;
+  width?: number;
 };
 
 export type VimOperator = "d" | "c" | "y";

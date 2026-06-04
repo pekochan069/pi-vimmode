@@ -133,7 +133,8 @@ export type AdapterCommand =
   | "lineEnd"
   | "wordLeft"
   | "wordRight"
-  | "undo";
+  | "undo"
+  | "redo";
 
 /**
  * Modal effects are adapter-applied intents. Modal code owns Vim semantics;

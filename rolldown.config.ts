@@ -40,10 +40,12 @@ export default defineConfig({
   },
   external: isExternal,
   output: {
+    cleanDir: true,
+    codeSplitting: false,
     dir: distDir,
     entryFileNames: "index.js",
     format: "esm",
-    codeSplitting: false,
+    minify: true,
   },
   plugins: [
     {

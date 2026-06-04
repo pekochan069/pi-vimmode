@@ -88,6 +88,7 @@ export const VIM_COMMAND_ACTIONS = [
   "startExCommand",
   "repeatChange",
   "undo",
+  "redo",
 ] as const satisfies readonly VimCommandAction[];
 export const VIM_STATUS_ITEMS = [
   "mode",
@@ -251,6 +252,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     startExCommand: Object.freeze([":"]),
     repeatChange: Object.freeze(["."]),
     undo: Object.freeze(["u"]),
+    redo: Object.freeze(["ctrl+r"]),
   }),
   operatorMotions: Object.freeze({
     delete: Object.freeze([
@@ -530,6 +532,7 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       startExCommand: [...keymap.commands.startExCommand],
       repeatChange: [...keymap.commands.repeatChange],
       undo: [...keymap.commands.undo],
+      redo: [...keymap.commands.redo],
     },
     operatorMotions: {
       delete: [...keymap.operatorMotions.delete],

@@ -105,6 +105,7 @@ describe("modal contracts", () => {
   test("effect union supports adapter-applied intents", () => {
     const effects: ModalEffect[] = [
       { type: "delegate", input: "\r" },
+      { type: "adapterCommand", command: "redo" },
       { type: "edit", result: { text: "x", cursor, changed: true } },
       { type: "playMacro", slot: "a", inputs: ["i", "x", "\x1b"] },
       { type: "invalidate" },
@@ -113,6 +114,7 @@ describe("modal contracts", () => {
 
     expect(effects.map((effect) => effect.type)).toEqual([
       "delegate",
+      "adapterCommand",
       "edit",
       "playMacro",
       "invalidate",
@@ -432,6 +434,30 @@ describe("modal engine", () => {
     });
   });
 
+  test("normal mode emits redo through semantic keymap without modal side effects", () => {
+    const state: ModalState = {
+      mode: "normal",
+      pending: "2\u0000count\u0000",
+      register: { type: "char", text: "keep" },
+      namedRegisters: { a: { type: "line", text: "named" } },
+      marks: { a: p(0, 2) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "a", current: cursor },
+    };
+
+    const update = handleModalInput(state, snapshot, options, "\x12");
+
+    expect(update.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "keep" },
+      namedRegisters: { a: { type: "line", text: "named" } },
+      marks: { a: p(0, 2) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "a", current: cursor },
+    });
+    expect(update.effects).toEqual([{ type: "adapterCommand", command: "redo" }]);
+  });
+
   test("normal mode uses configured semantic keymap", () => {
     const configuredOptions = {
       ...options,
@@ -439,7 +465,12 @@ describe("modal engine", () => {
         ...DEFAULT_VIM_KEYMAP,
         operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["z"] },
         motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
-        commands: { ...DEFAULT_VIM_KEYMAP.commands, openLineBelow: ["n"], visualBlock: ["alt+x"] },
+        commands: {
+          ...DEFAULT_VIM_KEYMAP.commands,
+          openLineBelow: ["n"],
+          visualBlock: ["alt+x"],
+          redo: ["R"],
+        },
       },
     };
 
@@ -471,6 +502,21 @@ describe("modal engine", () => {
 
     const visualBlock = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "\x1bx");
     expect(visualBlock.state).toEqual({ mode: "visualBlock", visualAnchor: cursor });
+
+    const redo = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "R");
+    expect(redo.effects).toEqual([{ type: "adapterCommand", command: "redo" }]);
+  });
+
+  test("insert mode delegates Ctrl-R and undo remains unchanged", () => {
+    expect(handleModalInput({ mode: "insert" }, snapshot, options, "\x12")).toEqual({
+      state: { mode: "insert" },
+      effects: [{ type: "delegate", input: "\x12" }],
+    });
+
+    expect(handleModalInput({ mode: "normal" }, snapshot, options, "u")).toEqual({
+      state: { mode: "normal" },
+      effects: [{ type: "adapterCommand", command: "undo" }],
+    });
   });
 
   test("normal edit commands return structural edit effects and register state", () => {

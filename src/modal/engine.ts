@@ -607,6 +607,8 @@ function applyCommand(
       return repeatChange(state, snapshot, options);
     case "undo":
       return withEffects(nextState, [{ type: "adapterCommand", command: "undo" }]);
+    case "redo":
+      return withEffects(nextState, [{ type: "adapterCommand", command: "redo" }]);
   }
 }
 

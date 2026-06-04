@@ -141,6 +141,7 @@ describe("normal command parser", () => {
         openLineBelow: ["n"],
         toggleCase: ["~"],
         visualBlock: ["ctrl+v"],
+        redo: ["ctrl+r"],
       },
     };
 
@@ -164,6 +165,10 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("ctrl+v", undefined, keymap)).toEqual({
       type: "command",
       command: "visualBlock",
+    });
+    expect(resolveNormalCommand("ctrl+r", undefined, keymap)).toEqual({
+      type: "command",
+      command: "redo",
     });
   });
 
@@ -276,7 +281,9 @@ describe("normal command parser", () => {
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordEnd", count: 4 });
   });
 
-  test("resolves prompt search commands", () => {
+  test("resolves prompt search commands and undo redo", () => {
+    expect(resolveNormalCommand("u", undefined)).toEqual({ type: "command", command: "undo" });
+    expect(resolveNormalCommand("ctrl+r", undefined)).toEqual({ type: "command", command: "redo" });
     expect(resolveNormalCommand(":", undefined)).toEqual({
       type: "command",
       command: "startExCommand",

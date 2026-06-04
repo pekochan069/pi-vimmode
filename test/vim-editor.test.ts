@@ -1,13 +1,16 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "bun:test";
 
-import type { ResolvedVimEditorOptions, VimMode } from "../src/types.ts";
+import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
-function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
+function createEditor(
+  options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+  diagnostics: VimDiagnostics = { warnings: [] },
+) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
   let hardwareCursorVisible = false;
@@ -38,7 +41,7 @@ function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
     },
   } as any;
   return {
-    editor: new VimEditor(tui, theme, keybindings, options),
+    editor: new VimEditor(tui, theme, keybindings, options, diagnostics),
     writes,
     hardwareCursorChanges,
     getHardwareCursorVisible: () => hardwareCursorVisible,
@@ -107,6 +110,29 @@ describe("vim editor integration", () => {
     const message = editor.render(20);
     expect(message.at(-1)).toContain("Pattern not found: x");
     expectRenderedWidth(message, 20);
+  });
+
+  test("diagnostic and feedback info rows render width-safely below prompt", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal", feedback: { noop: "status" } },
+      {
+        warnings: [
+          "project settings: piVimMode.keymap.commands.openLineBelow contains protected key ctrl+p",
+        ],
+      },
+    );
+    const baseline = editor.render(24);
+
+    runEx(editor, "vimdoctor");
+    const doctor = editor.render(24);
+    expect(doctor.length).toBe(baseline.length + 1);
+    expect(doctor.at(-1)).toContain("vimdoctor: 1 warning");
+    expectRenderedWidth(doctor, 24);
+
+    editor.handleInput("z");
+    const feedback = editor.render(16);
+    expect(feedback.at(-1)).toContain("unmapped key");
+    expectRenderedWidth(feedback, 16);
   });
 
   test("search and substitution preview rows render width-safely below prompt", () => {

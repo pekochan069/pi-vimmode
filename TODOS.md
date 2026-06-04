@@ -69,7 +69,7 @@
 
 - [x] ctrl+r (redo)
 
-- [ ] create `vimmode` command to pi that can toggle pi-vimmode
+- [x] create `vimmode` command to pi that can toggle pi-vimmode
 
 - [ ] change default settigns for UI
   - set cursorPosition enabled to true by default

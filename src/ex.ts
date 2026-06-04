@@ -47,11 +47,18 @@ export type ParsedExTransformCommand = {
   transform: PromptTransform;
 };
 
+export type ParsedExDiagnosticCommand = {
+  type: "diagnostic";
+  command: "vimdoctor" | "keymap" | "mapcheck" | "actions";
+  query?: string;
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
   | ParsedExLineCommand
   | ParsedExDestinationCommand
   | ParsedExTransformCommand
+  | ParsedExDiagnosticCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | { type: "empty" }
   | { type: "error"; message: string };
@@ -84,6 +91,10 @@ type ParsedCommandName =
   | "indent"
   | "dedent"
   | "reflow"
+  | "vimdoctor"
+  | "keymap"
+  | "mapcheck"
+  | "actions"
   | "noh"
   | "nohlsearch";
 
@@ -161,6 +172,7 @@ type ParsedCommandType =
   | "move"
   | "join"
   | "transform"
+  | "diagnostic"
   | "nohlsearch";
 
 type ParsedCommand = {
@@ -223,6 +235,11 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "dedent":
     case "reflow":
       return "transform";
+    case "vimdoctor":
+    case "keymap":
+    case "mapcheck":
+    case "actions":
+      return "diagnostic";
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
@@ -259,6 +276,10 @@ function parseCommand(
     "indent",
     "dedent",
     "reflow",
+    "vimdoctor",
+    "keymap",
+    "mapcheck",
+    "actions",
     "noh",
     "nohlsearch",
   ]);
@@ -459,6 +480,18 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       rangeExplicit: range.explicit,
       destination: destination.destination,
     };
+  }
+
+  if (type === "diagnostic") {
+    const args = command.rest.trim();
+    const name = command.command.name as ParsedExDiagnosticCommand["command"];
+    if (name === "vimdoctor" && args.length > 0) {
+      return { type: "error", message: "Unexpected Ex command arguments" };
+    }
+    if (name === "mapcheck" && args.length === 0) {
+      return { type: "error", message: "Missing mapcheck key" };
+    }
+    return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
   }
 
   if (type === "transform") {

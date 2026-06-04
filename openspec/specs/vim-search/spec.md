@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change todos-search-functionality. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode starts forward prompt search
 
 The Vim editor SHALL support `/` in normal mode as a pending literal search query over the current prompt buffer.
@@ -267,4 +269,3 @@ The change SHALL include automated tests and user-facing documentation for backw
 
 - **WHEN** the user opens `docs/features.md`
 - **THEN** it documents `/`, `?`, `n`, `N`, search history, empty-query recall, literal default behavior, regex opt-in syntax, regex bounds, and current search limitations
-

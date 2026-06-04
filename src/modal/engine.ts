@@ -8,12 +8,14 @@ import type {
   VimMotionAction,
   VimMotionOperatorAction,
   VimOperatorAction,
+  VimDiagnostics,
   VimRegister,
   VimTextObject,
 } from "../types.ts";
 import type {
   AdapterCommand,
   EditorSnapshot,
+  ExMessage,
   ModalEffect,
   ModalOptions,
   ModalState,
@@ -84,6 +86,7 @@ import {
   semanticMotionToLegacy,
 } from "../commands.ts";
 import {
+  feedbackForOptions,
   keymapForOptions,
   macrosForOptions,
   marksForOptions,
@@ -91,6 +94,13 @@ import {
   promptTransformsForOptions,
   searchForOptions,
 } from "../config.ts";
+import {
+  actionsMessage,
+  doctorMessage,
+  keymapMessage,
+  mapcheckMessage,
+  protectedShortcutForKey,
+} from "../customization.ts";
 import { parseExCommand } from "../ex.ts";
 import {
   clearMarkTarget,
@@ -149,8 +159,28 @@ function delegate(state: ModalState, input: string): ModalUpdate {
   return withEffects(state, [{ type: "delegate", input }]);
 }
 
-function delegateProtectedShortcut(state: ModalState, input: string): ModalUpdate {
-  return withEffects(clearPending(state), [{ type: "delegate", input }, { type: "invalidate" }]);
+function withNoopFeedback(state: ModalState, options: ModalOptions, text: string): ModalState {
+  return feedbackForOptions(options).noop === "status"
+    ? { ...state, exMessage: { kind: "info", text } }
+    : state;
+}
+
+function protectedShortcutMessage(data: string): string {
+  const key = parseKey(data) ?? data;
+  const shortcut = protectedShortcutForKey(key);
+  return shortcut
+    ? `${shortcut.key} protected for ${shortcut.reason}`
+    : "protected Pi shortcut delegated";
+}
+
+function delegateProtectedShortcut(
+  state: ModalState,
+  options: ModalOptions,
+  input: string,
+): ModalUpdate {
+  const cleared = clearPending(state);
+  const next = withNoopFeedback(cleared, options, protectedShortcutMessage(input));
+  return withEffects(next, [{ type: "delegate", input }, { type: "invalidate" }]);
 }
 
 function clearSearchHighlight(state: ModalState): ModalState {
@@ -613,7 +643,9 @@ function applyCommand(
     case "undo":
       return withEffects(nextState, [{ type: "adapterCommand", command: "undo" }]);
     case "redo":
-      return withEffects(nextState, [{ type: "adapterCommand", command: "redo" }]);
+      return snapshot.isRedoAvailable
+        ? withEffects(nextState, [{ type: "adapterCommand", command: "redo" }])
+        : invalidate(withNoopFeedback(nextState, options, "redo stack empty"));
   }
 }
 
@@ -972,7 +1004,11 @@ function addExHistory(history: readonly string[] | undefined, command: string): 
   return [...deduped, command].slice(-EX_HISTORY_LIMIT);
 }
 
-function finishExState(state: ModalState, kind?: "error" | "success", text?: string): ModalState {
+function finishExState(
+  state: ModalState,
+  kind?: "error" | "success" | "info",
+  text?: string,
+): ModalState {
   const pendingEx = state.pendingEx;
   const nextHistory =
     kind === "success" && pendingEx
@@ -990,16 +1026,22 @@ function finishExState(state: ModalState, kind?: "error" | "success", text?: str
   return kind && text ? { ...base, exMessage: { kind, text } } : base;
 }
 
-function cancelExCommand(state: ModalState): ModalUpdate {
+function restoreVisualExState(state: ModalState, message?: ExMessage): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
-  if (pendingEx.sourceMode === "normal")
-    return invalidate({ ...clearPendingEx(state), mode: "normal" });
+  if (pendingEx.sourceMode === "normal") {
+    return invalidate({
+      ...clearPendingEx(state),
+      mode: "normal",
+      ...(message ? { exMessage: message } : {}),
+    });
+  }
   return withEffects(
     {
       ...clearPendingEx(state),
       mode: pendingEx.sourceMode,
       visualAnchor: pendingEx.visualAnchor,
+      ...(message ? { exMessage: message } : {}),
     },
     [
       ...(pendingEx.visualCursor
@@ -1008,6 +1050,10 @@ function cancelExCommand(state: ModalState): ModalUpdate {
       { type: "invalidate" },
     ],
   );
+}
+
+function cancelExCommand(state: ModalState): ModalUpdate {
+  return restoreVisualExState(state);
 }
 
 function substitutionMessage(matches: number): string {
@@ -1037,6 +1083,7 @@ function executeExCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
+  diagnostics: VimDiagnostics = { warnings: [] },
 ): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
@@ -1101,6 +1148,22 @@ function executeExCommand(
 
   if (parsed.type === "nohlsearch") {
     return invalidate(finishExState(clearSearchHighlight(state)));
+  }
+
+  if (parsed.type === "diagnostic") {
+    const keymap = keymapForOptions(options);
+    const transforms = promptTransformsForOptions(options);
+    const macros = macrosForOptions(options);
+    const marks = marksForOptions(options);
+    const message =
+      parsed.command === "vimdoctor"
+        ? doctorMessage(options, diagnostics)
+        : parsed.command === "keymap"
+          ? keymapMessage(keymap, parsed.query, transforms, macros, marks)
+          : parsed.command === "mapcheck"
+            ? mapcheckMessage(keymap, parsed.query ?? "", diagnostics.warnings)
+            : actionsMessage(keymap, parsed.query, transforms, macros, marks);
+    return restoreVisualExState(state, { kind: "info", text: message });
   }
 
   if (parsed.type === "transform") {
@@ -1202,6 +1265,7 @@ function handlePendingExInput(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  diagnostics: VimDiagnostics,
 ): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
@@ -1209,7 +1273,7 @@ function handlePendingExInput(
   if (matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g"))
     return resetAndDelegate(state, options, data);
   if (matchesKey(data, "enter") || matchesKey(data, "return"))
-    return executeExCommand(state, snapshot, options);
+    return executeExCommand(state, snapshot, options, diagnostics);
   if (matchesKey(data, "backspace")) {
     if (pendingEx.command.length === 0) return invalidate(state);
     return invalidate({
@@ -1479,7 +1543,7 @@ function handleNormalInput(
       options,
     );
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, data);
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
 
   const key = keySequence(data);
   if (!key) {
@@ -1594,9 +1658,12 @@ function handleNormalInput(
       pendingResult.count,
     );
   }
-  if (pendingResult.type === "invalid") return invalidate(clearPending(state));
+  if (pendingResult.type === "invalid") {
+    return invalidate(withNoopFeedback(clearPending(state), options, "invalid Vim key sequence"));
+  }
 
-  return invalidate(state.pendingRegister ? clearPending(state) : state);
+  if (state.pendingRegister) return invalidate(clearPending(state));
+  return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
 }
 
 function visualKindForMode(mode: VimMode): "char" | "line" | "block" {
@@ -1654,7 +1721,7 @@ function handleVisualInput(
       ? invalidate(state)
       : modeUpdate(state, "visualBlock", options);
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, data);
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
 
   const key = keySequence(data);
   if (!key) return delegate(state, data);
@@ -1881,9 +1948,11 @@ function routeModalInput(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  diagnostics: VimDiagnostics,
 ): ModalUpdate {
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
-  if (routedState.pendingEx) return handlePendingExInput(routedState, snapshot, options, data);
+  if (routedState.pendingEx)
+    return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
   if (routedState.pendingSearch)
     return handlePendingSearchInput(routedState, snapshot, options, data);
   if (routedState.mode === "insert") return handleInsertInput(routedState, snapshot, options, data);
@@ -1937,8 +2006,9 @@ export function handleModalInput(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  diagnostics: VimDiagnostics = { warnings: [] },
 ): ModalUpdate {
-  const update = routeModalInput(state, snapshot, options, data);
+  const update = routeModalInput(state, snapshot, options, data, diagnostics);
   if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, options, data))
     return update;
   return {

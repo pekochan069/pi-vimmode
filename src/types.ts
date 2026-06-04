@@ -6,6 +6,18 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 export type CursorStyles = Record<VimMode, CursorStyle>;
 
+export type VimPreset = "minimal" | "prompt-safe" | "vim-heavy";
+
+export type VimNoopFeedback = "off" | "status";
+
+export type VimFeedbackOptions = {
+  noop: VimNoopFeedback;
+};
+
+export type VimDiagnostics = {
+  warnings: readonly string[];
+};
+
 export type VimMotionOperatorAction = "delete" | "change" | "yank";
 export type VimOperatorAction = VimMotionOperatorAction | "indent" | "dedent";
 
@@ -205,6 +217,7 @@ export type VimPromptTransformEditorOptions = {
 };
 
 export type VimEditorOptions = {
+  preset?: VimPreset;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: VimKeymapOptions;
@@ -212,11 +225,13 @@ export type VimEditorOptions = {
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;
+  feedback?: Partial<VimFeedbackOptions>;
   promptStructures?: VimPromptStructureEditorOptions;
   promptTransforms?: VimPromptTransformEditorOptions;
 };
 
 export type ResolvedVimEditorOptions = {
+  preset?: VimPreset;
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;
@@ -224,6 +239,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
   promptTransforms?: ResolvedVimPromptTransforms;
 };

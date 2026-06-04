@@ -17,14 +17,18 @@ import type {
   StartupMode,
   VimCommandAction,
   ResolvedVimEditorOptions,
+  VimFeedbackOptions,
   VimMode,
   VimMotionAction,
   VimMotionOperatorAction,
   VimOperatorAction,
+  VimPreset,
   VimStatusItem,
   VimTextObjectKind,
   VimTextObjectTarget,
 } from "./types.ts";
+
+import { protectedShortcutForKey } from "./customization.ts";
 
 const VIM_MODES = [
   "insert",
@@ -149,23 +153,8 @@ const TEXT_OBJECT_KIND_SET = new Set<string>(VIM_TEXT_OBJECT_KINDS);
 const TEXT_OBJECT_TARGET_SET = new Set<string>(VIM_TEXT_OBJECT_TARGETS);
 const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
-const PROTECTED_KEY_NAMES = new Set([
-  "enter",
-  "return",
-  "escape",
-  "esc",
-  "tab",
-  "shift+enter",
-  "ctrl+c",
-  "ctrl+d",
-  "ctrl+g",
-  "ctrl+l",
-  "ctrl+p",
-  "shift+ctrl+p",
-  "ctrl+shift+p",
-  "ctrl+t",
-  "shift+tab",
-]);
+const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
+const NOOP_FEEDBACK_VALUES = new Set<VimFeedbackOptions["noop"]>(["off", "status"]);
 
 export const DEFAULT_VIM_KEYMAP = Object.freeze({
   operators: Object.freeze({
@@ -347,6 +336,10 @@ export const DEFAULT_VIM_PROMPT_STRUCTURES = Object.freeze({
   }),
 }) as unknown as ResolvedVimPromptStructures;
 
+export const DEFAULT_VIM_FEEDBACK = Object.freeze({
+  noop: "off",
+}) as unknown as VimFeedbackOptions;
+
 export const DEFAULT_VIM_PROMPT_TRANSFORMS = Object.freeze({
   enabled: true,
   actions: Object.freeze({
@@ -383,11 +376,13 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
   search: DEFAULT_VIM_SEARCH,
+  feedback: DEFAULT_VIM_FEEDBACK,
   promptStructures: DEFAULT_VIM_PROMPT_STRUCTURES,
   promptTransforms: DEFAULT_VIM_PROMPT_TRANSFORMS,
 });
 
 type PartialVimOptions = {
+  preset?: VimPreset;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: PartialKeymapOptions;
@@ -395,6 +390,7 @@ type PartialVimOptions = {
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
   search?: PartialSearchOptions;
+  feedback?: PartialFeedbackOptions;
   promptStructures?: PartialPromptStructureOptions;
   promptTransforms?: PartialPromptTransformOptions;
 };
@@ -415,6 +411,7 @@ type PartialKeymapOptions = {
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
 type PartialMarkOptions = Partial<ResolvedVimMarks>;
 type PartialSearchOptions = Partial<ResolvedVimSearch>;
+type PartialFeedbackOptions = Partial<VimFeedbackOptions>;
 type PartialPromptStructureOptions = {
   enabled?: boolean;
   targets?: Partial<Record<PromptStructureTarget, boolean>>;
@@ -564,6 +561,10 @@ function cloneSearch(search: ResolvedVimSearch = DEFAULT_VIM_SEARCH): ResolvedVi
   return { ...search };
 }
 
+function cloneFeedback(feedback: VimFeedbackOptions = DEFAULT_VIM_FEEDBACK): VimFeedbackOptions {
+  return { ...feedback };
+}
+
 function clonePromptStructures(
   promptStructures: ResolvedVimPromptStructures = DEFAULT_VIM_PROMPT_STRUCTURES,
 ): ResolvedVimPromptStructures {
@@ -610,6 +611,7 @@ function cloneDefaultOptions(): ResolvedVimEditorOptions {
     macros: cloneMacros(),
     marks: cloneMarks(),
     search: cloneSearch(),
+    feedback: cloneFeedback(),
     promptStructures: clonePromptStructures(),
     promptTransforms: clonePromptTransforms(),
   };
@@ -646,10 +648,6 @@ function normalizeVimKeySequence(value: unknown): string | undefined {
   return [...(modifiers as string[]), key].join("+");
 }
 
-function isProtectedKeySequence(sequence: string): boolean {
-  return PROTECTED_KEY_NAMES.has(sequence.toLowerCase());
-}
-
 function parseStringArray(
   value: unknown,
   label: string,
@@ -664,8 +662,13 @@ function parseStringArray(
   const parsed: string[] = [];
   for (const item of value) {
     const sequence = normalizeVimKeySequence(item);
-    if (!sequence || isProtectedKeySequence(sequence)) {
-      warnings.push(`${label} contains unsupported or protected key`);
+    if (!sequence) {
+      warnings.push(`${label} contains unsupported key`);
+      continue;
+    }
+    const protectedShortcut = protectedShortcutForKey(sequence);
+    if (protectedShortcut) {
+      warnings.push(`${label} contains protected key ${sequence} (${protectedShortcut.reason})`);
       continue;
     }
     if (options.singleKeyOnly && sequence.length !== 1) {
@@ -1063,6 +1066,31 @@ function parseSearch(
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
 }
 
+function parseFeedback(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialFeedbackOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialFeedbackOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.feedback must be an object`);
+    return { warnings };
+  }
+
+  if (value.noop === undefined) return { warnings };
+  if (
+    typeof value.noop === "string" &&
+    NOOP_FEEDBACK_VALUES.has(value.noop as VimFeedbackOptions["noop"])
+  ) {
+    partial.noop = value.noop as VimFeedbackOptions["noop"];
+  } else {
+    warnings.push(`${sourceLabel}: piVimMode.feedback.noop must be off or status`);
+  }
+
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
 function parseBooleanMap<T extends string>(
   value: unknown,
   allowed: Set<string>,
@@ -1204,6 +1232,15 @@ function parsePiVimMode(
     return { partial, warnings };
   }
 
+  const preset = value.preset;
+  if (preset !== undefined) {
+    if (typeof preset === "string" && VIM_PRESETS.has(preset as VimPreset)) {
+      partial.preset = preset as VimPreset;
+    } else {
+      warnings.push(`${sourceLabel}: unsupported piVimMode.preset`);
+    }
+  }
+
   const startMode = value.startMode;
   if (startMode !== undefined) {
     if (typeof startMode === "string" && START_MODES.has(startMode as StartupMode)) {
@@ -1256,6 +1293,10 @@ function parsePiVimMode(
   partial.search = search.partial;
   warnings.push(...search.warnings);
 
+  const feedback = parseFeedback(value.feedback, sourceLabel);
+  partial.feedback = feedback.partial;
+  warnings.push(...feedback.warnings);
+
   const promptStructures = parsePromptStructures(value.promptStructures, sourceLabel);
   partial.promptStructures = promptStructures.partial;
   warnings.push(...promptStructures.warnings);
@@ -1296,6 +1337,10 @@ function mergeMarks(target: ResolvedVimMarks, partial: PartialMarkOptions): void
 }
 
 function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): void {
+  Object.assign(target, partial);
+}
+
+function mergeFeedback(target: VimFeedbackOptions, partial: PartialFeedbackOptions): void {
   Object.assign(target, partial);
 }
 
@@ -1415,7 +1460,34 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   return warnings;
 }
 
+function presetOptions(preset: VimPreset): PartialVimOptions {
+  if (preset === "minimal") {
+    return {
+      preset,
+      ui: { status: { items: ["mode"] } },
+      macros: { enabled: false },
+      marks: { enabled: false },
+      search: { highlightCurrent: false, maxHighlights: 50 },
+    };
+  }
+  if (preset === "vim-heavy") {
+    return {
+      preset,
+      startMode: "normal",
+      keymap: { commands: { visualBlock: ["ctrl+v"] } },
+      ui: { status: { items: ["mode", "pendingOperator", "selection", "cursorPosition"] } },
+    };
+  }
+  return {
+    preset,
+    startMode: "insert",
+    feedback: { noop: "off" },
+    search: { clearOnInsert: true, maxHighlights: 200 },
+  };
+}
+
 function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialVimOptions): void {
+  if (partial.preset) target.preset = partial.preset;
   if (partial.startMode) target.startMode = partial.startMode;
   if (partial.cursor) target.cursor = { ...target.cursor, ...partial.cursor };
   if (partial.keymap) mergeKeymap(target.keymap ?? cloneKeymap(), partial.keymap);
@@ -1423,6 +1495,7 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
   if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
   if (partial.search) mergeSearch(target.search ?? cloneSearch(), partial.search);
+  if (partial.feedback) mergeFeedback(target.feedback ?? cloneFeedback(), partial.feedback);
   if (partial.promptStructures) {
     mergePromptStructures(
       target.promptStructures ?? clonePromptStructures(),
@@ -1446,11 +1519,15 @@ export function resolveVimOptions(
 
   const globalPiVimMode = isRecord(globalSettings) ? globalSettings.piVimMode : undefined;
   const parsedGlobal = parsePiVimMode(globalPiVimMode, "global settings");
+  if (parsedGlobal.partial.preset)
+    mergePartialOptions(options, presetOptions(parsedGlobal.partial.preset));
   mergePartialOptions(options, parsedGlobal.partial);
   warnings.push(...parsedGlobal.warnings);
 
   const projectPiVimMode = isRecord(projectSettings) ? projectSettings.piVimMode : undefined;
   const parsedProject = parsePiVimMode(projectPiVimMode, "project settings");
+  if (parsedProject.partial.preset)
+    mergePartialOptions(options, presetOptions(parsedProject.partial.preset));
   mergePartialOptions(options, parsedProject.partial);
   warnings.push(...parsedProject.warnings);
   warnings.push(...detectKeymapConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
@@ -1515,6 +1592,10 @@ export function marksForOptions(options: ResolvedVimEditorOptions): ResolvedVimM
 
 export function searchForOptions(options: ResolvedVimEditorOptions): ResolvedVimSearch {
   return options.search ?? DEFAULT_VIM_SEARCH;
+}
+
+export function feedbackForOptions(options: ResolvedVimEditorOptions): VimFeedbackOptions {
+  return options.feedback ?? DEFAULT_VIM_FEEDBACK;
 }
 
 export function promptStructuresForOptions(

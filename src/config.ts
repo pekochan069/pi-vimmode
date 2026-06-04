@@ -276,7 +276,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
 export const DEFAULT_VIM_UI = Object.freeze({
   status: Object.freeze({
     enabled: true,
-    items: Object.freeze(["mode", "pendingOperator", "selection"]),
+    items: Object.freeze(["mode", "pendingOperator", "selection", "cursorPosition"]),
   }),
   mode: Object.freeze({
     enabled: true,
@@ -300,7 +300,7 @@ export const DEFAULT_VIM_UI = Object.freeze({
     previewMaxChars: 16,
   }),
   cursorPosition: Object.freeze({
-    enabled: false,
+    enabled: true,
     base: 1,
     format: "{line}:{column}",
   }),

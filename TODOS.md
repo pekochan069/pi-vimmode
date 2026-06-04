@@ -71,7 +71,7 @@
 
 - [x] create `vimmode` command to pi that can toggle pi-vimmode
 
-- [ ] change default settigns for UI
+- [x] change default UI settings
   - set cursorPosition enabled to true by default
   - set status.items to be ["mode", "pendingOperator", "selection", "cursorPosition"] by default
 
@@ -80,7 +80,7 @@
   - Keep finite scope; no full Ex/Vimscript parity.
   - Complexity: High. Confidence: 84%.
 
-- [ ] Self-explaining customization suite
+- [x] Self-explaining customization suite
   - Add `:vimdoctor`, `:keymap`, `:mapcheck`, protected Pi shortcut explanations, curated presets (`minimal`, `prompt-safe`, `vim-heavy`), optional no-op feedback, and searchable `:actions` palette.
   - Goal: make custom keybindings/debugging usable without hidden `vim ⚠` confusion.
   - Complexity: Medium. Confidence: 82%.

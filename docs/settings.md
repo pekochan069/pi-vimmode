@@ -416,7 +416,7 @@ Example:
 | Path                          | Default                                    | Accepted values                                                   | Effect                                                                |
 | ----------------------------- | ------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `piVimMode.ui.status.enabled` | `true`                                     | boolean                                                           | Enables/disables all status text in the editor border.                |
-| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
+| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
 
 Status item meanings:
 
@@ -456,7 +456,7 @@ Narrow labels are used when the prompt width is too small for the full label.
 
 | Path                                  | Default             | Accepted values                                | Effect                                                                                            |
 | ------------------------------------- | ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `piVimMode.ui.cursorPosition.enabled` | `false`             | boolean                                        | Enables cursor position status when `cursorPosition` item is present.                             |
+| `piVimMode.ui.cursorPosition.enabled` | `true`              | boolean                                        | Enables cursor position status when `cursorPosition` item is present.                             |
 | `piVimMode.ui.cursorPosition.base`    | `1`                 | `0` or `1`                                     | Display base for line and column. `1` matches common editor UI; `0` matches internal coordinates. |
 | `piVimMode.ui.cursorPosition.format`  | `"{line}:{column}"` | string containing both `{line}` and `{column}` | Format template for cursor position. Both placeholders are required.                              |
 
@@ -650,7 +650,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
     "ui": {
       "status": {
         "enabled": true,
-        "items": ["mode", "pendingOperator", "selection"]
+        "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
       },
       "mode": {
         "enabled": true,
@@ -674,7 +674,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "previewMaxChars": 16
       },
       "cursorPosition": {
-        "enabled": false,
+        "enabled": true,
         "base": 1,
         "format": "{line}:{column}"
       }

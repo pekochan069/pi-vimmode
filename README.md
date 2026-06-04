@@ -6,7 +6,13 @@ Vim-style prompt editing for [Pi](https://github.com/earendil-works/pi-coding-ag
 
 ## Install / load
 
-Install from Git:
+Install from npm:
+
+```sh
+pi install npm:pi-vimmode
+```
+
+or Install from Git to install latest version:
 
 ```sh
 pi install git:https://github.com/pekochan069/pi-vimmode

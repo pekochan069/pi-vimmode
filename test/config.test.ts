@@ -34,6 +34,10 @@ describe("vim config parsing", () => {
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
+    const backwardSearchOptions = {
+      keymap: { commands: { startSearchBackward: ["?"] } },
+    } satisfies VimEditorOptions;
+    expect(backwardSearchOptions.keymap?.commands?.startSearchBackward).toEqual(["?"]);
     expect(options.promptStructures.targets?.codeFence).toBe(false);
     expect(options.promptTransforms.actions?.reflow).toBe(false);
     expect(options.promptTransforms.commands?.quote).toEqual(["qte"]);
@@ -122,6 +126,7 @@ describe("vim config parsing", () => {
             toggleCase: ["~"],
             visualBlock: ["<C-v>", "<A-x>"],
             startExCommand: ["<A-;>"],
+            startSearchBackward: ["<A-?>"],
             redo: ["<C-r>", "ctrl+c"],
             openLineAbove: ["<C-S-p>"],
           },
@@ -139,6 +144,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
+    expect(result.options.keymap?.commands.startSearchBackward).toEqual(["alt+?"]);
     expect(result.options.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(result.options.keymap?.commands.openLineAbove).toEqual(["O"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
@@ -191,6 +197,7 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startSearchBackward).toEqual(["?"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");

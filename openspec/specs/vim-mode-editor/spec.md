@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-vim-mode-extension. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Extension replaces Pi prompt editor
 
 The extension SHALL register a `CustomEditor`-based Vim editor for Pi sessions without requiring changes to Pi core.
@@ -243,4 +245,3 @@ The change SHALL include automated tests and user-facing documentation for redo 
 
 - **WHEN** the user opens `docs/features.md`
 - **THEN** it documents normal-mode `Ctrl+R` redo, redo limitations, and the fact that pi-vimmode does not implement a Vim undo tree
-

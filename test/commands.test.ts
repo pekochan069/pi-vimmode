@@ -292,6 +292,10 @@ describe("normal command parser", () => {
       type: "command",
       command: "startSearch",
     });
+    expect(resolveNormalCommand("?", undefined)).toEqual({
+      type: "command",
+      command: "startSearchBackward",
+    });
     expect(resolveNormalCommand("n", undefined)).toEqual({
       type: "command",
       command: "repeatSearch",
@@ -303,6 +307,13 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("/", "d")).toEqual({
       type: "operatorSearch",
       operator: "delete",
+      direction: "forward",
+      count: undefined,
+    });
+    expect(resolveNormalCommand("?", "d")).toEqual({
+      type: "operatorSearch",
+      operator: "delete",
+      direction: "backward",
       count: undefined,
     });
   });

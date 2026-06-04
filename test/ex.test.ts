@@ -31,6 +31,28 @@ describe("Ex substitution parser", () => {
     });
   });
 
+  test("parses regex substitution flag with literal replacement", () => {
+    expect(parseExSubstitution("%s/TODO|FIXME/done/gr", context)).toMatchObject({
+      type: "substitute",
+      pattern: "TODO|FIXME",
+      replacement: "done",
+      global: true,
+      ignoreCase: false,
+      matcherMode: "regex",
+    });
+    expect(parseExSubstitution("s/todo/done/ri", context)).toMatchObject({
+      type: "substitute",
+      global: false,
+      ignoreCase: true,
+      matcherMode: "regex",
+    });
+    expect(parseExSubstitution("s/(old)/&-$1-\\1/r", context)).toMatchObject({
+      type: "substitute",
+      replacement: "&-$1-\\1",
+      matcherMode: "regex",
+    });
+  });
+
   test("rejects unsupported names and uppercase flags", () => {
     expect(parseExSubstitution("sub/old/new/", context)).toEqual({
       type: "error",

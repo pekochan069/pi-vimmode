@@ -69,7 +69,13 @@
 
 - [x] ctrl+r (redo)
 
-- [ ] Safe Ex/Search workbench
+- [ ] create `vimmode` command to pi that can toggle pi-vimmode
+
+- [ ] change default settigns for UI
+  - set cursorPosition enabled to true by default
+  - set status.items to be ["mode", "pendingOperator", "selection", "cursorPosition"] by default
+
+- [x] Safe Ex/Search workbench
   - Add shared `/` and `:` mini-editor with history, backward `?`, previous-query recall, bounded regex/literal modes, substitution preview/counts.
   - Keep finite scope; no full Ex/Vimscript parity.
   - Complexity: High. Confidence: 84%.

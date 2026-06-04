@@ -302,6 +302,7 @@ export type SubstituteLineRangeOptions = {
 export type SubstituteLineRangeResult = {
   edit: EditResult;
   matches: number;
+  ranges: TextRange[];
 };
 
 function literalIndexOf(
@@ -320,22 +321,24 @@ function substituteLineLiteral(
   replacement: string,
   global: boolean,
   ignoreCase: boolean,
-): { line: string; matches: number } {
+): { line: string; matches: number; ranges: Array<{ start: number; end: number }> } {
   let nextLine = "";
   let cursor = 0;
   let matches = 0;
+  const ranges: Array<{ start: number; end: number }> = [];
 
   while (cursor <= line.length) {
     const match = literalIndexOf(line, pattern, cursor, ignoreCase);
     if (match < 0) break;
     matches++;
+    ranges.push({ start: match, end: match + pattern.length - 1 });
     nextLine += line.slice(cursor, match) + replacement;
     cursor = match + pattern.length;
     if (!global) break;
   }
 
-  if (matches === 0) return { line, matches };
-  return { line: nextLine + line.slice(cursor), matches };
+  if (matches === 0) return { line, matches, ranges };
+  return { line: nextLine + line.slice(cursor), matches, ranges };
 }
 
 export function substituteLineRangeLiteral(
@@ -347,6 +350,7 @@ export function substituteLineRangeLiteral(
   const endLine = Math.max(0, Math.min(options.range.endLine, lines.length - 1));
   const nextLines = [...lines];
   let matches = 0;
+  const ranges: TextRange[] = [];
 
   for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
     const result = substituteLineLiteral(
@@ -358,11 +362,112 @@ export function substituteLineRangeLiteral(
     );
     nextLines[lineIndex] = result.line;
     matches += result.matches;
+    for (const range of result.ranges) {
+      ranges.push({
+        start: { line: lineIndex, col: range.start },
+        end: { line: lineIndex, col: range.end },
+      });
+    }
   }
 
   const nextText = joinLines(nextLines);
   return {
     matches,
+    ranges,
+    edit: {
+      text: nextText,
+      cursor: clampPosition(nextLines, options.originalCursor),
+      changed: nextText !== text,
+    },
+  };
+}
+
+export type SubstituteLineRangeRegexResult =
+  | ({ ok: true } & SubstituteLineRangeResult)
+  | { ok: false; message: string };
+
+function substituteLineRegex(
+  line: string,
+  regex: RegExp,
+  replacement: string,
+  global: boolean,
+):
+  | { ok: true; line: string; matches: number; ranges: Array<{ start: number; end: number }> }
+  | { ok: false; message: string } {
+  let nextLine = "";
+  let cursor = 0;
+  let matches = 0;
+  const ranges: Array<{ start: number; end: number }> = [];
+  regex.lastIndex = 0;
+
+  while (cursor <= line.length) {
+    regex.lastIndex = cursor;
+    const match = regex.exec(line);
+    if (!match) break;
+    if (match[0].length === 0)
+      return { ok: false, message: "Regex pattern cannot match empty text" };
+    matches++;
+    if (matches > REGEX_SEARCH_MATCH_MAX_COUNT)
+      return { ok: false, message: "Regex match count exceeded" };
+    ranges.push({ start: match.index, end: match.index + match[0].length - 1 });
+    nextLine += line.slice(cursor, match.index) + replacement;
+    cursor = match.index + match[0].length;
+    if (!global) break;
+  }
+
+  if (matches === 0) return { ok: true, line, matches, ranges };
+  return { ok: true, line: nextLine + line.slice(cursor), matches, ranges };
+}
+
+export function substituteLineRangeRegex(
+  text: string,
+  options: SubstituteLineRangeOptions,
+): SubstituteLineRangeRegexResult {
+  if (options.pattern.length === 0) return { ok: false, message: "Regex pattern cannot be empty" };
+  if (options.pattern.length > REGEX_SEARCH_PATTERN_MAX_LENGTH)
+    return { ok: false, message: "Regex pattern too long" };
+  if (text.length > REGEX_SEARCH_SUBJECT_MAX_LENGTH)
+    return { ok: false, message: "Regex subject too long" };
+
+  let regex: RegExp;
+  try {
+    regex = new RegExp(options.pattern, options.ignoreCase ? "gi" : "g");
+  } catch {
+    return { ok: false, message: "Invalid regex pattern" };
+  }
+
+  const lines = splitText(text);
+  const startLine = Math.max(0, Math.min(options.range.startLine, lines.length - 1));
+  const endLine = Math.max(0, Math.min(options.range.endLine, lines.length - 1));
+  const nextLines = [...lines];
+  let matches = 0;
+  const ranges: TextRange[] = [];
+
+  for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+    const result = substituteLineRegex(
+      nextLines[lineIndex] ?? "",
+      regex,
+      options.replacement,
+      options.global,
+    );
+    if (!result.ok) return result;
+    nextLines[lineIndex] = result.line;
+    matches += result.matches;
+    for (const range of result.ranges) {
+      ranges.push({
+        start: { line: lineIndex, col: range.start },
+        end: { line: lineIndex, col: range.end },
+      });
+    }
+    if (matches > REGEX_SEARCH_MATCH_MAX_COUNT)
+      return { ok: false, message: "Regex match count exceeded" };
+  }
+
+  const nextText = joinLines(nextLines);
+  return {
+    ok: true,
+    matches,
+    ranges,
     edit: {
       text: nextText,
       cursor: clampPosition(nextLines, options.originalCursor),
@@ -1254,31 +1359,138 @@ export function findSearchHighlightRanges(
   return ranges;
 }
 
+export type SearchMatcher =
+  | { mode: "literal"; query: string }
+  | { mode: "regex"; query: string; regex: RegExp };
+
+export type SearchMatch = { position: Position; length: number };
+
+export const REGEX_SEARCH_PATTERN_MAX_LENGTH = 256;
+export const REGEX_SEARCH_SUBJECT_MAX_LENGTH = 50_000;
+export const REGEX_SEARCH_MATCH_MAX_COUNT = 10_000;
+
+export function compileRegexSearchMatcher(
+  query: string,
+): { ok: true; matcher: SearchMatcher } | { ok: false; message: string } {
+  if (query.length > REGEX_SEARCH_PATTERN_MAX_LENGTH)
+    return { ok: false, message: "Regex pattern too long" };
+  try {
+    const regex = new RegExp(query, "g");
+    if (regex.exec("")?.[0] === "")
+      return { ok: false, message: "Regex pattern cannot match empty text" };
+    return { ok: true, matcher: { mode: "regex", query, regex } };
+  } catch {
+    return { ok: false, message: "Invalid regex pattern" };
+  }
+}
+
 export function findSearchMatch(
   text: string,
   cursor: Position,
   query: string,
   direction: SearchDirection = "forward",
 ): Position | undefined {
-  if (query.length === 0 || query.includes("\n")) return undefined;
+  return findSearchMatchWithMatcher(text, cursor, { mode: "literal", query }, direction)?.position;
+}
+
+export function findSearchMatchWithMatcher(
+  text: string,
+  cursor: Position,
+  matcher: SearchMatcher,
+  direction: SearchDirection = "forward",
+): SearchMatch | undefined {
+  if (matcher.query.length === 0 || matcher.query.includes("\n")) return undefined;
+  if (matcher.mode === "literal")
+    return findLiteralSearchMatch(text, cursor, matcher.query, direction);
+  if (text.length > REGEX_SEARCH_SUBJECT_MAX_LENGTH) return undefined;
+  return findRegexSearchMatch(text, cursor, matcher.regex, direction);
+}
+
+function findLiteralSearchMatch(
+  text: string,
+  cursor: Position,
+  query: string,
+  direction: SearchDirection,
+): SearchMatch | undefined {
   const start = positionToOffset(text, cursor);
   if (direction === "forward") {
     const later = text.indexOf(query, Math.min(text.length, start + 1));
-    if (later >= 0) return offsetToPosition(text, later);
+    if (later >= 0) return { position: offsetToPosition(text, later), length: query.length };
     const wrapped = text.indexOf(query, 0);
-    return wrapped >= 0 ? offsetToPosition(text, wrapped) : undefined;
+    return wrapped >= 0
+      ? { position: offsetToPosition(text, wrapped), length: query.length }
+      : undefined;
   }
 
   const earlier = start > 0 ? text.lastIndexOf(query, start - 1) : -1;
-  if (earlier >= 0) return offsetToPosition(text, earlier);
+  if (earlier >= 0) return { position: offsetToPosition(text, earlier), length: query.length };
   const wrapped = text.lastIndexOf(query);
-  return wrapped >= 0 ? offsetToPosition(text, wrapped) : undefined;
+  return wrapped >= 0
+    ? { position: offsetToPosition(text, wrapped), length: query.length }
+    : undefined;
 }
 
-function searchRangeEnd(text: string, target: Position, query: string): Position {
+function regexMatches(
+  text: string,
+  regex: RegExp,
+): { offset: number; length: number }[] | undefined {
+  const matches: { offset: number; length: number }[] = [];
+  regex.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[0].length === 0) return undefined;
+    matches.push({ offset: match.index, length: match[0].length });
+    if (matches.length > REGEX_SEARCH_MATCH_MAX_COUNT) return undefined;
+  }
+  return matches;
+}
+
+function findRegexSearchMatch(
+  text: string,
+  cursor: Position,
+  regex: RegExp,
+  direction: SearchDirection,
+): SearchMatch | undefined {
+  const matches = regexMatches(text, regex);
+  if (!matches || matches.length === 0) return undefined;
+  const start = positionToOffset(text, cursor);
+  const found =
+    direction === "forward"
+      ? (matches.find((match) => match.offset > start) ?? matches[0])
+      : (matches.findLast((match) => match.offset < start) ?? matches.at(-1));
+  return found
+    ? { position: offsetToPosition(text, found.offset), length: found.length }
+    : undefined;
+}
+
+function searchRangeEnd(text: string, target: Position, length: number): Position {
   const targetOffset = positionToOffset(text, target);
-  const endOffset = Math.max(targetOffset, Math.min(text.length, targetOffset + query.length) - 1);
+  const endOffset = Math.max(targetOffset, Math.min(text.length, targetOffset + length) - 1);
   return offsetToPosition(text, endOffset);
+}
+
+export function deleteSearchMatchRange(
+  text: string,
+  cursor: Position,
+  match: SearchMatch,
+): EditResult {
+  const active =
+    comparePositions(cursor, match.position) <= 0
+      ? searchRangeEnd(text, match.position, match.length)
+      : match.position;
+  return deleteRange(text, cursor, active);
+}
+
+export function yankSearchMatchRange(
+  text: string,
+  cursor: Position,
+  match: SearchMatch,
+): VimRegister | undefined {
+  const active =
+    comparePositions(cursor, match.position) <= 0
+      ? searchRangeEnd(text, match.position, match.length)
+      : match.position;
+  return yankVisualSelection(text, cursor, active, "char");
 }
 
 export function deleteSearchRange(
@@ -1287,9 +1499,7 @@ export function deleteSearchRange(
   target: Position,
   query: string,
 ): EditResult {
-  const active =
-    comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
-  return deleteRange(text, cursor, active);
+  return deleteSearchMatchRange(text, cursor, { position: target, length: query.length });
 }
 
 export function yankSearchRange(
@@ -1298,9 +1508,7 @@ export function yankSearchRange(
   target: Position,
   query: string,
 ): VimRegister | undefined {
-  const active =
-    comparePositions(cursor, target) <= 0 ? searchRangeEnd(text, target, query) : target;
-  return yankVisualSelection(text, cursor, active, "char");
+  return yankSearchMatchRange(text, cursor, { position: target, length: query.length });
 }
 
 export function findCharOnLine(

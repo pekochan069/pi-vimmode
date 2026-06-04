@@ -189,6 +189,7 @@ describe("Ex command-line modal behavior", () => {
       "/",
       "g",
       "\r",
+      "\r",
     ]);
     expect(result.text).toBe("new new\nnew");
     expect(result.cursor).toEqual(p(0, 0));
@@ -206,12 +207,16 @@ describe("Ex command-line modal behavior", () => {
     expect(error.effects.some((effect) => effect.type === "edit")).toBe(false);
     expect(error.state.exMessage).toEqual({ kind: "error", text: "Pattern not found: missing" });
 
-    const identical = handleModalInput(
+    const preview = handleModalInput(
       { mode: "normal", pendingEx: { command: "s/abc/abc/", sourceMode: "normal" } },
       snapshot,
       options,
       "\r",
     );
+    expect(preview.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(preview.state.pendingEx?.preview).toMatchObject({ command: "s/abc/abc/", matches: 1 });
+
+    const identical = handleModalInput(preview.state, snapshot, options, "\r");
     expect(identical.effects.some((effect) => effect.type === "edit")).toBe(false);
     expect(identical.state.exMessage).toEqual({ kind: "success", text: "1 substitution" });
   });
@@ -224,10 +229,97 @@ describe("Ex command-line modal behavior", () => {
       searchHighlight: { query: "old", current: p(0, 0) },
       pendingEx: { command: "s/old/new/", sourceMode: "normal" },
     };
-    const changed = handleModalInput(state, { text: "old", lines: ["old"], cursor }, options, "\r");
+    const preview = handleModalInput(state, { text: "old", lines: ["old"], cursor }, options, "\r");
+    expect(preview.state.searchHighlight).toEqual({ query: "old", current: p(0, 0) });
+
+    const changed = handleModalInput(
+      preview.state,
+      { text: "old", lines: ["old"], cursor },
+      options,
+      "\r",
+    );
     expect(changed.state.register).toEqual({ type: "char", text: "keep" });
     expect(changed.state.lastRepeatableChange).toEqual({ type: "command", command: "deleteChar" });
     expect(changed.state.searchHighlight).toBeUndefined();
+  });
+
+  test("Ex history recalls successful commands and skips preview-only failures", () => {
+    const substituted = applyModalKeys({ mode: "normal" }, "old old", p(0, 0), [
+      ":",
+      "s",
+      "/",
+      "o",
+      "l",
+      "d",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "\r",
+      "\r",
+      ":",
+      "\x1b[A",
+      "\r",
+    ]);
+
+    expect(substituted.state.pendingEx?.preview).toMatchObject({
+      command: "s/old/new/",
+      matches: 1,
+    });
+    expect(substituted.state.exHistory).toEqual(["s/old/new/"]);
+  });
+
+  test("Ex regex substitution previews and applies with literal replacement", () => {
+    const result = applyModalKeys({ mode: "normal" }, "TODO FIXME", p(0, 0), [
+      ":",
+      "%",
+      "s",
+      "/",
+      "T",
+      "O",
+      "D",
+      "O",
+      "|",
+      "F",
+      "I",
+      "X",
+      "M",
+      "E",
+      "/",
+      "&",
+      "-",
+      "$",
+      "1",
+      "-",
+      "\\",
+      "1",
+      "/",
+      "g",
+      "r",
+      "\r",
+      "\r",
+    ]);
+
+    expect(result.text).toBe("&-$1-\\1 &-$1-\\1");
+    expect(result.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+  });
+
+  test("editing Ex command clears substitution preview", () => {
+    const preview = handleModalInput(
+      { mode: "normal", pendingEx: { command: "s/old/new/", sourceMode: "normal" } },
+      { text: "old", lines: ["old"], cursor },
+      options,
+      "\r",
+    );
+    const edited = handleModalInput(
+      preview.state,
+      { text: "old", lines: ["old"], cursor },
+      options,
+      "x",
+    );
+    expect(edited.state.pendingEx?.command).toBe("s/old/new/x");
+    expect(edited.state.pendingEx?.preview).toBeUndefined();
   });
 
   test("Ex transforms current, explicit, and visual ranges", () => {
@@ -813,9 +905,39 @@ describe("modal engine", () => {
 
     expect(result.text).toBe("one two one");
     expect(result.cursor).toEqual(p(0, 8));
-    expect(result.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+    expect(result.state.lastSearch).toEqual({
+      query: "one",
+      direction: "forward",
+      matcherMode: "literal",
+    });
     expect(result.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
     expect(result.state.pendingSearch).toBeUndefined();
+  });
+
+  test("normal mode supports backward prompt search and repeat", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 8), [
+      "?",
+      "o",
+      "n",
+      "e",
+      "\r",
+      "n",
+    ]);
+
+    expect(result.text).toBe("one two one");
+    expect(result.cursor).toEqual(p(0, 8));
+    expect(result.state.lastSearch).toEqual({
+      query: "one",
+      direction: "backward",
+      matcherMode: "literal",
+    });
+    expect(result.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+    expect(result.state.pendingSearch).toBeUndefined();
+  });
+
+  test("backward prompt search displays question prefix while pending", () => {
+    const opened = handleModalInput({ mode: "normal" }, snapshot, options, "?");
+    expect(opened.state.pendingSearch).toEqual({ query: "", direction: "backward" });
   });
 
   test("prompt search highlight state honors config and clear events", () => {
@@ -836,7 +958,11 @@ describe("modal engine", () => {
       },
     );
     expect(noHighlight.state.searchHighlight).toBeUndefined();
-    expect(noHighlight.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+    expect(noHighlight.state.lastSearch).toEqual({
+      query: "one",
+      direction: "forward",
+      matcherMode: "literal",
+    });
 
     const highlighted = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), [
       "/",
@@ -885,6 +1011,117 @@ describe("modal engine", () => {
     }
   });
 
+  test("empty prompt search recalls previous successful query", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), [
+      "/",
+      "t",
+      "w",
+      "o",
+      "\r",
+      "/",
+      "\r",
+      "?",
+      "\r",
+    ]);
+
+    expect(result.cursor).toEqual(p(0, 4));
+    expect(result.state.lastSearch).toEqual({
+      query: "two",
+      direction: "backward",
+      matcherMode: "literal",
+    });
+  });
+
+  test("pending prompt search navigates successful search history", () => {
+    const searched = applyModalKeys({ mode: "normal" }, "one two three", p(0, 0), [
+      "/",
+      "t",
+      "w",
+      "o",
+      "\r",
+      "/",
+      "t",
+      "h",
+      "r",
+      "e",
+      "e",
+      "\r",
+      "/",
+      "\x1b[A",
+      "\r",
+    ]);
+
+    expect(searched.cursor).toEqual(p(0, 8));
+    expect(searched.state.lastSearch).toEqual({
+      query: "three",
+      direction: "forward",
+      matcherMode: "literal",
+    });
+    expect(searched.state.searchHistory).toEqual([
+      { query: "two", matcherMode: "literal" },
+      { query: "three", matcherMode: "literal" },
+    ]);
+  });
+
+  test("prompt search supports explicit bounded regex mode", () => {
+    const found = applyModalKeys({ mode: "normal" }, "todo FIXME", p(0, 0), [
+      "/",
+      "\\",
+      "r",
+      "T",
+      "O",
+      "D",
+      "O",
+      "|",
+      "F",
+      "I",
+      "X",
+      "M",
+      "E",
+      "\r",
+    ]);
+
+    expect(found.cursor).toEqual(p(0, 5));
+    expect(found.state.lastSearch).toEqual({
+      query: "TODO|FIXME",
+      direction: "forward",
+      matcherMode: "regex",
+    });
+    expect(found.state.searchHistory).toEqual([{ query: "TODO|FIXME", matcherMode: "regex" }]);
+
+    const literal = applyModalKeys({ mode: "normal" }, "todo TODO|FIXME FIXME", p(0, 0), [
+      "/",
+      "T",
+      "O",
+      "D",
+      "O",
+      "|",
+      "F",
+      "I",
+      "X",
+      "M",
+      "E",
+      "\r",
+    ]);
+    expect(literal.cursor).toEqual(p(0, 5));
+    expect(literal.state.lastSearch).toEqual({
+      query: "TODO|FIXME",
+      direction: "forward",
+      matcherMode: "literal",
+    });
+  });
+
+  test("invalid regex prompt search is safe", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["/", "\\", "r", "(", "\r"]);
+    expect(result).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      state: { mode: "normal", exMessage: { kind: "error", text: "Invalid regex pattern" } },
+    });
+    expect(result.state.lastSearch).toBeUndefined();
+    expect(result.state.searchHistory).toBeUndefined();
+  });
+
   test("normal prompt search handles cancellation empty and missing queries safely", () => {
     expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["/", "x", "\x1b"])).toMatchObject({
       text: "abc",
@@ -917,6 +1154,18 @@ describe("modal engine", () => {
     expect(result.text).toBe("abc");
     expect(result.state).toMatchObject({ mode: "visual", visualAnchor: p(0, 0) });
     expect(result.state.pending).toBeUndefined();
+  });
+
+  test("visual mode supports backward prompt search motion", () => {
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 8) },
+      "one two one",
+      p(0, 8),
+      ["?", "t", "w", "o", "\r"],
+    );
+
+    expect(result.cursor).toEqual(p(0, 4));
+    expect(result.state).toMatchObject({ mode: "visual", visualAnchor: p(0, 8) });
   });
 
   test("visual mode supports prompt search motion", () => {
@@ -952,6 +1201,13 @@ describe("modal engine", () => {
       text: " three",
       cursor: p(0, 0),
       state: { mode: "insert", register: { type: "char", text: "one two" } },
+    });
+    expect(
+      applyModalKeys({ mode: "normal" }, "one two three", p(0, 8), ["d", "?", "t", "w", "o", "\r"]),
+    ).toMatchObject({
+      text: "one hree",
+      cursor: p(0, 4),
+      state: { mode: "normal", register: { type: "char", text: "two t" } },
     });
     expect(
       applyModalKeys({ mode: "normal" }, "one two", p(0, 0), ["d", "/", "z", "\r"]),

@@ -233,23 +233,36 @@ Search misses are safe no-ops.
 
 ## Prompt search
 
-`/` starts literal forward search in current prompt. Type query text, then press `Enter`. `n` repeats last search direction and `N` searches opposite direction. Matches wrap around the prompt.
+`/` starts literal forward search in current prompt. `?` starts literal backward search. Type query text, then press `Enter`. `n` repeats last search direction and `N` searches opposite direction. Matches wrap around the prompt.
 
 Examples:
 
 ```text
-/error⏎    move to next literal error
-n          next error
-N          previous error
-d/error⏎  delete through next literal error match
-y/TODO⏎   yank through next literal TODO match
+/error⏎     move to next literal error
+?error⏎     move to previous literal error
+/⏎          recall previous successful query, search forward
+?⏎          recall previous successful query, search backward
+n           repeat same direction
+N           repeat opposite direction
+d/error⏎   delete through next literal error match
+y?TODO⏎    yank through previous literal TODO match
+/\rTODO|FIXME⏎  bounded regex search
 ```
+
+Search workbench behavior:
+
+- `/` and `?` render a width-safe workbench row below the prompt and shrink the prompt viewport by one row while pending.
+- `Up` / `Down` navigate prompt-local in-memory search history for the current editor instance.
+- Successful searches enter history; misses, invalid regex, and rejected bounded regex patterns do not.
+- Empty `/` or `?` recalls the last successful query and matcher mode.
+- Search is literal by default. Prefix a pending query with `\r` to opt into bounded JavaScript regex matching.
+- Regex search bounds: pattern length 256, prompt text length 50,000 UTF-16 code units, and match-count cap 10,000. Invalid, too-large, or zero-length regex matches are rejected without prompt mutation.
 
 Visual search moves the active cursor while preserving the visual anchor.
 
 Search highlighting:
 
-- Successful `/`, `n`, and `N` can highlight matches.
+- Successful `/`, `?`, `n`, and `N` can highlight matches.
 - Current match can use distinct styling.
 - Highlight rendering is capped by `piVimMode.search.maxHighlights`.
 - Precedence is: cursor, visual selection, current search match, other search matches, plain text.
@@ -257,9 +270,8 @@ Search highlighting:
 
 Limitations:
 
-- Search is literal, not regex.
-- `?` backward search command is not supported.
-- No search history, offsets, Vim highlight groups, `:nohlsearch`, or search across previous prompts.
+- No search offsets, Vim magic modes, Vim highlight groups, or search across previous prompts.
+- Regex mode is bounded mitigation, not a sandboxed regex engine.
 
 ## Visual char mode
 
@@ -380,13 +392,14 @@ Supported destination addresses for `:copy`/`:t` and `:move`/`:m`:
 
 Supported substitution flags:
 
-- `g`: replace every non-overlapping literal match per line
-- `i`: case-insensitive literal match
+- `g`: replace every non-overlapping match per line
+- `i`: case-insensitive match
+- `r`: opt into bounded JavaScript regex pattern matching
 
 Important semantics:
 
-- Pattern and replacement are literal strings, not regex.
-- `&`, `$1`, and `\1` in replacements insert literally.
+- Pattern matching is literal by default. Add `r` to use bounded regex, e.g. `:%s/TODO|FIXME/done/gr`.
+- Replacement text is always literal. `&`, `$1`, and `\1` insert literally, even in regex mode.
 - Empty replacement is valid.
 - Empty pattern is an error.
 - Delimiter can be any printable non-alphanumeric, non-whitespace, non-backslash character.
@@ -405,8 +418,11 @@ Important semantics:
 - `:reflow [width]` rewraps prose paragraphs to the given width or 80 columns; fenced code, error blocks, blank lines, and bullet lines are preserved.
 - `:nohlsearch` clears visible prompt search highlights but keeps repeat-search state for `n`/`N`.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
+- `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance.
 - Enter on an empty command closes the Ex row without a message.
-- Unsupported command, range, destination, delimiter, argument, or flag produces transient Ex error text.
+- Substitution is two-phase: first `Enter` highlights matched target text and reports a match count without editing, second unchanged `Enter` applies, `Esc` cancels.
+- Editing or history navigation clears a pending substitution match preview.
+- Unsupported command, range, destination, delimiter, argument, flag, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
 - Success/error messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
@@ -422,7 +438,9 @@ Transform examples:
 :reflow 72
 ```
 
-Limitations: no regex substitution, command history, repeat substitution, range offsets, semicolon ranges, confirmation flag, Ex register operands, `:global`, shell/file/window/buffer commands, or Vimscript evaluation. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
+
+Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, or Vimscript evaluation. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
 
 ## Registers
 
@@ -524,8 +542,8 @@ Rendering behavior:
 - Active macro recording shows `REC {slot}`.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
-- Ex input and Ex messages render in a dedicated row below the prompt and shrink prompt viewport by one row.
-- Pending Ex input also appears in status with an ellipsis when the pending-status item is enabled.
+- Pending `/`, `?`, and `:` workbench input plus search/Ex errors and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row.
+- Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.
 - Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
 - Terminal cursor-shape hints use best-effort DECSCUSR escapes.

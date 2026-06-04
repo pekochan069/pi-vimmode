@@ -42,6 +42,7 @@ import {
   putExRegisterAfterRange,
   replaceVisualRangeChars,
   substituteLineRangeLiteral,
+  substituteLineRangeRegex,
   toggleCaseAt,
   toggleCaseVisualRange,
   visualBlockSelectionSummary,
@@ -127,6 +128,54 @@ describe("prompt buffer operation API", () => {
         originalCursor: p(0, 7),
       }),
     ).toMatchObject({ matches: 2, edit: { text: " ", cursor: p(0, 1), changed: true } });
+  });
+
+  test("substitutes bounded regex patterns with literal replacement text", () => {
+    expect(
+      substituteLineRangeRegex("TODO FIXME done", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "TODO|FIXME",
+        replacement: "done",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 99),
+      }),
+    ).toMatchObject({ ok: true, matches: 2, edit: { text: "done done done", changed: true } });
+
+    expect(
+      substituteLineRangeRegex("old", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "(old)",
+        replacement: "&-$1-\\1",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toMatchObject({ ok: true, matches: 1, edit: { text: "&-$1-\\1", changed: true } });
+  });
+
+  test("rejects invalid bounded regex substitutions without edit effects", () => {
+    expect(
+      substituteLineRangeRegex("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "(",
+        replacement: "bar",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toEqual({ ok: false, message: "Invalid regex pattern" });
+
+    expect(
+      substituteLineRangeRegex("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "",
+        replacement: "bar",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toEqual({ ok: false, message: "Regex pattern cannot be empty" });
   });
 
   test("reports identical replacements and pattern-not-found without edit effects", () => {

@@ -31,12 +31,12 @@ The Vim editor SHALL render pending `/`, `?`, and `:` workbench input in a dedic
 
 ### Requirement: Workbench messages render preview, success, and error states safely
 
-The Vim editor SHALL render workbench feedback for search errors, Ex errors, Ex success counts, and substitution previews without breaking visual selection, search highlights, or cursor rendering.
+The Vim editor SHALL render workbench feedback for search errors, Ex errors, Ex success counts, and substitution match previews without breaking visual selection, search highlights, or cursor rendering.
 
-#### Scenario: Substitution preview message is visible
+#### Scenario: Substitution match preview is visible
 
 - **WHEN** a substitution preview is active
-- **THEN** the workbench row shows a readable substitution count and guidance that `Enter` applies while `Esc` cancels
+- **THEN** matched target text is highlighted and the workbench row shows a readable match count plus guidance that `Enter` applies while `Esc` cancels
 
 #### Scenario: Preview message is replaced by apply result
 
@@ -70,7 +70,7 @@ The change SHALL include automated rendering tests and user-facing documentation
 #### Scenario: Render validation runs
 
 - **WHEN** `bun test` is executed
-- **THEN** render tests cover `/`, `?`, and `:` workbench rows, long pending text, substitution preview messages, transient regex errors, viewport shrink behavior, visual selection composition, search highlight composition, and narrow terminal widths
+- **THEN** render tests cover `/`, `?`, and `:` workbench rows, long pending text, substitution match preview messages/highlights, transient regex errors, viewport shrink behavior, visual selection composition, search highlight composition, and narrow terminal widths
 
 #### Scenario: Typecheck runs
 
@@ -80,4 +80,4 @@ The change SHALL include automated rendering tests and user-facing documentation
 #### Scenario: User docs describe workbench row
 
 - **WHEN** the user opens `docs/features.md`
-- **THEN** it documents where `/`, `?`, `:` workbench input, substitution previews, counts, and errors appear and how those rows affect prompt viewport height
+- **THEN** it documents where `/`, `?`, `:` workbench input, substitution match previews, counts, and errors appear and how those rows affect prompt viewport height

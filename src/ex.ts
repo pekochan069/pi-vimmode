@@ -21,6 +21,7 @@ export type ParsedExSubstitution = {
   replacement: string;
   global: boolean;
   ignoreCase: boolean;
+  matcherMode: "literal" | "regex";
 };
 
 export type ParsedExLineCommand = {
@@ -309,10 +310,15 @@ function readDelimited(
   return { value, rest: "", closed: false };
 }
 
-function parseSubstitutionArgs(
-  source: string,
-):
-  | { ok: true; pattern: string; replacement: string; global: boolean; ignoreCase: boolean }
+function parseSubstitutionArgs(source: string):
+  | {
+      ok: true;
+      pattern: string;
+      replacement: string;
+      global: boolean;
+      ignoreCase: boolean;
+      matcherMode: "literal" | "regex";
+    }
   | { ok: false; message: string } {
   const delimiter = source[0];
   if (!isValidDelimiter(delimiter)) return { ok: false, message: "Invalid substitution delimiter" };
@@ -330,17 +336,27 @@ function parseSubstitutionArgs(
       replacement: replacement.value,
       global: false,
       ignoreCase: false,
+      matcherMode: "literal",
     };
   }
 
   let global = false;
   let ignoreCase = false;
+  let matcherMode: "literal" | "regex" = "literal";
   for (const flag of replacement.rest) {
     if (flag === "g") global = true;
     else if (flag === "i") ignoreCase = true;
+    else if (flag === "r") matcherMode = "regex";
     else return { ok: false, message: `Unsupported substitution flag: ${flag}` };
   }
-  return { ok: true, pattern: pattern.value, replacement: replacement.value, global, ignoreCase };
+  return {
+    ok: true,
+    pattern: pattern.value,
+    replacement: replacement.value,
+    global,
+    ignoreCase,
+    matcherMode,
+  };
 }
 
 function parseDestinationAddress(source: string, context: ExParseContext): DestinationParseResult {
@@ -429,6 +445,7 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       replacement: args.replacement,
       global: args.global,
       ignoreCase: args.ignoreCase,
+      matcherMode: args.matcherMode,
     };
   }
 

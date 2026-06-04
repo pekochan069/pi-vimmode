@@ -57,6 +57,7 @@ function runEx(editor: VimEditor, command: string) {
   editor.handleInput(":");
   for (const char of command) editor.handleInput(char);
   editor.handleInput("\r");
+  if (/^\s*(?:%|\d|\.|\$|'|<|>|,)*s(?:ubstitute)?\b/.test(command)) editor.handleInput("\r");
 }
 
 function expectEditorState(
@@ -106,6 +107,28 @@ describe("vim editor integration", () => {
     const message = editor.render(20);
     expect(message.at(-1)).toContain("Pattern not found: x");
     expectRenderedWidth(message, 20);
+  });
+
+  test("search and substitution preview rows render width-safely below prompt", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(20);
+
+    editor.handleInput("/");
+    typeKeys(editor, ["o", "l", "d"]);
+    const search = editor.render(20);
+    expect(search.length).toBe(baseline.length + 1);
+    expect(search.at(-1)).toContain("/old");
+    expectRenderedWidth(search, 20);
+    editor.handleInput("\x1b");
+
+    editor.setText("old old");
+    editor.handleInput(":");
+    typeKeys(editor, ["%", "s", "/", "o", "l", "d", "/", "n", "e", "w", "/", "g", "\r"]);
+    const preview = editor.render(80);
+    expect(preview.at(-1)).toContain("2 matches found");
+    expect(preview.at(-1)).toContain("Enter applies");
+    expect(preview.join("\n")).toContain(SEARCH_START);
+    expectRenderedWidth(preview, 80);
   });
 
   test("Ex row composes with visual selection and search highlights", () => {
@@ -616,6 +639,7 @@ describe("vim editor integration", () => {
       "e",
       "w",
       "/",
+      "\r",
       "\r",
       "q",
     ]);

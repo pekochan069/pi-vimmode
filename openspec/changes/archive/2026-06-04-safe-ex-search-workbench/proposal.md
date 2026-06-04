@@ -8,7 +8,7 @@ Search and Ex command-line currently use separate minimal collectors, so users l
 - Add backward `?` search with repeat-search semantics that respect original search direction.
 - Add history navigation for completed search queries and Ex commands, including previous-query recall for empty `/` or `?` search.
 - Add explicit literal and bounded-regex modes for search and substitution, with invalid or expensive patterns rejected safely.
-- Add substitution preview/count feedback before edit execution, so broad replacements can be inspected before mutating prompt text.
+- Add substitution match highlighting and count feedback before edit execution, so broad replacements can be inspected before mutating prompt text.
 - Keep all behavior finite, prompt-local, and safe on invalid/missing targets.
 
 ### Non-goals
@@ -27,9 +27,9 @@ Search and Ex command-line currently use separate minimal collectors, so users l
 ### Modified Capabilities
 
 - `vim-search`: add backward `?`, shared workbench editing/history, previous-query recall, and safe literal/regex query modes.
-- `vim-ex-command-line`: add shared workbench editing/history plus bounded substitution regex/literal modes and preview/count feedback.
+- `vim-ex-command-line`: add shared workbench editing/history plus bounded substitution regex/literal modes and match preview/count feedback.
 - `vim-keymap-configuration`: expose backward search entry as a finite semantic command while keeping workbench history controls prompt-local and non-recursive.
-- `vim-ui-configuration`: ensure shared workbench rows, search highlights, and substitution preview/count messages render width-safely with existing prompt/status UI.
+- `vim-ui-configuration`: ensure shared workbench rows, search highlights, and substitution match preview/count messages render width-safely with existing prompt/status UI.
 
 ## Impact
 

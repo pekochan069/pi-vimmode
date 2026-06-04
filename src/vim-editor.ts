@@ -47,9 +47,15 @@ function fitWidth(text: string, width: number): string {
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
-function renderExRow(state: ModalState, width: number): string | undefined {
+function renderWorkbenchRow(state: ModalState, width: number): string | undefined {
   if (width <= 0) return undefined;
-  const text = state.pendingEx ? `:${state.pendingEx.command}` : state.exMessage?.text;
+  const text = state.pendingSearch
+    ? `${state.pendingSearch.direction === "backward" ? "?" : "/"}${state.pendingSearch.query}`
+    : state.pendingEx?.preview
+      ? state.pendingEx.preview.message
+      : state.pendingEx
+        ? `:${state.pendingEx.command}`
+        : state.exMessage?.text;
   return text === undefined ? undefined : fitWidth(text, width);
 }
 
@@ -163,8 +169,10 @@ export class VimEditor extends CustomEditor {
   }
 
   override render(width: number): string[] {
-    const exRow = renderExRow(this.modalState, width);
-    const terminalRows = exRow ? Math.max(1, (this.terminalRows() ?? 24) - 1) : this.terminalRows();
+    const workbenchRow = renderWorkbenchRow(this.modalState, width);
+    const terminalRows = workbenchRow
+      ? Math.max(1, (this.terminalRows() ?? 24) - 1)
+      : this.terminalRows();
     const lines = this.renderEditorLines(width, terminalRows);
     if (lines.length === 0 || width <= 0) return lines;
 
@@ -180,7 +188,7 @@ export class VimEditor extends CustomEditor {
       ui: uiForOptions(this.options),
     });
     lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
-    if (exRow) lines.push(exRow);
+    if (workbenchRow) lines.push(workbenchRow);
     return lines;
   }
 
@@ -195,9 +203,18 @@ export class VimEditor extends CustomEditor {
   }
 
   private searchRenderInput() {
-    if (!this.modalState.searchHighlight) return undefined;
     const search = searchForOptions(this.options);
     if (!search.highlight) return undefined;
+    const preview = this.modalState.pendingEx?.preview;
+    if (preview) {
+      return {
+        query: "",
+        ranges: preview.ranges,
+        highlightCurrent: false,
+        maxHighlights: search.maxHighlights,
+      };
+    }
+    if (!this.modalState.searchHighlight) return undefined;
     return {
       query: this.modalState.searchHighlight.query,
       current: this.modalState.searchHighlight.current,
@@ -236,7 +253,12 @@ export class VimEditor extends CustomEditor {
       });
     }
 
-    if (this.searchRenderInput() || this.modalState.pendingEx || this.modalState.exMessage) {
+    if (
+      this.searchRenderInput() ||
+      this.modalState.pendingSearch ||
+      this.modalState.pendingEx ||
+      this.modalState.exMessage
+    ) {
       return renderPromptEditor({
         snapshot: {
           lines: this.getLines(),

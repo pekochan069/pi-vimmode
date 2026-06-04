@@ -86,7 +86,7 @@ ctrl+c, ctrl+d, ctrl+g, ctrl+l, ctrl+p,
 shift+ctrl+p, ctrl+shift+p, ctrl+t, shift+tab
 ```
 
-Protected or unsupported keys are ignored with a warning. `ctrl+a`, `ctrl+x`, and `ctrl+r` are explicitly owned by pi-vimmode in normal mode for numeric adjustment and redo; insert mode still delegates them to Pi.
+Protected or unsupported keys are ignored with a warning. `ctrl+a`, `ctrl+x`, `ctrl+r`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, and prompt search; insert mode still delegates them to Pi.
 
 ## Top-level settings
 
@@ -178,7 +178,8 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.tillCharBackward`        | `["T"]`      | Wait for char and move after it on current line.                                                       |
 | `piVimMode.keymap.commands.repeatCharSearch`        | `[";"]`      | Repeat last character search same direction.                                                           |
 | `piVimMode.keymap.commands.repeatCharSearchReverse` | `[","]`      | Repeat last character search opposite direction.                                                       |
-| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start literal prompt-local forward search. Also works after operator as search motion.                 |
+| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start prompt-local forward search. Also works after operator as search motion.                         |
+| `piVimMode.keymap.commands.startSearchBackward`     | `["?"]`      | Start prompt-local backward search. Also works after operator as search motion.                        |
 | `piVimMode.keymap.commands.repeatSearch`            | `["n"]`      | Repeat last prompt search direction.                                                                   |
 | `piVimMode.keymap.commands.repeatSearchReverse`     | `["N"]`      | Repeat prompt search opposite direction.                                                               |
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                 |
@@ -309,7 +310,7 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
-Search is literal and prompt-local. Regex search, `?`, search history, and Vim highlight groups are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
+Search is literal by default and prompt-local. `?` starts backward search, empty `/` or `?` recalls the previous successful query, and `Up` / `Down` navigate in-memory history while a search is pending. Prefix a pending query with `\r` for bounded regex search. Vim highlight groups, offsets, and cross-prompt history are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
 
 ## Prompt-native structure settings
 
@@ -490,6 +491,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "repeatCharSearch": [";"],
         "repeatCharSearchReverse": [","],
         "startSearch": ["/"],
+        "startSearchBackward": ["?"],
         "repeatSearch": ["n"],
         "repeatSearchReverse": ["N"],
         "startExCommand": [":"],

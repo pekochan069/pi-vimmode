@@ -54,6 +54,7 @@ export type VimCommandAction =
   | "repeatCharSearch"
   | "repeatCharSearchReverse"
   | "startSearch"
+  | "startSearchBackward"
   | "repeatSearch"
   | "repeatSearchReverse"
   | "startExCommand"

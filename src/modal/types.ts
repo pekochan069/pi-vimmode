@@ -4,6 +4,7 @@ import type {
   LineRange,
   PendingOperator,
   Position,
+  TextRange,
   StartupMode,
   ResolvedVimEditorOptions,
   VimMode,
@@ -14,6 +15,7 @@ import type {
   VimRegister,
   VimTextObject,
 } from "../types.ts";
+import type { PendingWorkbench } from "./workbench.ts";
 
 export type ModalOptions = ResolvedVimEditorOptions;
 
@@ -55,21 +57,39 @@ export type CharSearchState = {
 };
 
 export type SearchDirection = "forward" | "backward";
+export type SearchMatcherMode = "literal" | "regex";
 
 export type PendingSearchTarget = {
   query: string;
   direction: SearchDirection;
   operator?: VimOperatorAction;
+  historyIndex?: number;
+  historyDraft?: string;
 };
 
 export type SearchState = {
   query: string;
   direction: SearchDirection;
+  matcherMode?: SearchMatcherMode;
+};
+
+export type SearchHistoryEntry = {
+  query: string;
+  matcherMode: SearchMatcherMode;
 };
 
 export type SearchHighlightState = {
   query: string;
   current: Position;
+  matcherMode?: SearchMatcherMode;
+};
+
+export type ExSubstitutionPreview = {
+  command: string;
+  matches: number;
+  ranges: TextRange[];
+  edit: EditResult;
+  message: string;
 };
 
 export type PendingExCommand = {
@@ -78,6 +98,9 @@ export type PendingExCommand = {
   visualAnchor?: Position;
   visualCursor?: Position;
   visualRange?: LineRange;
+  preview?: ExSubstitutionPreview;
+  historyIndex?: number;
+  historyDraft?: string;
 };
 
 export type ExMessage = {
@@ -115,11 +138,14 @@ export type ModalState = {
   pendingRegister?: PendingRegisterTarget;
   marks?: MarkStore;
   pendingMark?: PendingMarkTarget;
+  pendingWorkbench?: PendingWorkbench;
   pendingSearch?: PendingSearchTarget;
   pendingEx?: PendingExCommand;
+  exHistory?: string[];
   exMessage?: ExMessage;
   lastCharSearch?: CharSearchState;
   lastSearch?: SearchState;
+  searchHistory?: SearchHistoryEntry[];
   searchHighlight?: SearchHighlightState;
   lastRepeatableChange?: RepeatableChange;
 };

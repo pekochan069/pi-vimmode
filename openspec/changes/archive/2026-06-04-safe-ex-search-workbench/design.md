@@ -14,7 +14,7 @@ This change adds shared entry behavior, history, backward search, regex opt-in, 
 - Support empty search recall from the last successful search query.
 - Keep literal matching as the default for search and substitution.
 - Add explicit bounded regex opt-in for search patterns and Ex substitution patterns.
-- Add two-phase Ex substitution preview/counts before prompt mutation.
+- Add two-phase Ex substitution match previews/counts before prompt mutation.
 - Preserve side-effect boundaries for registers, marks, dot-repeat, search highlights, visual state, Ex messages, cursor placement, and Pi delegation.
 
 **Non-Goals:**
@@ -88,7 +88,7 @@ Alternatives considered:
 
 Target seams: `src/ex.ts`, `src/buffer.ts`, workbench helper, `src/modal/engine.ts`, `src/render.ts`.
 
-First `Enter` on a valid substitution computes matches/counts and stores a preview tied to the exact command text and parsed matcher. Prompt text is unchanged. The Ex row shows preview count plus `Enter` apply / `Esc` cancel guidance. Second `Enter` with unchanged command applies the cached parsed substitution. Any command text edit, history navigation, cancellation, or new Ex/search entry clears the preview.
+First `Enter` on a valid substitution computes matched target ranges/counts and stores a preview tied to the exact command text and parsed matcher. Prompt text is unchanged; matched targets are highlighted. The Ex row shows match count plus `Enter` apply / `Esc` cancel guidance. Second `Enter` with unchanged command applies the cached parsed substitution. Any command text edit, history navigation, cancellation, or new Ex/search entry clears the preview.
 
 Non-substitution Ex commands keep current one-Enter execution. Substitution errors and no-match results stay non-mutating and do not enter preview state.
 

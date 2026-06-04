@@ -38,7 +38,12 @@ export type SemanticCommandResult =
       motion: VimMotionAction;
       count?: number;
     }
-  | { type: "operatorSearch"; operator: VimMotionOperatorAction; count?: number }
+  | {
+      type: "operatorSearch";
+      operator: VimMotionOperatorAction;
+      direction: "forward" | "backward";
+      count?: number;
+    }
   | {
       type: "operatorTextObject";
       operator: VimMotionOperatorAction;
@@ -203,13 +208,19 @@ function hasLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
   );
 }
 
-function exactStartSearchBinding(sequence: string, keymap: ResolvedVimKeymap): boolean {
+function searchDirectionForBinding(
+  sequence: string,
+  keymap: ResolvedVimKeymap,
+): "forward" | "backward" | undefined {
   const binding = exactBinding(sequence, keymap);
-  return binding?.kind === "command" && binding.command === "startSearch";
+  if (binding?.kind !== "command") return undefined;
+  if (binding.command === "startSearch") return "forward";
+  if (binding.command === "startSearchBackward") return "backward";
+  return undefined;
 }
 
-function hasStartSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return keymap.commands.startSearch.some(
+function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
+  return [...keymap.commands.startSearch, ...keymap.commands.startSearchBackward].some(
     (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
   );
 }
@@ -517,10 +528,11 @@ function resolveOperatorSearchPending(
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
   const searchSequence = pending.searchPrefix + key;
-  if (exactStartSearchBinding(searchSequence, keymap)) {
-    return { type: "operatorSearch", operator, count: pending.count };
+  const direction = searchDirectionForBinding(searchSequence, keymap);
+  if (direction) {
+    return { type: "operatorSearch", operator, direction, count: pending.count };
   }
-  if (hasStartSearchLongerPrefix(searchSequence, keymap)) {
+  if (hasSearchLongerPrefix(searchSequence, keymap)) {
     return {
       type: "pending",
       pending: encodeOperatorSearchPending(pending.operatorSequence, searchSequence, pending.count),
@@ -560,10 +572,11 @@ function resolveAfterOperator(
     return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key, count) };
   }
   if (!isMotionOperator(operator)) return { type: "invalid" };
-  if (exactStartSearchBinding(key, keymap)) {
-    return { type: "operatorSearch", operator, count };
+  const searchDirection = searchDirectionForBinding(key, keymap);
+  if (searchDirection) {
+    return { type: "operatorSearch", operator, direction: searchDirection, count };
   }
-  if (hasStartSearchLongerPrefix(key, keymap)) {
+  if (hasSearchLongerPrefix(key, keymap)) {
     return { type: "pending", pending: encodeOperatorSearchPending(operatorSequence, key, count) };
   }
 

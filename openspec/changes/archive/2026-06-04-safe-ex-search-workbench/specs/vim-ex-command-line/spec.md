@@ -22,7 +22,7 @@ The Vim editor SHALL keep Ex command-line editing finite, prompt-local, and sepa
 #### Scenario: Enter previews substitution before execution
 
 - **WHEN** Ex command-line mode is active with a valid substitution command that has at least one match and no active preview exists
-- **THEN** pressing `Enter` or `Return` computes a substitution preview/count, keeps Ex command-line mode active, and leaves prompt text unchanged
+- **THEN** pressing `Enter` or `Return` computes a substitution match preview/count, keeps Ex command-line mode active, and leaves prompt text unchanged
 
 ### Requirement: Ex substitution parser is finite and explicit
 
@@ -136,17 +136,17 @@ The Vim editor SHALL keep finite in-memory history for successfully executed Ex 
 
 ### Requirement: Ex substitution preview is required before prompt mutation
 
-The Vim editor SHALL preview/count Ex substitutions before applying them to prompt text.
+The Vim editor SHALL highlight matched substitution targets and report match counts before applying replacements to prompt text.
 
 #### Scenario: Literal substitution previews count
 
 - **WHEN** the editor is in Ex command-line mode with `:%s/foo/bar/g` and the addressed range contains three literal matches
-- **THEN** the first `Enter` reports a preview count of three substitutions and prompt text remains unchanged
+- **THEN** the first `Enter` highlights the three literal matches, reports `3 matches found`, and prompt text remains unchanged
 
 #### Scenario: Regex substitution previews count
 
 - **WHEN** the editor is in Ex command-line mode with `:%s/TODO|FIXME/done/gr` and the addressed range contains two regex matches
-- **THEN** the first `Enter` reports a preview count of two substitutions and prompt text remains unchanged
+- **THEN** the first `Enter` highlights the two regex matches, reports `2 matches found`, and prompt text remains unchanged
 
 #### Scenario: Confirm preview applies substitution
 
@@ -171,7 +171,7 @@ The Vim editor SHALL preview/count Ex substitutions before applying them to prom
 #### Scenario: Identical replacement previews and applies as success
 
 - **WHEN** the editor enters `:s/foo/foo/` and the addressed line contains `foo`
-- **THEN** the first `Enter` reports a preview count and the confirmation reports success without applying a text-change effect
+- **THEN** the first `Enter` reports a match count and the confirmation reports success without applying a text-change effect
 
 ### Requirement: Ex workbench behavior is documented and validated
 
@@ -180,7 +180,7 @@ The change SHALL include automated tests and user-facing documentation for Ex hi
 #### Scenario: Automated validation runs
 
 - **WHEN** `bun test` is executed
-- **THEN** tests cover Ex workbench typing, cancellation, history navigation, visual Ex cancellation after history navigation, literal substitution preview/apply, regex substitution preview/apply, invalid regex safety, regex bounds, unsupported flags, no-match behavior, identical replacement behavior, and history recording rules
+- **THEN** tests cover Ex workbench typing, cancellation, history navigation, visual Ex cancellation after history navigation, literal substitution match preview/apply, regex substitution match preview/apply, invalid regex safety, regex bounds, unsupported flags, no-match behavior, identical replacement behavior, and history recording rules
 
 #### Scenario: Typecheck runs
 
@@ -190,4 +190,4 @@ The change SHALL include automated tests and user-facing documentation for Ex hi
 #### Scenario: Feature guide describes Ex workbench
 
 - **WHEN** the user opens `docs/features.md`
-- **THEN** it documents Ex command history, substitution preview/apply flow, literal default behavior, regex `r` flag, regex bounds, literal replacement tokens, and current Ex limitations
+- **THEN** it documents Ex command history, substitution match preview/apply flow, literal default behavior, regex `r` flag, regex bounds, literal replacement tokens, and current Ex limitations

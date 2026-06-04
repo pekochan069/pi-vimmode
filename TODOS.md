@@ -65,6 +65,10 @@
   - Goal: make pi-vimmode better for agent prompt editing, not just broader Vim parity.
   - Complexity: Medium-High. Confidence: 88%.
 
+- [x] `>` and `<`
+
+- [ ] ctrl+r (redo)
+
 - [ ] Safe Ex/Search workbench
   - Add shared `/` and `:` mini-editor with history, backward `?`, previous-query recall, bounded regex/literal modes, substitution preview/counts.
   - Keep finite scope; no full Ex/Vimscript parity.

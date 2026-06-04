@@ -17,6 +17,8 @@ import {
   insertBlockText,
   joinExLineRange,
   applyPromptTransform,
+  shiftLineRange,
+  shiftLinesFromCursor,
   moveExLineRange,
   deleteCharAt,
   deleteLine,
@@ -744,6 +746,23 @@ describe("Ex line operations", () => {
     expect(joinExLineRange("one", { startLine: 0, endLine: 0 }, false)).toEqual({
       ok: false,
       message: "Not enough lines to join",
+    });
+  });
+
+  test("shifts prompt line ranges with transform semantics", () => {
+    expect(shiftLinesFromCursor("one\ntwo\nthree", p(0, 1), 2, "indent")).toMatchObject({
+      ok: true,
+      edit: { text: "  one\n  two\nthree", cursor: p(0, 1), changed: true },
+    });
+    expect(
+      shiftLineRange("  one\n\ttwo", { startLine: 0, endLine: 1 }, "dedent", p(0, 2)),
+    ).toMatchObject({
+      ok: true,
+      edit: { text: "one\ntwo", cursor: p(0, 2), changed: true },
+    });
+    expect(shiftLinesFromCursor("one", p(0, 0), 1, "dedent")).toMatchObject({
+      ok: true,
+      edit: { text: "one", cursor: p(0, 0), changed: false },
     });
   });
 

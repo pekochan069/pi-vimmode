@@ -19,6 +19,7 @@ import type {
   ResolvedVimEditorOptions,
   VimMode,
   VimMotionAction,
+  VimMotionOperatorAction,
   VimOperatorAction,
   VimStatusItem,
   VimTextObjectKind,
@@ -35,7 +36,8 @@ const VIM_MODES = [
 const START_MODES = new Set<StartupMode>(["insert", "normal"]);
 const CURSOR_STYLES = new Set<CursorStyle>(["block", "bar", "underline"]);
 
-export const VIM_OPERATOR_ACTIONS = ["delete", "change", "yank"] as const;
+export const VIM_MOTION_OPERATOR_ACTIONS = ["delete", "change", "yank"] as const;
+export const VIM_OPERATOR_ACTIONS = [...VIM_MOTION_OPERATOR_ACTIONS, "indent", "dedent"] as const;
 export const VIM_MOTION_ACTIONS = [
   "left",
   "down",
@@ -127,6 +129,7 @@ export const PROMPT_TRANSFORM_ACTIONS = [
   "reflow",
 ] as const satisfies readonly PromptTransformAction[];
 
+const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
 const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
 const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
 const COMMAND_ACTION_SET = new Set<string>(VIM_COMMAND_ACTIONS);
@@ -167,6 +170,8 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     delete: Object.freeze(["d"]),
     change: Object.freeze(["c"]),
     yank: Object.freeze(["y"]),
+    indent: Object.freeze([">"]),
+    dedent: Object.freeze(["<"]),
   }),
   motions: Object.freeze({
     left: Object.freeze(["h"]),
@@ -400,7 +405,7 @@ type PartialKeymapOptions = {
     kinds?: Partial<Record<VimTextObjectKind, string[]>>;
     targets?: Partial<Record<VimTextObjectTarget, string[]>>;
   };
-  operatorMotions?: Partial<Record<VimOperatorAction, VimMotionAction[]>>;
+  operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
 };
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
@@ -444,6 +449,8 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       delete: [...keymap.operators.delete],
       change: [...keymap.operators.change],
       yank: [...keymap.operators.yank],
+      indent: [...keymap.operators.indent],
+      dedent: [...keymap.operators.dedent],
     },
     motions: {
       left: [...keymap.motions.left],
@@ -806,9 +813,9 @@ function parseKeymap(
     if (!isRecord(value.operatorMotions)) {
       warnings.push(`${sourceLabel}: piVimMode.keymap.operatorMotions must be an object`);
     } else {
-      const operatorMotions: Partial<Record<VimOperatorAction, VimMotionAction[]>> = {};
+      const operatorMotions: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>> = {};
       for (const [operator, motions] of Object.entries(value.operatorMotions)) {
-        if (!OPERATOR_ACTION_SET.has(operator)) {
+        if (!MOTION_OPERATOR_ACTION_SET.has(operator)) {
           warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.operatorMotions.${operator}`);
           continue;
         }
@@ -818,7 +825,7 @@ function parseKeymap(
           `${sourceLabel}: piVimMode.keymap.operatorMotions.${operator} contains unsupported operator motion`,
           warnings,
         );
-        if (parsed) operatorMotions[operator as VimOperatorAction] = parsed;
+        if (parsed) operatorMotions[operator as VimMotionOperatorAction] = parsed;
       }
       if (Object.keys(operatorMotions).length > 0) partial.operatorMotions = operatorMotions;
     }

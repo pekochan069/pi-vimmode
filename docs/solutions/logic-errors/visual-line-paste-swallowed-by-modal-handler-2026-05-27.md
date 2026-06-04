@@ -1,7 +1,7 @@
 ---
 title: Visual commands swallowed by modal handler
 date: 2026-05-27
-last_updated: 2026-05-28
+last_updated: 2026-06-04
 category: docs/solutions/logic-errors
 module: pi-vimmode
 problem_type: logic_error
@@ -10,19 +10,22 @@ symptoms:
   - "Visual-line mode ignored `p` instead of pasting the register"
   - "Visual mode `r{char}` created pending state but did not replace selected text"
   - "Visual command input was invalidated instead of producing an edit effect"
+  - "Visual mode `2>` indented selected lines by one level instead of two"
 root_cause: logic_error
 resolution_type: code_fix
 severity: medium
 related_components:
   - testing_framework
+  - documentation
 tags:
   - vim-mode
   - visual-mode
   - modal-engine
   - prompt-buffer
+  - shift-operators
+  - counts
   - register-semantics
   - char-command
-  - replace-char
   - typescript
 ---
 
@@ -32,16 +35,18 @@ tags:
 
 `pi-vimmode` visual modes route input through `handleVisualInput()`, not the normal-mode command path. Commands that worked in normal mode could still be swallowed in visual mode unless visual routing explicitly handled their parser result and selection semantics.
 
-Two concrete failures exposed this pattern:
+Three concrete failures exposed this pattern:
 
 - Visual-line `p` did nothing instead of replacing the selected lines with the register.
 - Visual `r{char}` entered pending replacement state, then ignored the typed replacement character instead of replacing the selected text.
+- Visual `2>` indented the selected lines by one level instead of treating the count as shift depth.
 
 ## Symptoms
 
 - Select a line with `V`, then press `p`: prompt text does not change, mode remains `visualLine`, register remains unchanged.
 - Select text with `v` or `Ctrl-v`, press `r`, then type a replacement character: selected text is not replaced.
-- Normal-mode `p` or `r{char}` may work, creating false confidence that the command is implemented everywhere.
+- Normal-mode `p`, `r{char}`, or counted shift commands may work, creating false confidence that the command is implemented everywhere.
+- In visual modes, the selected lines change but count metadata can still be lost; `2>` becomes indistinguishable from `>`.
 
 ## What Didn't Work
 
@@ -49,6 +54,8 @@ Two concrete failures exposed this pattern:
 - Reusing `pasteRegister()` directly for visual-line paste would insert below or before the cursor, not replace the selected line range.
 - Calling `deleteLineRange()` and then paste would overwrite the register with the deleted selection before the old register could be pasted.
 - Adding normal-mode `replaceChar` support did not make visual `r{char}` work because visual input only handled `motion`, `command`, `pending`, and `invalid` parser results. It did not consume the second-stage `charCommand` result from `r` plus the typed replacement character.
+- Reusing normal shift count semantics directly would have been wrong: normal `2>>` means two lines by one level, while visual `2>` means selected lines by two levels because the selection already defines the line range.
+- Resolving the visual shift operator from `operatorActionForSequence(result.pending, keymap)` alone found `>`/`<`, but discarded the count encoded in the pending sequence.
 
 ## Solution
 
@@ -118,6 +125,74 @@ function pasteVisualLineSelection(
   );
   return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
 }
+```
+
+### Visual counted shift
+
+For visual shift operators, preserve the count prefix and pass it as shift depth. The normal-mode path keeps using count as the number of addressed lines.
+
+Before, visual pending operators resolved the operator but lost count metadata:
+
+```ts
+if (result.type === "pending") {
+  const operator = operatorActionForSequence(result.pending, keymap);
+  if (operator)
+    return applyVisualOperator(state, snapshot, options, visualKindForMode(state.mode), operator);
+}
+```
+
+After, the visual handler extracts count from the pending sequence and threads it into the visual operation:
+
+```ts
+if (result.type === "pending") {
+  const operator = operatorActionForSequence(result.pending, keymap);
+  if (operator)
+    return applyVisualOperator(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      operator,
+      countForPendingSequence(result.pending),
+    );
+}
+```
+
+Then the visual shift helper maps count to repeated line transforms over the selected/touched lines and narrows the `ExLineEditResult` before emitting an edit:
+
+```ts
+const shiftResult = shiftLineRange(
+  snapshot.text,
+  visualLineRange(state.visualAnchor, snapshot.cursor),
+  action,
+  snapshot.cursor,
+  depth,
+);
+if (!shiftResult.ok) return modeUpdate(state, "normal", options);
+const result = shiftResult.edit;
+return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+```
+
+Keep the buffer helper responsible for exact transform semantics by applying the existing `:indent` / `:dedent` logic once per depth level:
+
+```ts
+for (let i = 0; i < Math.max(1, depth); i += 1) {
+  currentResult = applyPromptTransform(currentText, range, { action }, originalCursor);
+  if (!currentResult.ok) return currentResult;
+  currentText = currentResult.edit.text;
+}
+```
+
+Regression-test visual count depth so it cannot drift again:
+
+```ts
+const countedVisual = applyModalKeys(
+  { mode: "visualLine", visualAnchor: p(0, 0) },
+  "one\ntwo",
+  p(1, 0),
+  ["2", ">"],
+);
+expect(countedVisual.text).toBe("    one\n    two");
 ```
 
 ### Visual replacement
@@ -213,6 +288,7 @@ The fixes keep range and register behavior in prompt-buffer operations:
 
 - Visual-line paste reads the old register before selected text becomes the new linewise register.
 - Visual replacement applies char/line/block range math in one helper and returns the replaced selection as the register.
+- Visual shift uses the visual selection for range and the pending count for shift depth, so `2>` and `>` remain distinct without changing normal `2>>` semantics.
 
 The modal engine only owns parser-result routing, mode transition, and edit effects:
 
@@ -220,6 +296,7 @@ The modal engine only owns parser-result routing, mode transition, and edit effe
 VISUAL_LINE + p -> replace selected lines -> NORMAL
 VISUAL + r + X -> replace selected chars -> NORMAL
 VISUAL_BLOCK + r + X -> replace selected cells -> NORMAL
+VISUAL_LINE + 2 > -> shift selected lines by two levels -> NORMAL
 ```
 
 ## Prevention
@@ -229,15 +306,17 @@ VISUAL_BLOCK + r + X -> replace selected cells -> NORMAL
 - When adding Vim commands, check all active dispatch tables; normal-mode support does not imply visual-mode support.
 - Audit every `SemanticCommandResult` union member in modal handlers. New result types such as `charCommand` should not silently fall through.
 - Test multi-step visual commands explicitly: first key creates pending state, second key executes edit.
+- Test count-bearing visual operators alongside their normal-mode counterparts when counts mean different things.
 - Assert mode, text, cursor, and register in one integration test.
 
-Verification used for the visual replacement fix:
+Verification used for the visual replacement and counted-shift fixes:
 
 ```bash
 bun test test/buffer.test.ts test/modal.test.ts
 bun run check-types
 bun run lint
 bun run format:check
+openspec validate add-shift-operators --type change --strict
 ```
 
 ## Related Issues
@@ -245,4 +324,5 @@ bun run format:check
 - `docs/solutions/architecture-patterns/pi-vimmode-prompt-buffer-operation-api-2026-05-27.md` — explains why prompt-buffer operations should own register/range semantics.
 - `docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md` — related modal parser and buffer-helper architecture.
 - `docs/solutions/ui-bugs/visual-block-insert-preview-hidden-2026-05-27.md` — related visual-block command handling.
-- GitHub issue searches for `pi-vimmode visual line paste` and `visual r pi-vimmode replace` returned no related issues.
+- `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — related count/command-contract drift prevention.
+- GitHub issue searches for `pi-vimmode visual line paste`, `visual r pi-vimmode replace`, and `visual shift count 2> indent` returned no related issues.

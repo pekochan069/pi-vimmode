@@ -125,11 +125,13 @@ Counts work for supported edits:
 ```text
 3x    delete 3 characters
 2dd   delete 2 lines
+3>>   indent 3 lines from cursor line
+2<<   dedent 2 lines from cursor line
 5~    toggle case across 5 characters on current line
 10<C-a> increment number by 10
 ```
 
-Dot-repeat is intentionally finite. It repeats supported recorded normal-mode changes such as `x`, `D`, `C`, `Ctrl-a`, `Ctrl-x`, `~`, `r`, `s`, `S`, `dd`, `cc`, operator motions, and text-object changes. It does not replay arbitrary insert-mode text, macros, Ex substitutions, visual-mode edits, joins, or pastes.
+Dot-repeat is intentionally finite. It repeats supported recorded normal-mode changes such as `x`, `D`, `C`, `Ctrl-a`, `Ctrl-x`, `~`, `r`, `s`, `S`, `dd`, `cc`, `>>`, `<<`, operator motions, and text-object changes. It does not replay arbitrary insert-mode text, macros, Ex substitutions, visual-mode edits, joins, or pastes.
 
 ## Operators and operator motions
 
@@ -138,6 +140,17 @@ Supported operators:
 - `d` delete
 - `c` change, then enter insert
 - `y` yank
+- `>` indent line-only shift
+- `<` dedent line-only shift
+
+Line-only shift examples:
+
+```text
+>>   indent current line by two spaces
+<<   dedent current line by one tab, two spaces, or one space
+3>>  indent current line and next two lines
+2<<  dedent current line and next line
+```
 
 Supported operator motions:
 
@@ -157,7 +170,7 @@ c^        change back to first non-blank
 d/foo⏎    delete from cursor through next literal foo match
 ```
 
-Operator motions are smaller than Vim's full grammar. Motions such as `h`, `l`, `gg`, `G`, and `%` remain normal/visual motions unless future buffer range semantics are added.
+Operator motions are smaller than Vim's full grammar. Motions such as `h`, `l`, `gg`, `G`, and `%` remain normal/visual motions unless future buffer range semantics are added. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
 
 ## Text objects
 
@@ -259,6 +272,7 @@ Supported actions:
 - `c` deletes selection and enters insert.
 - `r{char}` replaces selected characters and returns normal.
 - `~` toggles selected character case and returns normal.
+- `>` / `<` indents or dedents every touched line and returns normal.
 - `:` opens Ex command-line with `'<,'>` prefilled.
 - `"{a-z}` / `"{A-Z}` targets next yank/delete/change with named register.
 
@@ -278,7 +292,7 @@ Supported actions:
 - Motions extend selected line range.
 - `v` switches to visual char mode without resetting anchor.
 - `Ctrl-v` switches to visual block mode without resetting anchor.
-- `y`, `d`, `x`, `c`, `r{char}`, `~`, mark jumps, named register targeting, and `:` work linewise.
+- `y`, `d`, `x`, `c`, `r{char}`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
 - Linewise `p` in visual line mode replaces selected lines with the register content.
 
 Example:
@@ -302,6 +316,7 @@ Supported actions:
 - `c` deletes selected slices and enters insert.
 - `r{char}` replaces selected cells.
 - `~` toggles selected cell case.
+- `>` / `<` indents or dedents every line touched by the block, regardless of selected columns.
 - `I` starts block insert before block on each selected line; typed text is applied when `Esc` is pressed.
 - `A` starts block append after block on each selected line; typed text is applied when `Esc` is pressed.
 - `:` opens Ex command-line with visual line range marker `'<,'>` prefilled.

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
@@ -32,6 +32,12 @@ async function writeDistPackageJson() {
   await writeFile(join(distDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 
+async function copyDistDocs() {
+  await mkdir(distDir, { recursive: true });
+  await cp("README.md", join(distDir, "README.md"));
+  await cp("docs", join(distDir, "docs"), { recursive: true });
+}
+
 export default defineConfig({
   input: "./src/index.ts",
   platform: "node",
@@ -49,9 +55,9 @@ export default defineConfig({
   },
   plugins: [
     {
-      name: "dist-package-json",
+      name: "dist-package-files",
       async writeBundle() {
-        await writeDistPackageJson();
+        await Promise.all([writeDistPackageJson(), copyDistDocs()]);
       },
     },
   ],

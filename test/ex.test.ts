@@ -216,6 +216,47 @@ describe("Ex command parser", () => {
     });
   });
 
+  test("parses read-only customization diagnostic commands", () => {
+    expect(parseExCommand("vimdoctor", context)).toEqual({
+      type: "diagnostic",
+      command: "vimdoctor",
+    });
+    expect(parseExCommand("keymap redo", context)).toEqual({
+      type: "diagnostic",
+      command: "keymap",
+      query: "redo",
+    });
+    expect(parseExCommand("mapcheck ctrl+p", context)).toEqual({
+      type: "diagnostic",
+      command: "mapcheck",
+      query: "ctrl+p",
+    });
+    expect(parseExCommand("actions search", context)).toEqual({
+      type: "diagnostic",
+      command: "actions",
+      query: "search",
+    });
+  });
+
+  test("rejects unsupported diagnostic abbreviations and missing required arguments", () => {
+    expect(parseExCommand("vimd", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: vimd",
+    });
+    expect(parseExCommand("map", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: map",
+    });
+    expect(parseExCommand("mapcheck", context)).toEqual({
+      type: "error",
+      message: "Missing mapcheck key",
+    });
+    expect(parseExCommand("vimdoctor noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+  });
+
   test("honors configured prompt transform commands", () => {
     expect(
       parseExCommand("qte", {

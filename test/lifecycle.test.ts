@@ -1,22 +1,28 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ResolvedVimEditorOptions } from "../src/types.ts";
+import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
 type HookName = "session_start" | "resources_discover" | "agent_end" | "session_shutdown";
 type Hook = (event: unknown, ctx: FakeContext) => void;
+type Command = {
+  description: string;
+  handler: (args: string, ctx: FakeContext) => Promise<void> | void;
+};
 
 type FakeEditorComponent = (...args: unknown[]) => FakeEditor;
 
 type FakeUi = {
   component?: FakeEditorComponent;
-  setCalls: FakeEditorComponent[];
+  setCalls: Array<FakeEditorComponent | undefined>;
   statuses: Array<[string, string]>;
+  notifications: Array<[string, string]>;
   getEditorComponent: () => FakeEditorComponent | undefined;
-  setEditorComponent: (component: FakeEditorComponent) => void;
+  setEditorComponent: (component: FakeEditorComponent | undefined) => void;
   setStatus: (key: string, value: string) => void;
+  notify: (message: string, level: string) => void;
 };
 
 type FakeContext = {
@@ -26,6 +32,7 @@ type FakeContext = {
 
 type FakeEditor = {
   options: ResolvedVimEditorOptions;
+  diagnostics: VimDiagnostics;
   resetCount: number;
   resetTerminalCursorStyle: () => void;
 };
@@ -34,6 +41,7 @@ function createUi(): FakeUi {
   const ui: FakeUi = {
     setCalls: [],
     statuses: [],
+    notifications: [],
     getEditorComponent: () => ui.component,
     setEditorComponent: (component) => {
       ui.component = component;
@@ -41,6 +49,9 @@ function createUi(): FakeUi {
     },
     setStatus: (key, value) => {
       ui.statuses.push([key, value]);
+    },
+    notify: (message, level) => {
+      ui.notifications.push([message, level]);
     },
   };
   return ui;
@@ -57,6 +68,7 @@ function createLifecycleHarness(
   ],
 ) {
   const hooks = new Map<HookName, Hook>();
+  const commands = new Map<string, Command>();
   const scheduled: Array<() => void> = [];
   const loadCalls: Array<{ cwd?: string }> = [];
   const createdEditors: FakeEditor[] = [];
@@ -66,6 +78,9 @@ function createLifecycleHarness(
   const pi = {
     on: (name: HookName, hook: Hook) => {
       hooks.set(name, hook);
+    },
+    registerCommand: (name: string, command: Command) => {
+      commands.set(name, command);
     },
   };
 
@@ -77,9 +92,10 @@ function createLifecycleHarness(
       loadIndex += 1;
       return { options: option, warnings: warning };
     },
-    createEditor: (_tui, _theme, _keybindings, editorOptions) => {
+    createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics) => {
       const editor: FakeEditor = {
         options: editorOptions,
+        diagnostics,
         resetCount: 0,
         resetTerminalCursorStyle: () => {
           editor.resetCount += 1;
@@ -93,7 +109,7 @@ function createLifecycleHarness(
     },
   });
 
-  return { hooks, scheduled, loadCalls, createdEditors, warnings };
+  return { hooks, commands, scheduled, loadCalls, createdEditors, warnings };
 }
 
 describe("vim extension lifecycle", () => {
@@ -186,6 +202,10 @@ describe("vim extension lifecycle", () => {
       ["pi-vimmode", "vim ⚠"],
     ]);
     expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+    expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
+      [],
+      ["bad config"],
+    ]);
   });
 
   test("delayed reinstall refreshes settings and catches stale context failures", () => {
@@ -232,5 +252,25 @@ describe("vim extension lifecycle", () => {
     hooks.get("session_shutdown")?.({}, ctx);
 
     expect(createdEditors.map((editor) => editor.resetCount)).toEqual([1, 1]);
+  });
+
+  test("vimmode command toggles editor off and on", async () => {
+    const { hooks, commands } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+
+    await commands.get("vimmode")?.handler("", ctx);
+
+    expect(ctx.ui.component).toBeUndefined();
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim off"]);
+    expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode disabled", "info"]);
+
+    await commands.get("vimmode")?.handler("", ctx);
+
+    expect(ctx.ui.component).toBe(factory);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
+    expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode enabled", "info"]);
   });
 });

@@ -31,7 +31,7 @@ Example:
 }
 ```
 
-Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`.
+Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor.
 
 Common warning causes:
 
@@ -42,7 +42,7 @@ Common warning causes:
 - Protected Pi shortcut used in keymap.
 - Unsupported operator motion.
 - Duplicate or shadowed key bindings.
-- Invalid UI/search/macro/mark field type.
+- Invalid UI/search/macro/mark/feedback field type.
 - Legacy `piVimMode.vimOptions` present.
 
 ## Key sequence syntax
@@ -80,21 +80,50 @@ Rules:
 
 Protected Pi shortcuts cannot be mapped:
 
-```text
-enter, return, escape, esc, tab, shift+enter,
-ctrl+c, ctrl+d, ctrl+g, ctrl+l, ctrl+p,
-shift+ctrl+p, ctrl+shift+p, ctrl+t, shift+tab
-```
+| Key                                      | Preserved behavior                         |
+| ---------------------------------------- | ------------------------------------------ |
+| `enter`, `return`                        | Submit prompt / execute pending workbench. |
+| `escape`, `esc`                          | Cancel or mode transition.                 |
+| `tab`, `shift+tab`                       | Autocomplete navigation.                   |
+| `shift+enter`                            | Pi newline/submit variant.                 |
+| `ctrl+c`, `ctrl+g`                       | Interrupt/cancel and reset Vim state.      |
+| `ctrl+d`                                 | Pi EOF/delete shortcut.                    |
+| `ctrl+l`                                 | Pi terminal clear/redraw shortcut.         |
+| `ctrl+p`, `shift+ctrl+p`, `ctrl+shift+p` | Pi command/model palette shortcuts.        |
+| `ctrl+t`                                 | Pi external editor/tool shortcut.          |
 
-Protected or unsupported keys are ignored with a warning. `ctrl+a`, `ctrl+x`, `ctrl+r`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, and prompt search; insert mode still delegates them to Pi.
+Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, and prompt search; insert mode still delegates them to Pi.
 
 ## Top-level settings
 
-| Path                   | Default     | Accepted values        | Effect                                                                                                                                                             |
-| ---------------------- | ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `piVimMode`            | absent      | object                 | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
-| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"` | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
-| `piVimMode.vimOptions` | unsupported | none                   | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
+| Path                   | Default     | Accepted values                             | Effect                                                                                                                                                             |
+| ---------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
+| `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                |
+| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
+| `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
+
+### Presets
+
+Presets are field-level baselines. Resolution order is defaults, global preset, global explicit fields, project preset, project explicit fields.
+
+- `minimal`: quieter status, fewer inspectability extras, macro/mark features disabled by default.
+- `prompt-safe`: conservative default-style baseline for Pi prompt editing.
+- `vim-heavy`: starts in normal mode, enables visual-block keymap entry, and shows more status items.
+
+Example explicit override:
+
+```json
+{
+  "piVimMode": {
+    "preset": "vim-heavy",
+    "startMode": "insert",
+    "keymap": { "commands": { "visualBlock": ["B"] } }
+  }
+}
+```
+
+Here `vim-heavy` supplies its baseline, then `startMode` and `visualBlock` override those fields.
 
 ## Cursor settings
 
@@ -311,6 +340,26 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
 Search is literal by default and prompt-local. `?` starts backward search, empty `/` or `?` recalls the previous successful query, and `Up` / `Down` navigate in-memory history while a search is pending. Prefix a pending query with `\r` for bounded regex search. Vim highlight groups, offsets, and cross-prompt history are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
+
+## Feedback settings
+
+Optional feedback keeps default modal editing quiet while helping users understand confusing no-ops.
+
+| Path                      | Default | Accepted values     | Effect                                                                                                           |
+| ------------------------- | ------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.feedback.noop` | `"off"` | `"off"`, `"status"` | `"status"` shows one transient info row for selected no-ops such as unmapped normal keys or protected shortcuts. |
+
+Invalid feedback values warn and fall back to `"off"` without discarding valid sibling settings.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "feedback": { "noop": "status" }
+  }
+}
+```
 
 ## Prompt-native structure settings
 

@@ -12,10 +12,12 @@ Runtime behavior:
 
 - Installs automatically on `session_start`, `resources_discover`, and `agent_end`.
 - Re-runs installation on the next tick for startup/resource timing reliability.
+- Registers `/vimmode [on|off|toggle|status]` to temporarily enable/disable the modal editor without uninstalling the extension.
 - Loads settings from global and project Pi settings whenever it installs.
 - Shows status key `pi-vimmode` as `vim` when settings parse cleanly.
 - Shows `vim ⚠` when settings load with warnings.
-- Resets terminal cursor hints on `session_shutdown`.
+- Shows `vim off` when disabled through `/vimmode off`.
+- Resets terminal cursor hints on `session_shutdown` or `/vimmode off`.
 
 Example install from Git:
 
@@ -34,6 +36,8 @@ bun test
 
 Because pi-vimmode replaces Pi's main prompt editor, keep the recovery path handy when trying it in a new terminal.
 
+- Run `/vimmode off` to restore Pi's previous editor for the current extension runtime.
+- Run `/vimmode on` or `/vimmode` to enable the Vim editor again.
 - Run `pi list` to confirm the installed extension source.
 - Run `pi remove <source>` or `pi uninstall <source>` to remove it from Pi settings.
 - For the Git install shown above, run `pi remove git:https://github.com/pekochan069/pi-vimmode`.
@@ -370,6 +374,10 @@ Supported commands:
 :indent
 :dedent
 :reflow 72
+:vimdoctor
+:keymap redo
+:mapcheck ctrl+p
+:actions search
 ```
 
 Supported ranges:
@@ -417,6 +425,10 @@ Important semantics:
 - `:dedent` removes at most one tab, two spaces, or one leading space from each addressed line without deleting content.
 - `:reflow [width]` rewraps prose paragraphs to the given width or 80 columns; fenced code, error blocks, blank lines, and bullet lines are preserved.
 - `:nohlsearch` clears visible prompt search highlights but keeps repeat-search state for `n`/`N`.
+- `:vimdoctor` reports live customization health, warning count, and first actionable settings warning behind `vim ⚠`.
+- `:keymap [query]` reports effective resolved semantic keymap entries, e.g. `:keymap redo`.
+- `:mapcheck <key>` explains mapped, unmapped, protected, or warning-related key ownership, e.g. `:mapcheck ctrl+p`.
+- `:actions [query]` lists/searches finite supported actions without adding arbitrary Vim grammar.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance.
 - Enter on an empty command closes the Ex row without a message.
@@ -424,7 +436,8 @@ Important semantics:
 - Editing or history navigation clears a pending substitution match preview.
 - Unsupported command, range, destination, delimiter, argument, flag, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
-- Success/error messages stay in the Ex row until the next handled input.
+- Diagnostic commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
+- Success/error/info messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
 - Ex commands do not write named registers and do not update dot-repeat.
@@ -440,7 +453,7 @@ Transform examples:
 
 Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
 
-Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, or Vimscript evaluation. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
 
 ## Registers
 
@@ -542,7 +555,7 @@ Rendering behavior:
 - Active macro recording shows `REC {slot}`.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
-- Pending `/`, `?`, and `:` workbench input plus search/Ex errors and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row.
+- Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.
 - Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
@@ -562,7 +575,7 @@ Pi remains owner of app-level shortcuts.
 
 - `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
 - `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned.
-- Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings.
+- Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
 - `Ctrl-a`, `Ctrl-x`, and `Ctrl-r` are owned by pi-vimmode only in normal mode for numeric adjustment and redo.
 
 ## Configuration features
@@ -573,6 +586,7 @@ Examples of configurable features:
 
 - startup mode
 - cursor style per mode
+- presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
 - text object kind/target keys
 - allowed operator motions
@@ -585,6 +599,7 @@ Examples of configurable features:
 - search highlight behavior
 - prompt-native structure enablement per target
 - prompt transform enablement and command names
+- optional no-op feedback (`piVimMode.feedback.noop`) for selected confusing ignored inputs
 
 See [`settings.md`](./settings.md) for complete settings reference.
 

@@ -7,6 +7,7 @@ import type {
   EditResult,
   Position,
   ResolvedVimEditorOptions,
+  VimDiagnostics,
   VimMode,
 } from "./types.ts";
 
@@ -96,6 +97,7 @@ export function fitStatusBorder(
 
 function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
   return {
+    preset: options.preset,
     startMode: options.startMode,
     cursor: { ...options.cursor },
     keymap: options.keymap,
@@ -103,6 +105,7 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
     macros: options.macros,
     marks: options.marks,
     search: options.search,
+    feedback: options.feedback,
     promptStructures: options.promptStructures,
     promptTransforms: options.promptTransforms,
   };
@@ -120,6 +123,7 @@ function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
+  private readonly diagnostics: VimDiagnostics;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
@@ -130,9 +134,11 @@ export class VimEditor extends CustomEditor {
     theme: EditorTheme,
     keybindings: KeybindingsManager,
     options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+    diagnostics: VimDiagnostics = { warnings: [] },
   ) {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
+    this.diagnostics = { warnings: [...diagnostics.warnings] };
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -163,7 +169,13 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
-    const update = handleModalInput(this.modalState, this.snapshot(), this.options, data);
+    const update = handleModalInput(
+      this.modalState,
+      this.snapshot(),
+      this.options,
+      data,
+      this.diagnostics,
+    );
     this.modalState = update.state;
     this.applyEffects(update.effects);
   }
@@ -199,6 +211,7 @@ export class VimEditor extends CustomEditor {
       cursor: this.getCursor(),
       isAutocompleteOpen: this.isShowingAutocomplete(),
       isMacroReplaying: this.isMacroReplaying,
+      isRedoAvailable: this.redoStack.length > 0,
     };
   }
 

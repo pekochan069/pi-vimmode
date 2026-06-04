@@ -197,6 +197,109 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.exMessage).toEqual({ kind: "success", text: "3 substitutions" });
   });
 
+  test("diagnostic Ex commands report info without editing state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), [
+      ":",
+      "a",
+      "c",
+      "t",
+      "i",
+      "o",
+      "n",
+      "s",
+      " ",
+      "r",
+      "e",
+      "d",
+      "o",
+      "\r",
+    ]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.exMessage).toMatchObject({
+      kind: "info",
+      text: expect.stringContaining("redo"),
+    });
+  });
+
+  test("visual diagnostic Ex commands preserve visual state", () => {
+    const initial: ModalState = { mode: "visual", visualAnchor: p(0, 1) };
+    const opened = handleModalInput(
+      initial,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const key of ["a", "c", "t", "i", "o", "n", "s"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.exMessage?.kind).toBe("info");
+  });
+
+  test("no-op feedback is quiet by default and bounded when enabled", () => {
+    const quiet = handleModalInput({ mode: "normal" }, snapshot, options, "z");
+    expect(quiet.state.exMessage).toBeUndefined();
+
+    const noisy = handleModalInput(
+      { mode: "normal" },
+      snapshot,
+      { ...options, feedback: { noop: "status" } },
+      "z",
+    );
+    expect(noisy.state.exMessage).toEqual({ kind: "info", text: "unmapped key: z" });
+
+    const redo = handleModalInput(
+      { mode: "normal" },
+      { ...snapshot, isRedoAvailable: false },
+      { ...options, feedback: { noop: "status" } },
+      "\x12",
+    );
+    expect(redo.state.exMessage).toEqual({ kind: "info", text: "redo stack empty" });
+  });
+
+  test("protected shortcut feedback explains delegation when enabled", () => {
+    const update = handleModalInput(
+      { mode: "normal", pending: "d" },
+      snapshot,
+      { ...options, feedback: { noop: "status" } },
+      "\x10",
+    );
+
+    expect(update.effects).toContainEqual({ type: "delegate", input: "\x10" });
+    expect(update.state.pending).toBeUndefined();
+    expect(update.state.exMessage?.text).toContain("ctrl+p protected");
+  });
+
   test("Ex errors and identical substitutions do not emit edit effects", () => {
     const error = handleModalInput(
       { mode: "normal", pendingEx: { command: "s/missing/new/", sourceMode: "normal" } },
@@ -537,7 +640,7 @@ describe("modal engine", () => {
       searchHighlight: { query: "a", current: cursor },
     };
 
-    const update = handleModalInput(state, snapshot, options, "\x12");
+    const update = handleModalInput(state, { ...snapshot, isRedoAvailable: true }, options, "\x12");
 
     expect(update.state).toEqual({
       mode: "normal",
@@ -595,7 +698,12 @@ describe("modal engine", () => {
     const visualBlock = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "\x1bx");
     expect(visualBlock.state).toEqual({ mode: "visualBlock", visualAnchor: cursor });
 
-    const redo = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "R");
+    const redo = handleModalInput(
+      { mode: "normal" },
+      { ...snapshot, isRedoAvailable: true },
+      configuredOptions,
+      "R",
+    );
     expect(redo.effects).toEqual([{ type: "adapterCommand", command: "redo" }]);
   });
 

@@ -25,6 +25,7 @@ export type EditorSnapshot = {
   cursor: Position;
   isAutocompleteOpen?: boolean;
   isMacroReplaying?: boolean;
+  isRedoAvailable?: boolean;
 };
 
 export type MacroSlot = string;
@@ -104,7 +105,7 @@ export type PendingExCommand = {
 };
 
 export type ExMessage = {
-  kind: "error" | "success";
+  kind: "error" | "success" | "info";
   text: string;
 };
 

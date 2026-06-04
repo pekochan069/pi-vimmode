@@ -398,6 +398,68 @@ describe("vim config parsing", () => {
     ).toBe(true);
   });
 
+  test("resolves presets before explicit settings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        preset: "vim-heavy",
+        startMode: "insert",
+        keymap: { commands: { visualBlock: ["B"] } },
+        ui: { cursorPosition: { enabled: true } },
+      },
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.preset).toBe("vim-heavy");
+    expect(result.options.startMode).toBe("insert");
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["B"]);
+    expect(result.options.ui?.status.items).toContain("cursorPosition");
+    expect(result.options.ui?.cursorPosition.enabled).toBe(true);
+  });
+
+  test("project preset overrides global preset field by field", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { preset: "vim-heavy", cursor: { insert: "underline" } } },
+      { piVimMode: { preset: "minimal", feedback: { noop: "status" } } },
+    );
+
+    expect(result.options.preset).toBe("minimal");
+    expect(result.options.startMode).toBe("normal");
+    expect(result.options.cursor.insert).toBe("underline");
+    expect(result.options.macros?.enabled).toBe(false);
+    expect(result.options.feedback?.noop).toBe("status");
+  });
+
+  test("invalid preset and feedback fall back per field", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        preset: "maximal",
+        feedback: { noop: "loud" },
+        startMode: "normal",
+      },
+    });
+
+    expect(result.options.preset).toBeUndefined();
+    expect(result.options.feedback?.noop).toBe("off");
+    expect(result.options.startMode).toBe("normal");
+    expect(
+      result.warnings.some((warning) => warning.includes("unsupported piVimMode.preset")),
+    ).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("feedback.noop"))).toBe(true);
+  });
+
+  test("protected shortcut warnings include ownership reason", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { commands: { openLineBelow: ["ctrl+p"] } } },
+    });
+
+    expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("protected key ctrl+p (Pi command/model palette)"),
+      ),
+    ).toBe(true);
+  });
+
   test("invalid startup and cursor values fall back per field", () => {
     const result = resolveVimOptions({
       piVimMode: {

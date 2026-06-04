@@ -640,6 +640,39 @@ export function applyPromptTransform(
   return replaceLineRange(text, safeRange, replacement, originalCursor);
 }
 
+export function shiftLineRange(
+  text: string,
+  range: LineRange,
+  action: Extract<PromptTransform["action"], "indent" | "dedent">,
+  originalCursor: Position,
+  depth = 1,
+): ExLineEditResult {
+  let currentText = text;
+  let currentResult: ExLineEditResult | undefined;
+  let changed = false;
+  for (let i = 0; i < Math.max(1, depth); i += 1) {
+    currentResult = applyPromptTransform(currentText, range, { action }, originalCursor);
+    if (!currentResult.ok) return currentResult;
+    changed ||= currentResult.edit.changed;
+    currentText = currentResult.edit.text;
+  }
+  if (!currentResult || !currentResult.ok)
+    return applyPromptTransform(text, range, { action }, originalCursor);
+  return { ...currentResult, edit: { ...currentResult.edit, changed } };
+}
+
+export function shiftLinesFromCursor(
+  text: string,
+  cursor: Position,
+  count: number,
+  action: Extract<PromptTransform["action"], "indent" | "dedent">,
+): ExLineEditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  return shiftLineRange(text, { startLine: pos.line, endLine }, action, cursor);
+}
+
 export function joinExLineRange(
   text: string,
   range: LineRange,

@@ -6,6 +6,7 @@ import type {
   VimMode,
   VimMotion,
   VimMotionAction,
+  VimMotionOperatorAction,
   VimOperatorAction,
   VimRegister,
   VimTextObject,
@@ -55,6 +56,8 @@ import {
   replaceVisualRangeChars,
   replaceCharAt,
   substituteCharAt,
+  shiftLineRange,
+  shiftLinesFromCursor,
   substituteLineRangeLiteral,
   toggleCaseAt,
   toggleCaseVisualRange,
@@ -70,6 +73,7 @@ import {
   yankVisualSelection,
 } from "../buffer.ts";
 import {
+  countForPendingSequence,
   isMacroControlKey,
   operatorActionForSequence,
   resolveMacroCommand,
@@ -356,7 +360,7 @@ function withRepeatableChange(
 function applyOperatorMotion(
   state: ModalState,
   snapshot: EditorSnapshot,
-  operator: VimOperatorAction,
+  operator: VimMotionOperatorAction,
   motion: VimMotionAction,
   options: ModalOptions,
   count = 1,
@@ -383,6 +387,12 @@ function applyOperatorMotion(
   return withEffects(edited, effects);
 }
 
+function shiftActionForOperator(operator: VimOperatorAction): "indent" | "dedent" | undefined {
+  if (operator === "indent") return "indent";
+  if (operator === "dedent") return "dedent";
+  return undefined;
+}
+
 function applyLineCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -392,6 +402,23 @@ function applyLineCommand(
   recordRepeat = true,
 ): ModalUpdate {
   const nextState = clearCommandPending(state);
+  const shiftAction = shiftActionForOperator(operator);
+  if (shiftAction) {
+    const shiftResult = shiftLinesFromCursor(snapshot.text, snapshot.cursor, count, shiftAction);
+    if (!shiftResult.ok) return invalidate(nextState);
+    const result = shiftResult.edit;
+    let edited = editState(nextState, result);
+    if (recordRepeat)
+      edited = withRepeatableChange(
+        edited,
+        { type: "lineCommand", operator, count },
+        result.changed,
+      );
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   if (operator === "delete") {
     const result = deleteLine(snapshot.text, snapshot.cursor, count);
     let edited = editState(nextState, result);
@@ -961,7 +988,7 @@ function handlePendingExInput(
 function applyOperatorTextObject(
   state: ModalState,
   snapshot: EditorSnapshot,
-  operator: VimOperatorAction,
+  operator: VimMotionOperatorAction,
   textObject: VimTextObject,
   options: ModalOptions,
   count = 1,
@@ -1459,7 +1486,14 @@ function handleVisualInput(
   if (result.type === "pending") {
     const operator = operatorActionForSequence(result.pending, keymap);
     if (operator)
-      return applyVisualOperator(state, snapshot, options, visualKindForMode(state.mode), operator);
+      return applyVisualOperator(
+        state,
+        snapshot,
+        options,
+        visualKindForMode(state.mode),
+        operator,
+        countForPendingSequence(result.pending),
+      );
     if (state.pendingRegister) return invalidate(clearPending(state));
     return invalidate({ ...state, pending: result.pending });
   }
@@ -1468,13 +1502,43 @@ function handleVisualInput(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
+function visualLineRange(anchor: EditorSnapshot["cursor"], cursor: EditorSnapshot["cursor"]) {
+  return {
+    startLine: Math.min(anchor.line, cursor.line),
+    endLine: Math.max(anchor.line, cursor.line),
+  };
+}
+
+function shiftVisualSelection(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  action: "indent" | "dedent",
+  depth = 1,
+): ModalUpdate {
+  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+  const shiftResult = shiftLineRange(
+    snapshot.text,
+    visualLineRange(state.visualAnchor, snapshot.cursor),
+    action,
+    snapshot.cursor,
+    depth,
+  );
+  if (!shiftResult.ok) return modeUpdate(state, "normal", options);
+  const result = shiftResult.edit;
+  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+}
+
 function applyVisualOperator(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   kind: "char" | "line" | "block",
   operator: VimOperatorAction,
+  count = 1,
 ): ModalUpdate {
+  const shiftAction = shiftActionForOperator(operator);
+  if (shiftAction) return shiftVisualSelection(state, snapshot, options, shiftAction, count);
   if (operator === "yank") {
     if (!state.visualAnchor) return modeUpdate(state, "normal", options);
     return yankVisualUpdate(state, snapshot, options, kind);

@@ -1,5 +1,5 @@
-import { builtinModules } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
 

@@ -144,6 +144,38 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
 
+  test("parses shift operator keymap and rejects motion matrices for line-only operators", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          operators: { indent: ["]"], dedent: ["["], delete: ["d"] },
+          operatorMotions: {
+            delete: ["wordForward"],
+            indent: ["wordForward"],
+            dedent: ["lineEnd"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.operators.indent).toEqual(["]"]);
+    expect(result.options.keymap?.operators.dedent).toEqual(["["]);
+    expect(result.options.keymap?.operators.delete).toEqual(["d"]);
+    expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
+    expect("indent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
+    expect("dedent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("unsupported piVimMode.keymap.operatorMotions.indent"),
+      ),
+    ).toBe(true);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("unsupported piVimMode.keymap.operatorMotions.dedent"),
+      ),
+    ).toBe(true);
+  });
+
   test("default keymap includes roadmap actions and configurable word-end", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
@@ -152,6 +184,8 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
 
     const result = resolveVimOptions({

@@ -123,6 +123,10 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.operators.delete` | `["d"]` | Prefix for delete operator. Doubled operator deletes line when same operator sequence repeats. |
 | `piVimMode.keymap.operators.change` | `["c"]` | Prefix for change operator. Deletes range/line and enters insert.                              |
 | `piVimMode.keymap.operators.yank`   | `["y"]` | Prefix for yank operator. Updates registers without changing text.                             |
+| `piVimMode.keymap.operators.indent` | `[">"]` | Line-only shift operator. Doubled operator indents addressed line(s) by two spaces.            |
+| `piVimMode.keymap.operators.dedent` | `["<"]` | Line-only shift operator. Doubled operator dedents addressed line(s).                          |
+
+`indent` and `dedent` are line-only operators. In normal mode, repeat the operator sequence (`>>`, `<<`, or configured equivalents) and optional counts (`3>>`). In visual modes, one operator key shifts all touched lines; a count before the operator changes shift depth (`2>` indents selected lines by two levels). Arbitrary `>{motion}`, `<{motion}`, text-object, prompt-search, and mark-target shift ranges are unsupported safe no-ops.
 
 ### Motions
 
@@ -245,9 +249,26 @@ wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd
 | `piVimMode.keymap.operatorMotions.change` | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after change operator.                                         |
 | `piVimMode.keymap.operatorMotions.yank`   | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after yank operator.                                           |
 
-Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist.
+Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
 ### Keymap validation
+
+Example shift operator remap:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "operators": {
+        "indent": ["]"],
+        "dedent": ["["]
+      }
+    }
+  }
+}
+```
+
+With this config, `]]` indents the current line in normal mode, `[[` dedents it, and visual `]` / `[` shifts selected lines.
 
 - Unknown action names warn and are ignored.
 - Each binding value must be an array of strings.

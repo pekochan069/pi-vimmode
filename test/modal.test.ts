@@ -610,6 +610,51 @@ describe("modal engine", () => {
     expect(countedRepeat.state.register).toEqual({ type: "line", text: "three\nfour" });
   });
 
+  test("normal mode supports line shift operators without writing registers", () => {
+    const indented = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "one\ntwo\nthree",
+      p(0, 1),
+      [">", ">"],
+    );
+    expect(indented.text).toBe("  one\ntwo\nthree");
+    expect(indented.cursor).toEqual(p(0, 1));
+    expect(indented.state.mode).toBe("normal");
+    expect(indented.state.register).toEqual({ type: "char", text: "keep" });
+
+    const counted = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["3", ">", ">"]);
+    expect(counted.text).toBe("  one\n  two\n  three");
+
+    const dedented = applyModalKeys({ mode: "normal" }, "  one\n two\nthree", p(0, 2), [
+      "2",
+      "<",
+      "<",
+    ]);
+    expect(dedented.text).toBe("one\ntwo\nthree");
+    expect(dedented.cursor).toEqual(p(0, 2));
+
+    const noOp = applyModalKeys(
+      { mode: "normal", register: { type: "line", text: "old" } },
+      "one",
+      p(0, 0),
+      ["<", "<"],
+    );
+    expect(noOp.text).toBe("one");
+    expect(noOp.state.register).toEqual({ type: "line", text: "old" });
+  });
+
+  test("normal dot repeat applies line shift commands", () => {
+    const shifted = applyModalKeys({ mode: "normal" }, "one\ntwo", cursor, [">", ">"]);
+    expect(shifted.text).toBe("  one\ntwo");
+
+    const repeated = applyModalKeys(shifted.state, shifted.text, p(1, 0), ["."]);
+    expect(repeated.text).toBe("  one\n  two");
+
+    const counted = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", cursor, ["2", ">", ">"]);
+    const countedRepeat = applyModalKeys(counted.state, counted.text, p(1, 0), ["."]);
+    expect(countedRepeat.text).toBe("  one\n    two\n  three");
+  });
+
   test("normal dot repeat applies line change commands and keeps no-ops from replacing repeat", () => {
     const changed = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", cursor, [
       "c",
@@ -1360,6 +1405,66 @@ describe("modal engine", () => {
     );
     expect(yanked.state.register).toEqual({ type: "char", text: "ab" });
     expect(yanked.state.mode).toBe("normal");
+  });
+
+  test("visual shift operators transform touched lines and preserve registers", () => {
+    const visualChar = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1), register: { type: "char", text: "keep" } },
+      "one\ntwo\nthree",
+      p(1, 1),
+      [">"],
+    );
+    expect(visualChar.text).toBe("  one\n  two\nthree");
+    expect(visualChar.state.mode).toBe("normal");
+    expect(visualChar.state.visualAnchor).toBeUndefined();
+    expect(visualChar.state.register).toEqual({ type: "char", text: "keep" });
+
+    const visualLine = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(0, 0), register: { type: "line", text: "keep" } },
+      "  one\n  two\nthree",
+      p(1, 0),
+      ["<"],
+    );
+    expect(visualLine.text).toBe("one\ntwo\nthree");
+    expect(visualLine.state.mode).toBe("normal");
+    expect(visualLine.state.register).toEqual({ type: "line", text: "keep" });
+
+    const visualBlock = applyModalKeys(
+      { mode: "visualBlock", visualAnchor: p(0, 1) },
+      "one\ntwo\nthree",
+      p(2, 1),
+      [">"],
+    );
+    expect(visualBlock.text).toBe("  one\n  two\n  three");
+    expect(visualBlock.state.mode).toBe("normal");
+
+    const countedVisual = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(0, 0) },
+      "one\ntwo",
+      p(1, 0),
+      ["2", ">"],
+    );
+    expect(countedVisual.text).toBe("    one\n    two");
+    expect(countedVisual.state.mode).toBe("normal");
+  });
+
+  test("visual shifts clear search highlights on changed text and no-op safely without anchor", () => {
+    const shifted = applyModalKeys(
+      {
+        mode: "visualLine",
+        visualAnchor: p(0, 0),
+        searchHighlight: { query: "one", current: p(0, 0) },
+      },
+      "one\ntwo",
+      p(0, 0),
+      [">"],
+    );
+    expect(shifted.text).toBe("  one\ntwo");
+    expect(shifted.state.searchHighlight).toBeUndefined();
+
+    const noAnchor = applyModalKeys({ mode: "visualLine" }, "one", p(0, 0), [">"]);
+    expect(noAnchor.text).toBe("one");
+    expect(noAnchor.state.mode).toBe("normal");
   });
 
   test("visual toggle case changes selected text and returns normal", () => {

@@ -699,6 +699,52 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("visualBlock");
   });
 
+  test("configured shift operators survive live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        operators: {
+          ...DEFAULT_VIM_OPTIONS.keymap!.operators,
+          indent: ["]"],
+          dedent: ["["],
+        },
+      },
+    });
+
+    editor.setText("one\n  two");
+    typeKeys(editor, ["g", "g", "]", "]"]);
+    expectEditorState(editor, {
+      text: "  one\n  two",
+      cursor: { line: 0, col: 0 },
+      mode: "normal",
+    });
+
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput("[");
+    expectEditorState(editor, { text: "one\ntwo", cursor: { line: 1, col: 0 }, mode: "normal" });
+  });
+
+  test("default shift operators and existing editor behavior remain compatible", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", ">", ">", "j", "."]);
+    expect(editor.getText()).toBe("  one\n  two");
+
+    runEx(editor, "%dedent");
+    expect(editor.getText()).toBe("one\ntwo");
+
+    typeKeys(editor, ["g", "g", "d", "w"]);
+    expect(editor.getText()).toBe("two");
+
+    editor.handleInput("i");
+    editor.handleInput("<");
+    editor.handleInput(">");
+    expect(editor.getText()).toBe("<>two");
+  });
+
   test("normal mode supports extended navigation", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("  one\ntwo");

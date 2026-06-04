@@ -6,7 +6,8 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 export type CursorStyles = Record<VimMode, CursorStyle>;
 
-export type VimOperatorAction = "delete" | "change" | "yank";
+export type VimMotionOperatorAction = "delete" | "change" | "yank";
+export type VimOperatorAction = VimMotionOperatorAction | "indent" | "dedent";
 
 export type VimMotionAction =
   | "left"
@@ -107,7 +108,7 @@ export type VimKeymapOptions = {
   macros?: VimMacroKeymapOptions;
   marks?: VimMarkKeymapOptions;
   textObjects?: VimTextObjectKeymapOptions;
-  operatorMotions?: Partial<Record<VimOperatorAction, readonly VimMotionAction[]>>;
+  operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
@@ -124,7 +125,7 @@ export type ResolvedVimKeymap = {
   macros: ResolvedVimMacroKeymap;
   marks: ResolvedVimMarkKeymap;
   textObjects: ResolvedVimTextObjectKeymap;
-  operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
+  operatorMotions: Record<VimMotionOperatorAction, readonly VimMotionAction[]>;
 };
 
 export type VimSearchOptions = {

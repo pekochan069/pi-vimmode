@@ -6,6 +6,7 @@ import type {
   VimCommandAction,
   VimMotion,
   VimMotionAction,
+  VimMotionOperatorAction,
   VimOperator,
   VimOperatorAction,
   VimTextObject,
@@ -16,6 +17,7 @@ import type {
 import { DEFAULT_VIM_KEYMAP } from "./config.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(["d", "c", "y"]);
+const LINE_ONLY_OPERATORS = new Set<VimOperatorAction>(["indent", "dedent"]);
 const LEGACY_OPERATOR_MOTIONS = new Set<string>(["w", "b", "e", "0", "^", "$"]);
 const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
 const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
@@ -30,11 +32,16 @@ export type SemanticCommandResult =
   | { type: "command"; command: VimCommandAction; count?: number }
   | { type: "charCommand"; command: VimCommandAction; char: string; count?: number }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
-  | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction; count?: number }
-  | { type: "operatorSearch"; operator: VimOperatorAction; count?: number }
+  | {
+      type: "operatorMotion";
+      operator: VimMotionOperatorAction;
+      motion: VimMotionAction;
+      count?: number;
+    }
+  | { type: "operatorSearch"; operator: VimMotionOperatorAction; count?: number }
   | {
       type: "operatorTextObject";
-      operator: VimOperatorAction;
+      operator: VimMotionOperatorAction;
       textObject: VimTextObject;
       count?: number;
     }
@@ -89,7 +96,7 @@ const LEGACY_OPERATOR_TO_ACTION: Record<VimOperator, VimOperatorAction> = {
   c: "change",
   y: "yank",
 };
-const ACTION_TO_LEGACY_OPERATOR: Record<VimOperatorAction, VimOperator> = {
+const ACTION_TO_LEGACY_OPERATOR: Record<VimMotionOperatorAction, VimOperator> = {
   delete: "d",
   change: "c",
   yank: "y",
@@ -394,6 +401,12 @@ export function operatorActionForSequence(
   return binding?.kind === "operator" ? binding.operator : undefined;
 }
 
+export function countForPendingSequence(sequence: string | undefined): number | undefined {
+  if (!sequence) return undefined;
+  const count = decodeCountPending(sequence);
+  return count ? Number(count.count) : undefined;
+}
+
 function commandSequenceFor(
   command: VimCommandAction,
   keymap: ResolvedVimKeymap,
@@ -447,13 +460,21 @@ function withCount<T extends SemanticCommandResult>(
   return { ...result, count };
 }
 
+function isLineOnlyOperator(operator: VimOperatorAction): boolean {
+  return LINE_ONLY_OPERATORS.has(operator);
+}
+
+function isMotionOperator(operator: VimOperatorAction): operator is VimMotionOperatorAction {
+  return !isLineOnlyOperator(operator);
+}
+
 function resolveOperatorMotionPending(
   pending: EncodedOperatorMotionPending,
   key: string,
   keymap: ResolvedVimKeymap,
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
-  if (!operator) return { type: "invalid" };
+  if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
   const motionSequence = pending.motionPrefix + key;
   const motion = motionForSequence(motionSequence, keymap);
   if (motion && keymap.operatorMotions[operator].includes(motion)) {
@@ -494,7 +515,7 @@ function resolveOperatorSearchPending(
   keymap: ResolvedVimKeymap,
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
-  if (!operator) return { type: "invalid" };
+  if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
   const searchSequence = pending.searchPrefix + key;
   if (exactStartSearchBinding(searchSequence, keymap)) {
     return { type: "operatorSearch", operator, count: pending.count };
@@ -515,7 +536,7 @@ function resolveTextObjectPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   const target = textObjectTargetForKey(key, keymap);
-  if (!operator || !target) return { type: "invalid" };
+  if (!operator || !isMotionOperator(operator) || !target) return { type: "invalid" };
   return {
     type: "operatorTextObject",
     operator,
@@ -538,6 +559,7 @@ function resolveAfterOperator(
   if (hasOperatorPrefix(key, keymap, operator)) {
     return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key, count) };
   }
+  if (!isMotionOperator(operator)) return { type: "invalid" };
   if (exactStartSearchBinding(key, keymap)) {
     return { type: "operatorSearch", operator, count };
   }
@@ -647,7 +669,7 @@ export function resolveNormalCommand(
   return resolveWithoutPending(key, keymap);
 }
 
-export function semanticOperatorToLegacy(operator: VimOperatorAction): VimOperator {
+export function semanticOperatorToLegacy(operator: VimMotionOperatorAction): VimOperator {
   return ACTION_TO_LEGACY_OPERATOR[operator];
 }
 
@@ -659,11 +681,14 @@ export function parseNormalCommand(key: string, pending?: PendingOperator): Comm
   const result = resolveNormalCommand(key, pending, DEFAULT_VIM_KEYMAP);
   if (result.type === "pending")
     return { type: "pending", operator: pendingDisplay(result.pending) ?? result.pending };
-  if (result.type === "lineCommand")
+  if (result.type === "lineCommand") {
+    if (!isMotionOperator(result.operator)) return { type: "invalid" };
     return { type: "command", command: lineCommandFor(semanticOperatorToLegacy(result.operator)) };
+  }
   if (result.type === "motion" && result.motion === "bufferStart")
     return { type: "command", command: "gg" };
   if (result.type === "operatorMotion") {
+    if (!isMotionOperator(result.operator)) return { type: "invalid" };
     const motion = semanticMotionToLegacy(result.motion);
     if (!motion) return { type: "invalid" };
     return { type: "operatorMotion", operator: semanticOperatorToLegacy(result.operator), motion };

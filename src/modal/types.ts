@@ -9,6 +9,7 @@ import type {
   VimMode,
   VimCommandAction,
   VimMotionAction,
+  VimMotionOperatorAction,
   VimOperatorAction,
   VimRegister,
   VimTextObject,
@@ -87,10 +88,15 @@ export type ExMessage = {
 export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
-  | { type: "operatorMotion"; operator: VimOperatorAction; motion: VimMotionAction; count?: number }
+  | {
+      type: "operatorMotion";
+      operator: VimMotionOperatorAction;
+      motion: VimMotionAction;
+      count?: number;
+    }
   | {
       type: "operatorTextObject";
-      operator: VimOperatorAction;
+      operator: VimMotionOperatorAction;
       textObject: VimTextObject;
       count?: number;
     };

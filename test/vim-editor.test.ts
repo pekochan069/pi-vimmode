@@ -677,6 +677,76 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("old!");
   });
 
+  test("normal mode redo restores undone prompt edit and can be undone again", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "l", "x"]);
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+
+    editor.handleInput("u");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 1 }, mode: "normal" });
+
+    editor.handleInput("\x12");
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
+
+    editor.handleInput("u");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 1 }, mode: "normal" });
+  });
+
+  test("normal mode redo no-ops without state, survives movement, and clears after new edit", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput("\x12");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 3 }, mode: "normal" });
+
+    typeKeys(editor, ["g", "g", "x", "u", "l", "\x12"]);
+    expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
+
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "l", "x", "\x12"]);
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+  });
+
+  test("redo does not resurrect cleared search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("foo foo");
+    typeKeys(editor, ["g", "g", "/", "f", "o", "o", "\r"]);
+    expect(editor.render(80).join("\n")).toContain(SEARCH_START);
+
+    typeKeys(editor, ["x", "u", "\x12"]);
+    expect(editor.getText()).toBe("foo oo");
+    expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
+  });
+
+  test("configured redo key survives live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, redo: ["R"] },
+      },
+    });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "R"]);
+    expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
+  });
+
+  test("redo preserves modal side-effect state", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", '"', "a", "y", "y", "m", "b"]);
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+    expect(editor.getMark("b")).toEqual({ line: 0, col: 0 });
+
+    typeKeys(editor, ["j", "x", "u", "\x12"]);
+    expectEditorState(editor, { text: "one\nwo", cursor: { line: 1, col: 0 }, mode: "normal" });
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+    expect(editor.getMark("b")).toEqual({ line: 0, col: 0 });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "t" });
+  });
+
   test("normal mode uses configured keymap through the editor", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,

@@ -67,7 +67,7 @@
 
 - [x] `>` and `<`
 
-- [ ] ctrl+r (redo)
+- [x] ctrl+r (redo)
 
 - [ ] Safe Ex/Search workbench
   - Add shared `/` and `:` mini-editor with history, backward `?`, previous-query recall, bounded regex/literal modes, substitution preview/counts.

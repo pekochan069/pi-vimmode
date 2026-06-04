@@ -58,7 +58,8 @@ export type VimCommandAction =
   | "repeatSearchReverse"
   | "startExCommand"
   | "repeatChange"
-  | "undo";
+  | "undo"
+  | "redo";
 
 export type VimTextObjectKind = "inner" | "around";
 

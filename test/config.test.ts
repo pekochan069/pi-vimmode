@@ -28,8 +28,12 @@ describe("vim config parsing", () => {
       promptStructures: { targets: { codeFence: false } },
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
+    const redoOptions = {
+      keymap: { commands: { redo: ["ctrl+r"] } },
+    } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
+    expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
     expect(options.promptStructures.targets?.codeFence).toBe(false);
     expect(options.promptTransforms.actions?.reflow).toBe(false);
     expect(options.promptTransforms.commands?.quote).toEqual(["qte"]);
@@ -118,6 +122,7 @@ describe("vim config parsing", () => {
             toggleCase: ["~"],
             visualBlock: ["<C-v>", "<A-x>"],
             startExCommand: ["<A-;>"],
+            redo: ["<C-r>", "ctrl+c"],
             openLineAbove: ["<C-S-p>"],
           },
           macros: { record: ["m"], play: ["r"] },
@@ -134,6 +139,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
+    expect(result.options.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(result.options.keymap?.commands.openLineAbove).toEqual(["O"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
     expect(result.options.keymap?.macros.play).toEqual(["r"]);
@@ -183,6 +189,7 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
@@ -192,7 +199,7 @@ describe("vim config parsing", () => {
       piVimMode: {
         keymap: {
           motions: { wordEnd: ["E"] },
-          commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"] },
+          commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"], redo: ["U"] },
           operatorMotions: { change: ["wordEnd"] },
         },
       },
@@ -200,6 +207,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
+    expect(result.options.keymap?.commands.redo).toEqual(["U"]);
     expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd"]);
   });
 
@@ -324,7 +332,7 @@ describe("vim config parsing", () => {
         keymap: {
           operators: { delete: ["x"] },
           motions: { left: ["x"] },
-          commands: { deleteChar: ["x"] },
+          commands: { deleteChar: ["x"], redo: ["x"] },
           marks: { set: ["x"] },
           textObjects: { targets: { word: ["x"] } },
         },

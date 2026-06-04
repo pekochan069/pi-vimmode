@@ -119,6 +119,7 @@ one two three
 | `s` / `S`           | substitute character/current line and enter insert                      |
 | `.`                 | repeat last supported completed change                                  |
 | `u`                 | delegate to Pi native undo                                              |
+| `Ctrl-r`            | redo most recent prompt edit undone by normal-mode `u`                  |
 
 Counts work for supported edits:
 
@@ -132,6 +133,8 @@ Counts work for supported edits:
 ```
 
 Dot-repeat is intentionally finite. It repeats supported recorded normal-mode changes such as `x`, `D`, `C`, `Ctrl-a`, `Ctrl-x`, `~`, `r`, `s`, `S`, `dd`, `cc`, `>>`, `<<`, operator motions, and text-object changes. It does not replay arbitrary insert-mode text, macros, Ex substitutions, visual-mode edits, joins, or pastes.
+
+Redo is intentionally prompt-local and linear. `Ctrl-r` restores the latest text/cursor state undone by normal-mode `u`, remains a safe no-op when no redo state exists, survives cursor movement, and clears when a new text edit creates a different branch. pi-vimmode does not implement Vim's undo tree, redo counts, `:redo`, `g-`, or `g+`.
 
 ## Operators and operator motions
 
@@ -542,7 +545,7 @@ Pi remains owner of app-level shortcuts.
 - `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
 - `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings.
-- `Ctrl-a` and `Ctrl-x` are owned by pi-vimmode only in normal mode for numeric adjustment.
+- `Ctrl-a`, `Ctrl-x`, and `Ctrl-r` are owned by pi-vimmode only in normal mode for numeric adjustment and redo.
 
 ## Configuration features
 

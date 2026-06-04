@@ -39,7 +39,7 @@ const KEY = {
   wordLeft: "\x1bb",
   wordRight: "\x1bf",
   undo: "\x1f",
-} as const satisfies Record<AdapterCommand, string>;
+} as const satisfies Record<Exclude<AdapterCommand, "redo">, string>;
 
 function fitWidth(text: string, width: number): string {
   if (width <= 0) return "";
@@ -102,9 +102,19 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
   };
 }
 
+type RedoSnapshot = {
+  text: string;
+  cursor: Position;
+};
+
+function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
+  return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
+}
+
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
+  private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private isMacroReplaying = false;
@@ -255,14 +265,18 @@ export class VimEditor extends CustomEditor {
 
   private applyEffect(effect: ModalEffect): void {
     switch (effect.type) {
-      case "delegate":
+      case "delegate": {
+        const before = this.redoSnapshot();
         super.handleInput(effect.input);
+        this.clearRedoAfterTextChange(before);
         return;
+      }
       case "adapterCommand":
-        super.handleInput(KEY[effect.command]);
+        this.applyAdapterCommand(effect.command);
         return;
       case "edit":
         this.applyEdit(effect.result);
+        if (effect.result.changed) this.clearRedoStack();
         return;
       case "restoreCursor":
         this.restoreCursor(effect.position);
@@ -277,6 +291,47 @@ export class VimEditor extends CustomEditor {
         this.invalidate();
         return;
     }
+  }
+
+  private applyAdapterCommand(command: AdapterCommand): void {
+    if (command === "undo") {
+      this.applyUndo();
+      return;
+    }
+    if (command === "redo") {
+      this.applyRedo();
+      return;
+    }
+    super.handleInput(KEY[command]);
+  }
+
+  private redoSnapshot(): RedoSnapshot {
+    return { text: this.getText(), cursor: this.getCursor() };
+  }
+
+  private clearRedoStack(): void {
+    this.redoStack.length = 0;
+  }
+
+  private clearRedoAfterTextChange(before: RedoSnapshot): void {
+    if (this.getText() !== before.text) this.clearRedoStack();
+  }
+
+  private applyUndo(): void {
+    const before = this.redoSnapshot();
+    super.handleInput(KEY.undo);
+    if (!sameRedoSnapshot(before, this.redoSnapshot())) this.redoStack.push(before);
+  }
+
+  private applyRedo(): void {
+    const snapshot = this.redoStack.pop();
+    if (!snapshot) {
+      this.invalidate();
+      return;
+    }
+    this.setText(snapshot.text);
+    this.restoreCursor(snapshot.cursor);
+    this.invalidate();
   }
 
   private playMacro(inputs: readonly string[]): void {

@@ -86,7 +86,7 @@ ctrl+c, ctrl+d, ctrl+g, ctrl+l, ctrl+p,
 shift+ctrl+p, ctrl+shift+p, ctrl+t, shift+tab
 ```
 
-Protected or unsupported keys are ignored with a warning.
+Protected or unsupported keys are ignored with a warning. `ctrl+a`, `ctrl+x`, and `ctrl+r` are explicitly owned by pi-vimmode in normal mode for numeric adjustment and redo; insert mode still delegates them to Pi.
 
 ## Top-level settings
 
@@ -184,6 +184,7 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                 |
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                    |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                            |
+| `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                   |
 
 ### Macro keymap
 
@@ -493,7 +494,8 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "repeatSearchReverse": ["N"],
         "startExCommand": [":"],
         "repeatChange": ["."],
-        "undo": ["u"]
+        "undo": ["u"],
+        "redo": ["ctrl+r"]
       },
       "macros": {
         "record": ["q"],

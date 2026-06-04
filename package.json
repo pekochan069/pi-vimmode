@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -21,6 +21,12 @@
   },
   "type": "module",
   "module": "index.ts",
+  "files": [
+    "README.md",
+    "LICENSE",
+    "docs/features.md",
+    "docs/settings.md"
+  ],
   "publishConfig": {
     "access": "public"
   },

@@ -36,6 +36,7 @@ async function writeDistPackageJson() {
 async function copyDistDocs() {
   await mkdir(join(distDir, "docs"), { recursive: true });
   await cp("README.md", join(distDir, "README.md"));
+  await cp("LICENSE", join(distDir, "LICENSE"));
   await Promise.all(distDocs.map((doc) => cp(doc, join(distDir, doc))));
 }
 

@@ -149,7 +149,7 @@ if (structureRange) {
 
 Track whether the selected range starts inside an existing fence and seed `reflowLines()` with that state.
 
-```ts
+````ts
 function startsInsideFence(lines: readonly string[], startLine: number): boolean {
   let inFence = false;
   for (let index = 0; index < startLine; index++) {
@@ -163,11 +163,11 @@ replacement = reflowLines(
   transform.width ?? 80,
   startsInsideFence(lines, safeRange.startLine),
 );
-```
+````
 
 Keep a regression for visual subranges inside existing fences:
 
-```ts
+````ts
 test("reflow preserves selected subranges inside existing code fences", () => {
   const text = "intro\n```ts\nconst value = some very long expression here\n```\noutro";
   const result = applyPromptTransform(
@@ -179,7 +179,7 @@ test("reflow preserves selected subranges inside existing code fences", () => {
 
   expect(result).toMatchObject({ ok: true, edit: { text, changed: false } });
 });
-```
+````
 
 ### Make public config types match runtime merge behavior
 

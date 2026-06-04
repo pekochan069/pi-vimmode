@@ -1,20 +1,85 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context shown to AI when creating OpenSpec artifacts.
+context: |
+  Project: pi-vimmode, a Pi coding-agent extension that replaces Pi's main prompt editor with a CustomEditor-based Vim-style modal prompt editor.
+  Product boundary: practical agent prompt editing, not full Vim/Neovim parity.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Tech stack:
+  - TypeScript ESM, Bun, Pi extension package.
+  - Runtime peers: @earendil-works/pi-coding-agent and @earendil-works/pi-tui.
+  - Build/test tools: rolldown, bun test, tsgo --noEmit, oxlint, oxfmt.
+
+  Architecture seams:
+  - src/lifecycle.ts: extension activation, settings refresh, status, shutdown cursor reset.
+  - src/config.ts and src/types.ts: piVimMode defaults, accepted values, validation, warnings, public option types.
+  - src/commands.ts: finite semantic key parser, counts, operators, motions, text objects, macro parser.
+  - src/buffer.ts: pure prompt-buffer navigation/edit/search/visual/mark/register/substitution/line-transform operations.
+  - src/ex.ts: finite Ex command parser; no broad Vimscript parser.
+  - src/prompt-structures.ts: prompt-native Markdown/list/tag/error-block structure ranges.
+  - src/modal/engine.ts: modal state machine and side-effect decisions; avoid direct text splicing when buffer helpers fit.
+  - src/modal/view.ts: testable status/view derivation.
+  - src/render.ts: prompt rendering and visual/search/cursor composition.
+  - src/vim-editor.ts: Pi CustomEditor adapter and modal-effect interpreter; owns Pi runtime calls.
+
+  Source-of-truth hierarchy:
+  - Behavior requirements: openspec/specs/*.
+  - Settings names/defaults/validation: src/config.ts and src/types.ts.
+  - Runtime adapter behavior: src/vim-editor.ts plus focused tests.
+  - User-facing behavior docs: docs/features.md.
+  - Settings docs: docs/settings.md.
+  - README: quickstart and docs index only, not full behavior reference.
+  - ADRs: compact durable decisions.
+  - docs/solutions: reusable pitfalls and architectural patterns; check relevant entries before repeating parser/buffer/modal/config work.
+
+  Design principles:
+  - Keep behavior finite, explicit, prompt-local, and safe on invalid/missing targets.
+  - Prefer pure parser/buffer/structure helpers over adding branches to src/modal/engine.ts.
+  - Keep VimEditor thin: Pi runtime calls and modal effect application only.
+  - Preserve Pi application shortcuts and insert-mode default behavior.
+  - Avoid full Vimscript, recursive mappings, .vimrc, Neovim Lua, full Markdown/XML AST parsing, or language-aware formatting unless explicitly proposed.
+  - Config parsing should be field-by-field: invalid settings produce warnings and ignore invalid fields without discarding valid siblings.
+  - Any new option family must survive live VimEditor construction; update cloneOptions and add live editor tests.
+  - Render layers must compose safely: visual selection, search highlights, cursor style, width truncation.
+  - Keep TypeScript functions <=100 lines when possible; extract helpers before deep branching.
+  - Do not edit, format, normalize, or otherwise touch /home/thinline20/.pi/agent/settings.json unless explicitly requested.
+
+  Validation commands:
+  - bun test
+  - bun run check-types
+  - bun run lint
+  - bun run format:check
+  - openspec validate --specs --strict
+
+# Per-artifact rules shown to AI when creating specific artifacts.
+rules:
+  proposal:
+    - 'Use sections: Why, What Changes, Capabilities, Impact.'
+    - 'Keep product scope explicit: practical Pi prompt editing, not full Vim/Neovim parity.'
+    - 'List New Capabilities and Modified Capabilities using lower-kebab capability names that match or intentionally extend openspec/specs.'
+    - 'In Impact, name affected code seams, tests, docs, dependency changes, and compatibility/breaking-change status.'
+    - 'State no new runtime dependencies when true; call out any peer/runtime dependency change explicitly.'
+    - 'Include Non-goals when scope could easily drift.'
+
+  design:
+    - 'Use sections: Context, Goals / Non-Goals, Decisions, Risks / Trade-offs, Migration Plan, Open Questions.'
+    - 'Each decision should name target seam(s), alternatives considered, and reason for rejection.'
+    - 'Prefer finite typed parsers, pure buffer helpers, and thin adapter integration.'
+    - 'Call out side effects explicitly: registers, marks, dot-repeat, search highlights, visual state, Ex messages, cursor placement, Pi delegation.'
+    - 'Include config propagation risk when adding settings; mention src/config.ts, src/types.ts, VimEditor cloneOptions, and live editor tests.'
+    - 'Include docs source-of-truth impact when user-facing behavior or settings change.'
+    - 'Reject broad parity claims unless implementation covers them with tests and docs.'
+
+  specs:
+    - 'Use SHALL requirements with observable scenarios.'
+    - 'Scenarios should cover success, safe no-op/error behavior, invalid input, config disabled/renamed cases, and preserved existing behavior.'
+    - 'Prefer capabilities aligned with current specs: vim-mode-editor, vim-editor-adapter-architecture, prompt-buffer-operations, vim-ex-command-line, vim-search, vim-marks, vim-named-registers, vim-keymap-configuration, vim-ui-configuration, prompt-native-structure-editing, pi-vimmode-documentation.'
+    - 'Do not specify implementation detail unless it is an architectural requirement already durable in specs/ADRs.'
+    - 'Include validation/documentation scenarios when behavior is user-facing or settings-visible.'
+
+  tasks:
+    - 'Group tasks by implementation seam: pure helper/module, parser/types/config, modal integration, adapter/live editor, render/view, docs, validation.'
+    - 'Put focused tests beside each seam before broad integration tasks.'
+    - 'Include regression tests for known drift risks: config parsing vs live VimEditor behavior, dot-repeat, register writes, search highlight clearing, visual range capture, protected Pi shortcuts.'
+    - 'End with validation tasks: bun test, bun run check-types, bun run lint, bun run format:check, openspec validate --specs --strict.'
+    - 'Keep tasks independently checkable and small enough to complete/review; avoid vague "polish" tasks.'

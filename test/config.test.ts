@@ -28,8 +28,16 @@ describe("vim config parsing", () => {
       promptStructures: { targets: { codeFence: false } },
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
+    const redoOptions = {
+      keymap: { commands: { redo: ["ctrl+r"] } },
+    } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
+    expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
+    const backwardSearchOptions = {
+      keymap: { commands: { startSearchBackward: ["?"] } },
+    } satisfies VimEditorOptions;
+    expect(backwardSearchOptions.keymap?.commands?.startSearchBackward).toEqual(["?"]);
     expect(options.promptStructures.targets?.codeFence).toBe(false);
     expect(options.promptTransforms.actions?.reflow).toBe(false);
     expect(options.promptTransforms.commands?.quote).toEqual(["qte"]);
@@ -118,6 +126,8 @@ describe("vim config parsing", () => {
             toggleCase: ["~"],
             visualBlock: ["<C-v>", "<A-x>"],
             startExCommand: ["<A-;>"],
+            startSearchBackward: ["<A-?>"],
+            redo: ["<C-r>", "ctrl+c"],
             openLineAbove: ["<C-S-p>"],
           },
           macros: { record: ["m"], play: ["r"] },
@@ -134,6 +144,8 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
+    expect(result.options.keymap?.commands.startSearchBackward).toEqual(["alt+?"]);
+    expect(result.options.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(result.options.keymap?.commands.openLineAbove).toEqual(["O"]);
     expect(result.options.keymap?.macros.record).toEqual(["m"]);
     expect(result.options.keymap?.macros.play).toEqual(["r"]);
@@ -144,6 +156,38 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
 
+  test("parses shift operator keymap and rejects motion matrices for line-only operators", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          operators: { indent: ["]"], dedent: ["["], delete: ["d"] },
+          operatorMotions: {
+            delete: ["wordForward"],
+            indent: ["wordForward"],
+            dedent: ["lineEnd"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.operators.indent).toEqual(["]"]);
+    expect(result.options.keymap?.operators.dedent).toEqual(["["]);
+    expect(result.options.keymap?.operators.delete).toEqual(["d"]);
+    expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
+    expect("indent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
+    expect("dedent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("unsupported piVimMode.keymap.operatorMotions.indent"),
+      ),
+    ).toBe(true);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("unsupported piVimMode.keymap.operatorMotions.dedent"),
+      ),
+    ).toBe(true);
+  });
+
   test("default keymap includes roadmap actions and configurable word-end", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
@@ -151,14 +195,18 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.toggleCase).toEqual(["~"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startSearchBackward).toEqual(["?"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
 
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
           motions: { wordEnd: ["E"] },
-          commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"] },
+          commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"], redo: ["U"] },
           operatorMotions: { change: ["wordEnd"] },
         },
       },
@@ -166,6 +214,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
+    expect(result.options.keymap?.commands.redo).toEqual(["U"]);
     expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd"]);
   });
 
@@ -290,7 +339,7 @@ describe("vim config parsing", () => {
         keymap: {
           operators: { delete: ["x"] },
           motions: { left: ["x"] },
-          commands: { deleteChar: ["x"] },
+          commands: { deleteChar: ["x"], redo: ["x"] },
           marks: { set: ["x"] },
           textObjects: { targets: { word: ["x"] } },
         },
@@ -345,6 +394,68 @@ describe("vim config parsing", () => {
         warning.includes(
           "binding g for motions.left is shadowed by longer binding gg for motions.bufferStart",
         ),
+      ),
+    ).toBe(true);
+  });
+
+  test("resolves presets before explicit settings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        preset: "vim-heavy",
+        startMode: "insert",
+        keymap: { commands: { visualBlock: ["B"] } },
+        ui: { cursorPosition: { enabled: true } },
+      },
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.preset).toBe("vim-heavy");
+    expect(result.options.startMode).toBe("insert");
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["B"]);
+    expect(result.options.ui?.status.items).toContain("cursorPosition");
+    expect(result.options.ui?.cursorPosition.enabled).toBe(true);
+  });
+
+  test("project preset overrides global preset field by field", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { preset: "vim-heavy", cursor: { insert: "underline" } } },
+      { piVimMode: { preset: "minimal", feedback: { noop: "status" } } },
+    );
+
+    expect(result.options.preset).toBe("minimal");
+    expect(result.options.startMode).toBe("normal");
+    expect(result.options.cursor.insert).toBe("underline");
+    expect(result.options.macros?.enabled).toBe(false);
+    expect(result.options.feedback?.noop).toBe("status");
+  });
+
+  test("invalid preset and feedback fall back per field", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        preset: "maximal",
+        feedback: { noop: "loud" },
+        startMode: "normal",
+      },
+    });
+
+    expect(result.options.preset).toBeUndefined();
+    expect(result.options.feedback?.noop).toBe("off");
+    expect(result.options.startMode).toBe("normal");
+    expect(
+      result.warnings.some((warning) => warning.includes("unsupported piVimMode.preset")),
+    ).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("feedback.noop"))).toBe(true);
+  });
+
+  test("protected shortcut warnings include ownership reason", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { commands: { openLineBelow: ["ctrl+p"] } } },
+    });
+
+    expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("protected key ctrl+p (Pi command/model palette)"),
       ),
     ).toBe(true);
   });

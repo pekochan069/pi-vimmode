@@ -7,6 +7,7 @@ import type {
   EditResult,
   Position,
   ResolvedVimEditorOptions,
+  VimDiagnostics,
   VimMode,
 } from "./types.ts";
 
@@ -39,7 +40,7 @@ const KEY = {
   wordLeft: "\x1bb",
   wordRight: "\x1bf",
   undo: "\x1f",
-} as const satisfies Record<AdapterCommand, string>;
+} as const satisfies Record<Exclude<AdapterCommand, "redo">, string>;
 
 function fitWidth(text: string, width: number): string {
   if (width <= 0) return "";
@@ -47,9 +48,15 @@ function fitWidth(text: string, width: number): string {
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
-function renderExRow(state: ModalState, width: number): string | undefined {
+function renderWorkbenchRow(state: ModalState, width: number): string | undefined {
   if (width <= 0) return undefined;
-  const text = state.pendingEx ? `:${state.pendingEx.command}` : state.exMessage?.text;
+  const text = state.pendingSearch
+    ? `${state.pendingSearch.direction === "backward" ? "?" : "/"}${state.pendingSearch.query}`
+    : state.pendingEx?.preview
+      ? state.pendingEx.preview.message
+      : state.pendingEx
+        ? `:${state.pendingEx.command}`
+        : state.exMessage?.text;
   return text === undefined ? undefined : fitWidth(text, width);
 }
 
@@ -90,6 +97,7 @@ export function fitStatusBorder(
 
 function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
   return {
+    preset: options.preset,
     startMode: options.startMode,
     cursor: { ...options.cursor },
     keymap: options.keymap,
@@ -97,14 +105,26 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
     macros: options.macros,
     marks: options.marks,
     search: options.search,
+    feedback: options.feedback,
     promptStructures: options.promptStructures,
     promptTransforms: options.promptTransforms,
   };
 }
 
+type RedoSnapshot = {
+  text: string;
+  cursor: Position;
+};
+
+function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
+  return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
+}
+
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
+  private readonly diagnostics: VimDiagnostics;
+  private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private isMacroReplaying = false;
@@ -114,9 +134,11 @@ export class VimEditor extends CustomEditor {
     theme: EditorTheme,
     keybindings: KeybindingsManager,
     options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+    diagnostics: VimDiagnostics = { warnings: [] },
   ) {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
+    this.diagnostics = { warnings: [...diagnostics.warnings] };
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -147,14 +169,22 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
-    const update = handleModalInput(this.modalState, this.snapshot(), this.options, data);
+    const update = handleModalInput(
+      this.modalState,
+      this.snapshot(),
+      this.options,
+      data,
+      this.diagnostics,
+    );
     this.modalState = update.state;
     this.applyEffects(update.effects);
   }
 
   override render(width: number): string[] {
-    const exRow = renderExRow(this.modalState, width);
-    const terminalRows = exRow ? Math.max(1, (this.terminalRows() ?? 24) - 1) : this.terminalRows();
+    const workbenchRow = renderWorkbenchRow(this.modalState, width);
+    const terminalRows = workbenchRow
+      ? Math.max(1, (this.terminalRows() ?? 24) - 1)
+      : this.terminalRows();
     const lines = this.renderEditorLines(width, terminalRows);
     if (lines.length === 0 || width <= 0) return lines;
 
@@ -170,7 +200,7 @@ export class VimEditor extends CustomEditor {
       ui: uiForOptions(this.options),
     });
     lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
-    if (exRow) lines.push(exRow);
+    if (workbenchRow) lines.push(workbenchRow);
     return lines;
   }
 
@@ -181,13 +211,23 @@ export class VimEditor extends CustomEditor {
       cursor: this.getCursor(),
       isAutocompleteOpen: this.isShowingAutocomplete(),
       isMacroReplaying: this.isMacroReplaying,
+      isRedoAvailable: this.redoStack.length > 0,
     };
   }
 
   private searchRenderInput() {
-    if (!this.modalState.searchHighlight) return undefined;
     const search = searchForOptions(this.options);
     if (!search.highlight) return undefined;
+    const preview = this.modalState.pendingEx?.preview;
+    if (preview) {
+      return {
+        query: "",
+        ranges: preview.ranges,
+        highlightCurrent: false,
+        maxHighlights: search.maxHighlights,
+      };
+    }
+    if (!this.modalState.searchHighlight) return undefined;
     return {
       query: this.modalState.searchHighlight.query,
       current: this.modalState.searchHighlight.current,
@@ -226,7 +266,12 @@ export class VimEditor extends CustomEditor {
       });
     }
 
-    if (this.searchRenderInput() || this.modalState.pendingEx || this.modalState.exMessage) {
+    if (
+      this.searchRenderInput() ||
+      this.modalState.pendingSearch ||
+      this.modalState.pendingEx ||
+      this.modalState.exMessage
+    ) {
       return renderPromptEditor({
         snapshot: {
           lines: this.getLines(),
@@ -255,14 +300,18 @@ export class VimEditor extends CustomEditor {
 
   private applyEffect(effect: ModalEffect): void {
     switch (effect.type) {
-      case "delegate":
+      case "delegate": {
+        const before = this.redoSnapshot();
         super.handleInput(effect.input);
+        this.clearRedoAfterTextChange(before);
         return;
+      }
       case "adapterCommand":
-        super.handleInput(KEY[effect.command]);
+        this.applyAdapterCommand(effect.command);
         return;
       case "edit":
         this.applyEdit(effect.result);
+        if (effect.result.changed) this.clearRedoStack();
         return;
       case "restoreCursor":
         this.restoreCursor(effect.position);
@@ -277,6 +326,47 @@ export class VimEditor extends CustomEditor {
         this.invalidate();
         return;
     }
+  }
+
+  private applyAdapterCommand(command: AdapterCommand): void {
+    if (command === "undo") {
+      this.applyUndo();
+      return;
+    }
+    if (command === "redo") {
+      this.applyRedo();
+      return;
+    }
+    super.handleInput(KEY[command]);
+  }
+
+  private redoSnapshot(): RedoSnapshot {
+    return { text: this.getText(), cursor: this.getCursor() };
+  }
+
+  private clearRedoStack(): void {
+    this.redoStack.length = 0;
+  }
+
+  private clearRedoAfterTextChange(before: RedoSnapshot): void {
+    if (this.getText() !== before.text) this.clearRedoStack();
+  }
+
+  private applyUndo(): void {
+    const before = this.redoSnapshot();
+    super.handleInput(KEY.undo);
+    if (!sameRedoSnapshot(before, this.redoSnapshot())) this.redoStack.push(before);
+  }
+
+  private applyRedo(): void {
+    const snapshot = this.redoStack.pop();
+    if (!snapshot) {
+      this.invalidate();
+      return;
+    }
+    this.setText(snapshot.text);
+    this.restoreCursor(snapshot.cursor);
+    this.invalidate();
   }
 
   private playMacro(inputs: readonly string[]): void {

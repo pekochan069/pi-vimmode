@@ -99,6 +99,8 @@ See [`docs/settings.md`](docs/settings.md) for the full default reference and al
 
 If the extension blocks editing or configuration goes wrong:
 
+- Run `/vimmode off` to restore Pi's previous editor for the current extension runtime.
+- Run `/vimmode on` or `/vimmode` to enable the Vim editor again.
 - Start with [`docs/features.md#disable-or-recover`](docs/features.md#disable-or-recover).
 - Use `pi list` to inspect installed extensions.
 - Use `pi remove` or `pi uninstall` with the installed extension identifier to remove it.

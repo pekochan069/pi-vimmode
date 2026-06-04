@@ -29,6 +29,8 @@ type LayoutLine = {
 export type SearchHighlightRenderInput = {
   query: string;
   current?: Position;
+  currentRange?: TextRange;
+  ranges?: TextRange[];
   highlightCurrent: boolean;
   maxHighlights: number;
 };
@@ -159,12 +161,16 @@ function searchRangeAt(
   col: number,
 ): "current" | "other" | undefined {
   const current = options.search?.current;
-  if (options.search?.highlightCurrent && current) {
-    const currentRange = {
-      start: current,
-      end: { line: current.line, col: current.col + options.search.query.length - 1 },
-    };
-    if (isCellInRange(currentRange, lineIndex, col)) return "current";
+  if (options.search?.highlightCurrent) {
+    const currentRange =
+      options.search.currentRange ??
+      (current
+        ? {
+            start: current,
+            end: { line: current.line, col: current.col + options.search.query.length - 1 },
+          }
+        : undefined);
+    if (currentRange && isCellInRange(currentRange, lineIndex, col)) return "current";
   }
   return options.searchRanges.some((range) => isCellInRange(range, lineIndex, col))
     ? "other"
@@ -320,6 +326,7 @@ function createSearchRanges(
   search: SearchHighlightRenderInput | undefined,
 ): TextRange[] {
   if (!search) return [];
+  if (search.ranges) return search.ranges.slice(0, Math.max(0, search.maxHighlights));
   return findSearchHighlightRanges(text, search.query, Math.max(0, search.maxHighlights));
 }
 

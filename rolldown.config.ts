@@ -1,5 +1,5 @@
-import { builtinModules } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
 
@@ -40,10 +40,12 @@ export default defineConfig({
   },
   external: isExternal,
   output: {
+    cleanDir: true,
+    codeSplitting: false,
     dir: distDir,
     entryFileNames: "index.js",
     format: "esm",
-    codeSplitting: false,
+    minify: true,
   },
   plugins: [
     {

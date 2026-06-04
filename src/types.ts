@@ -6,7 +6,20 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 export type CursorStyles = Record<VimMode, CursorStyle>;
 
-export type VimOperatorAction = "delete" | "change" | "yank";
+export type VimPreset = "minimal" | "prompt-safe" | "vim-heavy";
+
+export type VimNoopFeedback = "off" | "status";
+
+export type VimFeedbackOptions = {
+  noop: VimNoopFeedback;
+};
+
+export type VimDiagnostics = {
+  warnings: readonly string[];
+};
+
+export type VimMotionOperatorAction = "delete" | "change" | "yank";
+export type VimOperatorAction = VimMotionOperatorAction | "indent" | "dedent";
 
 export type VimMotionAction =
   | "left"
@@ -53,11 +66,13 @@ export type VimCommandAction =
   | "repeatCharSearch"
   | "repeatCharSearchReverse"
   | "startSearch"
+  | "startSearchBackward"
   | "repeatSearch"
   | "repeatSearchReverse"
   | "startExCommand"
   | "repeatChange"
-  | "undo";
+  | "undo"
+  | "redo";
 
 export type VimTextObjectKind = "inner" | "around";
 
@@ -107,7 +122,7 @@ export type VimKeymapOptions = {
   macros?: VimMacroKeymapOptions;
   marks?: VimMarkKeymapOptions;
   textObjects?: VimTextObjectKeymapOptions;
-  operatorMotions?: Partial<Record<VimOperatorAction, readonly VimMotionAction[]>>;
+  operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
@@ -124,7 +139,7 @@ export type ResolvedVimKeymap = {
   macros: ResolvedVimMacroKeymap;
   marks: ResolvedVimMarkKeymap;
   textObjects: ResolvedVimTextObjectKeymap;
-  operatorMotions: Record<VimOperatorAction, readonly VimMotionAction[]>;
+  operatorMotions: Record<VimMotionOperatorAction, readonly VimMotionAction[]>;
 };
 
 export type VimSearchOptions = {
@@ -202,6 +217,7 @@ export type VimPromptTransformEditorOptions = {
 };
 
 export type VimEditorOptions = {
+  preset?: VimPreset;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: VimKeymapOptions;
@@ -209,11 +225,13 @@ export type VimEditorOptions = {
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;
+  feedback?: Partial<VimFeedbackOptions>;
   promptStructures?: VimPromptStructureEditorOptions;
   promptTransforms?: VimPromptTransformEditorOptions;
 };
 
 export type ResolvedVimEditorOptions = {
+  preset?: VimPreset;
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;
@@ -221,6 +239,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
   promptTransforms?: ResolvedVimPromptTransforms;
 };

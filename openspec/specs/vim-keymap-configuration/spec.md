@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -206,3 +204,258 @@ The Vim keymap configuration SHALL expose Ex command-line entry as a semantic no
 
 - **WHEN** the editor is in normal mode with a pending numeric count and receives the resolved Ex command-line entry key
 - **THEN** Ex command-line mode opens with a concrete clamped numeric range derived from the current prompt line and count
+
+### Requirement: Shift operators participate in semantic keymap configuration
+
+The Vim editor SHALL expose line-only shift operators through the semantic keymap model while preserving the default Vim keys.
+
+#### Scenario: Default shift operator keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting
+- **THEN** the resolved keymap binds `indent` to `>` and `dedent` to `<`
+
+#### Scenario: Configured indent operator works in normal mode
+
+- **WHEN** `piVimMode.keymap.operators.indent` is set to a valid key sequence and the editor is in normal mode
+- **THEN** pressing that key sequence twice indents the current prompt line instead of requiring the default `>>` keys
+
+#### Scenario: Configured dedent operator works in visual mode
+
+- **WHEN** `piVimMode.keymap.operators.dedent` is set to a valid key sequence and the editor is in a visual mode with an active selection
+- **THEN** pressing that key sequence dedents all prompt lines touched by the selection instead of requiring the default `<` key
+
+#### Scenario: Invalid shift operator binding falls back safely
+
+- **WHEN** `piVimMode.keymap.operators.indent` or `piVimMode.keymap.operators.dedent` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored, a warning is recorded, and sibling keymap fields remain usable
+
+### Requirement: Shift operators remain line-only under keymap configuration
+
+The Vim editor SHALL NOT treat shift operators as configurable motion, search, text-object, or mark operators until range-shift semantics are explicitly specified.
+
+#### Scenario: Shift operator motion configuration is rejected
+
+- **WHEN** `piVimMode.keymap.operatorMotions.indent` or `piVimMode.keymap.operatorMotions.dedent` is configured
+- **THEN** the unsupported operator-motion field is ignored with a warning and configured delete/change/yank operator-motion fields remain usable
+
+#### Scenario: Configured shift operator motion remains unsupported
+
+- **WHEN** the indent or dedent operator has a configured key sequence and the user presses that operator followed by a configured motion key
+- **THEN** the pending operator clears, prompt text is unchanged, registers are unchanged, and the motion key is not inserted into the prompt
+
+#### Scenario: Settings reference documents line-only shift operators
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.operators.indent`, `piVimMode.keymap.operators.dedent`, their defaults, and the fact that `operatorMotions` applies only to motion-capable delete/change/yank operators
+
+### Requirement: Redo command participates in semantic keymap configuration
+
+The Vim editor SHALL expose redo as a finite semantic command in `piVimMode.keymap.commands` while preserving the default Vim redo binding.
+
+#### Scenario: Default redo keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode with redo state available
+- **THEN** pressing `Ctrl+R` invokes redo
+
+#### Scenario: Configured redo command is used
+
+- **WHEN** `piVimMode.keymap.commands.redo` is set to a valid key sequence and the editor is in normal mode with redo state available
+- **THEN** pressing that configured key sequence invokes redo instead of requiring the default `Ctrl+R` key
+
+#### Scenario: Invalid redo binding falls back safely
+
+- **WHEN** `piVimMode.keymap.commands.redo` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored, a warning is recorded, and sibling keymap fields remain usable
+
+#### Scenario: Redo configuration survives live editor construction
+
+- **WHEN** a live `VimEditor` is constructed with resolved keymap options that include `commands.redo`
+- **THEN** the editor uses the resolved redo binding without dropping other command, motion, operator, macro, mark, search, or UI options
+
+### Requirement: Explicit control-key ownership includes normal-mode redo
+
+The Vim keymap configuration SHALL continue protecting Pi-owned shortcuts while allowing the extension to explicitly own `Ctrl+R` for normal-mode redo.
+
+#### Scenario: Normal mode redo control is handled by Vim mode
+
+- **WHEN** the editor is in normal mode and the user presses `Ctrl+R` with default keymap settings
+- **THEN** the Vim editor treats the input as redo rather than delegating it to Pi
+
+#### Scenario: Insert mode remains Pi-owned for redo control
+
+- **WHEN** the editor is in insert mode and the user presses `Ctrl+R`
+- **THEN** input delegates to Pi default editor behavior unless insert-mode `Ctrl+R` is explicitly supported by pi-vimmode in a future change
+
+#### Scenario: Other protected shortcuts remain protected
+
+- **WHEN** `piVimMode.keymap` attempts to bind a protected Pi shortcut that pi-vimmode does not explicitly own
+- **THEN** the binding is ignored or rejected with a warning and that shortcut continues to delegate to Pi behavior
+
+### Requirement: Redo keymap documentation is updated and validated
+
+The change SHALL include tests and settings documentation for configurable redo behavior and shortcut ownership.
+
+#### Scenario: Config validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover default redo keymap resolution, configured redo command execution, invalid redo binding fallback, live editor option propagation, and protected shortcut handling
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the TypeScript project compiles without type errors
+
+#### Scenario: Settings reference documents redo command
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.commands.redo`, the default `ctrl+r` binding, and normal-mode shortcut ownership
+
+### Requirement: Backward search entry participates in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose backward prompt search entry as a finite semantic command while preserving the default `?` binding.
+
+#### Scenario: Default backward search keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode
+- **THEN** pressing `?` enters backward prompt search workbench mode
+
+#### Scenario: Configured backward search key is used
+
+- **WHEN** `piVimMode.keymap.commands.startSearchBackward` is set to a valid key sequence and the editor is in normal mode
+- **THEN** that key sequence enters backward prompt search workbench mode instead of requiring the default `?` key
+
+#### Scenario: Configured backward search works from visual modes
+
+- **WHEN** `piVimMode.keymap.commands.startSearchBackward` is set to a valid key sequence and the editor is in a visual mode with an active selection
+- **THEN** that key sequence enters backward prompt search workbench mode and a completed matching search extends the active visual selection
+
+#### Scenario: Configured backward search works after operators
+
+- **WHEN** `piVimMode.keymap.commands.startSearchBackward` is set to a valid key sequence and the editor has a pending delete, change, or yank operator
+- **THEN** that key sequence starts backward search as an operator motion target
+
+#### Scenario: Insert mode remains Pi-owned for backward search key
+
+- **WHEN** the editor is in insert mode and the user presses `?` or a configured backward search key
+- **THEN** input delegates to Pi default editor behavior unless that insert-mode input is otherwise supported by pi-vimmode
+
+#### Scenario: Invalid backward search binding falls back safely
+
+- **WHEN** `piVimMode.keymap.commands.startSearchBackward` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored, a warning is recorded, and sibling keymap fields remain usable
+
+#### Scenario: Backward search configuration survives live editor construction
+
+- **WHEN** a live `VimEditor` is constructed with resolved keymap options that include `commands.startSearchBackward`
+- **THEN** the editor uses the resolved backward search binding without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
+
+### Requirement: Workbench history controls remain finite and non-recursive
+
+The Vim keymap configuration SHALL NOT introduce recursive mappings, timeout behavior, or Pi-owned shortcut capture for workbench history navigation.
+
+#### Scenario: Workbench history controls are active only while workbench input is pending
+
+- **WHEN** the user presses a resolved workbench history navigation key while no search or Ex workbench input is pending
+- **THEN** the key follows the existing normal, visual, insert, or Pi-delegated behavior for the current mode
+
+#### Scenario: Protected shortcuts remain protected outside explicit ownership
+
+- **WHEN** `piVimMode.keymap` attempts to bind a protected Pi shortcut that pi-vimmode does not explicitly own for normal-mode Vim behavior
+- **THEN** the binding is ignored or rejected with a warning and that shortcut continues to delegate to Pi behavior
+
+#### Scenario: Regex mode syntax is not a keymap action
+
+- **WHEN** the user configures keymap commands, motions, operators, macros, marks, or text objects
+- **THEN** regex opt-in remains controlled by the documented search prefix and Ex substitution flag rather than recursive or expression-based key mappings
+
+### Requirement: Backward search keymap documentation is updated and validated
+
+The change SHALL include tests and settings documentation for configurable backward search behavior and finite workbench controls.
+
+#### Scenario: Config validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover default backward search keymap resolution, configured backward search command execution, visual/operator contexts, invalid binding fallback, live editor option propagation, and protected shortcut handling
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the TypeScript project compiles without type errors
+
+#### Scenario: Settings reference documents backward search command
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.commands.startSearchBackward`, the default `?` binding, insert-mode delegation, and finite non-recursive workbench history behavior
+
+### Requirement: Keymap introspection uses resolved semantic bindings
+
+The Vim editor SHALL expose the resolved semantic keymap to diagnostic helpers so users can inspect the effective bindings after defaults, presets, global settings, project settings, and valid overrides are applied.
+
+#### Scenario: Default binding is reported
+
+- **WHEN** Pi starts with no `piVimMode.keymap` customization and the editor executes `:keymap redo`
+- **THEN** the editor reports the default redo binding from the resolved normal-mode keymap
+
+#### Scenario: Configured binding is reported
+
+- **WHEN** `piVimMode.keymap.commands.redo` is set to a valid non-conflicting key sequence and the editor executes `:keymap redo`
+- **THEN** the editor reports the configured binding instead of only the built-in default
+
+#### Scenario: Ignored invalid binding does not appear effective
+
+- **WHEN** a configured keymap field is ignored because it is unsupported, protected, or conflicting and the editor executes `:keymap` for that action
+- **THEN** the editor reports the effective fallback binding and the ignored field remains visible through diagnostics such as `:vimdoctor` or `:mapcheck` when warning details are available
+
+### Requirement: Protected Pi shortcuts have explainable ownership
+
+The keymap configuration SHALL retain an authoritative protected shortcut catalog that is used by validation, runtime delegation, diagnostics, and documentation.
+
+#### Scenario: Protected key warning includes a reason
+
+- **WHEN** `piVimMode.keymap` attempts to bind a Pi-owned protected shortcut such as `ctrl+p`
+- **THEN** the binding is ignored or rejected with a warning that identifies the key as protected and preserves valid sibling keymap fields
+
+#### Scenario: Mapcheck explains protected shortcut behavior
+
+- **WHEN** the editor executes `:mapcheck ctrl+p`
+- **THEN** the editor reports that `ctrl+p` is protected for Pi behavior and is not available as a pi-vimmode keymap binding
+
+#### Scenario: Explicitly owned control shortcut remains configurable
+
+- **WHEN** a shortcut is explicitly owned by pi-vimmode in normal mode, such as normal-mode redo on `ctrl+r`
+- **THEN** keymap validation does not reject that shortcut solely because it is a control-key sequence
+
+#### Scenario: Insert mode Pi shortcut behavior is preserved
+
+- **WHEN** the editor is in insert mode and the user presses a Pi-owned shortcut that pi-vimmode does not explicitly support in insert mode
+- **THEN** the shortcut delegates to Pi behavior according to existing protected shortcut rules
+
+### Requirement: Customization presets resolve safely
+
+The Vim editor SHALL support curated customization presets as typed option baselines that compose with explicit field-level settings.
+
+#### Scenario: Valid preset applies baseline options
+
+- **WHEN** `piVimMode.preset` is set to `minimal`, `prompt-safe`, or `vim-heavy`
+- **THEN** settings resolution applies the selected preset baseline before explicit fields from the same settings object
+
+#### Scenario: Explicit fields override preset fields
+
+- **WHEN** a preset sets a keymap, UI, feedback, startup, or cursor option and the same settings object provides an explicit valid value for that field
+- **THEN** the explicit value wins while unrelated preset fields remain applied
+
+#### Scenario: Project preset overrides global preset field-by-field
+
+- **WHEN** global settings select one preset and project settings select another preset or explicit sibling fields
+- **THEN** project settings override global settings according to existing field-by-field precedence without discarding valid global fields that are not overridden
+
+#### Scenario: Invalid preset falls back safely
+
+- **WHEN** `piVimMode.preset` contains an unsupported value
+- **THEN** settings resolution records a warning, ignores the invalid preset, preserves valid sibling fields, and constructs a live editor with valid resolved options
+
+#### Scenario: Presets avoid protected Pi shortcuts
+
+- **WHEN** any built-in preset is resolved
+- **THEN** the resulting keymap does not bind Pi-owned protected shortcuts unless pi-vimmode explicitly owns that shortcut for the relevant mode
+

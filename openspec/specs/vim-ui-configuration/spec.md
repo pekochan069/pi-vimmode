@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Status UI items are configurable
 
 The Vim editor SHALL read `piVimMode.ui.status` to determine which status items are rendered and in what order while preserving the current status UI by default.
@@ -220,3 +218,143 @@ The Vim editor SHALL render the dedicated Ex command-line row without breaking w
 
 - **WHEN** a transient Ex error or success message is visible in the dedicated Ex row
 - **THEN** the next handled input clears the message and restores the prompt viewport to its normal height unless Ex command-line mode is active again
+
+### Requirement: Shared workbench row renders search and Ex input width-safely
+
+The Vim editor SHALL render pending `/`, `?`, and `:` workbench input in a dedicated width-safe row that composes with the prompt viewport and existing Vim UI.
+
+#### Scenario: Forward search workbench row is visible
+
+- **WHEN** forward search input is pending
+- **THEN** the rendered editor includes a width-safe workbench row showing the `/` prefix and current pending search text without inserting that text into the prompt buffer
+
+#### Scenario: Backward search workbench row is visible
+
+- **WHEN** backward search input is pending
+- **THEN** the rendered editor includes a width-safe workbench row showing the `?` prefix and current pending search text without inserting that text into the prompt buffer
+
+#### Scenario: Ex workbench row remains visible
+
+- **WHEN** Ex command-line input is pending
+- **THEN** the rendered editor includes a width-safe workbench row showing the `:` prefix and current pending Ex command text
+
+#### Scenario: Workbench row shrinks prompt viewport
+
+- **WHEN** a search or Ex workbench row is visible for active input, preview, success, or error messaging
+- **THEN** the prompt editor viewport uses one fewer terminal row so total rendering remains bounded
+
+#### Scenario: Long workbench text is truncated safely
+
+- **WHEN** pending workbench text is longer than the available terminal width
+- **THEN** the workbench row truncates or scrolls the displayed text without emitting lines wider than the terminal width
+
+### Requirement: Workbench messages render preview, success, and error states safely
+
+The Vim editor SHALL render workbench feedback for search errors, Ex errors, Ex success counts, and substitution match previews without breaking visual selection, search highlights, or cursor rendering.
+
+#### Scenario: Substitution match preview is visible
+
+- **WHEN** a substitution preview is active
+- **THEN** matched target text is highlighted and the workbench row shows a readable match count plus guidance that `Enter` applies while `Esc` cancels
+
+#### Scenario: Preview message is replaced by apply result
+
+- **WHEN** a substitution preview is active and the user confirms it with `Enter` or `Return`
+- **THEN** the preview message is replaced by the normal Ex success count message after the substitution applies
+
+#### Scenario: Invalid regex search message is visible
+
+- **WHEN** a pending regex search fails because the pattern is invalid or exceeds bounds
+- **THEN** the workbench row shows a readable error message until the next handled input clears it
+
+#### Scenario: Workbench message clears on next handled input
+
+- **WHEN** a transient workbench error or success message is visible
+- **THEN** the next handled input clears the message and restores the prompt viewport to its normal height unless workbench input is active again
+
+#### Scenario: Visual selection composes with workbench row
+
+- **WHEN** search or Ex workbench input was opened from a visual mode with an active selection
+- **THEN** the prompt still renders the visual selection and the workbench row renders below the prompt box
+
+#### Scenario: Search highlights compose with workbench row
+
+- **WHEN** prompt search highlights are visible and search or Ex workbench input is active
+- **THEN** search highlights remain visible in the prompt render and the workbench row renders below the prompt box
+
+### Requirement: Workbench UI behavior is documented and validated
+
+The change SHALL include automated rendering tests and user-facing documentation for shared workbench display behavior.
+
+#### Scenario: Render validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** render tests cover `/`, `?`, and `:` workbench rows, long pending text, substitution match preview messages/highlights, transient regex errors, viewport shrink behavior, visual selection composition, search highlight composition, and narrow terminal widths
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the extension TypeScript compiles without type errors
+
+#### Scenario: User docs describe workbench row
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents where `/`, `?`, `:` workbench input, substitution match previews, counts, and errors appear and how those rows affect prompt viewport height
+
+### Requirement: Runtime informational messages are width-safe
+
+The Vim editor SHALL render diagnostic and optional feedback messages in the existing bounded message row without overflowing the editor viewport.
+
+#### Scenario: Diagnostic message renders below prompt
+
+- **WHEN** a diagnostic command such as `:vimdoctor`, `:keymap`, `:mapcheck`, or `:actions` completes with a message
+- **THEN** the rendered editor includes one width-safe row below the prompt box showing the diagnostic message
+
+#### Scenario: Diagnostic message shrinks prompt viewport
+
+- **WHEN** a diagnostic or feedback message row is visible
+- **THEN** the prompt editor viewport uses one fewer terminal row so total rendering remains bounded
+
+#### Scenario: Long diagnostic message is fitted
+
+- **WHEN** a diagnostic or feedback message is longer than the available terminal width
+- **THEN** the rendered row is truncated or fitted according to existing width-safety behavior without corrupting prompt text rendering
+
+### Requirement: Transient messages support info feedback
+
+The Vim editor SHALL support informational transient messages in addition to existing Ex success and error messages.
+
+#### Scenario: Info message clears on next handled input
+
+- **WHEN** an informational diagnostic or no-op feedback message is visible and the user provides the next handled input
+- **THEN** the informational message clears using the same transient lifecycle as existing Ex messages
+
+#### Scenario: Existing Ex success and error messages remain supported
+
+- **WHEN** an existing editing Ex command succeeds or fails
+- **THEN** the editor continues to show the existing success or error message behavior without requiring no-op feedback to be enabled
+
+#### Scenario: Message kind does not alter prompt editing state
+
+- **WHEN** a success, error, or info message is displayed
+- **THEN** the message kind affects only the transient message content and does not itself edit prompt text, registers, marks, macros, search state, or visual selection
+
+### Requirement: No-op feedback is configurable
+
+The Vim editor SHALL expose optional no-op feedback settings without changing the quiet default user interface.
+
+#### Scenario: Feedback disabled preserves quiet no-ops
+
+- **WHEN** no-op feedback is disabled and a normal-mode input is safely ignored
+- **THEN** the editor does not render a new informational feedback message
+
+#### Scenario: Feedback enabled shows bounded explanation
+
+- **WHEN** no-op feedback is enabled and a confusing no-op occurs, such as an invalid pending operator or protected shortcut delegation
+- **THEN** the editor shows one transient explanatory message in the bounded message row
+
+#### Scenario: Invalid feedback setting falls back safely
+
+- **WHEN** the no-op feedback setting has an unsupported type or value
+- **THEN** settings resolution records a warning, ignores the invalid field, preserves valid sibling fields, and the editor uses the default quiet feedback behavior
+

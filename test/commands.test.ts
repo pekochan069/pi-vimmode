@@ -26,6 +26,28 @@ describe("normal command parser", () => {
     expect(parseNormalCommand("g", "g")).toEqual({ type: "command", command: "gg" });
   });
 
+  test("resolves shift operators as line-only semantic commands", () => {
+    expect(resolveNormalCommand(">", undefined)).toEqual({ type: "pending", pending: ">" });
+    expect(resolveNormalCommand("<", undefined)).toEqual({ type: "pending", pending: "<" });
+    expect(resolveNormalCommand(">", ">")).toEqual({ type: "lineCommand", operator: "indent" });
+    expect(resolveNormalCommand("<", "<")).toEqual({ type: "lineCommand", operator: "dedent" });
+
+    const count = resolveNormalCommand("3", undefined);
+    const pendingIndent = resolveNormalCommand(">", count.type === "pending" ? count.pending : "");
+    expect(
+      resolveNormalCommand(">", pendingIndent.type === "pending" ? pendingIndent.pending : ""),
+    ).toEqual({ type: "lineCommand", operator: "indent", count: 3 });
+
+    const dedentCount = resolveNormalCommand("2", undefined);
+    const pendingDedent = resolveNormalCommand(
+      "<",
+      dedentCount.type === "pending" ? dedentCount.pending : "",
+    );
+    expect(
+      resolveNormalCommand("<", pendingDedent.type === "pending" ? pendingDedent.pending : ""),
+    ).toEqual({ type: "lineCommand", operator: "dedent", count: 2 });
+  });
+
   test("resolves operator motions", () => {
     for (const operator of ["d", "c", "y"] as const) {
       for (const motion of operatorMotions) {
@@ -43,6 +65,17 @@ describe("normal command parser", () => {
     expect(parseNormalCommand("p", "c")).toEqual({ type: "invalid" });
     expect(parseNormalCommand("d", "y")).toEqual({ type: "invalid" });
     expect(parseNormalCommand("x", "g")).toEqual({ type: "invalid" });
+  });
+
+  test("shift operators reject unsupported targets safely", () => {
+    expect(resolveNormalCommand("w", ">")).toEqual({ type: "invalid" });
+
+    const indentInner = resolveNormalCommand("i", ">");
+    expect(indentInner).toEqual({ type: "invalid" });
+
+    expect(resolveNormalCommand("/", ">")).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand("'", ">")).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand("w", "<")).toEqual({ type: "invalid" });
   });
 
   test("non-command key is not parsed", () => {
@@ -108,6 +141,7 @@ describe("normal command parser", () => {
         openLineBelow: ["n"],
         toggleCase: ["~"],
         visualBlock: ["ctrl+v"],
+        redo: ["ctrl+r"],
       },
     };
 
@@ -132,6 +166,28 @@ describe("normal command parser", () => {
       type: "command",
       command: "visualBlock",
     });
+    expect(resolveNormalCommand("ctrl+r", undefined, keymap)).toEqual({
+      type: "command",
+      command: "redo",
+    });
+  });
+
+  test("resolves configured shift operator bindings as line-only", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, indent: ["]"], dedent: ["["] },
+    };
+
+    expect(resolveNormalCommand("]", undefined, keymap)).toEqual({ type: "pending", pending: "]" });
+    expect(resolveNormalCommand("]", "]", keymap)).toEqual({
+      type: "lineCommand",
+      operator: "indent",
+    });
+    expect(resolveNormalCommand("[", "[", keymap)).toEqual({
+      type: "lineCommand",
+      operator: "dedent",
+    });
+    expect(resolveNormalCommand("w", "]", keymap)).toEqual({ type: "invalid" });
   });
 
   test("resolves finite multi-key sequences and invalid pending prefixes", () => {
@@ -225,7 +281,9 @@ describe("normal command parser", () => {
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordEnd", count: 4 });
   });
 
-  test("resolves prompt search commands", () => {
+  test("resolves prompt search commands and undo redo", () => {
+    expect(resolveNormalCommand("u", undefined)).toEqual({ type: "command", command: "undo" });
+    expect(resolveNormalCommand("ctrl+r", undefined)).toEqual({ type: "command", command: "redo" });
     expect(resolveNormalCommand(":", undefined)).toEqual({
       type: "command",
       command: "startExCommand",
@@ -233,6 +291,10 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("/", undefined)).toEqual({
       type: "command",
       command: "startSearch",
+    });
+    expect(resolveNormalCommand("?", undefined)).toEqual({
+      type: "command",
+      command: "startSearchBackward",
     });
     expect(resolveNormalCommand("n", undefined)).toEqual({
       type: "command",
@@ -245,6 +307,13 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("/", "d")).toEqual({
       type: "operatorSearch",
       operator: "delete",
+      direction: "forward",
+      count: undefined,
+    });
+    expect(resolveNormalCommand("?", "d")).toEqual({
+      type: "operatorSearch",
+      operator: "delete",
+      direction: "backward",
       count: undefined,
     });
   });

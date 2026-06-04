@@ -65,12 +65,22 @@
   - Goal: make pi-vimmode better for agent prompt editing, not just broader Vim parity.
   - Complexity: Medium-High. Confidence: 88%.
 
-- [ ] Safe Ex/Search workbench
+- [x] `>` and `<`
+
+- [x] ctrl+r (redo)
+
+- [x] create `vimmode` command to pi that can toggle pi-vimmode
+
+- [x] change default UI settings
+  - set cursorPosition enabled to true by default
+  - set status.items to be ["mode", "pendingOperator", "selection", "cursorPosition"] by default
+
+- [x] Safe Ex/Search workbench
   - Add shared `/` and `:` mini-editor with history, backward `?`, previous-query recall, bounded regex/literal modes, substitution preview/counts.
   - Keep finite scope; no full Ex/Vimscript parity.
   - Complexity: High. Confidence: 84%.
 
-- [ ] Self-explaining customization suite
+- [x] Self-explaining customization suite
   - Add `:vimdoctor`, `:keymap`, `:mapcheck`, protected Pi shortcut explanations, curated presets (`minimal`, `prompt-safe`, `vim-heavy`), optional no-op feedback, and searchable `:actions` palette.
   - Goal: make custom keybindings/debugging usable without hidden `vim ⚠` confusion.
   - Complexity: Medium. Confidence: 82%.

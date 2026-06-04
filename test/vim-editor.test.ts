@@ -1,13 +1,16 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "bun:test";
 
-import type { ResolvedVimEditorOptions, VimMode } from "../src/types.ts";
+import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
-function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
+function createEditor(
+  options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+  diagnostics: VimDiagnostics = { warnings: [] },
+) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
   let hardwareCursorVisible = false;
@@ -38,7 +41,7 @@ function createEditor(options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS) {
     },
   } as any;
   return {
-    editor: new VimEditor(tui, theme, keybindings, options),
+    editor: new VimEditor(tui, theme, keybindings, options, diagnostics),
     writes,
     hardwareCursorChanges,
     getHardwareCursorVisible: () => hardwareCursorVisible,
@@ -57,6 +60,7 @@ function runEx(editor: VimEditor, command: string) {
   editor.handleInput(":");
   for (const char of command) editor.handleInput(char);
   editor.handleInput("\r");
+  if (/^\s*(?:%|\d|\.|\$|'|<|>|,)*s(?:ubstitute)?\b/.test(command)) editor.handleInput("\r");
 }
 
 function expectEditorState(
@@ -106,6 +110,51 @@ describe("vim editor integration", () => {
     const message = editor.render(20);
     expect(message.at(-1)).toContain("Pattern not found: x");
     expectRenderedWidth(message, 20);
+  });
+
+  test("diagnostic and feedback info rows render width-safely below prompt", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal", feedback: { noop: "status" } },
+      {
+        warnings: [
+          "project settings: piVimMode.keymap.commands.openLineBelow contains protected key ctrl+p",
+        ],
+      },
+    );
+    const baseline = editor.render(24);
+
+    runEx(editor, "vimdoctor");
+    const doctor = editor.render(24);
+    expect(doctor.length).toBe(baseline.length + 1);
+    expect(doctor.at(-1)).toContain("vimdoctor: 1 warning");
+    expectRenderedWidth(doctor, 24);
+
+    editor.handleInput("z");
+    const feedback = editor.render(16);
+    expect(feedback.at(-1)).toContain("unmapped key");
+    expectRenderedWidth(feedback, 16);
+  });
+
+  test("search and substitution preview rows render width-safely below prompt", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(20);
+
+    editor.handleInput("/");
+    typeKeys(editor, ["o", "l", "d"]);
+    const search = editor.render(20);
+    expect(search.length).toBe(baseline.length + 1);
+    expect(search.at(-1)).toContain("/old");
+    expectRenderedWidth(search, 20);
+    editor.handleInput("\x1b");
+
+    editor.setText("old old");
+    editor.handleInput(":");
+    typeKeys(editor, ["%", "s", "/", "o", "l", "d", "/", "n", "e", "w", "/", "g", "\r"]);
+    const preview = editor.render(80);
+    expect(preview.at(-1)).toContain("2 matches found");
+    expect(preview.at(-1)).toContain("Enter applies");
+    expect(preview.join("\n")).toContain(SEARCH_START);
+    expectRenderedWidth(preview, 80);
   });
 
   test("Ex row composes with visual selection and search highlights", () => {
@@ -617,6 +666,7 @@ describe("vim editor integration", () => {
       "w",
       "/",
       "\r",
+      "\r",
       "q",
     ]);
     expect(editor.getText()).toBe("new\nnew");
@@ -677,6 +727,76 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("old!");
   });
 
+  test("normal mode redo restores undone prompt edit and can be undone again", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "l", "x"]);
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+
+    editor.handleInput("u");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 1 }, mode: "normal" });
+
+    editor.handleInput("\x12");
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
+
+    editor.handleInput("u");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 1 }, mode: "normal" });
+  });
+
+  test("normal mode redo no-ops without state, survives movement, and clears after new edit", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput("\x12");
+    expectEditorState(editor, { text: "abc", cursor: { line: 0, col: 3 }, mode: "normal" });
+
+    typeKeys(editor, ["g", "g", "x", "u", "l", "\x12"]);
+    expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
+
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "l", "x", "\x12"]);
+    expectEditorState(editor, { text: "ac", cursor: { line: 0, col: 1 }, mode: "normal" });
+  });
+
+  test("redo does not resurrect cleared search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("foo foo");
+    typeKeys(editor, ["g", "g", "/", "f", "o", "o", "\r"]);
+    expect(editor.render(80).join("\n")).toContain(SEARCH_START);
+
+    typeKeys(editor, ["x", "u", "\x12"]);
+    expect(editor.getText()).toBe("foo oo");
+    expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
+  });
+
+  test("configured redo key survives live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, redo: ["R"] },
+      },
+    });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "R"]);
+    expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
+  });
+
+  test("redo preserves modal side-effect state", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", '"', "a", "y", "y", "m", "b"]);
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+    expect(editor.getMark("b")).toEqual({ line: 0, col: 0 });
+
+    typeKeys(editor, ["j", "x", "u", "\x12"]);
+    expectEditorState(editor, { text: "one\nwo", cursor: { line: 1, col: 0 }, mode: "normal" });
+    expect(editor.getNamedRegister("a")).toEqual({ type: "line", text: "one" });
+    expect(editor.getMark("b")).toEqual({ line: 0, col: 0 });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "t" });
+  });
+
   test("normal mode uses configured keymap through the editor", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
@@ -697,6 +817,52 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
     editor.handleInput("B");
     expect(editor.getVimMode()).toBe("visualBlock");
+  });
+
+  test("configured shift operators survive live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        operators: {
+          ...DEFAULT_VIM_OPTIONS.keymap!.operators,
+          indent: ["]"],
+          dedent: ["["],
+        },
+      },
+    });
+
+    editor.setText("one\n  two");
+    typeKeys(editor, ["g", "g", "]", "]"]);
+    expectEditorState(editor, {
+      text: "  one\n  two",
+      cursor: { line: 0, col: 0 },
+      mode: "normal",
+    });
+
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput("[");
+    expectEditorState(editor, { text: "one\ntwo", cursor: { line: 1, col: 0 }, mode: "normal" });
+  });
+
+  test("default shift operators and existing editor behavior remain compatible", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", ">", ">", "j", "."]);
+    expect(editor.getText()).toBe("  one\n  two");
+
+    runEx(editor, "%dedent");
+    expect(editor.getText()).toBe("one\ntwo");
+
+    typeKeys(editor, ["g", "g", "d", "w"]);
+    expect(editor.getText()).toBe("two");
+
+    editor.handleInput("i");
+    editor.handleInput("<");
+    editor.handleInput(">");
+    expect(editor.getText()).toBe("<>two");
   });
 
   test("normal mode supports extended navigation", () => {

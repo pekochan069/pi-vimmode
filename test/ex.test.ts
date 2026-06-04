@@ -31,6 +31,28 @@ describe("Ex substitution parser", () => {
     });
   });
 
+  test("parses regex substitution flag with literal replacement", () => {
+    expect(parseExSubstitution("%s/TODO|FIXME/done/gr", context)).toMatchObject({
+      type: "substitute",
+      pattern: "TODO|FIXME",
+      replacement: "done",
+      global: true,
+      ignoreCase: false,
+      matcherMode: "regex",
+    });
+    expect(parseExSubstitution("s/todo/done/ri", context)).toMatchObject({
+      type: "substitute",
+      global: false,
+      ignoreCase: true,
+      matcherMode: "regex",
+    });
+    expect(parseExSubstitution("s/(old)/&-$1-\\1/r", context)).toMatchObject({
+      type: "substitute",
+      replacement: "&-$1-\\1",
+      matcherMode: "regex",
+    });
+  });
+
   test("rejects unsupported names and uppercase flags", () => {
     expect(parseExSubstitution("sub/old/new/", context)).toEqual({
       type: "error",
@@ -191,6 +213,47 @@ describe("Ex command parser", () => {
     expect(parseExCommand("reflow 72", context)).toMatchObject({
       type: "transform",
       transform: { action: "reflow", width: 72 },
+    });
+  });
+
+  test("parses read-only customization diagnostic commands", () => {
+    expect(parseExCommand("vimdoctor", context)).toEqual({
+      type: "diagnostic",
+      command: "vimdoctor",
+    });
+    expect(parseExCommand("keymap redo", context)).toEqual({
+      type: "diagnostic",
+      command: "keymap",
+      query: "redo",
+    });
+    expect(parseExCommand("mapcheck ctrl+p", context)).toEqual({
+      type: "diagnostic",
+      command: "mapcheck",
+      query: "ctrl+p",
+    });
+    expect(parseExCommand("actions search", context)).toEqual({
+      type: "diagnostic",
+      command: "actions",
+      query: "search",
+    });
+  });
+
+  test("rejects unsupported diagnostic abbreviations and missing required arguments", () => {
+    expect(parseExCommand("vimd", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: vimd",
+    });
+    expect(parseExCommand("map", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: map",
+    });
+    expect(parseExCommand("mapcheck", context)).toEqual({
+      type: "error",
+      message: "Missing mapcheck key",
+    });
+    expect(parseExCommand("vimdoctor noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
     });
   });
 

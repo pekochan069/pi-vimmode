@@ -31,7 +31,7 @@ Example:
 }
 ```
 
-Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`.
+Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor.
 
 Common warning causes:
 
@@ -42,7 +42,7 @@ Common warning causes:
 - Protected Pi shortcut used in keymap.
 - Unsupported operator motion.
 - Duplicate or shadowed key bindings.
-- Invalid UI/search/macro/mark field type.
+- Invalid UI/search/macro/mark/feedback field type.
 - Legacy `piVimMode.vimOptions` present.
 
 ## Key sequence syntax
@@ -80,21 +80,50 @@ Rules:
 
 Protected Pi shortcuts cannot be mapped:
 
-```text
-enter, return, escape, esc, tab, shift+enter,
-ctrl+c, ctrl+d, ctrl+g, ctrl+l, ctrl+p,
-shift+ctrl+p, ctrl+shift+p, ctrl+t, shift+tab
-```
+| Key                                      | Preserved behavior                         |
+| ---------------------------------------- | ------------------------------------------ |
+| `enter`, `return`                        | Submit prompt / execute pending workbench. |
+| `escape`, `esc`                          | Cancel or mode transition.                 |
+| `tab`, `shift+tab`                       | Autocomplete navigation.                   |
+| `shift+enter`                            | Pi newline/submit variant.                 |
+| `ctrl+c`, `ctrl+g`                       | Interrupt/cancel and reset Vim state.      |
+| `ctrl+d`                                 | Pi EOF/delete shortcut.                    |
+| `ctrl+l`                                 | Pi terminal clear/redraw shortcut.         |
+| `ctrl+p`, `shift+ctrl+p`, `ctrl+shift+p` | Pi command/model palette shortcuts.        |
+| `ctrl+t`                                 | Pi external editor/tool shortcut.          |
 
-Protected or unsupported keys are ignored with a warning.
+Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, and prompt search; insert mode still delegates them to Pi.
 
 ## Top-level settings
 
-| Path                   | Default     | Accepted values        | Effect                                                                                                                                                             |
-| ---------------------- | ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `piVimMode`            | absent      | object                 | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
-| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"` | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
-| `piVimMode.vimOptions` | unsupported | none                   | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
+| Path                   | Default     | Accepted values                             | Effect                                                                                                                                                             |
+| ---------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
+| `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                |
+| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
+| `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
+
+### Presets
+
+Presets are field-level baselines. Resolution order is defaults, global preset, global explicit fields, project preset, project explicit fields.
+
+- `minimal`: quieter status, fewer inspectability extras, macro/mark features disabled by default.
+- `prompt-safe`: conservative default-style baseline for Pi prompt editing.
+- `vim-heavy`: starts in normal mode, enables visual-block keymap entry, and shows more status items.
+
+Example explicit override:
+
+```json
+{
+  "piVimMode": {
+    "preset": "vim-heavy",
+    "startMode": "insert",
+    "keymap": { "commands": { "visualBlock": ["B"] } }
+  }
+}
+```
+
+Here `vim-heavy` supplies its baseline, then `startMode` and `visualBlock` override those fields.
 
 ## Cursor settings
 
@@ -123,6 +152,10 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.operators.delete` | `["d"]` | Prefix for delete operator. Doubled operator deletes line when same operator sequence repeats. |
 | `piVimMode.keymap.operators.change` | `["c"]` | Prefix for change operator. Deletes range/line and enters insert.                              |
 | `piVimMode.keymap.operators.yank`   | `["y"]` | Prefix for yank operator. Updates registers without changing text.                             |
+| `piVimMode.keymap.operators.indent` | `[">"]` | Line-only shift operator. Doubled operator indents addressed line(s) by two spaces.            |
+| `piVimMode.keymap.operators.dedent` | `["<"]` | Line-only shift operator. Doubled operator dedents addressed line(s).                          |
+
+`indent` and `dedent` are line-only operators. In normal mode, repeat the operator sequence (`>>`, `<<`, or configured equivalents) and optional counts (`3>>`). In visual modes, one operator key shifts all touched lines; a count before the operator changes shift depth (`2>` indents selected lines by two levels). Arbitrary `>{motion}`, `<{motion}`, text-object, prompt-search, and mark-target shift ranges are unsupported safe no-ops.
 
 ### Motions
 
@@ -174,12 +207,14 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.tillCharBackward`        | `["T"]`      | Wait for char and move after it on current line.                                                       |
 | `piVimMode.keymap.commands.repeatCharSearch`        | `[";"]`      | Repeat last character search same direction.                                                           |
 | `piVimMode.keymap.commands.repeatCharSearchReverse` | `[","]`      | Repeat last character search opposite direction.                                                       |
-| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start literal prompt-local forward search. Also works after operator as search motion.                 |
+| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start prompt-local forward search. Also works after operator as search motion.                         |
+| `piVimMode.keymap.commands.startSearchBackward`     | `["?"]`      | Start prompt-local backward search. Also works after operator as search motion.                        |
 | `piVimMode.keymap.commands.repeatSearch`            | `["n"]`      | Repeat last prompt search direction.                                                                   |
 | `piVimMode.keymap.commands.repeatSearchReverse`     | `["N"]`      | Repeat prompt search opposite direction.                                                               |
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                 |
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                    |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                            |
+| `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                   |
 
 ### Macro keymap
 
@@ -245,9 +280,26 @@ wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd
 | `piVimMode.keymap.operatorMotions.change` | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after change operator.                                         |
 | `piVimMode.keymap.operatorMotions.yank`   | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after yank operator.                                           |
 
-Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist.
+Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
 ### Keymap validation
+
+Example shift operator remap:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "operators": {
+        "indent": ["]"],
+        "dedent": ["["]
+      }
+    }
+  }
+}
+```
+
+With this config, `]]` indents the current line in normal mode, `[[` dedents it, and visual `]` / `[` shifts selected lines.
 
 - Unknown action names warn and are ignored.
 - Each binding value must be an array of strings.
@@ -287,7 +339,27 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
-Search is literal and prompt-local. Regex search, `?`, search history, and Vim highlight groups are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
+Search is literal by default and prompt-local. `?` starts backward search, empty `/` or `?` recalls the previous successful query, and `Up` / `Down` navigate in-memory history while a search is pending. Prefix a pending query with `\r` for bounded regex search. Vim highlight groups, offsets, and cross-prompt history are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
+
+## Feedback settings
+
+Optional feedback keeps default modal editing quiet while helping users understand confusing no-ops.
+
+| Path                      | Default | Accepted values     | Effect                                                                                                           |
+| ------------------------- | ------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.feedback.noop` | `"off"` | `"off"`, `"status"` | `"status"` shows one transient info row for selected no-ops such as unmapped normal keys or protected shortcuts. |
+
+Invalid feedback values warn and fall back to `"off"` without discarding valid sibling settings.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "feedback": { "noop": "status" }
+  }
+}
+```
 
 ## Prompt-native structure settings
 
@@ -344,7 +416,7 @@ Example:
 | Path                          | Default                                    | Accepted values                                                   | Effect                                                                |
 | ----------------------------- | ------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `piVimMode.ui.status.enabled` | `true`                                     | boolean                                                           | Enables/disables all status text in the editor border.                |
-| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
+| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
 
 Status item meanings:
 
@@ -384,7 +456,7 @@ Narrow labels are used when the prompt width is too small for the full label.
 
 | Path                                  | Default             | Accepted values                                | Effect                                                                                            |
 | ------------------------------------- | ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `piVimMode.ui.cursorPosition.enabled` | `false`             | boolean                                        | Enables cursor position status when `cursorPosition` item is present.                             |
+| `piVimMode.ui.cursorPosition.enabled` | `true`              | boolean                                        | Enables cursor position status when `cursorPosition` item is present.                             |
 | `piVimMode.ui.cursorPosition.base`    | `1`                 | `0` or `1`                                     | Display base for line and column. `1` matches common editor UI; `0` matches internal coordinates. |
 | `piVimMode.ui.cursorPosition.format`  | `"{line}:{column}"` | string containing both `{line}` and `{column}` | Format template for cursor position. Both placeholders are required.                              |
 
@@ -468,11 +540,13 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "repeatCharSearch": [";"],
         "repeatCharSearchReverse": [","],
         "startSearch": ["/"],
+        "startSearchBackward": ["?"],
         "repeatSearch": ["n"],
         "repeatSearchReverse": ["N"],
         "startExCommand": [":"],
         "repeatChange": ["."],
-        "undo": ["u"]
+        "undo": ["u"],
+        "redo": ["ctrl+r"]
       },
       "macros": {
         "record": ["q"],
@@ -576,7 +650,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
     "ui": {
       "status": {
         "enabled": true,
-        "items": ["mode", "pendingOperator", "selection"]
+        "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
       },
       "mode": {
         "enabled": true,
@@ -600,7 +674,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "previewMaxChars": 16
       },
       "cursorPosition": {
-        "enabled": false,
+        "enabled": true,
         "base": 1,
         "format": "{line}:{column}"
       }

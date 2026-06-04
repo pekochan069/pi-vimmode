@@ -27,6 +27,7 @@ async function writeDistPackageJson() {
   packageJson.main = "./index.js";
   packageJson.module = "./index.js";
   packageJson.exports = "./index.js";
+  packageJson.files = ["index.js", "README.md", "LICENSE", "docs/features.md", "docs/settings.md"];
   packageJson.pi = { extensions: ["./index.js"] };
 
   await mkdir(distDir, { recursive: true });

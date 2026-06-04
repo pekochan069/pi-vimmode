@@ -12,6 +12,7 @@ const piCorePackages = [
   "typebox",
 ];
 const distDir = "dist";
+const distDocs = ["docs/features.md", "docs/settings.md"];
 
 const isExternal = (id: string) =>
   nodeBuiltins.has(id) || piCorePackages.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
@@ -33,9 +34,9 @@ async function writeDistPackageJson() {
 }
 
 async function copyDistDocs() {
-  await mkdir(distDir, { recursive: true });
+  await mkdir(join(distDir, "docs"), { recursive: true });
   await cp("README.md", join(distDir, "README.md"));
-  await cp("docs", join(distDir, "docs"), { recursive: true });
+  await Promise.all(distDocs.map((doc) => cp(doc, join(distDir, doc))));
 }
 
 export default defineConfig({

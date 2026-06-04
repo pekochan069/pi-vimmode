@@ -21,6 +21,12 @@
   },
   "type": "module",
   "module": "index.ts",
+  "files": [
+    "README.md",
+    "LICENSE",
+    "docs/features.md",
+    "docs/settings.md"
+  ],
   "publishConfig": {
     "access": "public"
   },

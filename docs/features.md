@@ -359,13 +359,14 @@ Supported commands:
 :%s/old/new/g
 :2,4s#old/path#new/path#g
 :.,$substitute/old/new/i
+:2;.+1s/old/new/g
 :'<,'>s/old/new/g
-:delete     " alias :d
-:yank       " alias :y
-:put        " alias :pu
-:2,4copy$   " alias :t
-:3,4move0   " alias :m
-:join       " alias :j
+:delete      " alias :d
+:yank        " alias :y
+:put         " alias :pu
+:2,4copy$-1  " alias :t
+:3,4move0    " alias :m
+:join        " alias :j
 :nohlsearch " alias :noh
 :quote
 :unquote
@@ -388,7 +389,9 @@ Supported ranges:
 - numeric line address, e.g. `2`
 - `.`: current line
 - `$`: last line
-- comma range, e.g. `2,4`, `.,$`
+- single signed offset on a single-line address, e.g. `.+1`, `$-2`, `3+2`, `3-1`
+- comma range, e.g. `2,4`, `.,$`, `$-1,$`
+- semicolon range, e.g. `2;.+2`; first address becomes the base for resolving the second address, so `.` in the second address means line 2 here
 - normal-mode count before `:`, e.g. `3:` pre-fills a concrete clamped range
 
 Supported destination addresses for `:copy`/`:t` and `:move`/`:m`:
@@ -397,6 +400,7 @@ Supported destination addresses for `:copy`/`:t` and `:move`/`:m`:
 - numeric line address, e.g. `4`: after that line
 - `.`: after current line
 - `$`: after last line
+- single signed offset on numeric, `.`, or `$` destinations, e.g. `$-1`, `.+1`, `3-1`
 
 Supported substitution flags:
 
@@ -416,6 +420,7 @@ Important semantics:
 - `:put` inserts unnamed register text as prompt-buffer lines after the addressed range.
 - `:copy` duplicates addressed lines after the destination address; destination `0` inserts before line 1.
 - `:move` moves addressed lines after the destination address and rejects destinations inside the moved range.
+- Destination `0` is only the before-first-line sentinel; offset forms like `0+1` are unsupported.
 - `:join` with no explicit range joins current line with next line; explicit ranges join all addressed lines with normalized boundary whitespace.
 - `:quote` prefixes addressed lines with Markdown quote syntax `> `.
 - `:unquote` removes one leading Markdown quote marker from each addressed quoted line.
@@ -435,6 +440,7 @@ Important semantics:
 - Substitution is two-phase: first `Enter` highlights matched target text and reports a match count without editing, second unchanged `Enter` applies, `Esc` cancels.
 - Editing or history navigation clears a pending substitution match preview.
 - Unsupported command, range, destination, delimiter, argument, flag, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
+- Unsupported range syntax includes repeated offsets such as `.+1-2`, repeated range separators, expression ranges, search addresses, mark addresses, `+cmd` suffixes, and broader Vimscript grammar.
 - Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
 - Diagnostic commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
 - Success/error/info messages stay in the Ex row until the next handled input.

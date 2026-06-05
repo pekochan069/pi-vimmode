@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Status UI items are configurable
 
 The Vim editor SHALL read `piVimMode.ui.status` to determine which status items are rendered and in what order while preserving the current status UI by default.
@@ -357,4 +359,3 @@ The Vim editor SHALL expose optional no-op feedback settings without changing th
 
 - **WHEN** the no-op feedback setting has an unsupported type or value
 - **THEN** settings resolution records a warning, ignores the invalid field, preserves valid sibling fields, and the editor uses the default quiet feedback behavior
-

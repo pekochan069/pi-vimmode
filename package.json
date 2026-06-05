@@ -19,14 +19,14 @@
     "type": "git",
     "url": "git+https://github.com/pekochan069/pi-vimmode.git"
   },
-  "type": "module",
-  "module": "index.ts",
   "files": [
     "README.md",
     "LICENSE",
     "docs/features.md",
     "docs/settings.md"
   ],
+  "type": "module",
+  "module": "index.ts",
   "publishConfig": {
     "access": "public"
   },

@@ -5,6 +5,8 @@ import type {
   ResolvedVimPromptTransforms,
 } from "./types.ts";
 
+import { parseExDestination, parseExLineRange } from "./range.ts";
+
 export type ExParseContext = {
   lineCount: number;
   cursorLine: number;
@@ -63,12 +65,6 @@ export type ExParseResult =
   | { type: "empty" }
   | { type: "error"; message: string };
 
-type RangeParseResult =
-  | { ok: true; range: LineRange; rest: string; explicit: boolean }
-  | { ok: false; message: string };
-
-type DestinationParseResult = { ok: true; destination: number } | { ok: false; message: string };
-
 type ParsedCommandName =
   | "s"
   | "substitute"
@@ -97,71 +93,6 @@ type ParsedCommandName =
   | "actions"
   | "noh"
   | "nohlsearch";
-
-function validRange(range: LineRange, lineCount: number): boolean {
-  return (
-    range.startLine >= 0 &&
-    range.endLine >= 0 &&
-    range.startLine < lineCount &&
-    range.endLine < lineCount &&
-    range.startLine <= range.endLine
-  );
-}
-
-function parseAddress(
-  source: string,
-  context: ExParseContext,
-): { line: number; rest: string } | undefined {
-  if (source.startsWith("'<,'>")) return undefined;
-  const first = source[0];
-  if (first === ".") return { line: context.cursorLine, rest: source.slice(1) };
-  if (first === "$") return { line: context.lineCount - 1, rest: source.slice(1) };
-  const numeric = /^\d+/.exec(source);
-  if (numeric) return { line: Number(numeric[0]) - 1, rest: source.slice(numeric[0].length) };
-  return undefined;
-}
-
-function parseRange(source: string, context: ExParseContext): RangeParseResult {
-  if (source.startsWith("%")) {
-    const range = { startLine: 0, endLine: context.lineCount - 1 };
-    return validRange(range, context.lineCount)
-      ? { ok: true, range, rest: source.slice(1), explicit: true }
-      : { ok: false, message: "Invalid Ex range" };
-  }
-
-  if (source.startsWith("'<,'>")) {
-    if (!context.visualRange)
-      return { ok: false, message: "Visual range marker requires captured visual range" };
-    return {
-      ok: true,
-      range: context.visualRange,
-      rest: source.slice("'<,'>".length),
-      explicit: true,
-    };
-  }
-
-  const first = parseAddress(source, context);
-  if (!first) {
-    const range = { startLine: context.cursorLine, endLine: context.cursorLine };
-    return validRange(range, context.lineCount)
-      ? { ok: true, range, rest: source, explicit: false }
-      : { ok: false, message: "Invalid Ex range" };
-  }
-
-  if (!first.rest.startsWith(",")) {
-    const range = { startLine: first.line, endLine: first.line };
-    return validRange(range, context.lineCount)
-      ? { ok: true, range, rest: first.rest, explicit: true }
-      : { ok: false, message: "Invalid Ex range" };
-  }
-
-  const second = parseAddress(first.rest.slice(1), context);
-  if (!second) return { ok: false, message: "Invalid Ex range" };
-  const range = { startLine: first.line, endLine: second.line };
-  return validRange(range, context.lineCount)
-    ? { ok: true, range, rest: second.rest, explicit: true }
-    : { ok: false, message: "Invalid Ex range" };
-}
 
 type ParsedCommandType =
   | "substitute"
@@ -380,31 +311,6 @@ function parseSubstitutionArgs(source: string):
   };
 }
 
-function parseDestinationAddress(source: string, context: ExParseContext): DestinationParseResult {
-  const rest = source.trim();
-  if (rest.length === 0) return { ok: false, message: "Missing Ex destination" };
-
-  let destination: number;
-  let tail = "";
-  if (rest[0] === ".") {
-    destination = context.cursorLine;
-    tail = rest.slice(1);
-  } else if (rest[0] === "$") {
-    destination = context.lineCount - 1;
-    tail = rest.slice(1);
-  } else {
-    const numeric = /^\d+/.exec(rest);
-    if (!numeric) return { ok: false, message: "Invalid Ex destination" };
-    destination = Number(numeric[0]) - 1;
-    tail = rest.slice(numeric[0].length);
-  }
-
-  if (tail.trim().length > 0) return { ok: false, message: "Unexpected Ex command arguments" };
-  if (destination < -1 || destination >= context.lineCount)
-    return { ok: false, message: "Invalid Ex destination" };
-  return { ok: true, destination };
-}
-
 function rejectTrailingArgs(rest: string): ExParseResult | undefined {
   return rest.trim().length > 0
     ? { type: "error", message: "Unexpected Ex command arguments" }
@@ -447,10 +353,10 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   const source = commandLine.trim();
   if (source.length === 0) return { type: "empty" };
 
-  const range = parseRange(source, context);
-  if (!range.ok) return { type: "error", message: range.message };
+  const range = parseExLineRange(source, context);
+  if (!range.ok) return { type: "error", message: range.error.message };
 
-  const command = parseCommand(range.rest, context);
+  const command = parseCommand(range.value.rest, context);
   if (!command.ok) return { type: "error", message: command.message };
 
   const type = command.command.type;
@@ -460,8 +366,8 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     return {
       type,
       command: command.command.name as "s" | "substitute",
-      range: range.range,
-      rangeExplicit: range.explicit,
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
       pattern: args.pattern,
       replacement: args.replacement,
       global: args.global,
@@ -471,14 +377,14 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   }
 
   if (type === "copy" || type === "move") {
-    const destination = parseDestinationAddress(command.rest, context);
-    if (!destination.ok) return { type: "error", message: destination.message };
+    const destination = parseExDestination(command.rest, context);
+    if (!destination.ok) return { type: "error", message: destination.error.message };
     return {
       type,
       command: command.command.name,
-      range: range.range,
-      rangeExplicit: range.explicit,
-      destination: destination.destination,
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
+      destination: destination.value.destination,
     };
   }
 
@@ -502,8 +408,8 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     return {
       type,
       command: command.command.name,
-      range: range.range,
-      rangeExplicit: range.explicit,
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
       transform: transform.transform,
     };
   }
@@ -518,8 +424,8 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   return {
     type,
     command: command.command.name,
-    range: range.range,
-    rangeExplicit: range.explicit,
+    range: range.value.range,
+    rangeExplicit: range.value.explicit,
   };
 }
 

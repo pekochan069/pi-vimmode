@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -111,4 +113,3 @@ User-facing customization docs SHALL be validated against source behavior, OpenS
 
 - **WHEN** docs list protected Pi shortcuts or pi-vimmode-owned shortcuts
 - **THEN** the list matches the protected shortcut catalog used by runtime diagnostics and validation
-

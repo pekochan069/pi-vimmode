@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -608,4 +610,3 @@ Read-only diagnostic Ex commands SHALL NOT perform prompt-buffer edits or editin
 
 - **WHEN** the user executes a diagnostic Ex command and then presses the repeat-change command
 - **THEN** repeat-change behavior uses the previous real edit when one exists and does not repeat the diagnostic command
-

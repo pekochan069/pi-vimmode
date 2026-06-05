@@ -6,9 +6,13 @@ import {
   bufferStartPosition,
   changeLine,
   copyExLineRange,
+  copyResolvedLineRange,
   deleteBlockRange,
   deleteByMotion,
   deleteExLineRange,
+  deleteResolvedBlockRange,
+  deleteResolvedCharacterRange,
+  deleteResolvedLineRange,
   deleteTextObject,
   findCharOnLine,
   findSearchHighlightRanges,
@@ -20,6 +24,7 @@ import {
   shiftLineRange,
   shiftLinesFromCursor,
   moveExLineRange,
+  moveResolvedLineRange,
   deleteCharAt,
   deleteLine,
   deleteLineMarkRange,
@@ -40,6 +45,7 @@ import {
   pasteRegister,
   pasteRegisterBefore,
   putExRegisterAfterRange,
+  putRegisterAfterResolvedLineRange,
   replaceVisualRangeChars,
   substituteLineRangeLiteral,
   substituteLineRangeRegex,
@@ -52,6 +58,8 @@ import {
   wordEndPosition,
   yankByMotion,
   yankExLineRange,
+  yankResolvedCharacterRange,
+  yankResolvedLineRange,
   yankLine,
   yankLineMarkRange,
   yankLineRange,
@@ -777,6 +785,46 @@ describe("Ex line operations", () => {
       ok: false,
       message: "Ex move destination overlaps range",
     });
+  });
+
+  test("typed resolved ranges drive line, character, block, and destination operations", () => {
+    const line = { type: "line" as const, range: { startLine: 1, endLine: 1 } };
+    const destination = { type: "destination" as const, destination: -1 };
+    expect(deleteResolvedLineRange("one\ntwo\nthree", line)).toMatchObject({
+      ok: true,
+      edit: { text: "one\nthree", register: { type: "line", text: "two" } },
+    });
+    expect(yankResolvedLineRange("one\ntwo\nthree", line)).toEqual({
+      lines: 1,
+      register: { type: "line", text: "two" },
+    });
+    expect(
+      putRegisterAfterResolvedLineRange("one\ntwo", line, { type: "char", text: "alpha" }),
+    ).toMatchObject({ ok: true, edit: { text: "one\ntwo\nalpha" } });
+    expect(copyResolvedLineRange("one\ntwo", line, destination)).toMatchObject({
+      ok: true,
+      edit: { text: "two\none\ntwo" },
+    });
+    expect(moveResolvedLineRange("one\ntwo\nthree", line, destination)).toMatchObject({
+      ok: true,
+      edit: { text: "two\none\nthree" },
+    });
+
+    const character = {
+      type: "character" as const,
+      range: { start: p(0, 1), end: p(0, 3) },
+    };
+    expect(yankResolvedCharacterRange("abcd", character)).toEqual({ type: "char", text: "bcd" });
+    expect(deleteResolvedCharacterRange("abcd", character)).toMatchObject({
+      text: "a",
+      cursor: p(0, 1),
+    });
+
+    const block = {
+      type: "block" as const,
+      range: { startLine: 0, endLine: 1, startCol: 1, endCol: 2 },
+    };
+    expect(deleteResolvedBlockRange("abc\ndef", block)).toMatchObject({ text: "a\nd" });
   });
 
   test("joins omitted and explicit Ex line ranges", () => {

@@ -188,6 +188,42 @@ describe("Ex command parser", () => {
     });
   });
 
+  test("parses offset and semicolon Ex ranges", () => {
+    expect(parseExCommand(".,.+1delete", context)).toMatchObject({
+      type: "delete",
+      range: { startLine: 1, endLine: 2 },
+    });
+    expect(parseExCommand("$-1,$join", context)).toMatchObject({
+      type: "join",
+      range: { startLine: 3, endLine: 4 },
+    });
+    expect(parseExCommand("3+1yank", context)).toMatchObject({
+      type: "yank",
+      range: { startLine: 3, endLine: 3 },
+    });
+    expect(parseExCommand("2;.+2delete", context)).toMatchObject({
+      type: "delete",
+      range: { startLine: 1, endLine: 3 },
+    });
+    expect(parseExSubstitution("2;.+1s/foo/bar/g", context)).toMatchObject({
+      type: "substitute",
+      range: { startLine: 1, endLine: 2 },
+    });
+  });
+
+  test("parses offset copy and move destinations", () => {
+    expect(parseExCommand("2copy$-1", context)).toMatchObject({
+      type: "copy",
+      range: { startLine: 1, endLine: 1 },
+      destination: 3,
+    });
+    expect(parseExCommand("4move.+1", context)).toMatchObject({
+      type: "move",
+      range: { startLine: 3, endLine: 3 },
+      destination: 2,
+    });
+  });
+
   test("parses prompt transform commands with ranges and arguments", () => {
     expect(parseExCommand("quote", context)).toMatchObject({
       type: "transform",
@@ -340,6 +376,22 @@ describe("Ex command parser", () => {
     expect(parseExCommand("fence ts extra", context)).toEqual({
       type: "error",
       message: "Invalid fence language",
+    });
+    expect(parseExCommand("$+1yank", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand(".+1-2delete", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("2;delete", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("2t0+1", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex destination",
     });
   });
 });

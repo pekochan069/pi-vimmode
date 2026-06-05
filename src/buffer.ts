@@ -1,4 +1,11 @@
 import type {
+  BlockRange as ResolvedBlockRangeValue,
+  ResolvedBlockRange,
+  ResolvedCharacterRange,
+  ResolvedDestination,
+  ResolvedLineRange,
+} from "./range.ts";
+import type {
   EditResult,
   LineRange,
   Position,
@@ -17,12 +24,7 @@ export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchi
 export type VisualSelectionKind = "char" | "line" | "block";
 export type VisualSelectionMode = "visual" | "visualLine" | "visualBlock";
 
-type BlockRange = {
-  startLine: number;
-  endLine: number;
-  startCol: number;
-  endCol: number;
-};
+type BlockRange = ResolvedBlockRangeValue;
 
 function splitText(text: string): string[] {
   const lines = text.split("\n");
@@ -597,6 +599,60 @@ export function moveExLineRange(
       changed: nextText !== text,
     },
   };
+}
+
+export function deleteResolvedLineRange(text: string, target: ResolvedLineRange): ExLineEditResult {
+  return deleteExLineRange(text, target.range);
+}
+
+export function yankResolvedLineRange(text: string, target: ResolvedLineRange): ExLineYankResult {
+  return yankExLineRange(text, target.range);
+}
+
+export function putRegisterAfterResolvedLineRange(
+  text: string,
+  target: ResolvedLineRange,
+  register: VimRegister | undefined,
+): ExLineEditResult {
+  return putExRegisterAfterRange(text, target.range, register);
+}
+
+export function copyResolvedLineRange(
+  text: string,
+  target: ResolvedLineRange,
+  destination: ResolvedDestination,
+): ExLineEditResult {
+  return copyExLineRange(text, target.range, destination.destination);
+}
+
+export function moveResolvedLineRange(
+  text: string,
+  target: ResolvedLineRange,
+  destination: ResolvedDestination,
+): ExLineEditResult {
+  return moveExLineRange(text, target.range, destination.destination);
+}
+
+export function deleteResolvedCharacterRange(
+  text: string,
+  target: ResolvedCharacterRange,
+): EditResult {
+  return deleteRange(text, target.range.start, target.range.end);
+}
+
+export function yankResolvedCharacterRange(
+  text: string,
+  target: ResolvedCharacterRange,
+): VimRegister {
+  return { type: "char", text: selectionText(text, target.range.start, target.range.end) };
+}
+
+export function deleteResolvedBlockRange(text: string, target: ResolvedBlockRange): EditResult {
+  return deleteBlockRange(
+    text,
+    { line: target.range.startLine, col: target.range.startCol },
+    { line: target.range.endLine, col: target.range.endCol },
+  );
 }
 
 function replaceLineRange(

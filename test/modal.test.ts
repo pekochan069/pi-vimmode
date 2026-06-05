@@ -373,6 +373,170 @@ describe("Ex command-line modal behavior", () => {
     expect(substituted.state.exHistory).toEqual(["s/old/new/"]);
   });
 
+  test("Ex offset and semicolon substitution ranges preview and apply", () => {
+    const offset = applyModalKeys({ mode: "normal" }, "foo\nfoo\nfoo", p(0, 0), [
+      ":",
+      "2",
+      ",",
+      "2",
+      "+",
+      "1",
+      "s",
+      "/",
+      "f",
+      "o",
+      "o",
+      "/",
+      "b",
+      "a",
+      "r",
+      "/",
+      "g",
+      "\r",
+      "\r",
+    ]);
+    expect(offset.text).toBe("foo\nbar\nbar");
+    expect(offset.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+
+    const semicolon = applyModalKeys({ mode: "normal" }, "foo\nfoo\nfoo", p(0, 0), [
+      ":",
+      "2",
+      ";",
+      ".",
+      "+",
+      "1",
+      "s",
+      "/",
+      "f",
+      "o",
+      "o",
+      "/",
+      "b",
+      "a",
+      "z",
+      "/",
+      "g",
+      "\r",
+      "\r",
+    ]);
+    expect(semicolon.text).toBe("foo\nbaz\nbaz");
+    expect(semicolon.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+  });
+
+  test("Ex offset and semicolon line commands preserve bounded side effects", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "keep" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "two", current: p(1, 0) },
+    };
+    const deleted = applyModalKeys(initial, "one\ntwo\nthree\nfour", p(1, 0), [
+      ":",
+      ".",
+      ",",
+      ".",
+      "+",
+      "1",
+      "d",
+      "e",
+      "l",
+      "e",
+      "t",
+      "e",
+      "\r",
+    ]);
+    expect(deleted.text).toBe("one\nfour");
+    expect(deleted.state.register).toEqual({ type: "line", text: "two\nthree" });
+    expect(deleted.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(deleted.state.searchHighlight).toBeUndefined();
+
+    const yanked = applyModalKeys(initial, "one\ntwo\nthree\nfour", p(0, 0), [
+      ":",
+      "2",
+      ";",
+      ".",
+      "+",
+      "1",
+      "y",
+      "a",
+      "n",
+      "k",
+      "\r",
+    ]);
+    expect(yanked.text).toBe("one\ntwo\nthree\nfour");
+    expect(yanked.state.register).toEqual({ type: "line", text: "two\nthree" });
+    expect(yanked.state.searchHighlight).toEqual(initial.searchHighlight);
+  });
+
+  test("Ex destination offsets preserve copy, move, and destination zero behavior", () => {
+    const copied = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree\nfour", p(0, 0), [
+      ":",
+      "2",
+      "c",
+      "o",
+      "p",
+      "y",
+      "$",
+      "-",
+      "1",
+      "\r",
+    ]);
+    expect(copied.text).toBe("one\ntwo\nthree\ntwo\nfour");
+
+    const moved = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree\nfour", p(0, 0), [
+      ":",
+      "4",
+      "m",
+      "o",
+      "v",
+      "e",
+      ".",
+      "+",
+      "1",
+      "\r",
+    ]);
+    expect(moved.text).toBe("one\ntwo\nfour\nthree");
+
+    const copiedToZero = applyModalKeys({ mode: "normal" }, "one\ntwo", p(0, 0), [
+      ":",
+      "2",
+      "t",
+      "0",
+      "\r",
+    ]);
+    expect(copiedToZero.text).toBe("two\none\ntwo");
+  });
+
+  test("invalid offset ranges leave state unchanged", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "keep" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "one", current: p(0, 0) },
+    };
+    const update = applyModalKeys(initial, "one\ntwo", p(0, 0), [
+      ":",
+      ".",
+      "+",
+      "1",
+      "-",
+      "2",
+      "d",
+      "e",
+      "l",
+      "e",
+      "t",
+      "e",
+      "\r",
+    ]);
+    expect(update.text).toBe("one\ntwo");
+    expect(update.cursor).toEqual(p(0, 0));
+    expect(update.state.register).toEqual(initial.register);
+    expect(update.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(update.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(update.state.exMessage).toEqual({ kind: "error", text: "Invalid Ex range" });
+  });
+
   test("Ex regex substitution previews and applies with literal replacement", () => {
     const result = applyModalKeys({ mode: "normal" }, "TODO FIXME", p(0, 0), [
       ":",

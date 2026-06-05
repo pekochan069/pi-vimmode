@@ -413,9 +413,9 @@ Example:
 
 ### Status
 
-| Path                          | Default                                    | Accepted values                                                   | Effect                                                                |
-| ----------------------------- | ------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `piVimMode.ui.status.enabled` | `true`                                     | boolean                                                           | Enables/disables all status text in the editor border.                |
+| Path                          | Default                                                      | Accepted values                                                   | Effect                                                                |
+| ----------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `piVimMode.ui.status.enabled` | `true`                                                       | boolean                                                           | Enables/disables all status text in the editor border.                |
 | `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
 
 Status item meanings:

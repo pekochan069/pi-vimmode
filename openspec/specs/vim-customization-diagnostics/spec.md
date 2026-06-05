@@ -1,8 +1,11 @@
 # vim-customization-diagnostics Specification
 
 ## Purpose
+
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -92,4 +95,3 @@ The Vim editor SHALL support optional feedback for confusing no-op inputs while 
 
 - **WHEN** no-op feedback is enabled and repeated invalid or unmapped inputs occur
 - **THEN** the editor keeps feedback bounded to transient single messages and does not accumulate a multi-line log
-

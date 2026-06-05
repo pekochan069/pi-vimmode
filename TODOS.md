@@ -85,7 +85,7 @@
   - Goal: make custom keybindings/debugging usable without hidden `vim ⚠` confusion.
   - Complexity: Medium. Confidence: 82%.
 
-- [ ] Prompt range algebra kernel
+- [x] Prompt range algebra kernel
   - Extract reusable range resolver for Ex ranges, operator motions, marks, visual captures, search targets, offsets (`.+1`, `$-2`), and semicolon ranges.
   - Goal: unlock operator coverage, Ex operands, marks integration, and safer substitution without one-off parser branches.
   - Complexity: High. Confidence: 78%.

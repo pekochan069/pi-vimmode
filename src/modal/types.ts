@@ -85,16 +85,27 @@ export type SearchHighlightState = {
   matcherMode?: SearchMatcherMode;
 };
 
+export type LastExSubstitution = {
+  command: string;
+  pattern: string;
+  replacement: string;
+  global: boolean;
+  ignoreCase: boolean;
+  matcherMode: "literal" | "regex";
+};
+
 export type ExSubstitutionPreview = {
   command: string;
   matches: number;
   ranges: TextRange[];
   edit: EditResult;
   message: string;
+  repeatSource?: LastExSubstitution;
 };
 
 export type PendingExCommand = {
   command: string;
+  cursor?: number;
   sourceMode: Extract<VimMode, "normal" | "visual" | "visualLine" | "visualBlock">;
   visualAnchor?: Position;
   visualCursor?: Position;
@@ -143,6 +154,7 @@ export type ModalState = {
   pendingSearch?: PendingSearchTarget;
   pendingEx?: PendingExCommand;
   exHistory?: string[];
+  lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;
   messageHistory?: ExMessage[];
   lastCharSearch?: CharSearchState;

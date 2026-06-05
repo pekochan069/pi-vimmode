@@ -73,11 +73,11 @@ const ENTRIES = [
   {
     id: "ex",
     category: "ex",
-    topics: ["ex", ":", "substitute", "s", "commands"],
+    topics: ["ex", ":", "substitute", "s", "commands", "repeat", "register"],
     summary:
-      "finite Ex command-line supports :s substitution, line commands, transforms, diagnostics, and runtime help",
-    examples: [":s/old/new/", ":%s/old/new/g", ":help ex"],
-    limits: ["no Vimscript", "no recursive mappings", "no shell/file/window commands"],
+      "finite Ex command-line supports :s substitution, :& repeat substitution, line commands with register operands, transforms, diagnostics, and runtime help",
+    examples: [":s/old/new/", ":%s/old/new/gn", ":&", ":delete a", ":help ex"],
+    limits: ["no Vimscript", "no confirmation flag", "no shell/file/window commands"],
     docsAnchor: "runtime-help:ex",
     specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
     testAnchors: ["test/ex.test.ts", "test/modal.test.ts"],
@@ -134,8 +134,8 @@ const ENTRIES = [
     category: "settings",
     topics: ["settings", "config", "piVimMode", "options"],
     summary:
-      "piVimMode settings control start mode, cursor, keymap, UI, search, feedback, macros, marks, structures, and transforms",
-    examples: ["piVimMode.preset", "piVimMode.keymap", "piVimMode.search.highlight"],
+      "piVimMode settings control start mode, cursor, keymap, UI including workbench rows, search, feedback, macros, marks, structures, and transforms",
+    examples: ["piVimMode.preset", "piVimMode.keymap", "piVimMode.ui.workbench.reservedRows"],
     limits: ["field-by-field validation", "invalid fields warn", "valid siblings are preserved"],
     docsAnchor: "runtime-help:settings",
     specAnchor: "openspec/specs/pi-vimmode-documentation/spec.md",
@@ -228,6 +228,9 @@ function effectiveStateMessage(query: string, context: RuntimeHelpContext): stri
   }
   if (needle.includes("mark")) {
     return marks.enabled ? `marks enabled; slots ${marks.slots.join(",")}` : "marks disabled";
+  }
+  if (needle.includes("workbench") || needle.includes("reservedrows")) {
+    return `workbench reservedRows=${options.ui?.workbench.reservedRows ?? 0}`;
   }
   if (needle === "reflow" && transforms.actions.reflow === false) return "reflow disabled";
   if (needle === "quote" && transforms.actions.quote !== false) {

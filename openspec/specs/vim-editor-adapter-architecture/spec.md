@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-vimeditor-pi-adapter-modal-editing-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: VimEditor acts as the Pi adapter
 
 The Vim editor SHALL keep `VimEditor` as the Pi-facing `CustomEditor` adapter while moving modal editing semantics out of the adapter class.
@@ -213,4 +215,3 @@ The modal architecture SHALL keep modal coordinator functions small enough for r
 
 - **WHEN** feature modules need shared helpers such as pending-state clearing, effect construction, message logging, or source visual restoration
 - **THEN** they import those helpers from shared modal core modules rather than importing other feature modules in cycles
-

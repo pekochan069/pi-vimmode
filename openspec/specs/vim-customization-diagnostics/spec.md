@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -188,4 +190,3 @@ Runtime feature discovery SHALL describe the current editor's effective customiz
 
 - **WHEN** the editor executes `:features marks` and resolved mark options restrict allowed mark slots
 - **THEN** the feature result reports that marks are enabled with the current slot limits rather than listing unrestricted mark support
-

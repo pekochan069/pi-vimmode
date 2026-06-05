@@ -171,6 +171,9 @@ export type VimUiOptions = {
     base: 0 | 1;
     format: string;
   };
+  workbench: {
+    reservedRows: number;
+  };
 };
 
 export type ResolvedVimUi = VimUiOptions;

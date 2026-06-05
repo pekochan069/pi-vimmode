@@ -39,6 +39,7 @@ describe("documentation drift guard", () => {
       "piVimMode.search.highlight": String(DEFAULT_VIM_OPTIONS.search!.highlight),
       "piVimMode.search.maxHighlights": String(DEFAULT_VIM_OPTIONS.search!.maxHighlights),
       "piVimMode.feedback.noop": `"${DEFAULT_VIM_OPTIONS.feedback!.noop}"`,
+      "piVimMode.ui.workbench.reservedRows": String(DEFAULT_VIM_OPTIONS.ui!.workbench.reservedRows),
       "piVimMode.macros.enabled": String(DEFAULT_VIM_OPTIONS.macros!.enabled),
       "piVimMode.marks.enabled": String(DEFAULT_VIM_OPTIONS.marks!.enabled),
       "piVimMode.promptStructures.enabled": String(DEFAULT_VIM_OPTIONS.promptStructures!.enabled),
@@ -49,5 +50,19 @@ describe("documentation drift guard", () => {
       expect(settingsDoc).toContain(path);
       expect(settingsDoc).toContain(defaultValue);
     }
+  });
+
+  test("Ex docs do not list shipped Ex behavior as unsupported", () => {
+    for (const phrase of [
+      "no repeat substitution",
+      "no range offsets",
+      "no semicolon ranges",
+      "no Ex register operands",
+    ]) {
+      expect(featuresDoc).not.toContain(phrase);
+    }
+    expect(featuresDoc).toContain(":&");
+    expect(featuresDoc).toContain(":delete a");
+    expect(featuresDoc).toContain("piVimMode.ui.workbench.reservedRows");
   });
 });

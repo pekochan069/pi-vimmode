@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -168,4 +170,3 @@ The project SHALL keep `docs/settings.md` aligned with supported `piVimMode` set
 
 - **WHEN** a runtime help or feature registry entry references a setting-controlled feature area
 - **THEN** the corresponding setting path is documented in `docs/settings.md` or the registry entry declares that no user setting controls the feature
-

@@ -43,6 +43,7 @@ Common warning causes:
 - Unsupported operator motion.
 - Duplicate or shadowed key bindings.
 - Invalid UI/search/macro/mark/feedback field type.
+- Invalid `piVimMode.ui.workbench.reservedRows` value outside `0` through `5`.
 - Legacy `piVimMode.vimOptions` present.
 
 ## Key sequence syntax
@@ -474,6 +475,26 @@ Example cursor formats:
 }
 ```
 
+### Workbench row reservation
+
+| Path                                  | Default | Accepted values         | Effect                                                                                                            |
+| ------------------------------------- | ------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.ui.workbench.reservedRows` | `0`     | integer from `0` to `5` | Reserves width-safe rows below the prompt for `/`, `?`, `:` input, Ex/search messages, and substitution previews. |
+
+Default `0` preserves the existing idle layout: no blank workbench row is reserved until search, Ex input, preview, success, or error feedback is active. Active feedback still reserves one row. Setting `reservedRows` to `1` or more keeps that many rows below the prompt even when idle; active feedback renders in the first reserved row without subtracting extra height. Values below `0`, above `5`, non-integers, and non-numbers warn and fall back to `0` while valid sibling UI settings still apply.
+
+Example stable two-row command area:
+
+```json
+{
+  "piVimMode": {
+    "ui": {
+      "workbench": { "reservedRows": 2 }
+    }
+  }
+}
+```
+
 ## Full default reference
 
 This is the resolved default shape. Comments are not valid JSON; this block omits comments so it can be copied.
@@ -677,6 +698,9 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "enabled": true,
         "base": 1,
         "format": "{line}:{column}"
+      },
+      "workbench": {
+        "reservedRows": 0
       }
     }
   }

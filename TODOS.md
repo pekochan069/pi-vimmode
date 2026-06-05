@@ -39,13 +39,14 @@
 
 ## Ex Commands
 
-- [ ] Add regex-capable Ex substitution after literal v1 ships
-- [ ] Add remaining Vim Ex substitution flags after v1 `g`/`i` support
-- [ ] Add Ex range offset addresses like `.+1` and `$-2`
-- [ ] Add Ex semicolon range support after comma-only v1
-- [ ] Add Ex command history and repeat-substitution commands after v1
-- [ ] Add Ex register operands for `:delete`, `:yank`, and `:put`
-- [ ] Reuse full prompt editor for Ex command-line editing after minimal v1 ships
+- [x] Add regex-capable Ex substitution after literal v1 ships
+- [x] Add finite safe Vim Ex substitution flags after v1 `g`/`i` support (`n`, `e`; confirmation/print flags deferred)
+- [x] Add Ex range offset addresses like `.+1` and `$-2`
+- [x] Add Ex semicolon range support after comma-only v1
+- [x] Add Ex command history and repeat-substitution commands after v1
+- [x] Add Ex register operands for `:delete`, `:yank`, and `:put`
+- [x] Add bounded cursor-aware Ex command-line editing after minimal v1 ships (full nested prompt editor deferred)
+- [x] Add configurable workbench row reservation with `piVimMode.ui.workbench.reservedRows`
 
 - [ ] Extract oversized modal command handlers
   - Files: `src/modal/engine.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts`
@@ -53,7 +54,7 @@
   - Solution: Extract command-specific branches/private helpers while preserving behavior and current tests.
   - Benefits: Smaller review surface for modal bugs; less regression risk when adding Ex/search/visual behavior.
 
-- [ ] reserve ex command display section just like in real vim, also make it configurable (like reserve 2 lines for ex command display section)
+- [x] reserve ex command display section just like in real vim, also make it configurable (like reserve 2 lines for ex command display section)
 
 ## Custom keybindings
 
@@ -106,3 +107,6 @@
   - Record searches, marks, paragraph moves, Ex targets, macro starts, and jump points with snippet previews.
   - Keep scope prompt-local; do not promise full Vim jumplist parity.
   - Complexity: Medium. Confidence: 68%.
+
+- [ ] cursor flickering problem
+  - sometimes when agent is working on something, cursor flickers

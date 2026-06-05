@@ -1,8 +1,11 @@
 # vim-runtime-inspectability Specification
 
 ## Purpose
+
 TBD - created by archiving change architecture-runway-sprint-with-inspectability. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt-local inspect command summarizes current editor state
 
 The Vim editor SHALL expose a read-only `:vimmode inspect` diagnostic that summarizes the active prompt editor state without dumping raw prompt contents.
@@ -88,4 +91,3 @@ The inspectability surface SHALL document exact supported command syntax, output
 
 - **WHEN** `bun test` is executed
 - **THEN** tests cover inspect output categories, bounded message history, redaction of large prompt/register/macro content, read-only state preservation, and unsupported inspect command errors
-

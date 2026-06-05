@@ -414,6 +414,8 @@ Supported substitution flags:
 - `g`: replace every non-overlapping match per line
 - `i`: case-insensitive match
 - `r`: opt into bounded JavaScript regex pattern matching
+- `n`: count matches only, report the count, and leave prompt text unchanged
+- `e`: suppress the no-match error and report `0 substitutions` instead
 
 Important semantics:
 
@@ -425,6 +427,9 @@ Important semantics:
 - `:delete` removes addressed lines and writes the deleted linewise text to the unnamed register.
 - `:yank` copies addressed lines to the unnamed register without editing prompt text.
 - `:put` inserts unnamed register text as prompt-buffer lines after the addressed range.
+- `:delete a` and `:yank a` also write lowercase named register `a` while updating the unnamed register.
+- `:delete A` and `:yank A` append to lowercase named register `a` while the unnamed register receives only the latest addressed text.
+- `:put a` and `:put A` read lowercase named register `a`; uppercase put reads only and does not append.
 - `:copy` duplicates addressed lines after the destination address; destination `0` inserts before line 1.
 - `:move` moves addressed lines after the destination address and rejects destinations inside the moved range.
 - Destination `0` is only the before-first-line sentinel; offset forms like `0+1` are unsupported.
@@ -445,18 +450,20 @@ Important semantics:
 - `:features [query]` lists/searches supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
 - `:messages` shows a bounded prompt-local summary of retained recent runtime messages without opening a pager.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
-- `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance.
+- `Left` / `Right` / `Home` / `End`, forward delete, `Alt-Left`, `Alt-Right`, and `Ctrl-W` edit the pending Ex command text without editing prompt text.
+- `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance and move the command cursor to the end of the recalled command.
 - Enter on an empty command closes the Ex row without a message.
 - Substitution is two-phase: first `Enter` highlights matched target text and reports a match count without editing, second unchanged `Enter` applies, `Esc` cancels.
+- `:&`, `:&&`, and range-qualified forms such as `:%&` repeat the last successfully applied substitution through the same preview/apply flow.
 - Editing or history navigation clears a pending substitution match preview.
-- Unsupported command, range, destination, delimiter, argument, flag, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
+- Unsupported command, range, destination, delimiter, argument, flag, register operand, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Unsupported range syntax includes repeated offsets such as `.+1-2`, repeated range separators, expression ranges, search addresses, mark addresses, `+cmd` suffixes, and broader Vimscript grammar.
 - Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
 - Diagnostic and runtime help commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
 - Success/error/info messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
-- Ex commands do not write named registers and do not update dot-repeat.
+- Ex commands do not update dot-repeat. Only documented register operands on `:delete`, `:yank`, and `:put` touch named registers.
 
 Transform examples:
 
@@ -469,7 +476,7 @@ Transform examples:
 
 Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
 
-Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, full Vim help tags, a help pager, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+Limitations: no confirmation flag (`c`), print/list flags (`p`, `#`, `l`), special Ex registers, quoted Ex register operands such as `:delete \"a`, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, full Vim help tags, a help pager, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
 
 <!-- runtime-help:runtime-help -->
 <!-- runtime-help:customization-diagnostics -->
@@ -602,7 +609,8 @@ Rendering behavior:
 - Active macro recording shows `REC {slot}`.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
-- Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row.
+- Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row by default.
+- `piVimMode.ui.workbench.reservedRows` can reserve 0-5 width-safe workbench rows; active feedback uses the first reserved row and blank reserved rows keep the prompt viewport height stable.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.
 - Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators.
 - Cursor styles support `block`, `bar`, and `underline` by mode.

@@ -1,8 +1,11 @@
 # runtime-help-drift-guard Specification
 
 ## Purpose
+
 TBD - created by archiving change runtime-help-docs-spec-drift-guard. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime help is finite and source-backed
 
 The Vim editor SHALL provide finite runtime help that describes supported pi-vimmode behavior and explicit limitations without implying full Vim or Neovim parity.
@@ -107,4 +110,3 @@ The project SHALL include development-time validation that fails when user-facin
 
 - **WHEN** a source-backed feature registry entry lacks a required OpenSpec spec anchor or test anchor without an explicit approved exception
 - **THEN** the docs drift guard fails before the change is considered complete
-

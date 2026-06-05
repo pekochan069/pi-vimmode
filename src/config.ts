@@ -155,6 +155,7 @@ const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
 const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
 const NOOP_FEEDBACK_VALUES = new Set<VimFeedbackOptions["noop"]>(["off", "status"]);
+const WORKBENCH_RESERVED_ROWS_MAX = 5;
 
 export const DEFAULT_VIM_KEYMAP = Object.freeze({
   operators: Object.freeze({
@@ -304,6 +305,9 @@ export const DEFAULT_VIM_UI = Object.freeze({
     base: 1,
     format: "{line}:{column}",
   }),
+  workbench: Object.freeze({
+    reservedRows: 0,
+  }),
 }) as unknown as ResolvedVimUi;
 
 export const DEFAULT_VIM_MACROS = Object.freeze({
@@ -431,6 +435,7 @@ type PartialUiOptions = {
   };
   selection?: Partial<ResolvedVimUi["selection"]>;
   cursorPosition?: Partial<ResolvedVimUi["cursorPosition"]>;
+  workbench?: Partial<ResolvedVimUi["workbench"]>;
 };
 
 export type VimConfigLoadResult = {
@@ -599,6 +604,7 @@ function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
     },
     selection: { ...ui.selection },
     cursorPosition: { ...ui.cursorPosition },
+    workbench: { ...ui.workbench },
   };
 }
 
@@ -970,6 +976,27 @@ function parseUi(
         );
       }
       partial.cursorPosition = cursorPosition;
+    }
+  }
+
+  if (value.workbench !== undefined) {
+    if (!isRecord(value.workbench)) {
+      warnings.push(`${sourceLabel}: piVimMode.ui.workbench must be an object`);
+    } else {
+      const workbench: Partial<ResolvedVimUi["workbench"]> = {};
+      if (
+        typeof value.workbench.reservedRows === "number" &&
+        Number.isInteger(value.workbench.reservedRows) &&
+        value.workbench.reservedRows >= 0 &&
+        value.workbench.reservedRows <= WORKBENCH_RESERVED_ROWS_MAX
+      ) {
+        workbench.reservedRows = value.workbench.reservedRows;
+      } else if (value.workbench.reservedRows !== undefined) {
+        warnings.push(
+          `${sourceLabel}: piVimMode.ui.workbench.reservedRows must be an integer between 0 and ${WORKBENCH_RESERVED_ROWS_MAX}`,
+        );
+      }
+      partial.workbench = workbench;
     }
   }
 
@@ -1375,6 +1402,7 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
   if (partial.cursorPosition) {
     target.cursorPosition = { ...target.cursorPosition, ...partial.cursorPosition };
   }
+  if (partial.workbench) target.workbench = { ...target.workbench, ...partial.workbench };
 }
 
 function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {

@@ -9,6 +9,7 @@ import type {
 import type {
   EditorSnapshot,
   ExMessage,
+  LastExSubstitution,
   ModalEffect,
   ModalOptions,
   ModalState,
@@ -34,7 +35,7 @@ import {
   promptTransformsForOptions,
 } from "../config.ts";
 import { actionsMessage, doctorMessage, keymapMessage, mapcheckMessage } from "../customization.ts";
-import { parseExCommand } from "../ex.ts";
+import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
 import { runtimeFeaturesMessage, runtimeHelpMessage } from "../runtime-help.ts";
 import {
   clearPending,
@@ -48,6 +49,7 @@ import {
   withRuntimeMessage,
 } from "./core.ts";
 import { runtimeMessagesMessage, vimmodeInspectMessage } from "./inspect.ts";
+import { registerToRead, writeRegisters } from "./registers.ts";
 
 export function exDisplay(pendingEx: PendingExCommand | undefined): string | undefined {
   return pendingEx ? `:${pendingEx.command}` : undefined;
@@ -61,6 +63,7 @@ export function visualExCommand(
 ): PendingExCommand {
   return {
     command: "'<,'>",
+    cursor: "'<,'>".length,
     sourceMode,
     visualAnchor,
     visualCursor,
@@ -90,7 +93,7 @@ export function startExCommandUpdate(
       : "";
   return invalidate({
     ...clearPending(state),
-    pendingEx: { command, sourceMode: "normal" },
+    pendingEx: { command, cursor: command.length, sourceMode: "normal" },
   });
 }
 
@@ -105,6 +108,7 @@ export function startVisualExCommandUpdate(
     visualAnchor: state.visualAnchor,
     pendingEx: {
       command: "'<,'>",
+      cursor: "'<,'>".length,
       sourceMode: state.mode as "visual" | "visualLine" | "visualBlock",
       visualAnchor: state.visualAnchor,
       visualCursor: snapshot.cursor,
@@ -175,6 +179,17 @@ function substitutionMessage(matches: number): string {
   return `${matches} ${matches === 1 ? "substitution" : "substitutions"}`;
 }
 
+function substitutionSource(parsed: ParsedExSubstitution): LastExSubstitution {
+  return {
+    command: parsed.command,
+    pattern: parsed.pattern,
+    replacement: parsed.replacement,
+    global: parsed.global,
+    ignoreCase: parsed.ignoreCase,
+    matcherMode: parsed.matcherMode,
+  };
+}
+
 function lineMessage(lines: number, verb: string): string {
   return `${lines} ${lines === 1 ? "line" : "lines"} ${verb}`;
 }
@@ -211,11 +226,13 @@ function executeExCommand(
   if (parsed.type === "empty") return invalidate(finishExState(state));
   if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
 
-  if (parsed.type === "substitute") {
+  if (parsed.type === "substitute" || parsed.type === "repeatSubstitute") {
     if (pendingEx.preview?.command === pendingEx.command) {
       const result = pendingEx.preview;
+      const source = result.repeatSource ?? state.lastExSubstitution;
+      const base = result.edit.changed ? clearSearchHighlight(state) : state;
       const finished = finishExState(
-        result.edit.changed ? clearSearchHighlight(state) : state,
+        source ? { ...base, lastExSubstitution: source } : base,
         "success",
         substitutionMessage(result.matches),
       );
@@ -225,24 +242,34 @@ function executeExCommand(
       return withEffects(finished, effects);
     }
 
+    const source =
+      parsed.type === "substitute" ? substitutionSource(parsed) : state.lastExSubstitution;
+    if (!source) return invalidate(finishExState(state, "error", "No previous substitution"));
+
     const optionsForSubstitution = {
       range: parsed.range,
-      pattern: parsed.pattern,
-      replacement: parsed.replacement,
-      global: parsed.global,
-      ignoreCase: parsed.ignoreCase,
+      pattern: source.pattern,
+      replacement: source.replacement,
+      global: source.global,
+      ignoreCase: source.ignoreCase,
       originalCursor: snapshot.cursor,
     };
     const result =
-      parsed.matcherMode === "regex"
+      source.matcherMode === "regex"
         ? substituteLineRangeRegex(snapshot.text, optionsForSubstitution)
         : {
             ok: true as const,
             ...substituteLineRangeLiteral(snapshot.text, optionsForSubstitution),
           };
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+    if (parsed.type === "substitute" && parsed.countOnly) {
+      return invalidate(finishExState(state, "success", substitutionMessage(result.matches)));
+    }
     if (result.matches === 0) {
-      return invalidate(finishExState(state, "error", `Pattern not found: ${parsed.pattern}`));
+      if (parsed.type === "substitute" && parsed.noError) {
+        return invalidate(finishExState(state, "success", substitutionMessage(0)));
+      }
+      return invalidate(finishExState(state, "error", `Pattern not found: ${source.pattern}`));
     }
 
     const message = `${result.matches} ${result.matches === 1 ? "match" : "matches"} found; Enter applies, Esc cancels`;
@@ -256,6 +283,7 @@ function executeExCommand(
           ranges: result.ranges,
           edit: result.edit,
           message,
+          repeatSource: source,
         },
       },
     });
@@ -314,9 +342,10 @@ function executeExCommand(
 
   if (parsed.type === "yank") {
     const result = yankExLineRange(snapshot.text, parsed.range);
+    const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
     return invalidate(
       finishExState(
-        { ...state, register: result.register },
+        writeRegisters(base, result.register),
         "success",
         lineMessage(result.lines, "yanked"),
       ),
@@ -326,13 +355,17 @@ function executeExCommand(
   if (parsed.type === "delete") {
     const result = deleteExLineRange(snapshot.text, parsed.range);
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
-    return finishExEdit(state, result, lineMessage(result.lines, "deleted"), result.edit.register);
+    const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
+    const next = writeRegisters(base, result.edit.register);
+    return finishExEdit(next, result, lineMessage(result.lines, "deleted"));
   }
 
   if (parsed.type === "put") {
-    const result = putExRegisterAfterRange(snapshot.text, parsed.range, state.register);
+    const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
+    const result = putExRegisterAfterRange(snapshot.text, parsed.range, registerToRead(base));
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
-    return finishExEdit(state, result, lineMessage(result.lines, "put"));
+    const next = parsed.register ? writeRegisters(base, undefined) : base;
+    return finishExEdit(next, result, lineMessage(result.lines, "put"));
   }
 
   if (parsed.type === "copy") {
@@ -357,6 +390,50 @@ function clearExPreview(pendingEx: NonNullable<ModalState["pendingEx"]>) {
   return rest;
 }
 
+function exCursor(pendingEx: NonNullable<ModalState["pendingEx"]>): number {
+  return Math.max(
+    0,
+    Math.min(pendingEx.cursor ?? pendingEx.command.length, pendingEx.command.length),
+  );
+}
+
+function commandWordKind(char: string | undefined): "space" | "alpha" | "digit" | "punct" {
+  if (!char || /\s/.test(char)) return "space";
+  if (/[A-Za-z_]/.test(char)) return "alpha";
+  return /[0-9]/.test(char) ? "digit" : "punct";
+}
+
+function wordLeft(command: string, cursor: number): number {
+  let next = cursor;
+  while (next > 0 && commandWordKind(command[next - 1]) === "space") next--;
+  const kind = commandWordKind(command[next - 1]);
+  while (next > 0 && commandWordKind(command[next - 1]) === kind) next--;
+  return next;
+}
+
+function wordRight(command: string, cursor: number): number {
+  let next = cursor;
+  while (next < command.length && commandWordKind(command[next]) === "space") next++;
+  const kind = commandWordKind(command[next]);
+  while (next < command.length && commandWordKind(command[next]) === kind) next++;
+  while (next < command.length && commandWordKind(command[next]) === "space") next++;
+  return next;
+}
+
+function editPendingEx(
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  command: string,
+  cursor: number,
+): PendingExCommand {
+  return {
+    ...clearExPreview(pendingEx),
+    command,
+    cursor: Math.max(0, Math.min(cursor, command.length)),
+    historyIndex: undefined,
+    historyDraft: undefined,
+  };
+}
+
 function navigateExHistory(
   state: ModalState,
   pendingEx: NonNullable<ModalState["pendingEx"]>,
@@ -379,6 +456,7 @@ function navigateExHistory(
       pendingEx: {
         ...clearExPreview(pendingEx),
         command: draft,
+        cursor: draft.length,
         historyIndex: undefined,
         historyDraft: undefined,
       },
@@ -389,6 +467,7 @@ function navigateExHistory(
     pendingEx: {
       ...clearExPreview(pendingEx),
       command: history[nextIndex] ?? draft,
+      cursor: (history[nextIndex] ?? draft).length,
       historyIndex: nextIndex,
       historyDraft: draft,
     },
@@ -410,29 +489,89 @@ export function handlePendingExInput(
   if (keyMatches(data, "enter") || keyMatches(data, "return"))
     return executeExCommand(state, snapshot, options, diagnostics);
   if (keyMatches(data, "backspace")) {
-    if (pendingEx.command.length === 0) return invalidate(state);
+    const cursor = exCursor(pendingEx);
+    if (cursor === 0) return invalidate(state);
     return invalidate({
       ...state,
-      pendingEx: {
-        ...clearExPreview(pendingEx),
-        command: pendingEx.command.slice(0, -1),
-        historyIndex: undefined,
-        historyDraft: undefined,
-      },
+      pendingEx: editPendingEx(
+        pendingEx,
+        pendingEx.command.slice(0, cursor - 1) + pendingEx.command.slice(cursor),
+        cursor - 1,
+      ),
+    });
+  }
+  const parsed = keySequence(data);
+  if (keyMatches(data, "delete") || parsed === "delete" || data === "\x1b[3~") {
+    const cursor = exCursor(pendingEx);
+    if (cursor >= pendingEx.command.length) return invalidate(state);
+    return invalidate({
+      ...state,
+      pendingEx: editPendingEx(
+        pendingEx,
+        pendingEx.command.slice(0, cursor) + pendingEx.command.slice(cursor + 1),
+        cursor,
+      ),
+    });
+  }
+  if (keyMatches(data, "left")) {
+    const cursor = Math.max(0, exCursor(pendingEx) - 1);
+    return invalidate({ ...state, pendingEx: { ...clearExPreview(pendingEx), cursor } });
+  }
+  if (keyMatches(data, "right")) {
+    const cursor = Math.min(pendingEx.command.length, exCursor(pendingEx) + 1);
+    return invalidate({ ...state, pendingEx: { ...clearExPreview(pendingEx), cursor } });
+  }
+  if (keyMatches(data, "home")) {
+    return invalidate({ ...state, pendingEx: { ...clearExPreview(pendingEx), cursor: 0 } });
+  }
+  if (keyMatches(data, "end")) {
+    return invalidate({
+      ...state,
+      pendingEx: { ...clearExPreview(pendingEx), cursor: pendingEx.command.length },
     });
   }
   if (keyMatches(data, "up")) return invalidate(navigateExHistory(state, pendingEx, "previous"));
   if (keyMatches(data, "down")) return invalidate(navigateExHistory(state, pendingEx, "next"));
 
-  const key = keySequence(data);
+  const key = parsed;
+  if (key === "alt+left") {
+    return invalidate({
+      ...state,
+      pendingEx: {
+        ...clearExPreview(pendingEx),
+        cursor: wordLeft(pendingEx.command, exCursor(pendingEx)),
+      },
+    });
+  }
+  if (key === "alt+right") {
+    return invalidate({
+      ...state,
+      pendingEx: {
+        ...clearExPreview(pendingEx),
+        cursor: wordRight(pendingEx.command, exCursor(pendingEx)),
+      },
+    });
+  }
+  if (key === "ctrl+w") {
+    const cursor = exCursor(pendingEx);
+    const nextCursor = wordLeft(pendingEx.command, cursor);
+    return invalidate({
+      ...state,
+      pendingEx: editPendingEx(
+        pendingEx,
+        pendingEx.command.slice(0, nextCursor) + pendingEx.command.slice(cursor),
+        nextCursor,
+      ),
+    });
+  }
   if (!key || key.length !== 1) return invalidate(state);
+  const cursor = exCursor(pendingEx);
   return invalidate({
     ...state,
-    pendingEx: {
-      ...clearExPreview(pendingEx),
-      command: pendingEx.command + key,
-      historyIndex: undefined,
-      historyDraft: undefined,
-    },
+    pendingEx: editPendingEx(
+      pendingEx,
+      pendingEx.command.slice(0, cursor) + key + pendingEx.command.slice(cursor),
+      cursor + key.length,
+    ),
   });
 }

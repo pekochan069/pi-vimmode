@@ -135,6 +135,32 @@ describe("vim editor integration", () => {
     expectRenderedWidth(feedback, 16);
   });
 
+  test("reserved workbench rows render idle and active width-safely", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      ui: {
+        ...DEFAULT_VIM_OPTIONS.ui!,
+        workbench: { reservedRows: 2 },
+      },
+    });
+    const unreserved = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor.render(
+      20,
+    );
+    const baseline = editor.render(20);
+    expect(baseline.length).toBe(unreserved.length + 2);
+    expect(baseline.slice(-2)).toEqual([" ".repeat(20), " ".repeat(20)]);
+    expectRenderedWidth(baseline, 20);
+
+    editor.handleInput(":");
+    typeKeys(editor, ["h", "e", "l", "p"]);
+    const active = editor.render(20);
+    expect(active.length).toBe(baseline.length);
+    expect(active.at(-2)).toContain(":help");
+    expect(active.at(-1)).toBe(" ".repeat(20));
+    expectRenderedWidth(active, 20);
+  });
+
   test("search and substitution preview rows render width-safely below prompt", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     const baseline = editor.render(20);

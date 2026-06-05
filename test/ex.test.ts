@@ -53,6 +53,22 @@ describe("Ex substitution parser", () => {
     });
   });
 
+  test("parses safe substitution flags", () => {
+    expect(parseExSubstitution("%s/old/new/gn", context)).toMatchObject({
+      type: "substitute",
+      global: true,
+      countOnly: true,
+      noError: false,
+    });
+    expect(parseExSubstitution("s/todo/done/rie", context)).toMatchObject({
+      type: "substitute",
+      matcherMode: "regex",
+      ignoreCase: true,
+      noError: true,
+      countOnly: false,
+    });
+  });
+
   test("rejects unsupported names and uppercase flags", () => {
     expect(parseExSubstitution("sub/old/new/", context)).toEqual({
       type: "error",
@@ -168,6 +184,41 @@ describe("Ex command parser", () => {
     });
     expect(parseExCommand("join", context)).toMatchObject({ type: "join", command: "join" });
     expect(parseExCommand("noh", context)).toEqual({ type: "nohlsearch", command: "noh" });
+  });
+
+  test("parses repeat substitution aliases", () => {
+    expect(parseExCommand("&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+    expect(parseExCommand("&&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&&",
+      range: { startLine: 1, endLine: 1 },
+    });
+    expect(parseExCommand("%&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&",
+      range: { startLine: 0, endLine: 4 },
+      rangeExplicit: true,
+    });
+  });
+
+  test("parses Ex register operands for line commands", () => {
+    expect(parseExCommand("delete a", context)).toMatchObject({
+      type: "delete",
+      register: { slot: "a", append: false },
+    });
+    expect(parseExCommand("%yank A", context)).toMatchObject({
+      type: "yank",
+      register: { slot: "a", append: true },
+    });
+    expect(parseExCommand("put A", context)).toMatchObject({
+      type: "put",
+      register: { slot: "a", append: true },
+    });
   });
 
   test("parses copy and move destination addresses", () => {
@@ -424,7 +475,23 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Unsupported Ex command: co",
     });
-    expect(parseExCommand("delete a", context)).toEqual({
+    expect(parseExCommand("delete 1", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("yank _", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("put ab", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand('delete "a', context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("join a", context)).toEqual({
       type: "error",
       message: "Unexpected Ex command arguments",
     });

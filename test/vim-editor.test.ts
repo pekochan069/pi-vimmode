@@ -174,6 +174,43 @@ describe("vim editor integration", () => {
     expect(visualEx).toContain(":'<,'>");
   });
 
+  test("runtime help, inspect, and messages rows render width-safely", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput(":");
+    typeKeys(editor, ["s", "/", "m", "i", "s", "s", "i", "n", "g", "/", "x", "/", "\r"]);
+    runEx(editor, "vimmode inspect");
+    let lines = editor.render(48);
+    expect(lines.at(-1)).toContain("inspect: mode=normal");
+    expectRenderedWidth(lines, 48);
+
+    editor.handleInput(":");
+    typeKeys(editor, ["m", "e", "s", "s", "a", "g", "e", "s", "\r"]);
+
+    lines = editor.render(32);
+    expect(lines.at(-1)).toContain("messages: 2 retained");
+    expectRenderedWidth(lines, 32);
+  });
+
+  test("runtime help row composes with visual selection and search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one old\ntwo old");
+    editor.handleInput("/");
+    typeKeys(editor, ["o", "l", "d", "\r"]);
+    runEx(editor, "help search");
+    const searchHelp = editor.render(60).join("\n");
+    expect(searchHelp).toContain(SEARCH_START);
+    expect(searchHelp).toContain("prompt search");
+
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput(":");
+    typeKeys(editor, ["\b", "\b", "\b", "\b", "\b", "h", "e", "l", "p", "\r"]);
+    const visualHelp = editor.render(60).join("\n");
+    expect(visualHelp).toContain("\u001b[7m");
+    expect(visualHelp).toContain("help:");
+  });
+
   test("renders configured mode labels", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,

@@ -31,7 +31,7 @@ Example:
 }
 ```
 
-Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor.
+Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor. Run `:help settings` or `:features settings` for compact runtime reminders, but this file remains the complete settings reference.
 
 Common warning causes:
 

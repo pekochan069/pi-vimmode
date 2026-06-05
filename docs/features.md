@@ -235,6 +235,8 @@ T_  -> character after previous underscore
 
 Search misses are safe no-ops.
 
+<!-- runtime-help:search -->
+
 ## Prompt search
 
 `/` starts literal forward search in current prompt. `?` starts literal backward search. Type query text, then press `Enter`. `n` repeats last search direction and `N` searches opposite direction. Matches wrap around the prompt.
@@ -348,6 +350,8 @@ Ctrl-v jj I- Esc
 
 Adds `-` before the selected block column on three lines.
 
+<!-- runtime-help:ex -->
+
 ## Ex command-line
 
 Normal-mode `:` opens a dedicated Ex row below the prompt. Visual `:` opens the same row with `'<,'>` prefilled and keeps the original selection highlighted while editing the command.
@@ -379,6 +383,9 @@ Supported commands:
 :keymap redo
 :mapcheck ctrl+p
 :actions search
+:help search
+:features nohlsearch
+:messages
 ```
 
 Supported ranges:
@@ -434,6 +441,9 @@ Important semantics:
 - `:keymap [query]` reports effective resolved semantic keymap entries, e.g. `:keymap redo`.
 - `:mapcheck <key>` explains mapped, unmapped, protected, or warning-related key ownership, e.g. `:mapcheck ctrl+p`.
 - `:actions [query]` lists/searches finite supported actions without adding arbitrary Vim grammar.
+- `:help [topic]` shows compact source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
+- `:features [query]` lists/searches supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
+- `:messages` shows a bounded prompt-local summary of retained recent runtime messages without opening a pager.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance.
 - Enter on an empty command closes the Ex row without a message.
@@ -442,7 +452,7 @@ Important semantics:
 - Unsupported command, range, destination, delimiter, argument, flag, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Unsupported range syntax includes repeated offsets such as `.+1-2`, repeated range separators, expression ranges, search addresses, mark addresses, `+cmd` suffixes, and broader Vimscript grammar.
 - Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
-- Diagnostic commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
+- Diagnostic and runtime help commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
 - Success/error/info messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
@@ -459,7 +469,34 @@ Transform examples:
 
 Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
 
-Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+Limitations: no repeat substitution, range offsets, semicolon ranges, confirmation flag (`c`), Ex register operands, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, full Vim help tags, a help pager, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+
+<!-- runtime-help:runtime-help -->
+<!-- runtime-help:customization-diagnostics -->
+<!-- runtime-help:prompt-transforms -->
+
+### Runtime help and diagnostics
+
+Runtime help is finite, compact, source-backed, and prompt-local. It reports supported pi-vimmode behavior and limits; it does not read Vim help files or imply Vimscript/Neovim parity.
+
+Examples:
+
+```vim
+:help             " entry points
+:help search      " prompt search behavior and limits
+:help ex          " finite Ex command-line behavior and limits
+:features         " feature category summary
+:features redo    " supported action and current binding
+:features ctrl+p  " protected Pi shortcut ownership
+:vimmode inspect  " current prompt-local editor state summary
+:messages         " retained recent runtime message summary
+```
+
+`:`actions remains action-focused, `:keymap` remains binding-focused, `:mapcheck` explains one key or sequence, and `:vimdoctor` reports retained settings warnings behind `vim ⚠`. Use `:features` for broader feature/limit discovery.
+
+`:vimmode inspect` is read-only and bounded. It summarizes mode, cursor, pending workbench state, selection kind/anchor, register slots/types/lengths, mark slots/positions, macro slots/token counts, search/Ex history counts, retained warning count, and render-layer activity. It does not dump full prompt text, full register contents, raw macro token streams, Vimscript state, or Neovim/runtime internals.
+
+Runtime messages are in-memory for the current editor, bounded to 20 retained entries, and rendered through the same one-row workbench surface as Ex/search messages. There is no message pager, persistent log, `:messages clear`, or full Vim `:messages` parity.
 
 ## Registers
 
@@ -485,6 +522,8 @@ Examples:
 ```
 
 Limitations: no numbered registers, special registers, expression registers, black-hole register, or system clipboard register.
+
+<!-- runtime-help:marks -->
 
 ## Marks
 
@@ -512,6 +551,8 @@ d'a     delete line range through mark a
 ```
 
 Limitations: no global marks, special marks, automatic marks, mark list, persistence, or full Vim mark adjustment after edits.
+
+<!-- runtime-help:macros -->
 
 ## Macros
 
@@ -584,6 +625,8 @@ Pi remains owner of app-level shortcuts.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
 - `Ctrl-a`, `Ctrl-x`, and `Ctrl-r` are owned by pi-vimmode only in normal mode for numeric adjustment and redo.
 
+<!-- runtime-help:settings -->
+
 ## Configuration features
 
 Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar.
@@ -618,7 +661,8 @@ Useful files when verifying feature behavior:
 - `src/types.ts`: public option and behavior types.
 - `src/commands.ts`: finite semantic key parser, counts, text objects, macro control parser.
 - `src/buffer.ts`: pure prompt-buffer navigation, edit, search, visual, mark, register, and substitution operations.
-- `src/ex.ts`: finite Ex substitution parser.
+- `src/ex.ts`: finite Ex command-line parser.
+- `src/runtime-help.ts`: finite runtime help/feature registry and compact help output.
 - `src/modal/engine.ts`: modal state machine and Vim semantics.
 - `src/modal/view.ts`: mode/status/selection display derivation.
 - `src/render.ts`: prompt rendering, visual/search/cursor composition.

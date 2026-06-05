@@ -55,12 +55,26 @@ export type ParsedExDiagnosticCommand = {
   query?: string;
 };
 
+export type ParsedExRuntimeHelpCommand = {
+  type: "runtimeHelp";
+  command: "help" | "features" | "messages";
+  query?: string;
+};
+
+export type ParsedExInspectCommand = {
+  type: "inspect";
+  command: "vimmode";
+  query: "inspect";
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
   | ParsedExLineCommand
   | ParsedExDestinationCommand
   | ParsedExTransformCommand
   | ParsedExDiagnosticCommand
+  | ParsedExRuntimeHelpCommand
+  | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | { type: "empty" }
   | { type: "error"; message: string };
@@ -91,6 +105,10 @@ type ParsedCommandName =
   | "keymap"
   | "mapcheck"
   | "actions"
+  | "help"
+  | "features"
+  | "messages"
+  | "vimmode"
   | "noh"
   | "nohlsearch";
 
@@ -104,6 +122,8 @@ type ParsedCommandType =
   | "join"
   | "transform"
   | "diagnostic"
+  | "runtimeHelp"
+  | "inspect"
   | "nohlsearch";
 
 type ParsedCommand = {
@@ -171,6 +191,12 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "mapcheck":
     case "actions":
       return "diagnostic";
+    case "help":
+    case "features":
+    case "messages":
+      return "runtimeHelp";
+    case "vimmode":
+      return "inspect";
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
@@ -211,6 +237,10 @@ function parseCommand(
     "keymap",
     "mapcheck",
     "actions",
+    "help",
+    "features",
+    "messages",
+    "vimmode",
     "noh",
     "nohlsearch",
   ]);
@@ -398,6 +428,21 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       return { type: "error", message: "Missing mapcheck key" };
     }
     return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
+  }
+
+  if (type === "runtimeHelp") {
+    const args = command.rest.trim();
+    const name = command.command.name as ParsedExRuntimeHelpCommand["command"];
+    if (name === "messages" && args.length > 0) {
+      return { type: "error", message: "Unexpected Ex command arguments" };
+    }
+    return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
+  }
+
+  if (type === "inspect") {
+    const args = command.rest.trim();
+    if (args !== "inspect") return { type: "error", message: "Unexpected Ex command arguments" };
+    return { type, command: "vimmode", query: "inspect" };
   }
 
   if (type === "transform") {

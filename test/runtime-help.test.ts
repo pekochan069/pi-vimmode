@@ -1,0 +1,95 @@
+import { describe, expect, test } from "bun:test";
+
+import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
+import {
+  runtimeFeaturesMessage,
+  runtimeHelpEntries,
+  runtimeHelpMessage,
+} from "../src/runtime-help.ts";
+
+const context = { options: DEFAULT_VIM_OPTIONS, diagnostics: { warnings: [] } };
+
+describe("runtime help registry", () => {
+  test("general help lists finite entry points", () => {
+    const message = runtimeHelpMessage(undefined, context);
+
+    expect(message).toContain(":help <topic>");
+    expect(message).toContain(":features [query]");
+    expect(message).toContain(":messages");
+    expect(message).toContain(":actions");
+    expect(message).toContain(":keymap");
+    expect(message).toContain(":mapcheck");
+    expect(message).toContain(":vimdoctor");
+  });
+
+  test("topic help reports supported behavior and limits", () => {
+    expect(runtimeHelpMessage("search", context)).toContain("prompt search");
+    expect(runtimeHelpMessage("search", context)).toContain("no cross-prompt history");
+    expect(runtimeHelpMessage("ex", context)).toContain(":s");
+    expect(runtimeHelpMessage("vimscript", context)).toBe("help: no match for vimscript");
+  });
+
+  test("feature discovery summarizes categories and supported commands", () => {
+    const summary = runtimeFeaturesMessage(undefined, context);
+    for (const category of [
+      "modes",
+      "motions",
+      "editing",
+      "search",
+      "Ex",
+      "transforms",
+      "registers",
+      "marks",
+      "macros",
+      "settings",
+    ]) {
+      expect(summary).toContain(category);
+    }
+
+    expect(runtimeFeaturesMessage("nohlsearch", context)).toContain(
+      ":noh/:nohlsearch supported; clears visible prompt search highlights; preserves n/N repeat-search state",
+    );
+  });
+
+  test("feature discovery reuses action and protected shortcut metadata", () => {
+    expect(runtimeFeaturesMessage("redo", context)).toContain("command.redo ctrl+r");
+    expect(runtimeFeaturesMessage("ctrl+p", context)).toContain(
+      "protected for Pi command/model palette",
+    );
+  });
+
+  test("feature discovery reflects effective options", () => {
+    const minimal = resolveVimOptions(undefined, { piVimMode: { preset: "minimal" } }).options;
+    expect(runtimeFeaturesMessage("macros", { ...context, options: minimal })).toContain(
+      "macros disabled",
+    );
+
+    const restricted = resolveVimOptions(undefined, {
+      piVimMode: { marks: { enabled: true, slots: ["a", "b"] } },
+    }).options;
+    expect(runtimeFeaturesMessage("marks", { ...context, options: restricted })).toContain(
+      "slots a,b",
+    );
+
+    const transforms = resolveVimOptions(undefined, {
+      piVimMode: {
+        promptTransforms: {
+          actions: { reflow: false },
+          commands: { quote: ["qte"] },
+        },
+      },
+    }).options;
+    expect(runtimeFeaturesMessage("reflow", { ...context, options: transforms })).toContain(
+      "reflow disabled",
+    );
+    expect(runtimeFeaturesMessage("quote", { ...context, options: transforms })).toContain(":qte");
+  });
+
+  test("registry entries carry docs, spec, and test anchors", () => {
+    for (const entry of runtimeHelpEntries(context)) {
+      expect(entry.docsAnchor).toStartWith("runtime-help:");
+      expect(entry.specAnchor).toContain("openspec/specs/");
+      expect(entry.testAnchors.length).toBeGreaterThan(0);
+    }
+  });
+});

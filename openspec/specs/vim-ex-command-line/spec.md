@@ -710,3 +710,113 @@ The change SHALL include automated tests and user-facing documentation for visib
 - **WHEN** the user opens `docs/features.md`
 - **THEN** it documents supported Ex offsets, semicolon range behavior, destination offset behavior, destination zero behavior, and unsupported range syntax limits
 
+### Requirement: Ex command-line supports finite inspectability diagnostics
+
+The Vim editor SHALL parse and execute `:vimmode inspect` and `:messages` as finite read-only Ex diagnostic commands without adding arbitrary Vimscript or command dispatch.
+
+#### Scenario: Vimmode inspect command executes
+
+- **WHEN** Ex command-line mode is active and the user executes `:vimmode inspect`
+- **THEN** the editor exits Ex command-line mode, shows a bounded prompt-local inspect diagnostic, and leaves prompt text unchanged
+
+#### Scenario: Messages command executes
+
+- **WHEN** Ex command-line mode is active and the user executes `:messages`
+- **THEN** the editor exits Ex command-line mode, shows a bounded recent-message diagnostic, and leaves prompt text unchanged
+
+#### Scenario: Inspect command supports exact finite syntax
+
+- **WHEN** the Ex parser receives `vimmode inspect`
+- **THEN** it returns a finite parse result for the inspectability diagnostic command
+
+#### Scenario: Unsupported inspect syntax is rejected
+
+- **WHEN** the Ex parser receives unsupported inspectability syntax such as `vimmode`, `vimmode status`, `vimmode inspect raw`, `messages clear`, or `mes`
+- **THEN** it returns a readable Ex error and prompt text remains unchanged
+
+### Requirement: Inspectability diagnostics compose with Ex source-mode restoration
+
+Inspectability diagnostics SHALL follow existing Ex command-line source-mode restoration rules for normal and visual source modes.
+
+#### Scenario: Normal source mode returns to normal
+
+- **WHEN** `:vimmode inspect` or `:messages` is executed from Ex command-line mode opened in normal mode
+- **THEN** Ex command-line mode closes, the editor remains in normal mode, and the original prompt text and cursor are preserved
+
+#### Scenario: Visual source mode restores captured selection
+
+- **WHEN** `:vimmode inspect` or `:messages` is executed from Ex command-line mode opened in visual, visual-line, or visual-block mode
+- **THEN** Ex command-line mode closes, the original visual mode and captured selection are restored, and prompt text remains unchanged
+
+#### Scenario: Inspectability diagnostics do not enter Ex history as edits
+
+- **WHEN** `:vimmode inspect` or `:messages` executes successfully
+- **THEN** the command may be recorded according to existing successful Ex history rules, but it does not update registers, search state, visible search highlights, marks, macros, cursor target, or repeat-change state
+
+### Requirement: Inspectability Ex output uses existing workbench feedback surface
+
+The Ex command-line implementation SHALL show inspectability diagnostics through existing bounded diagnostic/workbench feedback rather than adding a new persistent render surface.
+
+#### Scenario: Inspect output appears as bounded diagnostic feedback
+
+- **WHEN** `:vimmode inspect` executes
+- **THEN** the diagnostic appears through the same transient feedback path used by finite read-only diagnostic Ex commands or a bounded message-view path, and total editor rendering remains width-safe
+
+#### Scenario: Messages output does not change prompt viewport rules permanently
+
+- **WHEN** `:messages` executes
+- **THEN** any visible diagnostic feedback uses existing workbench row behavior and clears according to existing transient feedback clearing rules while retained history remains available to future `:messages`
+
+#### Scenario: Pending Ex preview is cleared safely
+
+- **WHEN** an inspectability diagnostic is executed while an Ex substitution preview had been active for the same pending Ex command text
+- **THEN** the preview is cleared, prompt text remains unchanged, and no stale substitution edit is applied
+
+### Requirement: Ex command-line supports finite runtime help commands
+
+The Vim editor SHALL parse and execute finite read-only runtime help commands from Ex command-line mode.
+
+#### Scenario: Help command executes
+
+- **WHEN** the editor executes `:help` or `:help search`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested help entry
+
+#### Scenario: Features command executes
+
+- **WHEN** the editor executes `:features` or `:features redo`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested feature list or feature match
+
+#### Scenario: Messages command executes
+
+- **WHEN** the editor executes `:messages`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message describing retained runtime messages
+
+#### Scenario: Unsupported runtime help abbreviation is rejected
+
+- **WHEN** the editor executes an unsupported abbreviation such as `:h`, `:feat`, or `:mes`
+- **THEN** the editor reports a readable Ex error and prompt text remains unchanged
+
+#### Scenario: Unexpected messages arguments are rejected
+
+- **WHEN** the editor executes `:messages noisy` or another `:messages` command with unsupported trailing arguments
+- **THEN** the editor reports a readable Ex error and prompt text remains unchanged
+
+### Requirement: Runtime help Ex commands are read-only
+
+Runtime help Ex commands SHALL not edit the prompt buffer or mutate modal editing side effects beyond the bounded informational message.
+
+#### Scenario: Runtime help command preserves normal-mode state
+
+- **WHEN** the editor executes `:help`, `:features`, or `:messages` from normal Ex command-line mode
+- **THEN** prompt text, cursor position, registers, marks, search highlights, macro state, and dot-repeat state remain unchanged except for the transient informational message
+
+#### Scenario: Runtime help command preserves visual Ex state
+
+- **WHEN** Ex command-line mode was opened from a visual selection, the user deletes the prefilled visual range marker, and executes `:help`, `:features`, or `:messages`
+- **THEN** the command exits Ex mode without editing prompt text and restores the original visual mode, anchor, cursor, and highlight according to existing visual Ex restoration behavior
+
+#### Scenario: Runtime help command does not update dot repeat
+
+- **WHEN** the editor executes `:help`, `:features`, or `:messages` after a repeatable normal-mode edit
+- **THEN** pressing `.` later repeats the previous supported normal-mode edit rather than replaying the runtime help command
+

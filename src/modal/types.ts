@@ -144,6 +144,7 @@ export type ModalState = {
   pendingEx?: PendingExCommand;
   exHistory?: string[];
   exMessage?: ExMessage;
+  messageHistory?: ExMessage[];
   lastCharSearch?: CharSearchState;
   lastSearch?: SearchState;
   searchHistory?: SearchHistoryEntry[];

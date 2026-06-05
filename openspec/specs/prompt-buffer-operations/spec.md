@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-buffer-ts-prompt-buffer-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt buffer exposes operation-level navigation
 
 The prompt buffer module SHALL expose navigation operations that resolve cursor targets for supported prompt motions without requiring callers to compose low-level line, offset, or clamp helpers.
@@ -144,4 +146,3 @@ The implementation SHALL validate typed range integration with focused tests tha
 
 - **WHEN** modal or `VimEditor` tests exercise behavior backed by typed ranges
 - **THEN** those tests assert user-visible editor state and Pi adapter effects rather than duplicating low-level range arithmetic
-

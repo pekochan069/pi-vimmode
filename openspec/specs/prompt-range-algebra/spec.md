@@ -1,8 +1,11 @@
 # prompt-range-algebra Specification
 
 ## Purpose
+
 TBD - created by archiving change prompt-range-algebra-kernel. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt range algebra resolves finite prompt-local references
 
 The Vim editor SHALL provide a prompt-local range algebra that resolves only supported finite range references over the current prompt buffer.
@@ -69,4 +72,3 @@ The Vim editor SHALL keep range parsing and resolution side-effect free; only la
 
 - **WHEN** range algebra needs cursor, visual capture, or prompt line count for Ex resolution
 - **THEN** callers pass those facts as input data and range algebra does not import modal engine or Pi adapter internals
-

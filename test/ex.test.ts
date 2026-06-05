@@ -274,7 +274,34 @@ describe("Ex command parser", () => {
     });
   });
 
-  test("rejects unsupported diagnostic abbreviations and missing required arguments", () => {
+  test("parses finite runtime help commands", () => {
+    expect(parseExCommand("help", context)).toEqual({ type: "runtimeHelp", command: "help" });
+    expect(parseExCommand("help search", context)).toEqual({
+      type: "runtimeHelp",
+      command: "help",
+      query: "search",
+    });
+    expect(parseExCommand("features", context)).toEqual({
+      type: "runtimeHelp",
+      command: "features",
+    });
+    expect(parseExCommand("features redo", context)).toEqual({
+      type: "runtimeHelp",
+      command: "features",
+      query: "redo",
+    });
+    expect(parseExCommand("messages", context)).toEqual({
+      type: "runtimeHelp",
+      command: "messages",
+    });
+    expect(parseExCommand("vimmode inspect", context)).toEqual({
+      type: "inspect",
+      command: "vimmode",
+      query: "inspect",
+    });
+  });
+
+  test("rejects unsupported diagnostic/runtime-help abbreviations and missing required arguments", () => {
     expect(parseExCommand("vimd", context)).toEqual({
       type: "error",
       message: "Unsupported Ex command: vimd",
@@ -283,11 +310,43 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Unsupported Ex command: map",
     });
+    expect(parseExCommand("h", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: h",
+    });
+    expect(parseExCommand("feat", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: feat",
+    });
+    expect(parseExCommand("mes", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: mes",
+    });
     expect(parseExCommand("mapcheck", context)).toEqual({
       type: "error",
       message: "Missing mapcheck key",
     });
     expect(parseExCommand("vimdoctor noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("messages noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode status", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode inspect raw", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("messages clear", context)).toEqual({
       type: "error",
       message: "Unexpected Ex command arguments",
     });

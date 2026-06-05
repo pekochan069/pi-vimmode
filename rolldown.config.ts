@@ -30,7 +30,6 @@ async function writeDistPackageJson() {
   packageJson.files = ["index.js", "README.md", "LICENSE", "docs/features.md", "docs/settings.md"];
   packageJson.pi = { extensions: ["./index.js"] };
 
-  await mkdir(distDir, { recursive: true });
   await writeFile(join(distDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 

@@ -90,13 +90,13 @@
   - Goal: unlock operator coverage, Ex operands, marks integration, and safer substitution without one-off parser branches.
   - Complexity: High. Confidence: 78%.
 
-- [ ] Runtime help and docs/spec drift guard
+- [x] Runtime help and docs/spec drift guard
   - Generate or validate feature matrix from action registry, config schema, OpenSpec, and tests.
   - Expose runtime help/limits via `:help`, `:features`, `:messages`.
   - Fail checks when docs contradict source, like stale `:nohlsearch` claims.
   - Complexity: Medium. Confidence: 76%.
 
-- [ ] Architecture runway sprint with inspectability
+- [x] Architecture runway sprint with inspectability
   - Split modal/search/Ex/visual/macro handlers into feature modules with semantic action/effect contracts.
   - Add golden effect tests.
   - Expose optional `:vimmode inspect` / `:messages` for mode, cursor, selection, registers, marks, macros, search, and render layers.

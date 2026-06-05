@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Status UI items are configurable
 
 The Vim editor SHALL read `piVimMode.ui.status` to determine which status items are rendered and in what order while preserving the current status UI by default.
@@ -454,4 +456,3 @@ The Vim editor SHALL support `piVimMode.ui.workbench.reservedRows` as the Pi-nat
 
 - **WHEN** the user opens `docs/settings.md`
 - **THEN** it documents `piVimMode.ui.workbench.reservedRows`, default behavior, supported bounds, examples, and the relationship between reserved rows and active workbench feedback
-

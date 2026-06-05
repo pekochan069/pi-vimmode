@@ -149,6 +149,7 @@ export class VimEditor extends CustomEditor {
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
+  private agentBusy = false;
   private isMacroReplaying = false;
 
   constructor(
@@ -188,6 +189,12 @@ export class VimEditor extends CustomEditor {
 
   getCurrentCursorStyle(): CursorStyle {
     return cursorStyleForMode(this.options, this.modalState.mode);
+  }
+
+  setAgentBusy(active: boolean): void {
+    if (this.agentBusy === active) return;
+    this.agentBusy = active;
+    this.syncHardwareCursorVisibility(this.getCurrentCursorStyle());
   }
 
   override handleInput(data: string): void {
@@ -463,6 +470,10 @@ export class VimEditor extends CustomEditor {
   }
 
   private syncHardwareCursorVisibility(style: CursorStyle): void {
+    if (this.agentBusy) {
+      this.setHardwareCursorVisibility(false);
+      return;
+    }
     this.setHardwareCursorVisibility(
       style === "bar" || this.originalHardwareCursorVisible === true,
     );

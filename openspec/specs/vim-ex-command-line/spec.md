@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -917,4 +919,3 @@ The Vim editor SHALL support finite repeat-substitution commands that reuse the 
 
 - **WHEN** a repeated substitution applies successfully
 - **THEN** it preserves existing Ex substitution side-effect rules for cursor intent, registers, dot-repeat, search highlights, Ex messages, and history recording
-

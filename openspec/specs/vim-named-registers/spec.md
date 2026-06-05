@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-named-registers. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode supports named register prefixes
 
 The Vim editor SHALL support Vim-style `"{slot}` register prefixes in normal mode for supported yank, delete, change, and paste commands.
@@ -219,4 +221,3 @@ The named register change SHALL include automated tests and user-facing document
 
 - **WHEN** the user opens `docs/features.md`
 - **THEN** it documents Ex register operand syntax for `:delete`, `:yank`, and `:put`, explains lowercase and uppercase behavior, and lists unsupported special registers or quoted Ex operand forms as limitations
-

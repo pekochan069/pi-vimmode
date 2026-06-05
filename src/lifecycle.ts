@@ -18,7 +18,7 @@ type VimEditorFactory = (
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
 
-type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle">;
+type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle" | "setAgentBusy">;
 
 type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
@@ -44,6 +44,7 @@ export function registerVimLifecycle(
   let currentOptions = dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS;
   let currentDiagnostics: VimDiagnostics = { warnings: [] };
   let enabled = true;
+  let agentBusy = false;
   let previousEditorFactory: EditorComponentFactory;
   const editors = new Set<TrackedEditor>();
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
@@ -56,6 +57,7 @@ export function registerVimLifecycle(
   const editorFactory: VimEditorFactory = (tui, theme, keybindings) => {
     const editor = createEditor(tui, theme, keybindings, currentOptions, currentDiagnostics);
     editors.add(editor);
+    if (agentBusy) editor.setAgentBusy(true);
     return editor as VimEditor;
   };
 
@@ -89,6 +91,11 @@ export function registerVimLifecycle(
     });
   };
 
+  const setKnownEditorsAgentBusy = (active: boolean) => {
+    agentBusy = active;
+    for (const editor of editors) editor.setAgentBusy(active);
+  };
+
   const resetKnownEditors = () => {
     for (const editor of editors) editor.resetTerminalCursorStyle();
     editors.clear();
@@ -96,6 +103,7 @@ export function registerVimLifecycle(
 
   const disableEditor = (ctx: ExtensionContext) => {
     enabled = false;
+    agentBusy = false;
     resetKnownEditors();
     if (ctx.ui.getEditorComponent() === editorFactory) {
       ctx.ui.setEditorComponent(previousEditorFactory);
@@ -136,11 +144,17 @@ export function registerVimLifecycle(
     installEditorSoon(ctx);
   });
 
+  pi.on("agent_start", () => {
+    setKnownEditorsAgentBusy(true);
+  });
+
   pi.on("agent_end", (_event, ctx) => {
+    setKnownEditorsAgentBusy(false);
     installEditor(ctx);
   });
 
   pi.on("session_shutdown", () => {
+    agentBusy = false;
     resetKnownEditors();
   });
 }

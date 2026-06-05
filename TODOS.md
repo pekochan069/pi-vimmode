@@ -108,5 +108,5 @@
   - Keep scope prompt-local; do not promise full Vim jumplist parity.
   - Complexity: Medium. Confidence: 68%.
 
-- [ ] cursor flickering problem
+- [x] cursor flickering problem
   - sometimes when agent is working on something, cursor flickers

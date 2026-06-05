@@ -10,10 +10,11 @@ import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
+  initialHardwareCursorVisible = false,
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
-  let hardwareCursorVisible = false;
+  let hardwareCursorVisible = initialHardwareCursorVisible;
   const tui = {
     terminal: { rows: 24, write: (data: string) => writes.push(data) },
     requestRender() {},
@@ -1218,6 +1219,69 @@ describe("vim editor integration", () => {
     expect(writes.at(-1)).toBe("\x1b[6 q");
     expect(getHardwareCursorVisible()).toBe(true);
     editor.resetTerminalCursorStyle();
+    expect(writes.at(-1)).toBe("\x1b[0 q");
+    expect(getHardwareCursorVisible()).toBe(false);
+    expect(hardwareCursorChanges).toEqual([true, false, true, false]);
+  });
+
+  test("agent busy suppresses bar hardware cursor without changing editor state", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
+    });
+    editor.handleInput("a");
+    expectEditorState(editor, { text: "a", cursor: { line: 0, col: 1 }, mode: "insert" });
+    expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(true);
+
+    editor.setAgentBusy(true);
+
+    expectEditorState(editor, { text: "a", cursor: { line: 0, col: 1 }, mode: "insert" });
+    expect(editor.getCurrentCursorStyle()).toBe("bar");
+    expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(false);
+    expect(hardwareCursorChanges).toEqual([true, false]);
+  });
+
+  test("agent idle restores cursor policy and preserves original hardware visibility", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor(
+      {
+        startMode: "insert",
+        cursor: {
+          ...DEFAULT_VIM_OPTIONS.cursor,
+          insert: "bar",
+          normal: "underline",
+        },
+      },
+      { warnings: [] },
+      true,
+    );
+    expect(hardwareCursorChanges).toEqual([]);
+    editor.handleInput("\x1b");
+    expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(getHardwareCursorVisible()).toBe(true);
+
+    editor.setAgentBusy(true);
+    expect(getHardwareCursorVisible()).toBe(false);
+    editor.setAgentBusy(false);
+
+    expect(editor.getVimMode()).toBe("normal");
+    expect(editor.getCurrentCursorStyle()).toBe("underline");
+    expect(getHardwareCursorVisible()).toBe(true);
+    expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(hardwareCursorChanges).toEqual([false, true]);
+  });
+
+  test("cursor reset restores original hardware visibility after busy transitions", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
+    });
+    editor.setAgentBusy(true);
+    editor.setAgentBusy(false);
+
+    editor.resetTerminalCursorStyle();
+
     expect(writes.at(-1)).toBe("\x1b[0 q");
     expect(getHardwareCursorVisible()).toBe(false);
     expect(hardwareCursorChanges).toEqual([true, false, true, false]);

@@ -99,6 +99,30 @@ describe("vim config parsing", () => {
     expect(result.options.ui?.mode.labels.insert).toBe("INSERT");
   });
 
+  test("parses workbench reserved rows field-by-field", () => {
+    const valid = resolveVimOptions({
+      piVimMode: {
+        ui: { workbench: { reservedRows: 2 }, status: { enabled: false } },
+      },
+    });
+    expect(valid.warnings).toEqual([]);
+    expect(valid.options.ui?.workbench.reservedRows).toBe(2);
+    expect(valid.options.ui?.status.enabled).toBe(false);
+
+    const invalid = resolveVimOptions({
+      piVimMode: {
+        ui: { workbench: { reservedRows: 99 }, mode: { labels: { normal: "COMMAND" } } },
+      },
+    });
+    expect(invalid.options.ui?.workbench.reservedRows).toBe(0);
+    expect(invalid.options.ui?.mode.labels.normal).toBe("COMMAND");
+    expect(
+      invalid.warnings.some((warning) =>
+        warning.includes("piVimMode.ui.workbench.reservedRows must be an integer between 0 and 5"),
+      ),
+    ).toBe(true);
+  });
+
   test("rejects legacy vimOptions aliases in favor of UI config", () => {
     const result = resolveVimOptions({
       piVimMode: {

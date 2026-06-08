@@ -5,7 +5,12 @@ import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
-type HookName = "session_start" | "resources_discover" | "agent_end" | "session_shutdown";
+type HookName =
+  | "session_start"
+  | "resources_discover"
+  | "agent_start"
+  | "agent_end"
+  | "session_shutdown";
 type Hook = (event: unknown, ctx: FakeContext) => void;
 type Command = {
   description: string;
@@ -33,8 +38,10 @@ type FakeContext = {
 type FakeEditor = {
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
+  busyCalls: boolean[];
   resetCount: number;
   resetTerminalCursorStyle: () => void;
+  setAgentBusy: (active: boolean) => void;
 };
 
 function createUi(): FakeUi {
@@ -96,9 +103,13 @@ function createLifecycleHarness(
       const editor: FakeEditor = {
         options: editorOptions,
         diagnostics,
+        busyCalls: [],
         resetCount: 0,
         resetTerminalCursorStyle: () => {
           editor.resetCount += 1;
+        },
+        setAgentBusy: (active) => {
+          editor.busyCalls.push(active);
         },
       };
       createdEditors.push(editor);
@@ -118,6 +129,7 @@ describe("vim extension lifecycle", () => {
 
     expect([...hooks.keys()].sort()).toEqual([
       "agent_end",
+      "agent_start",
       "resources_discover",
       "session_shutdown",
       "session_start",
@@ -156,6 +168,54 @@ describe("vim extension lifecycle", () => {
     expect(ctx.ui.setCalls).toHaveLength(1);
     expect(scheduled).toHaveLength(0);
     expect(loadCalls).toEqual([{ cwd: "/repo" }]);
+  });
+
+  test("agent start marks existing editors busy without installing", () => {
+    const { hooks, createdEditors, loadCalls } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    expect(() => hooks.get("agent_start")?.({}, ctx)).not.toThrow();
+    expect(ctx.ui.setCalls).toEqual([]);
+    expect(loadCalls).toEqual([]);
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    const first = factory({}, {}, {});
+    const second = factory({}, {}, {});
+
+    hooks.get("agent_start")?.({}, ctx);
+
+    expect(createdEditors).toEqual([first, second]);
+    expect(first.busyCalls).toEqual([true]);
+    expect(second.busyCalls).toEqual([true]);
+    expect(ctx.ui.setCalls).toEqual([factory]);
+  });
+
+  test("editors created during agent busy state start busy", () => {
+    const { hooks, createdEditors } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    hooks.get("agent_start")?.({}, ctx);
+    factory({}, {}, {});
+
+    expect(createdEditors[0]!.busyCalls).toEqual([true]);
+  });
+
+  test("agent end marks tracked editors idle while preserving install behavior", () => {
+    const { hooks, createdEditors, loadCalls } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+    hooks.get("agent_start")?.({}, ctx);
+    hooks.get("agent_end")?.({}, ctx);
+
+    expect(createdEditors[0]!.busyCalls).toEqual([true, false]);
+    expect(ctx.ui.setCalls).toEqual([factory]);
+    expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
   });
 
   test("stable factory avoids component churn", () => {
@@ -247,25 +307,34 @@ describe("vim extension lifecycle", () => {
     const factory = ctx.ui.setCalls[0]!;
     factory({}, {}, {});
     factory({}, {}, {});
+    hooks.get("agent_start")?.({}, ctx);
 
     hooks.get("session_shutdown")?.({}, ctx);
     hooks.get("session_shutdown")?.({}, ctx);
 
+    expect(createdEditors.map((editor) => editor.busyCalls)).toEqual([[true], [true]]);
     expect(createdEditors.map((editor) => editor.resetCount)).toEqual([1, 1]);
   });
 
   test("vimmode command toggles editor off and on", async () => {
-    const { hooks, commands } = createLifecycleHarness();
+    const { hooks, commands, createdEditors } = createLifecycleHarness();
     const ctx = createContext("/repo");
 
     hooks.get("agent_end")?.({}, ctx);
     const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+    hooks.get("agent_start")?.({}, ctx);
 
     await commands.get("vimmode")?.handler("", ctx);
 
+    expect(createdEditors[0]!.busyCalls).toEqual([true]);
+    expect(createdEditors[0]!.resetCount).toBe(1);
     expect(ctx.ui.component).toBeUndefined();
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim off"]);
     expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode disabled", "info"]);
+
+    hooks.get("session_shutdown")?.({}, ctx);
+    expect(createdEditors[0]!.resetCount).toBe(1);
 
     await commands.get("vimmode")?.handler("", ctx);
 

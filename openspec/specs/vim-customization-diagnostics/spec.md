@@ -95,3 +95,98 @@ The Vim editor SHALL support optional feedback for confusing no-op inputs while 
 
 - **WHEN** no-op feedback is enabled and repeated invalid or unmapped inputs occur
 - **THEN** the editor keeps feedback bounded to transient single messages and does not accumulate a multi-line log
+
+### Requirement: Inspect and message diagnostics are effective-runtime views
+
+Runtime diagnostics SHALL report the effective editor state and configuration available to the current prompt editor rather than raw settings tables or stale implementation defaults.
+
+#### Scenario: Inspect reflects resolved feature availability
+
+- **WHEN** `:vimmode inspect` runs with a preset or resolved options that disable macros, marks, prompt transforms, search highlights, or status items
+- **THEN** the diagnostic reflects the effective enabled/disabled state instead of advertising unavailable actions as active behavior
+
+#### Scenario: Messages reflects retained runtime events
+
+- **WHEN** `:messages` runs after diagnostics, Ex errors, Ex successes, or enabled no-op feedback have occurred in the current editor session
+- **THEN** it reports retained runtime message events rather than rereading settings files or reconstructing messages from raw config
+
+#### Scenario: Diagnostics include existing warnings when relevant
+
+- **WHEN** retained settings diagnostics contain invalid fields, protected key warnings, or keymap conflicts and the user runs `:vimmode inspect`
+- **THEN** the inspect output includes a bounded warning summary without replacing `:vimdoctor` as the detailed customization health command
+
+### Requirement: Inspect and message diagnostics preserve customization state boundaries
+
+Inspectability diagnostics SHALL follow the same read-only state boundaries as existing customization diagnostics.
+
+#### Scenario: Inspect does not mutate effective keymaps or options
+
+- **WHEN** the user executes `:vimmode inspect`
+- **THEN** resolved options, effective keymaps, feature enablement, protected shortcut handling, and retained diagnostics remain unchanged
+
+#### Scenario: Messages does not mutate effective keymaps or options
+
+- **WHEN** the user executes `:messages`
+- **THEN** resolved options, effective keymaps, feature enablement, protected shortcut handling, and retained diagnostics remain unchanged
+
+#### Scenario: Diagnostic output remains bounded with large state
+
+- **WHEN** prompt text, registers, search history, Ex history, macro slots, marks, or diagnostics are large
+- **THEN** `:vimmode inspect` and `:messages` truncate or summarize output so the diagnostic feedback remains bounded and width-safe
+
+### Requirement: Diagnostic command registry remains finite
+
+The customization diagnostic surface SHALL add inspectability commands explicitly rather than turning diagnostics into arbitrary action or command execution.
+
+#### Scenario: Supported diagnostics are explicit
+
+- **WHEN** the user searches or inspects supported diagnostic commands through runtime help or action diagnostics
+- **THEN** `vimdoctor`, `keymap`, `mapcheck`, `actions`, `vimmode inspect`, and `messages` are presented as finite supported diagnostics when available
+
+#### Scenario: Unsupported diagnostic names remain unsupported
+
+- **WHEN** the user executes unsupported diagnostic-like commands such as `:map`, `:actionspalette`, `:vimmode dump`, or `:messages clear`
+- **THEN** the editor reports a bounded unsupported-command error and leaves prompt editing state unchanged
+
+#### Scenario: Diagnostic docs reject broad parity claims
+
+- **WHEN** user-facing docs describe customization and inspectability diagnostics
+- **THEN** they identify the finite command set and do not imply full Vim `:messages`, `:map`, `:verbose`, or Vimscript support
+
+### Requirement: Customization metadata supports runtime feature discovery
+
+The Vim editor SHALL reuse the existing semantic action, keymap, prompt transform, macro, mark, and protected shortcut metadata for broader runtime feature discovery without weakening existing customization diagnostic commands.
+
+#### Scenario: Feature search reuses current action bindings
+
+- **WHEN** the editor executes `:features redo` and the resolved keymap binds redo to `ctrl+r`
+- **THEN** the feature result reports redo using the same effective binding vocabulary as `:actions redo` or `:keymap redo`
+
+#### Scenario: Protected shortcut feature search reuses protected catalog
+
+- **WHEN** the editor executes `:features ctrl+p`
+- **THEN** the feature result describes the protected Pi shortcut using the same ownership reason and behavior vocabulary as `:mapcheck ctrl+p`
+
+#### Scenario: Customization diagnostics keep their existing scope
+
+- **WHEN** the editor executes `:actions`, `:keymap`, `:mapcheck`, or `:vimdoctor` after runtime help support is added
+- **THEN** those commands keep their existing action-focused, keymap-focused, key-checking, and doctor-summary behavior rather than becoming general help or docs browsers
+
+### Requirement: Feature discovery reflects effective customization state
+
+Runtime feature discovery SHALL describe the current editor's effective customization state when a feature area is disabled, renamed, or restricted by resolved pi-vimmode options.
+
+#### Scenario: Disabled prompt transform is reported as disabled
+
+- **WHEN** the editor executes `:features reflow` and the resolved prompt transform options disable the `reflow` action
+- **THEN** the feature result reports that `reflow` is disabled for the current editor rather than describing it as an active Ex transform
+
+#### Scenario: Renamed prompt transform command is discoverable
+
+- **WHEN** the editor executes `:features quote` and the resolved prompt transform options rename the quote command
+- **THEN** the feature result includes the current command name that users should execute for the quote transform
+
+#### Scenario: Restricted mark slots are reported
+
+- **WHEN** the editor executes `:features marks` and resolved mark options restrict allowed mark slots
+- **THEN** the feature result reports that marks are enabled with the current slot limits rather than listing unrestricted mark support

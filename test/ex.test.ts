@@ -53,6 +53,22 @@ describe("Ex substitution parser", () => {
     });
   });
 
+  test("parses safe substitution flags", () => {
+    expect(parseExSubstitution("%s/old/new/gn", context)).toMatchObject({
+      type: "substitute",
+      global: true,
+      countOnly: true,
+      noError: false,
+    });
+    expect(parseExSubstitution("s/todo/done/rie", context)).toMatchObject({
+      type: "substitute",
+      matcherMode: "regex",
+      ignoreCase: true,
+      noError: true,
+      countOnly: false,
+    });
+  });
+
   test("rejects unsupported names and uppercase flags", () => {
     expect(parseExSubstitution("sub/old/new/", context)).toEqual({
       type: "error",
@@ -170,6 +186,41 @@ describe("Ex command parser", () => {
     expect(parseExCommand("noh", context)).toEqual({ type: "nohlsearch", command: "noh" });
   });
 
+  test("parses repeat substitution aliases", () => {
+    expect(parseExCommand("&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+    expect(parseExCommand("&&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&&",
+      range: { startLine: 1, endLine: 1 },
+    });
+    expect(parseExCommand("%&", context)).toMatchObject({
+      type: "repeatSubstitute",
+      command: "&",
+      range: { startLine: 0, endLine: 4 },
+      rangeExplicit: true,
+    });
+  });
+
+  test("parses Ex register operands for line commands", () => {
+    expect(parseExCommand("delete a", context)).toMatchObject({
+      type: "delete",
+      register: { slot: "a", append: false },
+    });
+    expect(parseExCommand("%yank A", context)).toMatchObject({
+      type: "yank",
+      register: { slot: "a", append: true },
+    });
+    expect(parseExCommand("put A", context)).toMatchObject({
+      type: "put",
+      register: { slot: "a", append: true },
+    });
+  });
+
   test("parses copy and move destination addresses", () => {
     expect(parseExCommand("2,3copy$", context)).toMatchObject({
       type: "copy",
@@ -274,7 +325,34 @@ describe("Ex command parser", () => {
     });
   });
 
-  test("rejects unsupported diagnostic abbreviations and missing required arguments", () => {
+  test("parses finite runtime help commands", () => {
+    expect(parseExCommand("help", context)).toEqual({ type: "runtimeHelp", command: "help" });
+    expect(parseExCommand("help search", context)).toEqual({
+      type: "runtimeHelp",
+      command: "help",
+      query: "search",
+    });
+    expect(parseExCommand("features", context)).toEqual({
+      type: "runtimeHelp",
+      command: "features",
+    });
+    expect(parseExCommand("features redo", context)).toEqual({
+      type: "runtimeHelp",
+      command: "features",
+      query: "redo",
+    });
+    expect(parseExCommand("messages", context)).toEqual({
+      type: "runtimeHelp",
+      command: "messages",
+    });
+    expect(parseExCommand("vimmode inspect", context)).toEqual({
+      type: "inspect",
+      command: "vimmode",
+      query: "inspect",
+    });
+  });
+
+  test("rejects unsupported diagnostic/runtime-help abbreviations and missing required arguments", () => {
     expect(parseExCommand("vimd", context)).toEqual({
       type: "error",
       message: "Unsupported Ex command: vimd",
@@ -283,11 +361,43 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Unsupported Ex command: map",
     });
+    expect(parseExCommand("h", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: h",
+    });
+    expect(parseExCommand("feat", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: feat",
+    });
+    expect(parseExCommand("mes", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: mes",
+    });
     expect(parseExCommand("mapcheck", context)).toEqual({
       type: "error",
       message: "Missing mapcheck key",
     });
     expect(parseExCommand("vimdoctor noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("messages noisy", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode status", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("vimmode inspect raw", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("messages clear", context)).toEqual({
       type: "error",
       message: "Unexpected Ex command arguments",
     });
@@ -365,7 +475,23 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Unsupported Ex command: co",
     });
-    expect(parseExCommand("delete a", context)).toEqual({
+    expect(parseExCommand("delete 1", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("yank _", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("put ab", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand('delete "a', context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
+    });
+    expect(parseExCommand("join a", context)).toEqual({
       type: "error",
       message: "Unexpected Ex command arguments",
     });

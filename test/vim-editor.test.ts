@@ -10,10 +10,11 @@ import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
+  initialHardwareCursorVisible = false,
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
-  let hardwareCursorVisible = false;
+  let hardwareCursorVisible = initialHardwareCursorVisible;
   const tui = {
     terminal: { rows: 24, write: (data: string) => writes.push(data) },
     requestRender() {},
@@ -135,6 +136,32 @@ describe("vim editor integration", () => {
     expectRenderedWidth(feedback, 16);
   });
 
+  test("reserved workbench rows render idle and active width-safely", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      ui: {
+        ...DEFAULT_VIM_OPTIONS.ui!,
+        workbench: { reservedRows: 2 },
+      },
+    });
+    const unreserved = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" }).editor.render(
+      20,
+    );
+    const baseline = editor.render(20);
+    expect(baseline.length).toBe(unreserved.length + 2);
+    expect(baseline.slice(-2)).toEqual([" ".repeat(20), " ".repeat(20)]);
+    expectRenderedWidth(baseline, 20);
+
+    editor.handleInput(":");
+    typeKeys(editor, ["h", "e", "l", "p"]);
+    const active = editor.render(20);
+    expect(active.length).toBe(baseline.length);
+    expect(active.at(-2)).toContain(":help");
+    expect(active.at(-1)).toBe(" ".repeat(20));
+    expectRenderedWidth(active, 20);
+  });
+
   test("search and substitution preview rows render width-safely below prompt", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     const baseline = editor.render(20);
@@ -172,6 +199,43 @@ describe("vim editor integration", () => {
     const visualEx = editor.render(40).join("\n");
     expect(visualEx).toContain("\u001b[7m");
     expect(visualEx).toContain(":'<,'>");
+  });
+
+  test("runtime help, inspect, and messages rows render width-safely", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    editor.handleInput(":");
+    typeKeys(editor, ["s", "/", "m", "i", "s", "s", "i", "n", "g", "/", "x", "/", "\r"]);
+    runEx(editor, "vimmode inspect");
+    let lines = editor.render(48);
+    expect(lines.at(-1)).toContain("inspect: mode=normal");
+    expectRenderedWidth(lines, 48);
+
+    editor.handleInput(":");
+    typeKeys(editor, ["m", "e", "s", "s", "a", "g", "e", "s", "\r"]);
+
+    lines = editor.render(32);
+    expect(lines.at(-1)).toContain("messages: 2 retained");
+    expectRenderedWidth(lines, 32);
+  });
+
+  test("runtime help row composes with visual selection and search highlights", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one old\ntwo old");
+    editor.handleInput("/");
+    typeKeys(editor, ["o", "l", "d", "\r"]);
+    runEx(editor, "help search");
+    const searchHelp = editor.render(60).join("\n");
+    expect(searchHelp).toContain(SEARCH_START);
+    expect(searchHelp).toContain("prompt search");
+
+    editor.handleInput("V");
+    editor.handleInput("j");
+    editor.handleInput(":");
+    typeKeys(editor, ["\b", "\b", "\b", "\b", "\b", "h", "e", "l", "p", "\r"]);
+    const visualHelp = editor.render(60).join("\n");
+    expect(visualHelp).toContain("\u001b[7m");
+    expect(visualHelp).toContain("help:");
   });
 
   test("renders configured mode labels", () => {
@@ -1155,6 +1219,69 @@ describe("vim editor integration", () => {
     expect(writes.at(-1)).toBe("\x1b[6 q");
     expect(getHardwareCursorVisible()).toBe(true);
     editor.resetTerminalCursorStyle();
+    expect(writes.at(-1)).toBe("\x1b[0 q");
+    expect(getHardwareCursorVisible()).toBe(false);
+    expect(hardwareCursorChanges).toEqual([true, false, true, false]);
+  });
+
+  test("agent busy suppresses bar hardware cursor without changing editor state", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
+    });
+    editor.handleInput("a");
+    expectEditorState(editor, { text: "a", cursor: { line: 0, col: 1 }, mode: "insert" });
+    expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(true);
+
+    editor.setAgentBusy(true);
+
+    expectEditorState(editor, { text: "a", cursor: { line: 0, col: 1 }, mode: "insert" });
+    expect(editor.getCurrentCursorStyle()).toBe("bar");
+    expect(writes.at(-1)).toBe("\x1b[6 q");
+    expect(getHardwareCursorVisible()).toBe(false);
+    expect(hardwareCursorChanges).toEqual([true, false]);
+  });
+
+  test("agent idle restores cursor policy and preserves original hardware visibility", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor(
+      {
+        startMode: "insert",
+        cursor: {
+          ...DEFAULT_VIM_OPTIONS.cursor,
+          insert: "bar",
+          normal: "underline",
+        },
+      },
+      { warnings: [] },
+      true,
+    );
+    expect(hardwareCursorChanges).toEqual([]);
+    editor.handleInput("\x1b");
+    expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(getHardwareCursorVisible()).toBe(true);
+
+    editor.setAgentBusy(true);
+    expect(getHardwareCursorVisible()).toBe(false);
+    editor.setAgentBusy(false);
+
+    expect(editor.getVimMode()).toBe("normal");
+    expect(editor.getCurrentCursorStyle()).toBe("underline");
+    expect(getHardwareCursorVisible()).toBe(true);
+    expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(hardwareCursorChanges).toEqual([false, true]);
+  });
+
+  test("cursor reset restores original hardware visibility after busy transitions", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
+    });
+    editor.setAgentBusy(true);
+    editor.setAgentBusy(false);
+
+    editor.resetTerminalCursorStyle();
+
     expect(writes.at(-1)).toBe("\x1b[0 q");
     expect(getHardwareCursorVisible()).toBe(false);
     expect(hardwareCursorChanges).toEqual([true, false, true, false]);

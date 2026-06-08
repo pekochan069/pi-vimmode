@@ -48,16 +48,25 @@ function fitWidth(text: string, width: number): string {
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
-function renderWorkbenchRow(state: ModalState, width: number): string | undefined {
-  if (width <= 0) return undefined;
-  const text = state.pendingSearch
+function workbenchText(state: ModalState): string | undefined {
+  return state.pendingSearch
     ? `${state.pendingSearch.direction === "backward" ? "?" : "/"}${state.pendingSearch.query}`
     : state.pendingEx?.preview
       ? state.pendingEx.preview.message
       : state.pendingEx
         ? `:${state.pendingEx.command}`
         : state.exMessage?.text;
-  return text === undefined ? undefined : fitWidth(text, width);
+}
+
+function renderWorkbenchRows(state: ModalState, width: number, reservedRows: number): string[] {
+  if (width <= 0) return [];
+  const text = workbenchText(state);
+  const rows = Math.max(text === undefined ? 0 : 1, reservedRows);
+  if (rows === 0) return [];
+  return [
+    fitWidth(text ?? "", width),
+    ...Array.from({ length: rows - 1 }, () => fitWidth("", width)),
+  ];
 }
 
 export function fitStatusBorder(
@@ -101,7 +110,20 @@ function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptio
     startMode: options.startMode,
     cursor: { ...options.cursor },
     keymap: options.keymap,
-    ui: options.ui,
+    ui: options.ui
+      ? {
+          ...options.ui,
+          status: { ...options.ui.status, items: [...options.ui.status.items] },
+          mode: {
+            ...options.ui.mode,
+            labels: { ...options.ui.mode.labels },
+            narrowLabels: { ...options.ui.mode.narrowLabels },
+          },
+          selection: { ...options.ui.selection },
+          cursorPosition: { ...options.ui.cursorPosition },
+          workbench: { ...options.ui.workbench },
+        }
+      : undefined,
     macros: options.macros,
     marks: options.marks,
     search: options.search,
@@ -127,6 +149,7 @@ export class VimEditor extends CustomEditor {
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
+  private agentBusy = false;
   private isMacroReplaying = false;
 
   constructor(
@@ -168,6 +191,12 @@ export class VimEditor extends CustomEditor {
     return cursorStyleForMode(this.options, this.modalState.mode);
   }
 
+  setAgentBusy(active: boolean): void {
+    if (this.agentBusy === active) return;
+    this.agentBusy = active;
+    this.syncHardwareCursorVisibility(this.getCurrentCursorStyle());
+  }
+
   override handleInput(data: string): void {
     const update = handleModalInput(
       this.modalState,
@@ -181,11 +210,12 @@ export class VimEditor extends CustomEditor {
   }
 
   override render(width: number): string[] {
-    const workbenchRow = renderWorkbenchRow(this.modalState, width);
-    const terminalRows = workbenchRow
-      ? Math.max(1, (this.terminalRows() ?? 24) - 1)
+    const reservedRows = Math.max(0, uiForOptions(this.options).workbench.reservedRows);
+    const workbenchRows = renderWorkbenchRows(this.modalState, width, reservedRows);
+    const terminalRows = workbenchRows.length
+      ? Math.max(1, (this.terminalRows() ?? 24) - workbenchRows.length)
       : this.terminalRows();
-    const lines = this.renderEditorLines(width, terminalRows);
+    const lines = this.renderEditorLines(width, terminalRows, workbenchRows.length > 0);
     if (lines.length === 0 || width <= 0) return lines;
 
     const last = lines.length - 1;
@@ -200,7 +230,7 @@ export class VimEditor extends CustomEditor {
       ui: uiForOptions(this.options),
     });
     lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
-    if (workbenchRow) lines.push(workbenchRow);
+    lines.push(...workbenchRows);
     return lines;
   }
 
@@ -236,7 +266,11 @@ export class VimEditor extends CustomEditor {
     };
   }
 
-  private renderEditorLines(width: number, terminalRows = this.terminalRows()): string[] {
+  private renderEditorLines(
+    width: number,
+    terminalRows = this.terminalRows(),
+    forcePromptRender = false,
+  ): string[] {
     if (
       (this.modalState.mode === "visual" ||
         this.modalState.mode === "visualLine" ||
@@ -270,7 +304,8 @@ export class VimEditor extends CustomEditor {
       this.searchRenderInput() ||
       this.modalState.pendingSearch ||
       this.modalState.pendingEx ||
-      this.modalState.exMessage
+      this.modalState.exMessage ||
+      forcePromptRender
     ) {
       return renderPromptEditor({
         snapshot: {
@@ -435,6 +470,10 @@ export class VimEditor extends CustomEditor {
   }
 
   private syncHardwareCursorVisibility(style: CursorStyle): void {
+    if (this.agentBusy) {
+      this.setHardwareCursorVisibility(false);
+      return;
+    }
     this.setHardwareCursorVisibility(
       style === "bar" || this.originalHardwareCursorVisible === true,
     );

@@ -266,6 +266,89 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.exMessage?.kind).toBe("info");
   });
 
+  test("runtime help Ex commands report info without editing state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), [
+      ":",
+      "f",
+      "e",
+      "a",
+      "t",
+      "u",
+      "r",
+      "e",
+      "s",
+      " ",
+      "r",
+      "e",
+      "d",
+      "o",
+      "\r",
+    ]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.exMessage).toMatchObject({
+      kind: "info",
+      text: expect.stringContaining("redo"),
+    });
+  });
+
+  test("visual runtime help Ex commands preserve visual state after marker deletion", () => {
+    const opened = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const _ of ["'", ">", ",", "'", "<"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        "\b",
+      ).state;
+    }
+    for (const key of ["h", "e", "l", "p"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.exMessage?.text).toContain("help:");
+  });
+
   test("no-op feedback is quiet by default and bounded when enabled", () => {
     const quiet = handleModalInput({ mode: "normal" }, snapshot, options, "z");
     expect(quiet.state.exMessage).toBeUndefined();
@@ -298,6 +381,118 @@ describe("Ex command-line modal behavior", () => {
     expect(update.effects).toContainEqual({ type: "delegate", input: "\x10" });
     expect(update.state.pending).toBeUndefined();
     expect(update.state.exMessage?.text).toContain("ctrl+p protected");
+  });
+
+  test("vimmode inspect reports bounded read-only state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "secret register payload" },
+      namedRegisters: { a: { type: "line", text: "named secret" } },
+      marks: { a: p(0, 1) },
+      macros: { q: ["i", "x", "\x1b"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      pendingEx: { command: "vimmode inspect", sourceMode: "normal" },
+    };
+
+    const result = handleModalInput(initial, snapshot, options, "\r");
+
+    expect(result.state.mode).toBe("normal");
+    expect(result.effects).toEqual([{ type: "invalidate" }]);
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.exMessage?.kind).toBe("info");
+    expect(result.state.exMessage?.text).toContain("inspect: mode=normal");
+    expect(result.state.exMessage?.text).toContain("registers=unnamed-char:23,named-1(a)");
+    expect(result.state.exMessage?.text).not.toContain("secret register payload");
+    expect(result.state.exMessage?.text).not.toContain("named secret");
+  });
+
+  test("vimmode inspect from visual Ex restores visual state", () => {
+    const result = handleModalInput(
+      {
+        mode: "visual",
+        visualAnchor: p(0, 1),
+        pendingEx: {
+          command: "vimmode inspect",
+          sourceMode: "visual",
+          visualAnchor: p(0, 1),
+          visualCursor: p(0, 2),
+          visualRange: { startLine: 0, endLine: 0 },
+        },
+      },
+      snapshot,
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.state.exMessage?.text).toContain("inspect: mode=visual");
+  });
+
+  test("runtime messages are retained with bounded history", () => {
+    const empty = handleModalInput(
+      { mode: "normal", pendingEx: { command: "messages", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(empty.state.exMessage).toEqual({ kind: "info", text: "messages: none retained" });
+    expect(empty.state.messageHistory).toBeUndefined();
+
+    const error = handleModalInput(
+      { mode: "normal", pendingEx: { command: "s/missing/new/", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(error.state.messageHistory).toEqual([
+      { kind: "error", text: "Pattern not found: missing" },
+    ]);
+
+    const cleared = handleModalInput(error.state, snapshot, options, ":");
+    expect(cleared.state.exMessage).toBeUndefined();
+    expect(cleared.state.messageHistory).toEqual(error.state.messageHistory);
+
+    const messages = handleModalInput(
+      { ...cleared.state, pendingEx: { command: "messages", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(messages.state.exMessage?.text).toBe(
+      "messages: 1 retained; latest: Pattern not found: missing",
+    );
+    expect(messages.state.messageHistory).toEqual(error.state.messageHistory);
+  });
+
+  test("message history cap discards oldest entries", () => {
+    const history = Array.from({ length: 20 }, (_, index) => ({
+      kind: "info" as const,
+      text: `old ${index}`,
+    }));
+    const result = handleModalInput(
+      {
+        mode: "normal",
+        messageHistory: history,
+        pendingEx: { command: "s/missing/new/", sourceMode: "normal" },
+      },
+      snapshot,
+      options,
+      "\r",
+    );
+
+    expect(result.state.messageHistory).toHaveLength(20);
+    expect(result.state.messageHistory?.[0]?.text).toBe("old 1");
+    expect(result.state.messageHistory?.at(-1)?.text).toBe("Pattern not found: missing");
   });
 
   test("Ex errors and identical substitutions do not emit edit effects", () => {
@@ -344,6 +539,98 @@ describe("Ex command-line modal behavior", () => {
     expect(changed.state.register).toEqual({ type: "char", text: "keep" });
     expect(changed.state.lastRepeatableChange).toEqual({ type: "command", command: "deleteChar" });
     expect(changed.state.searchHighlight).toBeUndefined();
+    expect(changed.state.lastExSubstitution).toMatchObject({
+      pattern: "old",
+      replacement: "new",
+      global: false,
+    });
+  });
+
+  test("count-only and no-error substitution flags avoid mutation and preserve repeat source", () => {
+    const counted = handleModalInput(
+      {
+        mode: "normal",
+        lastExSubstitution: {
+          pattern: "old",
+          replacement: "new",
+          global: true,
+          ignoreCase: false,
+          matcherMode: "literal",
+          command: "%s/old/new/g",
+        },
+        pendingEx: { command: "%s/foo/bar/gn", sourceMode: "normal" },
+      },
+      { text: "foo foo", lines: ["foo foo"], cursor },
+      options,
+      "\r",
+    );
+    expect(counted.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(counted.state.pendingEx).toBeUndefined();
+    expect(counted.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+    expect(counted.state.exHistory).toEqual(["%s/foo/bar/gn"]);
+    expect(counted.state.lastExSubstitution?.pattern).toBe("old");
+
+    const noMatch = handleModalInput(
+      { mode: "normal", pendingEx: { command: "%s/missing/new/e", sourceMode: "normal" } },
+      { text: "foo", lines: ["foo"], cursor },
+      options,
+      "\r",
+    );
+    expect(noMatch.state.exMessage).toEqual({ kind: "success", text: "0 substitutions" });
+    expect(noMatch.state.pendingEx).toBeUndefined();
+  });
+
+  test("repeat substitution previews then applies last applied substitution semantics", () => {
+    const applied = applyModalKeys({ mode: "normal" }, "foo foo", p(0, 0), [
+      ":",
+      "%",
+      "s",
+      "/",
+      "f",
+      "o",
+      "o",
+      "/",
+      "b",
+      "a",
+      "r",
+      "/",
+      "g",
+      "\r",
+      "\r",
+    ]);
+    expect(applied.text).toBe("bar bar");
+
+    const repeatPreview = handleModalInput(
+      { ...applied.state, pendingEx: { command: "%&", sourceMode: "normal" } },
+      { text: "foo\nfoo", lines: ["foo", "foo"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(repeatPreview.state.pendingEx?.preview).toMatchObject({ command: "%&", matches: 2 });
+
+    const repeated = handleModalInput(
+      repeatPreview.state,
+      { text: "foo\nfoo", lines: ["foo", "foo"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(repeated.effects).toContainEqual({
+      type: "edit",
+      result: { text: "bar\nbar", cursor: p(0, 0), changed: true },
+    });
+    expect(repeated.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+  });
+
+  test("repeat substitution without previous applied substitution is safe", () => {
+    const result = handleModalInput(
+      { mode: "normal", pendingEx: { command: "&", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(result.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(result.state.exMessage).toEqual({ kind: "error", text: "No previous substitution" });
+    expect(result.state.exHistory).toBeUndefined();
   });
 
   test("Ex history recalls successful commands and skips preview-only failures", () => {
@@ -421,6 +708,78 @@ describe("Ex command-line modal behavior", () => {
     ]);
     expect(semicolon.text).toBe("foo\nbaz\nbaz");
     expect(semicolon.state.exMessage).toEqual({ kind: "success", text: "2 substitutions" });
+  });
+
+  test("Ex register operands read write append and preserve unnamed defaults", () => {
+    const deleted = handleModalInput(
+      {
+        mode: "normal",
+        namedRegisters: { b: { type: "line", text: "keep" } },
+        pendingEx: { command: "2delete a", sourceMode: "normal" },
+      },
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: p(1, 0) },
+      options,
+      "\r",
+    );
+    expect(deleted.state.register).toEqual({ type: "line", text: "two" });
+    expect(deleted.state.namedRegisters?.a).toEqual({ type: "line", text: "two" });
+    expect(deleted.state.namedRegisters?.b).toEqual({ type: "line", text: "keep" });
+
+    const yanked = handleModalInput(
+      {
+        mode: "normal",
+        namedRegisters: { a: { type: "line", text: "old" } },
+        pendingEx: { command: "%yank A", sourceMode: "normal" },
+      },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(yanked.state.register).toEqual({ type: "line", text: "one\ntwo" });
+    expect(yanked.state.namedRegisters?.a).toEqual({ type: "line", text: "old\none\ntwo" });
+
+    const put = handleModalInput(
+      {
+        mode: "normal",
+        register: { type: "line", text: "unnamed" },
+        namedRegisters: { a: { type: "line", text: "named" } },
+        pendingEx: { command: "put A", sourceMode: "normal" },
+      },
+      { text: "one", lines: ["one"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(put.effects).toContainEqual({
+      type: "edit",
+      result: { text: "one\nnamed", cursor: p(1, 0), changed: true },
+    });
+    expect(put.state.namedRegisters?.a).toEqual({ type: "line", text: "named" });
+  });
+
+  test("Ex invalid or missing register operands are safe", () => {
+    const missing = handleModalInput(
+      {
+        mode: "normal",
+        register: { type: "line", text: "keep" },
+        namedRegisters: { a: { type: "line", text: "named" } },
+        pendingEx: { command: "put z", sourceMode: "normal" },
+      },
+      { text: "one", lines: ["one"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(missing.effects.some((effect) => effect.type === "edit")).toBe(false);
+    expect(missing.state.exMessage).toEqual({ kind: "error", text: "Register is empty" });
+    expect(missing.state.register).toEqual({ type: "line", text: "keep" });
+    expect(missing.state.namedRegisters?.a).toEqual({ type: "line", text: "named" });
+
+    const invalid = handleModalInput(
+      { mode: "normal", pendingEx: { command: 'delete "a', sourceMode: "normal" } },
+      { text: "one", lines: ["one"], cursor: p(0, 0) },
+      options,
+      "\r",
+    );
+    expect(invalid.state.exMessage).toEqual({ kind: "error", text: "Invalid Ex register operand" });
   });
 
   test("Ex offset and semicolon line commands preserve bounded side effects", () => {
@@ -586,7 +945,75 @@ describe("Ex command-line modal behavior", () => {
       "x",
     );
     expect(edited.state.pendingEx?.command).toBe("s/old/new/x");
+    expect(edited.state.pendingEx?.cursor).toBe("s/old/new/x".length);
     expect(edited.state.pendingEx?.preview).toBeUndefined();
+  });
+
+  test("Ex command-line cursor edits command text without touching prompt", () => {
+    const result = applyModalKeys({ mode: "normal" }, "prompt", p(0, 0), [
+      ":",
+      "d",
+      "e",
+      "l",
+      "x",
+      "e",
+      "t",
+      "e",
+      "\x1b[D",
+      "\x1b[D",
+      "\x1b[D",
+      "\x1b[D",
+      "\x1b[3~",
+      "\x1b[H",
+      "2",
+    ]);
+    expect(result.text).toBe("prompt");
+    expect(result.state.pendingEx?.command).toBe("2delete");
+    expect(result.state.pendingEx?.cursor).toBe(1);
+  });
+
+  test("Ex command-line word movement and deletion are bounded", () => {
+    const state = applyModalKeys({ mode: "normal" }, "prompt", p(0, 0), [
+      ":",
+      "2",
+      ",",
+      "4",
+      "d",
+      "e",
+      "l",
+      "e",
+      "t",
+      "e",
+      " ",
+      "a",
+      "\x1bb",
+      "\x17",
+    ]).state;
+    expect(state.pendingEx?.command).toBe("2,4a");
+    expect(state.pendingEx?.cursor).toBe(3);
+  });
+
+  test("Ex history recall moves command cursor to end", () => {
+    const substituted = applyModalKeys({ mode: "normal" }, "old", p(0, 0), [
+      ":",
+      "s",
+      "/",
+      "o",
+      "l",
+      "d",
+      "/",
+      "n",
+      "e",
+      "w",
+      "/",
+      "\r",
+      "\r",
+      ":",
+      "x",
+      "\x1b[A",
+    ]);
+    expect(substituted.state.pendingEx?.command).toBe("s/old/new/");
+    expect(substituted.state.pendingEx?.cursor).toBe("s/old/new/".length);
   });
 
   test("Ex transforms current, explicit, and visual ranges", () => {
@@ -718,6 +1145,7 @@ describe("modal view state", () => {
         },
         selection: { enabled: false, previewMaxChars: 4 },
         cursorPosition: { enabled: true, base: 1, format: "L{line}:C{column}" },
+        workbench: { reservedRows: 0 },
       },
     });
 
@@ -763,6 +1191,7 @@ describe("modal view state", () => {
         },
         selection: { enabled: true, previewMaxChars: 16 },
         cursorPosition: { enabled: false, base: 1, format: "{line}:{column}" },
+        workbench: { reservedRows: 0 },
       },
     });
     expect(modeHidden.left.trim()).toBe("REC a");

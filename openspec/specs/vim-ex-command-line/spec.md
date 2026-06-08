@@ -37,17 +37,42 @@ The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffe
 
 ### Requirement: Ex command-line input uses minimal editing controls
 
-The Vim editor SHALL keep Ex command-line editing finite, prompt-local, and separate from prompt-buffer editing while adding shared workbench history and substitution preview controls.
+The Vim editor SHALL keep Ex command-line editing finite, prompt-local, cursor-aware, and separate from prompt-buffer editing while preserving shared workbench history and substitution preview controls.
 
-#### Scenario: Type Ex command text
+#### Scenario: Type Ex command text at end
 
-- **WHEN** Ex command-line mode is active and the user types printable characters
+- **WHEN** Ex command-line mode is active, the command cursor is at the end of the Ex command text, and the user types printable characters
 - **THEN** those characters are appended to the Ex command text and are not inserted into the prompt buffer
 
-#### Scenario: Backspace edits Ex command text
+#### Scenario: Type Ex command text at cursor
+
+- **WHEN** Ex command-line mode is active, the user moves the command cursor left, and the user types printable characters
+- **THEN** those characters are inserted at the command cursor, the command cursor advances after the inserted text, any pending substitution preview is cleared, and prompt text remains unchanged
+
+#### Scenario: Backspace edits Ex command text at cursor
 
 - **WHEN** Ex command-line mode is active and the user presses `Backspace`
-- **THEN** the last editable Ex command character is removed when one exists, any pending substitution preview is cleared, and prompt text remains unchanged
+- **THEN** the editable Ex command character before the command cursor is removed when one exists, the command cursor is clamped to the edited command text, any pending substitution preview is cleared, and prompt text remains unchanged
+
+#### Scenario: Delete edits Ex command text at cursor
+
+- **WHEN** Ex command-line mode is active and the user presses the resolved forward-delete key
+- **THEN** the editable Ex command character after the command cursor is removed when one exists, any pending substitution preview is cleared, and prompt text remains unchanged
+
+#### Scenario: Cursor movement edits no prompt text
+
+- **WHEN** Ex command-line mode is active and the user presses resolved command-line movement keys such as Left, Right, Home, End, word-left, or word-right
+- **THEN** only the Ex command cursor moves within command-text bounds and prompt text remains unchanged
+
+#### Scenario: Word deletion is bounded
+
+- **WHEN** Ex command-line mode is active and the user presses the resolved command-line delete-word key
+- **THEN** only the word or whitespace run adjacent to the Ex command cursor is removed from the Ex command text, any pending substitution preview is cleared, and prompt text remains unchanged
+
+#### Scenario: History recall updates command cursor
+
+- **WHEN** Ex command-line input is active and history navigation replaces the pending Ex command text
+- **THEN** the command cursor moves to the end of the recalled command, any pending substitution preview is cleared, and prompt text remains unchanged
 
 #### Scenario: Enter executes non-preview Ex command text
 
@@ -56,7 +81,7 @@ The Vim editor SHALL keep Ex command-line editing finite, prompt-local, and sepa
 
 #### Scenario: Enter previews substitution before execution
 
-- **WHEN** Ex command-line mode is active with a valid substitution command that has at least one match and no active preview exists
+- **WHEN** Ex command-line mode is active with a valid mutating substitution command that has at least one match and no active preview exists
 - **THEN** pressing `Enter` or `Return` computes a substitution match preview/count, keeps Ex command-line mode active, and leaves prompt text unchanged
 
 ### Requirement: Ex command-line mode renders in a dedicated row
@@ -276,12 +301,17 @@ The Vim editor SHALL apply Ex substitution without corrupting modal state, regis
 
 ### Requirement: Ex command-line supports finite non-substitution commands
 
-The Vim editor SHALL parse and execute a finite set of non-substitution Ex commands while preserving existing Ex substitution behavior.
+The Vim editor SHALL parse and execute a finite set of non-substitution Ex commands while preserving existing Ex substitution behavior and explicitly supported register operands.
 
 #### Scenario: Supported command aliases execute
 
 - **WHEN** the editor executes supported aliases `:d`, `:delete`, `:y`, `:yank`, `:pu`, `:put`, `:t`, `:copy`, `:m`, `:move`, `:j`, `:join`, `:noh`, or `:nohlsearch` with valid arguments
 - **THEN** the command executes according to its prompt-buffer Ex semantics and exits Ex command-line mode
+
+#### Scenario: Supported Ex register operands execute
+
+- **WHEN** the editor executes `:delete a`, `:yank A`, `:put a`, or range-qualified forms such as `:2,4delete b`
+- **THEN** the command parses as a supported finite line command with a register operand and executes according to named-register Ex semantics
 
 #### Scenario: Unsupported command is rejected
 
@@ -290,7 +320,7 @@ The Vim editor SHALL parse and execute a finite set of non-substitution Ex comma
 
 #### Scenario: Unexpected trailing arguments are rejected
 
-- **WHEN** the editor executes an Ex command with unsupported trailing arguments such as `:delete a` or `:join!`
+- **WHEN** the editor executes an Ex command with unsupported trailing arguments such as `:delete "a`, `:put ab`, or `:join!`
 - **THEN** the editor reports a readable Ex error and prompt text remains unchanged
 
 ### Requirement: Ex delete and yank operate on addressed prompt-buffer lines
@@ -452,10 +482,15 @@ The Vim editor SHALL keep non-substitution Ex command side effects explicit and 
 - **WHEN** a non-substitution Ex command changes prompt text and the user later presses `.` in normal mode
 - **THEN** dot repeat behavior uses the previous supported normal-mode repeatable change, if any, rather than the Ex command
 
-#### Scenario: Ex line commands do not write named registers
+#### Scenario: Ex line commands without register operands do not write named registers
 
-- **WHEN** named register `a` contains text and the editor executes `:delete`, `:yank`, or `:put`
+- **WHEN** named register `a` contains text and the editor executes `:delete`, `:yank`, or `:put` without a register operand
 - **THEN** named register `a` remains unchanged while the unnamed-register behavior follows the specific Ex command semantics
+
+#### Scenario: Ex line commands with register operands use named registers
+
+- **WHEN** named register `a` contains text and the editor executes `:delete a`, `:yank A`, or `:put a`
+- **THEN** only the documented register operand semantics affect named registers while unrelated named registers remain unchanged
 
 ### Requirement: Ex command-line uses shared workbench history
 
@@ -532,12 +567,12 @@ The Vim editor SHALL highlight matched substitution targets and report match cou
 
 ### Requirement: Ex workbench behavior is documented and validated
 
-The change SHALL include automated tests and user-facing documentation for Ex history, regex substitution mode, and substitution preview.
+The change SHALL include automated tests and user-facing documentation for Ex history, cursor-aware Ex command-line editing, regex substitution mode, repeat substitution, substitution flags, substitution preview, register operands, and current limitations.
 
 #### Scenario: Automated validation runs
 
 - **WHEN** `bun test` is executed
-- **THEN** tests cover Ex workbench typing, cancellation, history navigation, visual Ex cancellation after history navigation, literal substitution match preview/apply, regex substitution match preview/apply, invalid regex safety, regex bounds, unsupported flags, no-match behavior, identical replacement behavior, and history recording rules
+- **THEN** tests cover Ex workbench typing, cursor movement, cursor-aware deletion, command-line word deletion, cancellation, history navigation, visual Ex cancellation after history navigation, literal substitution match preview/apply, regex substitution match preview/apply, count-only substitutions, no-error substitutions, repeat substitution, invalid regex safety, regex bounds, unsupported flags, no-match behavior, identical replacement behavior, register operands, and history recording rules
 
 #### Scenario: Typecheck runs
 
@@ -547,7 +582,7 @@ The change SHALL include automated tests and user-facing documentation for Ex hi
 #### Scenario: Feature guide describes Ex workbench
 
 - **WHEN** the user opens `docs/features.md`
-- **THEN** it documents Ex command history, substitution match preview/apply flow, literal default behavior, regex `r` flag, regex bounds, literal replacement tokens, and current Ex limitations
+- **THEN** it documents Ex command history, cursor-aware command-line editing, substitution match preview/apply flow, literal default behavior, regex `r` flag, count-only `n` flag, no-error `e` flag, repeat-substitution commands, regex bounds, literal replacement tokens, Ex register operands, and current Ex limitations
 
 ### Requirement: Ex command-line supports read-only customization commands
 
@@ -610,3 +645,277 @@ Read-only diagnostic Ex commands SHALL NOT perform prompt-buffer edits or editin
 
 - **WHEN** the user executes a diagnostic Ex command and then presses the repeat-change command
 - **THEN** repeat-change behavior uses the previous real edit when one exists and does not repeat the diagnostic command
+
+### Requirement: Ex line ranges support finite address offsets
+
+The Vim editor SHALL support signed line offsets on finite Ex line addresses for supported line-oriented Ex commands.
+
+#### Scenario: Offset from current line executes
+
+- **WHEN** the editor is on prompt line 2 of a four-line prompt and executes `:.,.+1delete`
+- **THEN** prompt lines 2 and 3 are deleted, the unnamed register receives those lines as linewise text, and the Ex row reports the deleted line count
+
+#### Scenario: Offset from last line executes
+
+- **WHEN** the editor executes `:$-1,$join` in a prompt with at least two lines
+- **THEN** the last two prompt lines are joined according to existing Ex join whitespace and message semantics
+
+#### Scenario: Offset from numeric line executes
+
+- **WHEN** the editor executes `:3+1yank` in a prompt with at least four lines
+- **THEN** prompt line 4 is copied to the unnamed register as linewise text and prompt text remains unchanged
+
+#### Scenario: Offset range applies to substitution preview
+
+- **WHEN** the editor previews `:2,2+1s/foo/bar/g` in a prompt where lines 2 and 3 contain matches
+- **THEN** substitution preview highlights matches only on prompt lines 2 and 3 and leaves prompt text unchanged until confirmation
+
+#### Scenario: Out-of-bounds offset is rejected
+
+- **WHEN** the editor executes an Ex command with an offset resolving outside prompt-buffer lines such as `:1-1delete` or `:$+1yank`
+- **THEN** the editor reports an Ex range error, prompt text remains unchanged, and registers remain unchanged
+
+#### Scenario: Repeated offset is rejected in v1
+
+- **WHEN** the editor executes an Ex command with repeated offset syntax such as `:.+1-2delete`
+- **THEN** the editor reports a readable Ex range error, prompt text remains unchanged, and registers remain unchanged
+
+### Requirement: Ex semicolon ranges reset the second address base
+
+The Vim editor SHALL support a finite Ex semicolon range form where the first resolved single-line address becomes the current-line base for resolving the second single-line address.
+
+#### Scenario: Semicolon relative range executes
+
+- **WHEN** the editor executes `:2;.+2delete` in a prompt with at least four lines
+- **THEN** prompt lines 2 through 4 are deleted and the unnamed register receives those lines as linewise text
+
+#### Scenario: Semicolon range can use current-line start
+
+- **WHEN** the editor is on prompt line 3 and executes `:.;.-1yank`
+- **THEN** the editor reports an Ex range error because the resolved range is reversed and prompt text and registers remain unchanged
+
+#### Scenario: Semicolon range composes with substitution preview
+
+- **WHEN** the editor previews `:2;.+1s/foo/bar/g` in a prompt where lines 2 and 3 contain matches
+- **THEN** substitution preview highlights matches only on prompt lines 2 and 3 and leaves prompt text unchanged until confirmation
+
+#### Scenario: Unsupported semicolon forms are rejected
+
+- **WHEN** the editor executes a semicolon range using unsupported broad syntax such as repeated separators, expression ranges, or a missing second address
+- **THEN** the editor reports a readable Ex range error and prompt text remains unchanged
+
+### Requirement: Ex copy and move destination addresses support finite offsets
+
+The Vim editor SHALL support signed line offsets on finite Ex destination addresses for copy and move commands while preserving existing destination-zero behavior.
+
+#### Scenario: Copy destination offset executes
+
+- **WHEN** the editor executes `:2copy$-1` in a prompt with at least four lines
+- **THEN** prompt line 2 is duplicated after the penultimate line and before the original last line
+
+#### Scenario: Move destination offset executes
+
+- **WHEN** the editor is on prompt line 1 and executes `:4move.+1` in a prompt with at least four lines
+- **THEN** prompt line 4 is moved after prompt line 2 and the Ex row reports `1 line moved`
+
+#### Scenario: Destination zero remains before first line
+
+- **WHEN** the editor executes `:2t0` or `:3,4m0` with valid source ranges
+- **THEN** existing before-first-line destination behavior is preserved
+
+#### Scenario: Destination zero is not an offset base
+
+- **WHEN** the editor executes a copy or move command with an offset applied to destination zero such as `:2t0+1`
+- **THEN** the editor reports a readable Ex range error and prompt text remains unchanged
+
+#### Scenario: Destination offset inside moved range is rejected
+
+- **WHEN** the editor executes `:2,4move3+0`
+- **THEN** the editor reports a readable Ex error and prompt text remains unchanged
+
+### Requirement: Ex range algebra behavior is documented and validated
+
+The change SHALL include automated tests and user-facing documentation for visible Ex offset and semicolon range behavior.
+
+#### Scenario: Automated range validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover Ex address offsets, semicolon base semantics, destination offsets, destination zero preservation, visual range preservation, invalid offset safety, substitution preview ranges, and non-substitution command ranges
+
+#### Scenario: Feature guide describes finite Ex ranges
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents supported Ex offsets, semicolon range behavior, destination offset behavior, destination zero behavior, and unsupported range syntax limits
+
+### Requirement: Ex command-line supports finite inspectability diagnostics
+
+The Vim editor SHALL parse and execute `:vimmode inspect` and `:messages` as finite read-only Ex diagnostic commands without adding arbitrary Vimscript or command dispatch.
+
+#### Scenario: Vimmode inspect command executes
+
+- **WHEN** Ex command-line mode is active and the user executes `:vimmode inspect`
+- **THEN** the editor exits Ex command-line mode, shows a bounded prompt-local inspect diagnostic, and leaves prompt text unchanged
+
+#### Scenario: Messages command executes
+
+- **WHEN** Ex command-line mode is active and the user executes `:messages`
+- **THEN** the editor exits Ex command-line mode, shows a bounded recent-message diagnostic, and leaves prompt text unchanged
+
+#### Scenario: Inspect command supports exact finite syntax
+
+- **WHEN** the Ex parser receives `vimmode inspect`
+- **THEN** it returns a finite parse result for the inspectability diagnostic command
+
+#### Scenario: Unsupported inspect syntax is rejected
+
+- **WHEN** the Ex parser receives unsupported inspectability syntax such as `vimmode`, `vimmode status`, `vimmode inspect raw`, `messages clear`, or `mes`
+- **THEN** it returns a readable Ex error and prompt text remains unchanged
+
+### Requirement: Inspectability diagnostics compose with Ex source-mode restoration
+
+Inspectability diagnostics SHALL follow existing Ex command-line source-mode restoration rules for normal and visual source modes.
+
+#### Scenario: Normal source mode returns to normal
+
+- **WHEN** `:vimmode inspect` or `:messages` is executed from Ex command-line mode opened in normal mode
+- **THEN** Ex command-line mode closes, the editor remains in normal mode, and the original prompt text and cursor are preserved
+
+#### Scenario: Visual source mode restores captured selection
+
+- **WHEN** `:vimmode inspect` or `:messages` is executed from Ex command-line mode opened in visual, visual-line, or visual-block mode
+- **THEN** Ex command-line mode closes, the original visual mode and captured selection are restored, and prompt text remains unchanged
+
+#### Scenario: Inspectability diagnostics do not enter Ex history as edits
+
+- **WHEN** `:vimmode inspect` or `:messages` executes successfully
+- **THEN** the command may be recorded according to existing successful Ex history rules, but it does not update registers, search state, visible search highlights, marks, macros, cursor target, or repeat-change state
+
+### Requirement: Inspectability Ex output uses existing workbench feedback surface
+
+The Ex command-line implementation SHALL show inspectability diagnostics through existing bounded diagnostic/workbench feedback rather than adding a new persistent render surface.
+
+#### Scenario: Inspect output appears as bounded diagnostic feedback
+
+- **WHEN** `:vimmode inspect` executes
+- **THEN** the diagnostic appears through the same transient feedback path used by finite read-only diagnostic Ex commands or a bounded message-view path, and total editor rendering remains width-safe
+
+#### Scenario: Messages output does not change prompt viewport rules permanently
+
+- **WHEN** `:messages` executes
+- **THEN** any visible diagnostic feedback uses existing workbench row behavior and clears according to existing transient feedback clearing rules while retained history remains available to future `:messages`
+
+#### Scenario: Pending Ex preview is cleared safely
+
+- **WHEN** an inspectability diagnostic is executed while an Ex substitution preview had been active for the same pending Ex command text
+- **THEN** the preview is cleared, prompt text remains unchanged, and no stale substitution edit is applied
+
+### Requirement: Ex command-line supports finite runtime help commands
+
+The Vim editor SHALL parse and execute finite read-only runtime help commands from Ex command-line mode.
+
+#### Scenario: Help command executes
+
+- **WHEN** the editor executes `:help` or `:help search`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested help entry
+
+#### Scenario: Features command executes
+
+- **WHEN** the editor executes `:features` or `:features redo`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested feature list or feature match
+
+#### Scenario: Messages command executes
+
+- **WHEN** the editor executes `:messages`
+- **THEN** the editor exits Ex command-line mode and shows a bounded informational message describing retained runtime messages
+
+#### Scenario: Unsupported runtime help abbreviation is rejected
+
+- **WHEN** the editor executes an unsupported abbreviation such as `:h`, `:feat`, or `:mes`
+- **THEN** the editor reports a readable Ex error and prompt text remains unchanged
+
+#### Scenario: Unexpected messages arguments are rejected
+
+- **WHEN** the editor executes `:messages noisy` or another `:messages` command with unsupported trailing arguments
+- **THEN** the editor reports a readable Ex error and prompt text remains unchanged
+
+### Requirement: Runtime help Ex commands are read-only
+
+Runtime help Ex commands SHALL not edit the prompt buffer or mutate modal editing side effects beyond the bounded informational message.
+
+#### Scenario: Runtime help command preserves normal-mode state
+
+- **WHEN** the editor executes `:help`, `:features`, or `:messages` from normal Ex command-line mode
+- **THEN** prompt text, cursor position, registers, marks, search highlights, macro state, and dot-repeat state remain unchanged except for the transient informational message
+
+#### Scenario: Runtime help command preserves visual Ex state
+
+- **WHEN** Ex command-line mode was opened from a visual selection, the user deletes the prefilled visual range marker, and executes `:help`, `:features`, or `:messages`
+- **THEN** the command exits Ex mode without editing prompt text and restores the original visual mode, anchor, cursor, and highlight according to existing visual Ex restoration behavior
+
+#### Scenario: Runtime help command does not update dot repeat
+
+- **WHEN** the editor executes `:help`, `:features`, or `:messages` after a repeatable normal-mode edit
+- **THEN** pressing `.` later repeats the previous supported normal-mode edit rather than replaying the runtime help command
+
+### Requirement: Ex substitution supports finite safe additional flags
+
+The Vim editor SHALL support a finite prompt-safe subset of additional Ex substitution flags without expanding into Vimscript, confirmation prompts, print modes, or replacement backreference expansion.
+
+#### Scenario: Count-only flag reports matches without mutation
+
+- **WHEN** the editor executes `:%s/foo/bar/gn` and the addressed range contains matches
+- **THEN** the editor reports the match count, leaves prompt text unchanged, exits Ex command-line mode without requiring a second apply confirmation, and records the command as a successful Ex history entry
+
+#### Scenario: Count-only flag composes with regex and ignore-case
+
+- **WHEN** the editor executes `:%s/todo/done/rin` in a prompt containing `TODO`
+- **THEN** the editor counts regex matches case-insensitively, reports the count, leaves prompt text unchanged, and does not apply replacement text
+
+#### Scenario: No-error flag suppresses no-match error
+
+- **WHEN** the editor executes `:%s/missing/new/e` and the addressed range has no matches
+- **THEN** the editor leaves prompt text unchanged, reports a zero-match non-error result, exits Ex command-line mode, and records the command as a successful Ex history entry
+
+#### Scenario: No-error flag does not suppress invalid syntax
+
+- **WHEN** the editor executes a substitution with the `e` flag and an invalid delimiter, invalid regex pattern, out-of-bounds range, or unsupported flag
+- **THEN** the editor reports the underlying Ex error, does not record the command as successful history, and leaves prompt text unchanged
+
+#### Scenario: Count-only substitution does not become repeat source
+
+- **WHEN** the editor executes a count-only substitution and then executes a repeat-substitution command
+- **THEN** the repeat-substitution command uses the last successfully applied substitution before the count-only command, or reports that no repeatable substitution exists
+
+### Requirement: Ex repeat-substitution commands reuse the last applied substitution safely
+
+The Vim editor SHALL support finite repeat-substitution commands that reuse the last successfully applied substitution semantics while preserving substitution preview safety.
+
+#### Scenario: Repeat substitution previews before mutation
+
+- **WHEN** the editor has previously applied `:%s/foo/bar/g`, Ex command-line mode is active on a prompt containing `foo`, and the user executes `:&`
+- **THEN** the editor previews the repeated substitution over the resolved current range, reports the match count, keeps prompt text unchanged, and requires confirmation before applying replacement text
+
+#### Scenario: Range-qualified repeat substitution executes
+
+- **WHEN** the editor has previously applied a substitution and then executes `:%&`
+- **THEN** the repeated substitution resolves the explicit percent range, previews matches over the whole prompt, and applies only after confirmation
+
+#### Scenario: Double-ampersand repeat is accepted as finite alias
+
+- **WHEN** the editor has previously applied a substitution and executes `:&&`
+- **THEN** the editor repeats the same stored substitution semantics as `:&` using the current resolved range and the existing preview/apply safety
+
+#### Scenario: No previous substitution is safe
+
+- **WHEN** the editor executes `:&` before any substitution has successfully applied in the current editor session
+- **THEN** the editor reports a readable Ex error, leaves prompt text unchanged, and does not add the repeat command to Ex history
+
+#### Scenario: Repeat source updates after successful apply
+
+- **WHEN** the editor applies a new substitution after an older substitution exists
+- **THEN** later repeat-substitution commands use the newer applied substitution semantics
+
+#### Scenario: Repeat substitution keeps bounded side effects
+
+- **WHEN** a repeated substitution applies successfully
+- **THEN** it preserves existing Ex substitution side-effect rules for cursor intent, registers, dot-repeat, search highlights, Ex messages, and history recording

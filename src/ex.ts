@@ -23,7 +23,21 @@ export type ParsedExSubstitution = {
   replacement: string;
   global: boolean;
   ignoreCase: boolean;
+  countOnly: boolean;
+  noError: boolean;
   matcherMode: "literal" | "regex";
+};
+
+export type ParsedExRepeatSubstitution = {
+  type: "repeatSubstitute";
+  command: "&" | "&&";
+  range: LineRange;
+  rangeExplicit: boolean;
+};
+
+export type ParsedExRegisterOperand = {
+  slot: string;
+  append: boolean;
 };
 
 export type ParsedExLineCommand = {
@@ -31,6 +45,7 @@ export type ParsedExLineCommand = {
   command: string;
   range: LineRange;
   rangeExplicit: boolean;
+  register?: ParsedExRegisterOperand;
 };
 
 export type ParsedExDestinationCommand = {
@@ -55,12 +70,27 @@ export type ParsedExDiagnosticCommand = {
   query?: string;
 };
 
+export type ParsedExRuntimeHelpCommand = {
+  type: "runtimeHelp";
+  command: "help" | "features" | "messages";
+  query?: string;
+};
+
+export type ParsedExInspectCommand = {
+  type: "inspect";
+  command: "vimmode";
+  query: "inspect";
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
+  | ParsedExRepeatSubstitution
   | ParsedExLineCommand
   | ParsedExDestinationCommand
   | ParsedExTransformCommand
   | ParsedExDiagnosticCommand
+  | ParsedExRuntimeHelpCommand
+  | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | { type: "empty" }
   | { type: "error"; message: string };
@@ -91,6 +121,10 @@ type ParsedCommandName =
   | "keymap"
   | "mapcheck"
   | "actions"
+  | "help"
+  | "features"
+  | "messages"
+  | "vimmode"
   | "noh"
   | "nohlsearch";
 
@@ -104,6 +138,8 @@ type ParsedCommandType =
   | "join"
   | "transform"
   | "diagnostic"
+  | "runtimeHelp"
+  | "inspect"
   | "nohlsearch";
 
 type ParsedCommand = {
@@ -171,6 +207,12 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "mapcheck":
     case "actions":
       return "diagnostic";
+    case "help":
+    case "features":
+    case "messages":
+      return "runtimeHelp";
+    case "vimmode":
+      return "inspect";
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
@@ -211,6 +253,10 @@ function parseCommand(
     "keymap",
     "mapcheck",
     "actions",
+    "help",
+    "features",
+    "messages",
+    "vimmode",
     "noh",
     "nohlsearch",
   ]);
@@ -269,6 +315,8 @@ function parseSubstitutionArgs(source: string):
       replacement: string;
       global: boolean;
       ignoreCase: boolean;
+      countOnly: boolean;
+      noError: boolean;
       matcherMode: "literal" | "regex";
     }
   | { ok: false; message: string } {
@@ -288,17 +336,23 @@ function parseSubstitutionArgs(source: string):
       replacement: replacement.value,
       global: false,
       ignoreCase: false,
+      countOnly: false,
+      noError: false,
       matcherMode: "literal",
     };
   }
 
   let global = false;
   let ignoreCase = false;
+  let countOnly = false;
+  let noError = false;
   let matcherMode: "literal" | "regex" = "literal";
   for (const flag of replacement.rest) {
     if (flag === "g") global = true;
     else if (flag === "i") ignoreCase = true;
     else if (flag === "r") matcherMode = "regex";
+    else if (flag === "n") countOnly = true;
+    else if (flag === "e") noError = true;
     else return { ok: false, message: `Unsupported substitution flag: ${flag}` };
   }
   return {
@@ -307,6 +361,8 @@ function parseSubstitutionArgs(source: string):
     replacement: replacement.value,
     global,
     ignoreCase,
+    countOnly,
+    noError,
     matcherMode,
   };
 }
@@ -315,6 +371,18 @@ function rejectTrailingArgs(rest: string): ExParseResult | undefined {
   return rest.trim().length > 0
     ? { type: "error", message: "Unexpected Ex command arguments" }
     : undefined;
+}
+
+function parseRegisterOperand(
+  rest: string,
+): { ok: true; register?: ParsedExRegisterOperand } | { ok: false; message: string } {
+  const operand = rest.trim();
+  if (operand.length === 0) return { ok: true };
+  if (!/^[A-Za-z]$/.test(operand)) return { ok: false, message: "Invalid Ex register operand" };
+  return {
+    ok: true,
+    register: { slot: operand.toLowerCase(), append: operand >= "A" && operand <= "Z" },
+  };
 }
 
 function parseTransformArgs(
@@ -356,6 +424,16 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
   const range = parseExLineRange(source, context);
   if (!range.ok) return { type: "error", message: range.error.message };
 
+  const repeat = range.value.rest.trim();
+  if (repeat === "&" || repeat === "&&") {
+    return {
+      type: "repeatSubstitute",
+      command: repeat,
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
+    };
+  }
+
   const command = parseCommand(range.value.rest, context);
   if (!command.ok) return { type: "error", message: command.message };
 
@@ -372,6 +450,8 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       replacement: args.replacement,
       global: args.global,
       ignoreCase: args.ignoreCase,
+      countOnly: args.countOnly,
+      noError: args.noError,
       matcherMode: args.matcherMode,
     };
   }
@@ -400,6 +480,21 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
   }
 
+  if (type === "runtimeHelp") {
+    const args = command.rest.trim();
+    const name = command.command.name as ParsedExRuntimeHelpCommand["command"];
+    if (name === "messages" && args.length > 0) {
+      return { type: "error", message: "Unexpected Ex command arguments" };
+    }
+    return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
+  }
+
+  if (type === "inspect") {
+    const args = command.rest.trim();
+    if (args !== "inspect") return { type: "error", message: "Unexpected Ex command arguments" };
+    return { type, command: "vimmode", query: "inspect" };
+  }
+
   if (type === "transform") {
     const transformAction = command.command.transformAction;
     if (!transformAction) return { type: "error", message: "Unsupported Ex command" };
@@ -411,6 +506,18 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       range: range.value.range,
       rangeExplicit: range.value.explicit,
       transform: transform.transform,
+    };
+  }
+
+  if (type === "delete" || type === "yank" || type === "put") {
+    const register = parseRegisterOperand(command.rest);
+    if (!register.ok) return { type: "error", message: register.message };
+    return {
+      type,
+      command: command.command.name,
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
+      ...(register.register ? { register: register.register } : {}),
     };
   }
 

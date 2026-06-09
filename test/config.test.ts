@@ -512,4 +512,112 @@ describe("vim config parsing", () => {
       paths.cleanup();
     }
   });
+
+  test("parses action keymap entries and keeps no default action bindings", () => {
+    const options = {
+      keymap: {
+        actions: {
+          "prompt.transform.reflow": ["gq", { key: "gQ", args: { width: 100 } }],
+          "prompt.transform.fence": [{ key: "gT", args: { language: "ts" } }],
+          "prompt.transform.quote": [{ key: "g>" }],
+        },
+        commands: { visualBlock: ["ctrl+v"] },
+      },
+    } satisfies VimEditorOptions;
+    expect(options.keymap?.actions?.["prompt.transform.reflow"]?.length).toBe(2);
+
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    const result = resolveVimOptions({ piVimMode: options });
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "gQ", actionId: "prompt.transform.reflow", args: { action: "reflow", width: 100 } },
+      { key: "gT", actionId: "prompt.transform.fence", args: { action: "fence", language: "ts" } },
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+    ]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v"]);
+  });
+
+  test("resolves action keymap warnings per binding", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { dedent: false } },
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": [
+              "gq",
+              "gq",
+              { key: "gQ", args: { width: "wide" } },
+              { key: "ctrl+p" },
+            ],
+            "prompt.transform.fence": [{ key: "gF", args: { unknown: "ts" } }],
+            "prompt.transform.quote": ["gg"],
+            "prompt.transform.dedent": ["g<"],
+            "promptTransform.reflow": ["gr"],
+            "vimmode.doctor": ["gd"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("promptTransform.reflow"),
+        expect.stringContaining("prompt.transform.reflow"),
+        expect.stringContaining("vimmode.doctor"),
+        expect.stringContaining("Invalid reflow width"),
+        expect.stringContaining("Unknown action arg: unknown"),
+        expect.stringContaining("protected key ctrl+p"),
+        expect.stringContaining("disabled prompt transform action prompt.transform.dedent"),
+        expect.stringContaining("conflicts with motions.bufferStart"),
+      ]),
+    );
+  });
+
+  test("project action bindings replace global bindings and empty arrays unbind", () => {
+    const replaced = resolveVimOptions(
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gQ"] } } } },
+    );
+    expect(replaced.options.keymap?.actions.accepted).toEqual([
+      { key: "gQ", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+
+    const unbound = resolveVimOptions(
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": [] } } } },
+    );
+    expect(unbound.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("rejects action conflicts but allows shared non-executable prefixes", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": ["gq", "g", "ga"],
+            "prompt.transform.fence": ["gq", "zq"],
+            "prompt.transform.quote": ["zq"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "ga", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("prefix-shadow conflict"),
+        expect.stringContaining("conflict with motions.bufferStart"),
+        expect.stringContaining("duplicate action key gq"),
+        expect.stringContaining("duplicate action key zq"),
+      ]),
+    );
+  });
 });

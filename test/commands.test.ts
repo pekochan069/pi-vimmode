@@ -7,7 +7,7 @@ import {
   resolveMacroCommand,
   resolveNormalCommand,
 } from "../src/commands.ts";
-import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
+import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
 
 const operatorMotions = ["w", "b", "0", "^", "$"] as const;
 
@@ -128,6 +128,81 @@ describe("normal command parser", () => {
     ).toEqual({ type: "startRecording", slot: "x" });
     expect(resolveMacroCommand("q", undefined, false, { enabled: false })).toEqual({
       type: "none",
+    });
+  });
+
+  test("resolves configured prompt transform action bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: { "prompt.transform.reflow": ["gq", { key: "gQ", args: { width: 72 } }] },
+        },
+      },
+    }).options.keymap;
+    expect(keymap?.actions.accepted).toHaveLength(2);
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("q", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+    });
+
+    const count = resolveNormalCommand("3", undefined, keymap);
+    const countedPrefix = resolveNormalCommand(
+      "g",
+      count.type === "pending" ? count.pending : "",
+      keymap,
+    );
+    expect(
+      resolveNormalCommand(
+        "Q",
+        countedPrefix.type === "pending" ? countedPrefix.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow", width: 72 },
+      count: 3,
+    });
+  });
+
+  test("action bindings do not resolve as operator targets", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options.keymap;
+    const operatorPrefix = resolveNormalCommand("g", "d", keymap);
+    expect(operatorPrefix).toEqual({
+      type: "pending",
+      pending: "d\u0000motion\u0000g\u0000motion\u0000",
+    });
+    expect(
+      resolveNormalCommand(
+        "q",
+        operatorPrefix.type === "pending" ? operatorPrefix.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "invalid",
+    });
+  });
+
+  test("rejected action conflicts preserve legacy command behavior", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["gg"] } } },
+    });
+    expect(result.options.keymap?.actions.accepted).toEqual([]);
+    expect(resolveNormalCommand("g", undefined, result.options.keymap)).toEqual({
+      type: "pending",
+      pending: "g",
+    });
+    expect(resolveNormalCommand("g", "g", result.options.keymap)).toEqual({
+      type: "motion",
+      motion: "bufferStart",
     });
   });
 

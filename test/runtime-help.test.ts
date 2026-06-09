@@ -56,6 +56,11 @@ describe("runtime help registry", () => {
     expect(runtimeFeaturesMessage("ctrl+p", context)).toContain(
       "protected for Pi command/model palette",
     );
+
+    const actions = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    expect(runtimeFeaturesMessage("reflow", { ...context, options: actions })).toContain("gq");
   });
 
   test("feature discovery reflects effective options", () => {

@@ -1,7 +1,9 @@
+import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 import type {
   CommandResult,
   NormalCommand,
   PendingOperator,
+  PromptTransform,
   ResolvedVimKeymap,
   VimCommandAction,
   VimMotion,
@@ -30,6 +32,12 @@ export type SemanticCommandResult =
   | { type: "pending"; pending: string }
   | { type: "motion"; motion: VimMotionAction; count?: number }
   | { type: "command"; command: VimCommandAction; count?: number }
+  | {
+      type: "action";
+      actionId: BindablePromptTransformActionId;
+      args: PromptTransform;
+      count?: number;
+    }
   | { type: "charCommand"; command: VimCommandAction; char: string; count?: number }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
   | {
@@ -67,7 +75,13 @@ export type MacroCommandResult =
 type Binding =
   | { sequence: string; kind: "operator"; operator: VimOperatorAction }
   | { sequence: string; kind: "motion"; motion: VimMotionAction }
-  | { sequence: string; kind: "command"; command: VimCommandAction };
+  | { sequence: string; kind: "command"; command: VimCommandAction }
+  | {
+      sequence: string;
+      kind: "action";
+      actionId: BindablePromptTransformActionId;
+      args: PromptTransform;
+    };
 
 type EncodedCountPending = { type: "count"; count: string; inner: string };
 type EncodedCharCommandPending = { type: "charCommand"; command: VimCommandAction; count?: number };
@@ -194,6 +208,14 @@ function bindingsFor(keymap: ResolvedVimKeymap): Binding[] {
     readonly string[],
   ][]) {
     for (const sequence of sequences) bindings.push({ sequence, kind: "command", command });
+  }
+  for (const binding of keymap.actions.accepted) {
+    bindings.push({
+      sequence: binding.key,
+      kind: "action",
+      actionId: binding.actionId,
+      args: binding.args,
+    });
   }
   return bindings;
 }
@@ -616,6 +638,9 @@ function resolveWithoutPending(
     }
     return { type: "command", command: binding.command, count };
   }
+  if (binding?.kind === "action") {
+    return { type: "action", actionId: binding.actionId, args: binding.args, count };
+  }
   return { type: "none" };
 }
 
@@ -673,6 +698,13 @@ export function resolveNormalCommand(
       return { type: "command", command: combinedBinding.command };
     }
     if (combinedBinding?.kind === "operator") return { type: "pending", pending: combined };
+    if (combinedBinding?.kind === "action") {
+      return {
+        type: "action",
+        actionId: combinedBinding.actionId,
+        args: combinedBinding.args,
+      };
+    }
 
     const pendingOperator = operatorActionForSequence(pending, keymap);
     if (pendingOperator) return resolveAfterOperator(pending, key, keymap);

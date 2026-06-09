@@ -474,9 +474,39 @@ Transform examples:
 :reflow 72
 ```
 
+Prompt transform actions can also be bound to normal/visual keys through `piVimMode.keymap.actions` using canonical `prompt.transform.*` IDs:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actions": {
+        "prompt.transform.reflow": ["gq", { "key": "gQ", "args": { "width": 100 } }],
+        "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }],
+        "prompt.transform.quote": ["g>"],
+        "prompt.transform.unquote": ["g<"]
+      }
+    }
+  }
+}
+```
+
+Examples:
+
+```vim
+g>    " quote current line
+3gq   " reflow current line plus next two lines
+gT    " fence current line with configured language, e.g. ts
+vjjg> " quote touched visual lines, then return to normal mode
+```
+
+Action keybindings call the same prompt transform behavior as Ex commands, but changed action edits are silent and do not update dot-repeat in this milestone. Visual actions use touched lines; visual-block action transforms are linewise, not rectangular. `piVimMode.promptTransforms.commands` remains the Ex command-name config surface. `piVimMode.promptTransforms.actions` remains the transform enable-flag surface. `piVimMode.keymap.actions` is only for key bindings.
+
+Canonical config IDs are required: `prompt.transform.quote`, `prompt.transform.unquote`, `prompt.transform.bulletize`, `prompt.transform.fence`, `prompt.transform.indent`, `prompt.transform.dedent`, and `prompt.transform.reflow`. Legacy `promptTransform.*` aliases remain searchable in diagnostics for one transition release, but are rejected in config with a warning that names the canonical ID.
+
 Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
 
-Limitations: no confirmation flag (`c`), print/list flags (`p`, `#`, `l`), special Ex registers, quoted Ex register operands such as `:delete \"a`, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, full Vim help tags, a help pager, or full interactive command palette. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
+Limitations: no confirmation flag (`c`), print/list flags (`p`, `#`, `l`), special Ex registers, quoted Ex register operands such as `:delete \"a`, `:global`, shell/file/window/buffer commands, replacement backrefs, Vimscript evaluation, `.vimrc`, recursive mappings, Neovim Lua, full Vim help tags, a help pager, full interactive command palette, runtime `:map`, runtime `:action`, plugin API, quickref parity, or rectangular visual-block prompt transform actions. Transform command names are configurable through settings but do not add arbitrary Ex grammar.
 
 <!-- runtime-help:runtime-help -->
 <!-- runtime-help:customization-diagnostics -->

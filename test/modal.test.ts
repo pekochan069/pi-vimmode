@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
-import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
+import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
 import { handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
@@ -1055,6 +1055,172 @@ describe("Ex command-line modal behavior", () => {
     );
     expect(fenced.text).toBe("```ts\nconst x = 1;\nconst y = 2;\n```");
     expect(fenced.state.mode).toBe("normal");
+  });
+
+  test("keybound prompt transform actions edit normal ranges silently", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": ["g>"],
+            "prompt.transform.bulletize": ["g*"],
+            "prompt.transform.fence": [{ key: "gT", args: { language: "ts" } }],
+            "prompt.transform.reflow": [{ key: "gq", args: { width: 20 } }],
+          },
+        },
+      },
+    }).options;
+
+    const quoted = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo",
+      p(0, 0),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(quoted.text).toBe("> one\ntwo");
+    expect(quoted.state.exMessage).toBeUndefined();
+
+    const bulletized = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo\nthree\nfour",
+      p(1, 0),
+      ["3", "g", "*"],
+      actionOptions,
+    );
+    expect(bulletized.text).toBe("one\n- two\n- three\n- four");
+
+    const fenced = applyModalKeys(
+      { mode: "normal" },
+      "const x = 1;",
+      p(0, 0),
+      ["g", "T"],
+      actionOptions,
+    );
+    expect(fenced.text).toBe("```ts\nconst x = 1;\n```");
+
+    const reflowed = applyModalKeys(
+      { mode: "normal" },
+      "alpha beta gamma delta epsilon",
+      p(0, 0),
+      ["g", "q"],
+      actionOptions,
+    );
+    expect(reflowed.text).toBe("alpha beta gamma\ndelta epsilon");
+  });
+
+  test("keybound prompt transform actions edit visual touched lines", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },
+    }).options;
+
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "one\ntwo\nthree",
+      p(1, 1),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(visual.text).toBe("> one\n> two\nthree");
+    expect(visual.state.mode).toBe("normal");
+    expect(visual.state.visualAnchor).toBeUndefined();
+
+    const visualLine = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(1, 0) },
+      "one\ntwo\nthree",
+      p(2, 0),
+      ["3", "g", ">"],
+      actionOptions,
+    );
+    expect(visualLine.text).toBe("one\n> two\n> three");
+
+    const visualBlock = applyModalKeys(
+      { mode: "visualBlock", visualAnchor: p(0, 1) },
+      "one\ntwo\nthree",
+      p(2, 1),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(visualBlock.text).toBe("> one\n> two\n> three");
+  });
+
+  test("keybound prompt transform actions report no-op feedback and skip dot-repeat", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        feedback: { noop: "status" },
+        keymap: {
+          actions: { "prompt.transform.unquote": ["g<"], "prompt.transform.quote": ["g>"] },
+        },
+      },
+    }).options;
+
+    const unchanged = applyModalKeys({ mode: "normal" }, "one", p(0, 0), ["g", "<"], actionOptions);
+    expect(unchanged.text).toBe("one");
+    expect(unchanged.state.exMessage).toEqual({
+      kind: "info",
+      text: "prompt transform made no changes",
+    });
+
+    const quoted = applyModalKeys(
+      {
+        mode: "normal",
+        register: { type: "char", text: "x" },
+        marks: { a: p(0, 0) },
+        searchHighlight: { query: "one", current: p(0, 0) },
+        lastSearch: { query: "one", direction: "forward" },
+        messageHistory: [{ kind: "info", text: "old" }],
+        lastRepeatableChange: { type: "command", command: "deleteChar" },
+      },
+      "one",
+      p(0, 0),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(quoted.text).toBe("> one");
+    expect(quoted.state.register).toEqual({ type: "char", text: "x" });
+    expect(quoted.state.marks).toEqual({ a: p(0, 0) });
+    expect(quoted.state.searchHighlight).toBeUndefined();
+    expect(quoted.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+    expect(quoted.state.messageHistory).toEqual([{ kind: "info", text: "old" }]);
+    expect(quoted.state.lastRepeatableChange).toEqual({ type: "command", command: "deleteChar" });
+
+    const noPreviousRepeat = applyModalKeys(
+      { mode: "normal" },
+      "one",
+      p(0, 0),
+      ["g", ">", "."],
+      actionOptions,
+    );
+    expect(noPreviousRepeat.text).toBe("> one");
+  });
+
+  test("macro recording captures and replays action key sequences", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },
+    }).options;
+    const recorded = applyModalKeys(
+      { mode: "normal" },
+      "one",
+      p(0, 0),
+      ["q", "a", "g", ">", "q"],
+      actionOptions,
+    );
+    expect(recorded.text).toBe("> one");
+    expect(recorded.state.macros?.a).toEqual(["g", ">"]);
+
+    const played = handleModalInput(
+      recorded.state,
+      { text: "two", lines: ["two"], cursor },
+      actionOptions,
+      "@",
+    );
+    const playback = handleModalInput(
+      played.state,
+      { text: "two", lines: ["two"], cursor },
+      actionOptions,
+      "a",
+    );
+    expect(playback.effects).toContainEqual({ type: "playMacro", slot: "a", inputs: ["g", ">"] });
   });
 
   test("Ex transform argument errors do not edit text", () => {

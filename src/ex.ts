@@ -5,6 +5,7 @@ import type {
   ResolvedVimPromptTransforms,
 } from "./types.ts";
 
+import { normalizePromptTransformActionArgs } from "./prompt-transform-actions.ts";
 import { parseExDestination, parseExLineRange } from "./range.ts";
 
 export type ExParseContext = {
@@ -389,32 +390,7 @@ function parseTransformArgs(
   action: PromptTransformAction,
   rest: string,
 ): { ok: true; transform: PromptTransform } | { ok: false; message: string } {
-  const args = rest.trim();
-  if (action === "fence") {
-    if (/\s/.test(args)) return { ok: false, message: "Invalid fence language" };
-    return {
-      ok: true,
-      transform: args ? { action: "fence", language: args } : { action: "fence" },
-    };
-  }
-  if (action === "reflow") {
-    if (args.length === 0) return { ok: true, transform: { action: "reflow" } };
-    if (!/^\d+$/.test(args)) return { ok: false, message: "Invalid reflow width" };
-    const width = Number(args);
-    if (width < 20 || width > 240) return { ok: false, message: "Invalid reflow width" };
-    return { ok: true, transform: { action: "reflow", width } };
-  }
-  if (args.length > 0) return { ok: false, message: "Unexpected Ex command arguments" };
-  if (
-    action === "quote" ||
-    action === "unquote" ||
-    action === "bulletize" ||
-    action === "indent" ||
-    action === "dedent"
-  ) {
-    return { ok: true, transform: { action } };
-  }
-  return { ok: false, message: "Unsupported Ex command" };
+  return normalizePromptTransformActionArgs({ source: "ex", action, rest });
 }
 
 export function parseExCommand(commandLine: string, context: ExParseContext): ExParseResult {

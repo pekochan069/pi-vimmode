@@ -141,7 +141,11 @@ bun test
 bun run check-types
 bun run lint
 bun run format:check
+bun run build
+bun pm pack --dry-run
 ```
+
+Before publishing, inspect dry-run package contents and confirm extension entrypoint plus runtime source/build output are included, not docs only.
 
 Manual smoke checklist:
 

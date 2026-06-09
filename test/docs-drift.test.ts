@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
-import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
+import { PROMPT_TRANSFORM_ACTIONS } from "../src/prompt-transform-actions.ts";
 import { runtimeHelpEntries } from "../src/runtime-help.ts";
 
 const featuresDoc = readFileSync("docs/features.md", "utf8");
@@ -64,5 +65,43 @@ describe("documentation drift guard", () => {
     expect(featuresDoc).toContain(":&");
     expect(featuresDoc).toContain(":delete a");
     expect(featuresDoc).toContain("piVimMode.ui.workbench.reservedRows");
+  });
+
+  test("prompt transform action registry stays aligned with docs", () => {
+    const documentedIds = new Set(allUserDocs.match(/prompt\.transform\.[a-z]+/g) ?? []);
+    for (const action of PROMPT_TRANSFORM_ACTIONS) {
+      expect(documentedIds.has(action.id)).toBe(true);
+      expect(allUserDocs).toContain(action.docsAnchor);
+    }
+    for (const id of documentedIds) {
+      expect(PROMPT_TRANSFORM_ACTIONS.some((action) => action.id === id)).toBe(true);
+    }
+    expect(allUserDocs).toContain("promptTransform.*");
+  });
+
+  test("documented keymap.actions example shape parses", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": ["gq", { key: "gQ", args: { width: 100 } }],
+            "prompt.transform.fence": [{ key: "gT", args: { language: "ts" } }],
+            "prompt.transform.quote": [{ key: "g>" }],
+          },
+        },
+      },
+    });
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted.map((binding) => binding.actionId)).toEqual([
+      "prompt.transform.reflow",
+      "prompt.transform.reflow",
+      "prompt.transform.fence",
+      "prompt.transform.quote",
+    ]);
+  });
+
+  test("release docs include build and package contents inspection", () => {
+    expect(readFileSync("README.md", "utf8")).toContain("bun run build");
+    expect(readFileSync("README.md", "utf8")).toContain("bun pm pack --dry-run");
   });
 });

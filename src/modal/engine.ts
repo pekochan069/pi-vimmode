@@ -26,6 +26,7 @@ import {
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
+import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
 import {
   clearCommandPending,
   clearExMessage,
@@ -314,6 +315,10 @@ function handleNormalInput(
   }
   if (pendingResult.type === "command")
     return applyCommand(state, snapshot, options, pendingResult.command, pendingResult.count);
+  if (pendingResult.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyPromptTransformAction(state, snapshot, options, pendingResult);
+  }
   if (pendingResult.type === "charCommand")
     return applyCommand(
       state,
@@ -408,6 +413,10 @@ function handleVisualInput(
       visualKindForMode(state.mode),
       result.char,
     );
+  }
+  if (result.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyVisualPromptTransformAction(state, snapshot, options, result);
   }
   if (result.type === "command") {
     const registerAware = result.command === "deleteChar" || result.command === "pasteAfter";

@@ -24,6 +24,14 @@ _Avoid_: Vim commands, colon commands
 An Ex command that replaces prompt-buffer text inside an addressed range using `:s`-style syntax.
 _Avoid_: Substitute character, `s` command, prompt search
 
+**Prompt transform action**:
+A finite prompt-local transformation such as quoting, bulletizing, fencing, indenting, dedenting, or reflowing prompt-buffer lines. It is not an Ex command, even when an Ex command can invoke the same transformation.
+_Avoid_: Prompt transform command, generic Vim action, plugin action
+
+**Action keybinding**:
+A configured normal/visual-mode key sequence that invokes a prompt transform action. It is not a command alias and does not imply runtime mapping support.
+_Avoid_: Ex command name, `:map`, recursive mapping
+
 **Ex range**:
 A set of prompt-buffer lines addressed by an Ex command. It may refer to the current prompt line, all prompt lines, selected visual lines, or numeric prompt line ranges; visual mode supplies selected lines, not selected characters or block cells.
 _Avoid_: Visual selection, text object
@@ -51,3 +59,6 @@ Developer: “Should `:%s/old/new/g` be called a Vim command?”
 Domain expert: “Use Ex substitution. It runs from Ex command-line mode, acts on an Ex range, and v1 matches a literal Ex substitution pattern.”
 Developer: “If visual mode opens `:'<,'>s/old/new/g`, does `'<,'>` mean local marks?”
 Domain expert: “No. That visual range marker only refers to the captured selected lines for this Ex command.”
+
+Developer: “If `gq` reflows the prompt, is `gq` a prompt transform action?”
+Domain expert: “No. Reflow is the prompt transform action. `gq` is an action keybinding that invokes it. It is not an Ex command name or a recursive mapping.”

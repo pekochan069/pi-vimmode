@@ -26,10 +26,12 @@ import {
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
+import { scrollHelpPopup } from "../keybinding-discovery-popup.ts";
 import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
 import {
   clearCommandPending,
   clearExMessage,
+  clearHelpPopup,
   clearPending,
   delegate,
   editState,
@@ -484,6 +486,34 @@ function handleVisualInput(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
+function handleHelpPopupInput(state: ModalState, options: ModalOptions, data: string): ModalUpdate {
+  if (matchesKey(data, "escape")) return invalidate(clearHelpPopup(state));
+  if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
+
+  if (!state.helpPopup) return invalidate(state);
+  if (matchesKey(data, "down")) {
+    return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, 1) });
+  }
+  if (matchesKey(data, "up")) {
+    return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, -1) });
+  }
+
+  const key = keySequence(data);
+  if (key === "j") return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, 1) });
+  if (key === "k") return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, -1) });
+  if (key === "g")
+    return invalidate({ ...state, helpPopup: { ...state.helpPopup, scrollOffset: 0 } });
+  if (key === "G") {
+    return invalidate({
+      ...state,
+      helpPopup: scrollHelpPopup(state.helpPopup, state.helpPopup.lines.length),
+    });
+  }
+
+  return invalidate(state);
+}
+
 function routeModalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -492,6 +522,7 @@ function routeModalInput(
   diagnostics: VimDiagnostics,
 ): ModalUpdate {
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
+  if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
   if (routedState.pendingEx)
     return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
   if (routedState.pendingSearch)

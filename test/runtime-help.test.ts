@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
+import { keybindingDiscoveryPopup } from "../src/keybinding-discovery-popup.ts";
 import {
   runtimeFeaturesMessage,
   runtimeHelpEntries,
@@ -74,6 +75,31 @@ describe("runtime help registry", () => {
     expect(runtimeFeaturesMessage("vimscript mappings", context)).toBe(
       "features: no match for vimscript mappings",
     );
+  });
+
+  test("keybinding discovery popup content is source-backed and finite", () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    const popup = keybindingDiscoveryPopup(options);
+    const text = [popup.title, ...popup.lines].join("\n");
+
+    expect(popup.docsAnchor).toBe("runtime-help:keybinding-discovery-popup");
+    expect(text).toContain("Keybinding discovery");
+    expect(text).toContain("paragraph-editing");
+    expect(text).toContain("markdown-wrapping");
+    expect(text).toContain("prompt.transform.reflow");
+    expect(text).toContain("gq");
+    expect(text).toContain("piVimMode.keymap.actions");
+    expect(text).toContain("piVimMode.keymap.actionPresets");
+    expect(text).toContain("accepted bindings");
+    expect(text).toContain("opt-in");
+    expect(text).toContain("no defaults");
+    expect(text).toContain("no plugin API");
+    expect(text).toContain("no runtime :map");
+    expect(text).toContain("no runtime :action");
+    expect(text).toContain("no command palette");
+    expect(text).toContain("no Vim help pager");
   });
 
   test("feature discovery reuses action and protected shortcut metadata", () => {

@@ -104,6 +104,11 @@ export function clearExMessage(state: ModalState): ModalState {
   return rest;
 }
 
+export function clearHelpPopup(state: ModalState): ModalState {
+  const { helpPopup: _helpPopup, ...rest } = state;
+  return rest;
+}
+
 export function clearPendingEx(state: ModalState): ModalState {
   const { pendingEx: _pendingEx, ...rest } = state;
   return rest;
@@ -128,6 +133,7 @@ export function clearCommandPending(state: ModalState): ModalState {
     pendingSearch: _pendingSearch,
     pendingEx: _pendingEx,
     exMessage: _exMessage,
+    helpPopup: _helpPopup,
     ...rest
   } = state;
   return rest;

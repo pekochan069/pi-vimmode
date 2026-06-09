@@ -520,6 +520,20 @@ Prompt transform actions can also be bound to normal/visual keys through `piVimM
 
 Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.actionPresets`; recipes are copy-paste snippets for `piVimMode.keymap.actions`. Both are backed by the same finite canonical action metadata. They are not defaults, not recursive mappings, not runtime `:map`, not `.vimrc`, not plugin API, not diagnostic/help action dispatch, and not Vim/Neovim parity. Run `:features keybindings` or `:features action presets` to discover recommended presets and recipes at runtime.
 
+<!-- runtime-help:keybinding-discovery-popup -->
+
+### Keybinding discovery popup
+
+`:features keybindings` is the initial popup entry point for a dedicated bounded read-only keybinding discovery overlay, similar to Pi picker-style overlay UIs. It expands the cramped one-row feature summary into a centered floating panel with a title, body rows, scroll/range indicator, and footer without changing prompt text or retained runtime messages.
+
+The popup summarizes action keybinding recipes and presets, canonical `prompt.transform.*` action IDs, accepted configured bindings from `piVimMode.keymap.actions`, the `piVimMode.keymap.actionPresets` surface, and hints for `:actions <query>`, `:keymap <action>`, and `:mapcheck <key>`. Detailed setting shapes, defaults, and validation rules remain in [`settings.md`](./settings.md).
+
+When popup content overflows the bounded body, scroll inside the overlay with `j`/`k` or arrow-down/arrow-up to reach hidden rows. The popup scroll position is local overlay state only; it does not edit the prompt, move the prompt cursor, or append `:messages` history.
+
+Dismiss the popup with `Esc` or existing reset/cancel behavior. Other runtime help and diagnostic commands remain compact unless a future spec opts them into popup display: `:help`, `:actions`, `:keymap`, `:mapcheck`, `:messages`, and non-keybinding `:features <query>` still use their existing bounded one-row feedback.
+
+Popup non-goals: no Vim help tags, no command palette, no runtime `:map`, no runtime `:action`, no recursive mappings, no plugin API, no diagnostic/help action keybinding dispatch, no default action keybindings, and no unbounded output log.
+
 <!-- action-keybinding-preset:paragraph-editing -->
 <!-- action-keybinding-preset:markdown-wrapping -->
 
@@ -757,6 +771,7 @@ Useful files when verifying feature behavior:
 - `src/buffer.ts`: pure prompt-buffer navigation, edit, search, visual, mark, register, and substitution operations.
 - `src/ex.ts`: finite Ex command-line parser.
 - `src/runtime-help.ts`: finite runtime help/feature registry and compact help output.
+- `src/keybinding-discovery-popup.ts`: source-backed multi-line keybinding discovery popup content.
 - `src/modal/engine.ts`: modal state machine and Vim semantics.
 - `src/modal/view.ts`: mode/status/selection display derivation.
 - `src/render.ts`: prompt rendering, visual/search/cursor composition.

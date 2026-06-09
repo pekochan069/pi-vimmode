@@ -8,6 +8,7 @@ import {
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
+import { keybindingDiscoveryPopup } from "../src/keybinding-discovery-popup.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
@@ -107,6 +108,34 @@ describe("documentation drift guard", () => {
       expect(PROMPT_TRANSFORM_ACTIONS.some((action) => action.id === id)).toBe(true);
     }
     expect(allUserDocs).toContain("promptTransform.*");
+  });
+
+  test("keybinding discovery popup docs and registry-backed action IDs stay aligned", () => {
+    const popup = keybindingDiscoveryPopup(DEFAULT_VIM_OPTIONS);
+    const popupText = [popup.title, ...popup.lines].join("\n");
+    const popupIds = new Set(popupText.match(/prompt\.transform\.[a-z]+/g) ?? []);
+
+    expect(featuresDoc).toContain(`<!-- ${popup.docsAnchor} -->`);
+    expect(featuresDoc).toContain(":features keybindings");
+    expect(featuresDoc).toContain("dedicated bounded read-only keybinding discovery overlay");
+    expect(featuresDoc).toContain("initial popup entry point");
+    expect(featuresDoc).toContain("scroll/range indicator");
+    expect(featuresDoc).toContain("j`/`k`");
+    expect(featuresDoc).toContain("arrow-down/arrow-up");
+    expect(featuresDoc).toContain("does not edit the prompt");
+    expect(featuresDoc).toContain("`:messages` history");
+    expect(featuresDoc).toContain("Esc");
+    expect(featuresDoc).toContain("no runtime `:map`");
+    expect(featuresDoc).toContain("no runtime `:action`");
+    expect(featuresDoc).toContain("no command palette");
+    expect(featuresDoc).toContain("no Vim help tags");
+    expect(featuresDoc).toContain("no default action keybindings");
+    expect(featuresDoc).toContain("no unbounded output log");
+    const bindableIds: readonly string[] = bindablePromptTransformActionIds();
+    for (const id of popupIds) {
+      expect(bindableIds).toContain(id);
+      expect(allUserDocs).toContain(id);
+    }
   });
 
   test("action keybinding recipe docs anchors and configs stay aligned", () => {

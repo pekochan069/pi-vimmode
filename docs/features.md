@@ -2,7 +2,7 @@
 
 pi-vimmode replaces Pi's main prompt editor with a Vim-style modal editor. It targets fast prompt editing inside Pi, not full Vim or Neovim parity.
 
-Use this guide for behavior. Use [`settings.md`](./settings.md) for every `piVimMode` setting and default.
+Use this guide for behavior. Use [`settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for every `piVimMode` setting and default.
 
 ## Activation and lifecycle
 
@@ -526,7 +526,7 @@ Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.act
 
 `:features keybindings` is the initial popup entry point for a dedicated bounded read-only keybinding discovery overlay, similar to Pi picker-style overlay UIs. It expands the cramped one-row feature summary into a centered floating panel with a title, body rows, scroll/range indicator, and footer without changing prompt text or retained runtime messages.
 
-The popup summarizes action keybinding recipes and presets, canonical `prompt.transform.*` action IDs, accepted configured bindings from `piVimMode.keymap.actions`, the `piVimMode.keymap.actionPresets` surface, and hints for `:actions <query>`, `:keymap <action>`, and `:mapcheck <key>`. Detailed setting shapes, defaults, and validation rules remain in [`settings.md`](./settings.md).
+The popup summarizes action keybinding recipes and presets, canonical `prompt.transform.*` action IDs, accepted configured bindings from `piVimMode.keymap.actions`, the `piVimMode.keymap.actionPresets` surface, and hints for `:actions <query>`, `:keymap <action>`, and `:mapcheck <key>`. Detailed setting shapes, defaults, and validation rules remain in [`settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md).
 
 When popup content overflows the bounded body, scroll inside the overlay with `j`/`k` or arrow-down/arrow-up to reach hidden rows. The popup scroll position is local overlay state only; it does not edit the prompt, move the prompt cursor, or append `:messages` history.
 
@@ -758,7 +758,7 @@ Examples of configurable features:
 - prompt transform enablement and command names
 - optional no-op feedback (`piVimMode.feedback.noop`) for selected confusing ignored inputs
 
-See [`settings.md`](./settings.md) for complete settings reference.
+See [`settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for complete settings reference.
 
 ## Architecture source map
 

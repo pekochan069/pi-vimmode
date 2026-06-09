@@ -76,7 +76,7 @@ Rules:
   - `<S-tab>` / `<Shift-tab>` -> `shift+tab`
   - `<D-x>` / `<Cmd-x>` / `<Super-x>` -> `super+x`
 - Prefer lowercase normalized names such as `ctrl+a` for raw modifier strings.
-- Empty arrays do not override existing/default bindings.
+- Empty arrays do not override existing/default bindings for classic keymap groups. In `piVimMode.keymap.actions`, an empty array unbinds that action in the current settings scope.
 - Multi-key sequences are finite. There is no recursive mapping or timeout behavior.
 
 Protected Pi shortcuts cannot be mapped:
@@ -283,6 +283,57 @@ wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd
 
 Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
+### Action keybindings
+
+`piVimMode.keymap.actions` binds finite prompt transform actions to normal/visual key sequences. It is a flat record from canonical action ID to an array of string entries or `{ "key", "args" }` entries. No action keybindings exist by default.
+
+Supported bindable action IDs:
+
+- `prompt.transform.quote`
+- `prompt.transform.unquote`
+- `prompt.transform.bulletize`
+- `prompt.transform.fence`
+- `prompt.transform.indent`
+- `prompt.transform.dedent`
+- `prompt.transform.reflow`
+
+<!-- #prompt-transform-action-quote -->
+<!-- #prompt-transform-action-unquote -->
+<!-- #prompt-transform-action-bulletize -->
+<!-- #prompt-transform-action-fence -->
+<!-- #prompt-transform-action-indent -->
+<!-- #prompt-transform-action-dedent -->
+<!-- #prompt-transform-action-reflow -->
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actions": {
+        "prompt.transform.reflow": ["gq", { "key": "gQ", "args": { "width": 100 } }],
+        "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }],
+        "prompt.transform.quote": [{ "key": "g>" }]
+      }
+    }
+  }
+}
+```
+
+Normal mode action keys transform the current line; a count extends the line range, e.g. `3gq` reflows current line plus next two lines. Visual, visual-line, and visual-block action keys transform touched lines once, ignore visual counts, then return to normal mode. Visual-block action transforms are linewise, not rectangular.
+
+Parameterized args:
+
+- `prompt.transform.fence`: optional `{ "language": "ts" }`; language must not contain whitespace.
+- `prompt.transform.reflow`: optional `{ "width": 72 }`; width must be an integer from `20` through `240`.
+- `quote`, `unquote`, `bulletize`, `indent`, and `dedent` reject args.
+- Unknown arg keys reject that binding so typos do not silently fall back to defaults.
+
+Rejected action key entries are ignored with warnings while valid sibling entries stay usable. Rejections include unknown action IDs, legacy alias IDs, invalid args, protected Pi shortcuts, disabled prompt transform actions, duplicate keys across different actions, exact grammar conflicts, and prefix-shadow conflicts. Same-action repeated keys dedupe without warning. Use `:vimdoctor` for retained warnings and `:mapcheck <key>` to inspect accepted or rejected action keys.
+
+`piVimMode.keymap.actions` accepts canonical `prompt.transform.*` IDs only. Legacy `promptTransform.*` names are temporary diagnostic/search aliases, not config input. `piVimMode.promptTransforms.actions` remains the enable/disable boolean surface for transforms, and `piVimMode.promptTransforms.commands` remains the Ex command-name surface; neither moves into `keymap.actions`.
+
 ### Keymap validation
 
 Example shift operator remap:
@@ -303,11 +354,12 @@ Example shift operator remap:
 With this config, `]]` indents the current line in normal mode, `[[` dedents it, and visual `]` / `[` shifts selected lines.
 
 - Unknown action names warn and are ignored.
-- Each binding value must be an array of strings.
+- Each classic keymap binding value must be an array of strings; `keymap.actions` also accepts `{ "key", "args" }` entries.
 - Protected shortcuts are ignored with warnings.
-- Duplicate bindings inside a group warn.
-- Duplicate bindings across the resolved keymap warn.
-- A shorter binding shadowed by a longer binding prefix warns, e.g. `g` and `gg`.
+- Duplicate bindings inside a classic group warn.
+- Duplicate bindings across the resolved classic keymap warn.
+- A shorter classic binding shadowed by a longer binding prefix warns, e.g. `g` and `gg`.
+- Action binding conflicts reject before dispatch; classic grammar remains owner until explicitly unbound or remapped.
 
 ## Macro behavior settings
 
@@ -377,7 +429,7 @@ These settings enable/disable prompt-native structure text objects after parsing
 
 ## Prompt transform settings
 
-These settings enable/disable finite prompt transform Ex commands and configure command names.
+These settings enable/disable finite prompt transform Ex commands and configure command names. They are separate from `piVimMode.keymap.actions`: `promptTransforms.actions` are boolean enable flags, and `promptTransforms.commands` are Ex command names such as `:quote` or `:reflow`.
 
 | Path                                           | Default     | Effect                                 |
 | ---------------------------------------------- | ----------- | -------------------------------------- |

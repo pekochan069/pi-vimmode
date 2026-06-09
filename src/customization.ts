@@ -12,6 +12,11 @@ import type {
   VimTextObjectTarget,
 } from "./types.ts";
 
+import {
+  canonicalPromptTransformActionIdForShortName,
+  legacyPromptTransformActionAliasForId,
+} from "./prompt-transform-actions.ts";
+
 export type VimActionKind =
   | "command"
   | "motion"
@@ -27,6 +32,8 @@ export type VimActionEntry = {
   kind: VimActionKind;
   description: string;
   keys: readonly string[];
+  aliases?: readonly string[];
+  exCommands?: readonly string[];
 };
 
 export type ProtectedShortcut = {
@@ -297,16 +304,22 @@ export function actionEntriesForKeymap(
     });
   }
   if (promptTransforms?.enabled !== false) {
-    for (const [id, keys] of Object.entries(promptTransforms?.commands ?? {}) as [
+    for (const [id, exCommands] of Object.entries(promptTransforms?.commands ?? {}) as [
       PromptTransformAction,
       readonly string[],
     ][]) {
       if (promptTransforms?.actions[id] === false) continue;
+      const actionId = canonicalPromptTransformActionIdForShortName(id);
+      const actionKeys = keymap.actions.accepted
+        .filter((binding) => binding.actionId === actionId)
+        .map((binding) => binding.key);
       entries.push({
-        id: `promptTransform.${id}`,
+        id: actionId,
         kind: "promptTransform",
         description: TRANSFORM_DESCRIPTIONS[id],
-        keys,
+        keys: actionKeys,
+        aliases: [legacyPromptTransformActionAliasForId(actionId)],
+        exCommands,
       });
     }
   }
@@ -324,7 +337,14 @@ export function searchActions(
   const needle = query.trim().toLowerCase();
   if (!needle) return entries;
   return entries.filter((entry) => {
-    const haystack = [entry.id, entry.kind, entry.description, ...entry.keys]
+    const haystack = [
+      entry.id,
+      entry.kind,
+      entry.description,
+      ...(entry.aliases ?? []),
+      ...(entry.exCommands ?? []),
+      ...entry.keys,
+    ]
       .join(" ")
       .toLowerCase();
     return haystack.includes(needle);
@@ -333,7 +353,9 @@ export function searchActions(
 
 function summarizeEntry(entry: VimActionEntry): string {
   const keys = entry.keys.length > 0 ? entry.keys.join(",") : "unbound";
-  return `${entry.kind}.${entry.id} ${keys} — ${entry.description}`;
+  const ex = entry.exCommands?.length ? ` ex=${entry.exCommands.join(",")}` : "";
+  const id = entry.kind === "promptTransform" ? entry.id : `${entry.kind}.${entry.id}`;
+  return `${id} ${keys}${ex} — ${entry.description}`;
 }
 
 export function actionsMessage(
@@ -373,10 +395,16 @@ export function mapcheckMessage(
   const protectedShortcut = protectedShortcutForKey(key);
   if (protectedShortcut)
     return `mapcheck: ${key} protected for ${protectedShortcut.reason}; ${protectedShortcut.behavior}`;
-  const matches = actionEntriesForKeymap(keymap).filter((entry) => entry.keys.includes(key));
-  if (matches[0]) return `mapcheck: ${key} -> ${matches[0].kind}.${matches[0].id}`;
+  const actionBinding = keymap.actions.accepted.find((binding) => binding.key === key);
+  if (actionBinding) return `mapcheck: ${key} -> ${actionBinding.actionId}`;
   const conflict = warnings.find((warning) => warning.includes(key));
   if (conflict) return `mapcheck: ${key} warning: ${conflict}`;
+  const matches = actionEntriesForKeymap(keymap).filter((entry) => entry.keys.includes(key));
+  if (matches[0]) {
+    const target =
+      matches[0].kind === "promptTransform" ? matches[0].id : `${matches[0].kind}.${matches[0].id}`;
+    return `mapcheck: ${key} -> ${target}`;
+  }
   return `mapcheck: ${key} is unmapped`;
 }
 

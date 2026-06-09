@@ -234,7 +234,7 @@ function effectiveStateMessage(query: string, context: RuntimeHelpContext): stri
   }
   if (needle === "reflow" && transforms.actions.reflow === false) return "reflow disabled";
   if (needle === "quote" && transforms.actions.quote !== false) {
-    return `promptTransform.quote ${transforms.commands.quote.map((name) => `:${name}`).join(",")}`;
+    return `prompt.transform.quote ${transforms.commands.quote.map((name) => `:${name}`).join(",")}`;
   }
   return undefined;
 }

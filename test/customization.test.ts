@@ -47,6 +47,30 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(keymap, "zz")).toBe("mapcheck: zz is unmapped");
   });
 
+  test("reports canonical prompt transform action bindings and legacy aliases", () => {
+    const { options, warnings } = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": ["gq"],
+            "prompt.transform.quote": ["gg"],
+          },
+        },
+      },
+    });
+    const message = actionsMessage(options.keymap!, "reflow", options.promptTransforms);
+    expect(message).toContain("prompt.transform.reflow");
+    expect(message).not.toContain("promptTransform.prompt.transform.reflow");
+    expect(
+      actionsMessage(options.keymap!, "promptTransform.reflow", options.promptTransforms),
+    ).toContain("prompt.transform.reflow");
+    expect(
+      keymapMessage(options.keymap!, "prompt.transform.reflow", options.promptTransforms),
+    ).toContain("gq");
+    expect(mapcheckMessage(options.keymap!, "gq")).toBe("mapcheck: gq -> prompt.transform.reflow");
+    expect(mapcheckMessage(options.keymap!, "gg", warnings)).toContain("rejected");
+  });
+
   test("doctor summarizes healthy and warning states", () => {
     expect(doctorMessage(DEFAULT_VIM_OPTIONS)).toBe("vimdoctor: ok — customization healthy");
     expect(doctorMessage(DEFAULT_VIM_OPTIONS, { warnings: ["bad config"] })).toBe(

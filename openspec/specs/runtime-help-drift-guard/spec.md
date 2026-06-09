@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change runtime-help-docs-spec-drift-guard. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Runtime help is finite and source-backed
 
 The Vim editor SHALL provide finite runtime help that describes supported pi-vimmode behavior and explicit limitations without implying full Vim or Neovim parity.
@@ -110,3 +108,33 @@ The project SHALL include development-time validation that fails when user-facin
 
 - **WHEN** a source-backed feature registry entry lacks a required OpenSpec spec anchor or test anchor without an explicit approved exception
 - **THEN** the docs drift guard fails before the change is considered complete
+
+### Requirement: Drift guard validates prompt transform action registry claims
+
+The project SHALL validate that prompt transform action registry metadata, runtime diagnostics, specs, tests, and user-facing docs stay aligned.
+
+#### Scenario: Public action ID missing from docs fails validation
+
+- **WHEN** a bindable prompt transform action ID exists in the registry and user docs do not mention it or its docs anchor
+- **THEN** the docs drift guard fails in the normal validation path
+
+#### Scenario: Documented action ID missing from registry fails validation
+
+- **WHEN** user docs mention a `prompt.transform.*` action ID that is absent from the registry
+- **THEN** the docs drift guard fails with an actionable message
+
+#### Scenario: Registry docs anchor missing fails validation
+
+- **WHEN** a registry action entry references a docs anchor that does not exist in docs
+- **THEN** the docs drift guard fails before the change is considered complete
+
+#### Scenario: Example keymap actions config parses successfully
+
+- **WHEN** docs include an example `piVimMode.keymap.actions` configuration
+- **THEN** an automated test parses the example or an equivalent fixture successfully
+
+#### Scenario: Legacy alias behavior is tested
+
+- **WHEN** legacy `promptTransform.*` aliases are supported for diagnostics
+- **THEN** tests verify the alias maps to canonical `prompt.transform.*` output until the alias removal TODO is completed
+

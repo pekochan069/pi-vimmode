@@ -2,11 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 import type {
   CursorStyle,
   CursorStyles,
   PromptStructureTarget,
   PromptTransformAction,
+  ResolvedVimActionBinding,
   ResolvedVimKeymap,
   ResolvedVimMacros,
   ResolvedVimMarks,
@@ -29,6 +31,12 @@ import type {
 } from "./types.ts";
 
 import { protectedShortcutForKey } from "./customization.ts";
+import {
+  bindablePromptTransformActionIds,
+  canonicalPromptTransformActionIdForLegacyAlias,
+  normalizePromptTransformActionArgs,
+  promptTransformActionForId,
+} from "./prompt-transform-actions.ts";
 
 const VIM_MODES = [
   "insert",
@@ -153,6 +161,7 @@ const TEXT_OBJECT_KIND_SET = new Set<string>(VIM_TEXT_OBJECT_KINDS);
 const TEXT_OBJECT_TARGET_SET = new Set<string>(VIM_TEXT_OBJECT_TARGETS);
 const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
+const BINDABLE_PROMPT_TRANSFORM_ACTION_SET = new Set<string>(bindablePromptTransformActionIds());
 const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
 const NOOP_FEEDBACK_VALUES = new Set<VimFeedbackOptions["noop"]>(["off", "status"]);
 const WORKBENCH_RESERVED_ROWS_MAX = 5;
@@ -271,6 +280,9 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
       "firstNonBlank",
       "lineEnd",
     ]),
+  }),
+  actions: Object.freeze({
+    accepted: Object.freeze([]),
   }),
 }) as unknown as ResolvedVimKeymap;
 
@@ -410,6 +422,7 @@ type PartialKeymapOptions = {
     targets?: Partial<Record<VimTextObjectTarget, string[]>>;
   };
   operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
+  actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
 };
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
@@ -543,6 +556,12 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       delete: [...keymap.operatorMotions.delete],
       change: [...keymap.operatorMotions.change],
       yank: [...keymap.operatorMotions.yank],
+    },
+    actions: {
+      accepted: keymap.actions.accepted.map((binding) => ({
+        ...binding,
+        args: { ...binding.args },
+      })),
     },
   };
 }
@@ -751,6 +770,85 @@ function parseKeyBindings<T extends string>(
   return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
+function parseActionBindingEntry(
+  entry: unknown,
+  actionId: BindablePromptTransformActionId,
+  label: string,
+  warnings: string[],
+): ResolvedVimActionBinding | undefined {
+  let rawKey: unknown;
+  let rawArgs: unknown;
+  if (typeof entry === "string") rawKey = entry;
+  else if (isRecord(entry)) {
+    rawKey = entry.key;
+    rawArgs = entry.args;
+  } else {
+    warnings.push(`${label} contains unsupported action binding entry`);
+    return undefined;
+  }
+
+  const key = normalizeVimKeySequence(rawKey);
+  if (!key) {
+    warnings.push(`${label} contains unsupported key`);
+    return undefined;
+  }
+  const protectedShortcut = protectedShortcutForKey(key);
+  if (protectedShortcut) {
+    warnings.push(`${label} contains protected key ${key} (${protectedShortcut.reason})`);
+    return undefined;
+  }
+
+  const normalized = normalizePromptTransformActionArgs({
+    source: "keymap",
+    actionId,
+    args: rawArgs,
+  });
+  if (!normalized.ok) {
+    warnings.push(`${label}.${key}: ${normalized.message}`);
+    return undefined;
+  }
+  return { key, actionId, args: normalized.transform };
+}
+
+function parseActionBindings(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+): Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.keymap.actions must be an object`);
+    return undefined;
+  }
+
+  const parsed: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  for (const [rawActionId, entries] of Object.entries(value)) {
+    const legacyCanonical = canonicalPromptTransformActionIdForLegacyAlias(rawActionId);
+    if (legacyCanonical) {
+      warnings.push(
+        `${sourceLabel}: unsupported piVimMode.keymap.actions.${rawActionId}; use canonical ${legacyCanonical}`,
+      );
+      continue;
+    }
+    if (!BINDABLE_PROMPT_TRANSFORM_ACTION_SET.has(rawActionId)) {
+      warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.actions.${rawActionId}`);
+      continue;
+    }
+    if (!Array.isArray(entries)) {
+      warnings.push(`${sourceLabel}: piVimMode.keymap.actions.${rawActionId} must be an array`);
+      continue;
+    }
+    const actionId = rawActionId as BindablePromptTransformActionId;
+    const label = `${sourceLabel}: piVimMode.keymap.actions.${rawActionId}`;
+    const bindings = entries
+      .map((entry) => parseActionBindingEntry(entry, actionId, label, warnings))
+      .filter((binding): binding is ResolvedVimActionBinding => Boolean(binding));
+    parsed[actionId] = bindings;
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function parseKeymap(
   value: unknown,
   sourceLabel: string,
@@ -845,6 +943,8 @@ function parseKeymap(
       if (Object.keys(operatorMotions).length > 0) partial.operatorMotions = operatorMotions;
     }
   }
+
+  partial.actions = parseActionBindings(value.actions, sourceLabel, warnings);
 
   return { partial, warnings };
 }
@@ -1350,6 +1450,7 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.operatorMotions) {
     target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
   }
+  if (partial.actions) mergeActionBindings(target, partial.actions);
 }
 
 function mergeMacros(target: ResolvedVimMacros, partial: PartialMacroOptions): void {
@@ -1388,6 +1489,20 @@ function mergePromptTransforms(
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
 }
 
+function mergeActionBindings(
+  target: ResolvedVimKeymap,
+  actions: NonNullable<PartialKeymapOptions["actions"]>,
+): void {
+  const byId = new Map<BindablePromptTransformActionId, ResolvedVimActionBinding[]>();
+  for (const binding of target.actions.accepted) {
+    byId.set(binding.actionId, [...(byId.get(binding.actionId) ?? []), binding]);
+  }
+  for (const [actionId, bindings] of Object.entries(actions)) {
+    byId.set(actionId as BindablePromptTransformActionId, bindings ?? []);
+  }
+  target.actions = { accepted: [...byId.values()].flat() };
+}
+
 function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
   if (partial.status) target.status = { ...target.status, ...partial.status };
   if (partial.mode) {
@@ -1403,6 +1518,116 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
     target.cursorPosition = { ...target.cursorPosition, ...partial.cursorPosition };
   }
   if (partial.workbench) target.workbench = { ...target.workbench, ...partial.workbench };
+}
+
+type GrammarBinding = { sequence: string; label: string };
+
+type ActionBindingConflict = { rejected: boolean; reason?: string };
+
+function grammarBindingsForKeymap(keymap: ResolvedVimKeymap): GrammarBinding[] {
+  const bindings: GrammarBinding[] = [];
+  const add = (sequence: string, label: string) => bindings.push({ sequence, label });
+  for (const [operator, sequences] of Object.entries(keymap.operators)) {
+    for (const sequence of sequences) add(sequence, `operators.${operator}`);
+  }
+  for (const [motion, sequences] of Object.entries(keymap.motions)) {
+    for (const sequence of sequences) add(sequence, `motions.${motion}`);
+  }
+  for (const [command, sequences] of Object.entries(keymap.commands)) {
+    for (const sequence of sequences) add(sequence, `commands.${command}`);
+  }
+  for (const [macro, sequences] of Object.entries(keymap.macros)) {
+    for (const sequence of sequences) add(sequence, `macros.${macro}`);
+  }
+  for (const [mark, sequences] of Object.entries(keymap.marks)) {
+    for (const sequence of sequences) add(sequence, `marks.${mark}`);
+  }
+  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds)) {
+    for (const sequence of sequences) add(sequence, `textObjects.kinds.${kind}`);
+  }
+  for (const [target, sequences] of Object.entries(keymap.textObjects.targets)) {
+    for (const sequence of sequences) add(sequence, `textObjects.targets.${target}`);
+  }
+  return bindings;
+}
+
+function grammarConflictForActionKey(
+  key: string,
+  grammarBindings: readonly GrammarBinding[],
+): string | undefined {
+  const exact = grammarBindings.find((binding) => binding.sequence === key);
+  if (exact) return `conflicts with ${exact.label}`;
+  const prefix = grammarBindings.find(
+    (binding) => key.startsWith(binding.sequence) || binding.sequence.startsWith(key),
+  );
+  return prefix ? `prefix-shadow conflict with ${prefix.label}` : undefined;
+}
+
+function disabledActionReason(
+  actionId: BindablePromptTransformActionId,
+  promptTransforms: ResolvedVimPromptTransforms,
+): string | undefined {
+  const action = promptTransformActionForId(actionId);
+  if (!action) return `unsupported action ${actionId}`;
+  if (!promptTransforms.enabled) return `disabled prompt transform suite for ${actionId}`;
+  if (promptTransforms.actions[action] === false) {
+    return `disabled prompt transform action ${actionId}`;
+  }
+  return undefined;
+}
+
+function resolveActionBindings(
+  keymap: ResolvedVimKeymap,
+  promptTransforms: ResolvedVimPromptTransforms,
+): { accepted: ResolvedVimActionBinding[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const candidates: ResolvedVimActionBinding[] = [];
+  const seenSameAction = new Set<string>();
+  for (const binding of keymap.actions.accepted) {
+    const dedupeKey = `${binding.actionId}\0${binding.key}`;
+    if (seenSameAction.has(dedupeKey)) continue;
+    seenSameAction.add(dedupeKey);
+    candidates.push(binding);
+  }
+
+  const conflicts = new Map<ResolvedVimActionBinding, ActionBindingConflict>();
+  const byKey = new Map<string, Set<BindablePromptTransformActionId>>();
+  for (const binding of candidates) {
+    byKey.set(binding.key, (byKey.get(binding.key) ?? new Set()).add(binding.actionId));
+  }
+
+  for (const binding of candidates) {
+    const reason = disabledActionReason(binding.actionId, promptTransforms);
+    if (reason) conflicts.set(binding, { rejected: true, reason });
+  }
+  for (const [key, actionIds] of byKey) {
+    if (actionIds.size <= 1) continue;
+    const ids = [...actionIds].sort();
+    warnings.push(`resolved settings: duplicate action key ${key} for ${ids.join(" and ")}`);
+    for (const binding of candidates.filter((candidate) => candidate.key === key)) {
+      conflicts.set(binding, { rejected: true, reason: `duplicate action key ${key}` });
+    }
+  }
+
+  const grammarBindings = grammarBindingsForKeymap(keymap);
+  for (const binding of candidates) {
+    if (conflicts.get(binding)?.rejected) continue;
+    const reason = grammarConflictForActionKey(binding.key, grammarBindings);
+    if (reason) conflicts.set(binding, { rejected: true, reason });
+  }
+
+  const accepted: ResolvedVimActionBinding[] = [];
+  for (const binding of candidates) {
+    const conflict = conflicts.get(binding);
+    if (conflict?.rejected) {
+      warnings.push(
+        `resolved settings: rejected piVimMode.keymap.actions.${binding.actionId}.${binding.key}: ${conflict.reason}`,
+      );
+      continue;
+    }
+    accepted.push(binding);
+  }
+  return { accepted, warnings };
 }
 
 function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
@@ -1558,6 +1783,12 @@ export function resolveVimOptions(
     mergePartialOptions(options, presetOptions(parsedProject.partial.preset));
   mergePartialOptions(options, parsedProject.partial);
   warnings.push(...parsedProject.warnings);
+  const actionBindings = resolveActionBindings(
+    options.keymap ?? DEFAULT_VIM_KEYMAP,
+    options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+  );
+  if (options.keymap) options.keymap.actions = { accepted: actionBindings.accepted };
+  warnings.push(...actionBindings.warnings);
   warnings.push(...detectKeymapConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
 
   return { options, warnings };

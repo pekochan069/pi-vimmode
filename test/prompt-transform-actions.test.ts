@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
@@ -47,6 +48,14 @@ describe("prompt transform action registry", () => {
       "promptTransform.quote",
     );
     expect(promptTransformActionForId("vimmode.doctor")).toBeUndefined();
+  });
+
+  test("bindable action IDs exclude metadata-only diagnostics", () => {
+    const bindableIds = bindablePromptTransformActionIds();
+    for (const entry of DIAGNOSTIC_ACTIONS) {
+      expect(bindableIds).not.toContain(entry.id);
+      expect(promptTransformActionForId(entry.id)).toBeUndefined();
+    }
   });
 });
 

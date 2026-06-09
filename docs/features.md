@@ -57,6 +57,33 @@ Because pi-vimmode replaces Pi's main prompt editor, keep the recovery path hand
 
 Startup mode is `insert` by default. Configure `piVimMode.startMode` to start new prompts in `normal` instead.
 
+## Quick reference
+
+pi-vimmode has a finite prompt-local surface. This quickref classifies what is supported; it is not a Vim/Neovim quickref clone.
+
+| Category                             | Examples                                                               | Classification                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.             |
+| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                      |
+| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                 |
+| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                      |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keymap`, `:mapcheck`                       | Read-only metadata/help actions; searchable as `vimmode.*`, but metadata-only and not bindable. |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries.                          |
+| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                    |
+
+<!-- diagnostic-actions:vimmode.doctor -->
+<!-- diagnostic-actions:vimmode.actions -->
+<!-- diagnostic-actions:vimmode.keymap -->
+<!-- diagnostic-actions:vimmode.mapcheck -->
+<!-- diagnostic-actions:vimmode.help -->
+<!-- diagnostic-actions:vimmode.features -->
+<!-- diagnostic-actions:vimmode.messages -->
+<!-- diagnostic-actions:vimmode.inspect -->
+
+Diagnostic/help metadata IDs are for discovery only: `vimmode.doctor`, `vimmode.actions`, `vimmode.keymap`, `vimmode.mapcheck`, `vimmode.help`, `vimmode.features`, `vimmode.messages`, and `vimmode.inspect` are not accepted by `piVimMode.keymap.actions` and cannot dispatch from user keybindings. Use canonical `prompt.transform.*` IDs for prompt transform keybindings. Legacy `promptTransform.*` names remain diagnostics-only search aliases for one transition release and are rejected in config with a warning naming the canonical ID.
+
+Non-goals: no public plugin action API, diagnostic action keybinding dispatch, runtime `:map`, runtime `:action`, Vimscript, Neovim Lua, full Vim help tags, help pager, or broad quickref parity.
+
 ### Escape and reset behavior
 
 - Insert + inactive autocomplete: `Esc` enters normal mode.
@@ -529,7 +556,7 @@ Examples:
 :messages         " retained recent runtime message summary
 ```
 
-`:`actions remains action-focused, `:keymap` remains binding-focused, `:mapcheck` explains one key or sequence, and `:vimdoctor` reports retained settings warnings behind `vim ⚠`. Use `:features` for broader feature/limit discovery.
+`:actions` remains action-focused, `:keymap` remains binding-focused, `:mapcheck` explains one key or sequence, and `:vimdoctor` reports retained settings warnings behind `vim ⚠`. Use `:features` for broader feature/limit discovery. Diagnostic/help metadata IDs use the `vimmode.*` namespace for search and docs classification only; they are metadata-only, not bindable, and do not create a plugin action API.
 
 `:vimmode inspect` is read-only and bounded. It summarizes mode, cursor, pending workbench state, selection kind/anchor, register slots/types/lengths, mark slots/positions, macro slots/token counts, search/Ex history counts, retained warning count, and render-layer activity. It does not dump full prompt text, full register contents, raw macro token streams, Vimscript state, or Neovim/runtime internals.
 

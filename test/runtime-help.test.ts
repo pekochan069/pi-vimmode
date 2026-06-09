@@ -26,6 +26,8 @@ describe("runtime help registry", () => {
     expect(runtimeHelpMessage("search", context)).toContain("prompt search");
     expect(runtimeHelpMessage("search", context)).toContain("no cross-prompt history");
     expect(runtimeHelpMessage("ex", context)).toContain(":s");
+    expect(runtimeHelpMessage("actions", context)).toContain("metadata-only");
+    expect(runtimeHelpMessage("diagnostics", context)).toContain("not bindable");
     expect(runtimeHelpMessage("vimscript", context)).toBe("help: no match for vimscript");
   });
 
@@ -41,6 +43,8 @@ describe("runtime help registry", () => {
       "registers",
       "marks",
       "macros",
+      "diagnostics",
+      "runtime help",
       "settings",
     ]) {
       expect(summary).toContain(category);
@@ -56,11 +60,19 @@ describe("runtime help registry", () => {
     expect(runtimeFeaturesMessage("ctrl+p", context)).toContain(
       "protected for Pi command/model palette",
     );
+    expect(runtimeFeaturesMessage("vimmode.doctor", context)).toContain("vimmode.doctor");
+    expect(runtimeFeaturesMessage("vimdoctor", context)).toContain("metadata-only not bindable");
+    expect(runtimeFeaturesMessage("vimmode.dump", context)).toBe(
+      "features: no match for vimmode.dump",
+    );
 
     const actions = resolveVimOptions({
       piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
     }).options;
     expect(runtimeFeaturesMessage("reflow", { ...context, options: actions })).toContain("gq");
+    expect(
+      runtimeFeaturesMessage("promptTransform.reflow", { ...context, options: actions }),
+    ).toContain("prompt.transform.reflow");
   });
 
   test("feature discovery reflects effective options", () => {

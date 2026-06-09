@@ -1,8 +1,11 @@
 # prompt-transform-action-keybindings Specification
 
 ## Purpose
+
 TBD - created by archiving change typed-action-registry-keybindings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt transform actions have canonical registry metadata
 
 The Vim editor SHALL expose a finite typed registry for bindable prompt transform actions using canonical `prompt.transform.*` action IDs.
@@ -99,4 +102,3 @@ Keybound prompt transform actions SHALL edit prompt text only through existing p
 
 - **WHEN** the editor is in insert mode and a key sequence matches a configured action binding
 - **THEN** input delegates to Pi/default insert behavior rather than invoking the action
-

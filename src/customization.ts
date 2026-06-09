@@ -13,6 +13,11 @@ import type {
 } from "./types.ts";
 
 import {
+  diagnosticActionEntries,
+  diagnosticActionMessage,
+  type DiagnosticActionEntry,
+} from "./diagnostic-actions.ts";
+import {
   canonicalPromptTransformActionIdForShortName,
   legacyPromptTransformActionAliasForId,
 } from "./prompt-transform-actions.ts";
@@ -25,7 +30,9 @@ export type VimActionKind =
   | "mark"
   | "textObject"
   | "search"
-  | "promptTransform";
+  | "promptTransform"
+  | "diagnostic"
+  | "runtimeHelp";
 
 export type VimActionEntry = {
   id: string;
@@ -34,7 +41,20 @@ export type VimActionEntry = {
   keys: readonly string[];
   aliases?: readonly string[];
   exCommands?: readonly string[];
+  bindable?: false;
 };
+
+function diagnosticActionEntry(entry: DiagnosticActionEntry): VimActionEntry {
+  return {
+    id: entry.id,
+    kind: entry.category,
+    description: entry.description,
+    keys: [],
+    aliases: entry.topics,
+    exCommands: [entry.command],
+    bindable: false,
+  };
+}
 
 export type ProtectedShortcut = {
   key: string;
@@ -323,6 +343,7 @@ export function actionEntriesForKeymap(
       });
     }
   }
+  entries.push(...diagnosticActionEntries().map(diagnosticActionEntry));
   return entries;
 }
 
@@ -352,6 +373,8 @@ export function searchActions(
 }
 
 function summarizeEntry(entry: VimActionEntry): string {
+  const diagnostic = diagnosticActionEntries().find((action) => action.id === entry.id);
+  if (diagnostic) return diagnosticActionMessage(diagnostic);
   const keys = entry.keys.length > 0 ? entry.keys.join(",") : "unbound";
   const ex = entry.exCommands?.length ? ` ex=${entry.exCommands.join(",")}` : "";
   const id = entry.kind === "promptTransform" ? entry.id : `${entry.kind}.${entry.id}`;
@@ -370,7 +393,7 @@ export function actionsMessage(
     return matches[0] ? summarizeEntry(matches[0]) : `actions: no match for ${query.trim()}`;
   const counts = new Map<VimActionKind, number>();
   for (const entry of matches) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
-  return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("promptTransform") ?? 0} transforms; :actions <query>`;
+  return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("promptTransform") ?? 0} transforms, ${counts.get("diagnostic") ?? 0} diagnostic metadata, ${counts.get("runtimeHelp") ?? 0} runtime-help metadata; :actions <query>`;
 }
 
 export function keymapMessage(
@@ -381,8 +404,12 @@ export function keymapMessage(
   marks?: ResolvedVimMarks,
 ): string {
   const matches = searchActions(keymap, query, promptTransforms, macros, marks);
-  if (!query.trim())
-    return `keymap: ${actionEntriesForKeymap(keymap, promptTransforms, macros, marks).length} entries; :keymap <action>`;
+  if (!query.trim()) {
+    const bindingEntries = actionEntriesForKeymap(keymap, promptTransforms, macros, marks).filter(
+      (entry) => entry.bindable !== false,
+    );
+    return `keymap: ${bindingEntries.length} entries; :keymap <action>`;
+  }
   return matches[0] ? summarizeEntry(matches[0]) : `keymap: no match for ${query.trim()}`;
 }
 

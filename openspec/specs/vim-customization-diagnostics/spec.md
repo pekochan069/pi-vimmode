@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -227,4 +229,3 @@ Runtime customization diagnostics SHALL report canonical prompt transform action
 
 - **WHEN** the editor executes `:actions`, `:keymap`, `:mapcheck`, or `:vimdoctor` for action keybindings
 - **THEN** prompt text, cursor position, mode, visual selection, search highlights, registers, marks, macros, and dot-repeat state remain unchanged except for diagnostic messages
-

@@ -216,10 +216,18 @@ describe("Ex command-line modal behavior", () => {
       "n",
       "s",
       " ",
-      "r",
-      "e",
-      "d",
+      "v",
+      "i",
+      "m",
+      "m",
       "o",
+      "d",
+      "e",
+      ".",
+      "h",
+      "e",
+      "l",
+      "p",
       "\r",
     ]);
 
@@ -232,7 +240,7 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
     expect(result.state.exMessage).toMatchObject({
       kind: "info",
-      text: expect.stringContaining("redo"),
+      text: expect.stringContaining("vimmode.help"),
     });
   });
 
@@ -289,10 +297,20 @@ describe("Ex command-line modal behavior", () => {
       "e",
       "s",
       " ",
-      "r",
+      "v",
+      "i",
+      "m",
+      "m",
+      "o",
+      "d",
       "e",
+      ".",
       "d",
       "o",
+      "c",
+      "t",
+      "o",
+      "r",
       "\r",
     ]);
 
@@ -308,7 +326,7 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
     expect(result.state.exMessage).toMatchObject({
       kind: "info",
-      text: expect.stringContaining("redo"),
+      text: expect.stringContaining("vimmode.doctor"),
     });
   });
 

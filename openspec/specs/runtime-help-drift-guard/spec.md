@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change runtime-help-docs-spec-drift-guard. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime help is finite and source-backed
 
 The Vim editor SHALL provide finite runtime help that describes supported pi-vimmode behavior and explicit limitations without implying full Vim or Neovim parity.
@@ -137,4 +139,3 @@ The project SHALL validate that prompt transform action registry metadata, runti
 
 - **WHEN** legacy `promptTransform.*` aliases are supported for diagnostics
 - **THEN** tests verify the alias maps to canonical `prompt.transform.*` output until the alias removal TODO is completed
-

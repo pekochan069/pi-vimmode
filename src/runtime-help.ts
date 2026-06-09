@@ -1,5 +1,6 @@
 import type { ResolvedVimEditorOptions } from "./types.ts";
 
+import { actionKeybindingRecipeMessage } from "./action-keybinding-recipes.ts";
 import {
   keymapForOptions,
   macrosForOptions,
@@ -178,6 +179,8 @@ export function runtimeFeaturesMessage(
   if (!needle) {
     return "features: modes, motions, editing, search, Ex commands, transforms, registers, marks, macros, diagnostics, runtime help, settings, Pi shortcuts; :features <query>";
   }
+  const recipe = actionKeybindingRecipeMessage(needle);
+  if (recipe) return recipe;
   const state = effectiveStateMessage(needle, context);
   if (state) return state;
   const action = actionFeatureMessage(needle, context);

@@ -518,6 +518,16 @@ Prompt transform actions can also be bound to normal/visual keys through `piVimM
 }
 ```
 
+Action keybinding recipes are opt-in snippets, not defaults, not plugin API, and not diagnostic/help action dispatch. Run `:features keybindings` to discover recommended recipes at runtime.
+
+<!-- action-keybinding-recipe:paragraph-editing -->
+
+Paragraph editing recipe: `prompt.transform.reflow` on `gq`, `prompt.transform.quote` on `g>`, and `prompt.transform.unquote` on `g<`.
+
+<!-- action-keybinding-recipe:markdown-wrapping -->
+
+Markdown wrapping recipe: `prompt.transform.fence` on `gT` with a configured language, plus `prompt.transform.quote` on `g>` and `prompt.transform.unquote` on `g<`.
+
 Examples:
 
 ```vim

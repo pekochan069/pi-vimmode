@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
+import { ACTION_KEYBINDING_RECIPES } from "../src/action-keybinding-recipes.ts";
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
@@ -103,6 +104,19 @@ describe("documentation drift guard", () => {
       expect(PROMPT_TRANSFORM_ACTIONS.some((action) => action.id === id)).toBe(true);
     }
     expect(allUserDocs).toContain("promptTransform.*");
+  });
+
+  test("action keybinding recipe docs anchors and configs stay aligned", () => {
+    for (const recipe of ACTION_KEYBINDING_RECIPES) {
+      expect(allUserDocs).toContain(`<!-- ${recipe.docsAnchor} -->`);
+      const result = resolveVimOptions({ piVimMode: { keymap: { actions: recipe.actions } } });
+      expect(result.warnings).toEqual([]);
+      for (const binding of recipe.expected) {
+        expect(bindablePromptTransformActionIds()).toContain(binding.actionId);
+        expect(allUserDocs).toContain(binding.actionId);
+        expect(allUserDocs).toContain(binding.key);
+      }
+    }
   });
 
   test("documented keymap.actions example shape parses", () => {

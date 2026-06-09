@@ -125,6 +125,8 @@ export type VimActionKeymapOptions = Partial<
   Record<BindablePromptTransformActionId, readonly VimActionKeyBindingEntry[]>
 >;
 
+export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
+
 export type VimKeymapOptions = {
   operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
   motions?: Partial<Record<VimMotionAction, readonly string[]>>;
@@ -133,6 +135,7 @@ export type VimKeymapOptions = {
   marks?: VimMarkKeymapOptions;
   textObjects?: VimTextObjectKeymapOptions;
   operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
+  actionPresets?: readonly VimActionKeybindingPreset[];
   actions?: VimActionKeymapOptions;
 };
 

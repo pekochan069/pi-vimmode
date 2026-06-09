@@ -17,6 +17,7 @@ import type {
   ResolvedVimSearch,
   ResolvedVimUi,
   StartupMode,
+  VimActionKeybindingPreset,
   VimCommandAction,
   ResolvedVimEditorOptions,
   VimFeedbackOptions,
@@ -30,6 +31,10 @@ import type {
   VimTextObjectTarget,
 } from "./types.ts";
 
+import {
+  actionKeybindingPresetActions,
+  isActionKeybindingPreset,
+} from "./action-keybinding-recipes.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   bindablePromptTransformActionIds,
@@ -422,6 +427,7 @@ type PartialKeymapOptions = {
     targets?: Partial<Record<VimTextObjectTarget, string[]>>;
   };
   operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
+  actionPresets?: VimActionKeybindingPreset[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
 };
 
@@ -849,6 +855,52 @@ function parseActionBindings(
   return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
+function mergeParsedActionBindings(
+  target: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>,
+  source: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> | undefined,
+): void {
+  if (!source) return;
+  for (const [actionId, bindings] of Object.entries(source)) {
+    target[actionId as BindablePromptTransformActionId] = bindings ?? [];
+  }
+}
+
+function parseActionPresets(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+): {
+  presets?: VimActionKeybindingPreset[];
+  actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
+} {
+  if (value === undefined) return {};
+  if (!Array.isArray(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.keymap.actionPresets must be an array`);
+    return {};
+  }
+
+  const presets: VimActionKeybindingPreset[] = [];
+  const actions: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  for (const entry of value) {
+    if (typeof entry !== "string" || !isActionKeybindingPreset(entry)) {
+      const suffix = typeof entry === "string" ? `.${entry}` : " contains unsupported preset";
+      warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.actionPresets${suffix}`);
+      continue;
+    }
+    presets.push(entry);
+    const presetActions = parseActionBindings(
+      actionKeybindingPresetActions(entry),
+      `${sourceLabel}: piVimMode.keymap.actionPresets.${entry}`,
+      warnings,
+    );
+    mergeParsedActionBindings(actions, presetActions);
+  }
+  return {
+    presets: presets.length > 0 ? presets : undefined,
+    actions: Object.keys(actions).length > 0 ? actions : undefined,
+  };
+}
+
 function parseKeymap(
   value: unknown,
   sourceLabel: string,
@@ -944,7 +996,12 @@ function parseKeymap(
     }
   }
 
-  partial.actions = parseActionBindings(value.actions, sourceLabel, warnings);
+  const actionPresets = parseActionPresets(value.actionPresets, sourceLabel, warnings);
+  partial.actionPresets = actionPresets.presets;
+  const actions: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  mergeParsedActionBindings(actions, actionPresets.actions);
+  mergeParsedActionBindings(actions, parseActionBindings(value.actions, sourceLabel, warnings));
+  partial.actions = Object.keys(actions).length > 0 ? actions : undefined;
 
   return { partial, warnings };
 }

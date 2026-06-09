@@ -5,7 +5,10 @@ import { join } from "node:path";
 
 import type { VimEditorOptions } from "../src/types.ts";
 
-import { ACTION_KEYBINDING_RECIPES } from "../src/action-keybinding-recipes.ts";
+import {
+  ACTION_KEYBINDING_PRESETS,
+  ACTION_KEYBINDING_RECIPES,
+} from "../src/action-keybinding-recipes.ts";
 import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
@@ -549,6 +552,119 @@ describe("vim config parsing", () => {
       expect.arrayContaining([
         expect.stringContaining("disabled prompt transform action prompt.transform.quote"),
       ]),
+    );
+  });
+
+  test("action keybinding presets expand through config", () => {
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    for (const preset of ACTION_KEYBINDING_PRESETS) {
+      const result = resolveVimOptions({
+        piVimMode: { keymap: { actionPresets: [preset.id] } },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.actions.accepted).toEqual(preset.expected);
+    }
+  });
+
+  test("action keybinding presets merge before explicit actions", () => {
+    const merged = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actionPresets: ["paragraph-editing", "markdown-wrapping"],
+          actions: {
+            "prompt.transform.quote": ["zq"],
+            "prompt.transform.unquote": [],
+          },
+        },
+      },
+    });
+    expect(merged.warnings).toEqual([]);
+    expect(merged.options.keymap?.actions.accepted).toHaveLength(3);
+    expect(merged.options.keymap?.actions.accepted).toEqual(
+      expect.arrayContaining([
+        { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+        {
+          key: "gT",
+          actionId: "prompt.transform.fence",
+          args: { action: "fence" },
+        },
+        { key: "zq", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      ]),
+    );
+
+    const projectOverride = resolveVimOptions(
+      { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["zq"] } } } },
+    );
+    expect(projectOverride.options.keymap?.actions.accepted).toEqual([
+      { key: "zq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+  });
+
+  test("action keybinding presets warn per invalid entry and preserve valid siblings", () => {
+    const invalid = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: { actionPresets: ["paragraph-editing", "nope", 3] },
+      },
+    });
+    expect(invalid.options.startMode).toBe("normal");
+    expect(invalid.options.keymap?.actions.accepted).toEqual(
+      ACTION_KEYBINDING_PRESETS[0]!.expected,
+    );
+    expect(invalid.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("unsupported piVimMode.keymap.actionPresets.nope"),
+        expect.stringContaining("piVimMode.keymap.actionPresets contains unsupported preset"),
+      ]),
+    );
+
+    const notArray = resolveVimOptions({
+      piVimMode: { keymap: { actionPresets: "paragraph-editing" } },
+    });
+    expect(notArray.options.keymap?.actions.accepted).toEqual([]);
+    expect(notArray.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("piVimMode.keymap.actionPresets must be an array"),
+      ]),
+    );
+  });
+
+  test("action keybinding presets preserve existing rejection rules", () => {
+    const disabled = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { quote: false } },
+        keymap: { actionPresets: ["paragraph-editing"] },
+      },
+    });
+    expect(disabled.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(disabled.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("disabled prompt transform action prompt.transform.quote"),
+      ]),
+    );
+
+    const conflict = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actionPresets: ["paragraph-editing"],
+          motions: { bufferStart: ["gq"] },
+        },
+      },
+    });
+    expect(conflict.options.keymap?.actions.accepted).toEqual([
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(conflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("conflicts with motions.bufferStart")]),
     );
   });
 

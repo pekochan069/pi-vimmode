@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
-import { ACTION_KEYBINDING_RECIPES } from "../src/action-keybinding-recipes.ts";
+import {
+  ACTION_KEYBINDING_PRESETS,
+  ACTION_KEYBINDING_RECIPES,
+} from "../src/action-keybinding-recipes.ts";
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
@@ -112,6 +115,26 @@ describe("documentation drift guard", () => {
       const result = resolveVimOptions({ piVimMode: { keymap: { actions: recipe.actions } } });
       expect(result.warnings).toEqual([]);
       for (const binding of recipe.expected) {
+        expect(bindablePromptTransformActionIds()).toContain(binding.actionId);
+        expect(allUserDocs).toContain(binding.actionId);
+        expect(allUserDocs).toContain(binding.key);
+      }
+    }
+  });
+
+  test("action keybinding preset docs anchors and configs stay aligned", () => {
+    expect(allUserDocs).toContain("piVimMode.keymap.actionPresets");
+    for (const preset of ACTION_KEYBINDING_PRESETS) {
+      expect(allUserDocs).toContain(`<!-- ${preset.presetDocsAnchor} -->`);
+      expect(allUserDocs).toContain(preset.id);
+      expect(allUserDocs).toContain("no default");
+      expect(allUserDocs).toContain("no plugin API");
+      const result = resolveVimOptions({
+        piVimMode: { keymap: { actionPresets: [preset.id] } },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.actions.accepted).toEqual(preset.expected);
+      for (const binding of preset.expected) {
         expect(bindablePromptTransformActionIds()).toContain(binding.actionId);
         expect(allUserDocs).toContain(binding.actionId);
         expect(allUserDocs).toContain(binding.key);

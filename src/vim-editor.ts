@@ -1,6 +1,13 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import {
+  truncateToWidth,
+  visibleWidth,
+  type EditorTheme,
+  type OverlayHandle,
+  type TUI,
+} from "@earendil-works/pi-tui";
 
+import type { HelpPopup } from "./keybinding-discovery-popup.ts";
 import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
 import type {
   CursorStyle,
@@ -19,6 +26,7 @@ import {
   searchForOptions,
   uiForOptions,
 } from "./config.ts";
+import { KeybindingDiscoveryOverlayComponent } from "./keybinding-discovery-overlay.ts";
 import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
@@ -146,9 +154,11 @@ export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
   private readonly diagnostics: VimDiagnostics;
+  private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
+  private helpOverlay: OverlayHandle | undefined;
   private agentBusy = false;
   private isMacroReplaying = false;
 
@@ -162,6 +172,7 @@ export class VimEditor extends CustomEditor {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
     this.diagnostics = { warnings: [...diagnostics.warnings] };
+    this.overlayTheme = theme;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -354,6 +365,9 @@ export class VimEditor extends CustomEditor {
       case "playMacro":
         this.playMacro(effect.inputs);
         return;
+      case "openHelpPopup":
+        this.openHelpPopup(effect.popup);
+        return;
       case "terminalCursor":
         this.applyTerminalCursorStyle(effect.style);
         return;
@@ -361,6 +375,33 @@ export class VimEditor extends CustomEditor {
         this.invalidate();
         return;
     }
+  }
+
+  private openHelpPopup(popup: HelpPopup): void {
+    this.helpOverlay?.hide();
+    let handle: OverlayHandle | undefined;
+    const component = new KeybindingDiscoveryOverlayComponent(
+      this.tui,
+      popup,
+      this.overlayTheme,
+      () => {
+        handle?.hide();
+        if (this.helpOverlay === handle) this.helpOverlay = undefined;
+        this.tui.requestRender();
+      },
+    );
+    handle = this.tui.showOverlay(component, {
+      anchor: "center",
+      width: "90%",
+      minWidth: 48,
+      maxHeight: "90%",
+      margin: 2,
+      visible: (termWidth, termHeight) => termWidth >= 48 && termHeight >= 12,
+    });
+    this.helpOverlay = handle;
+    const { helpPopup: _helpPopup, ...state } = this.modalState;
+    this.modalState = state;
+    this.invalidate();
   }
 
   private applyAdapterCommand(command: AdapterCommand): void {

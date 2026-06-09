@@ -36,6 +36,10 @@ import {
 } from "../config.ts";
 import { actionsMessage, doctorMessage, keymapMessage, mapcheckMessage } from "../customization.ts";
 import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
+import {
+  isKeybindingDiscoveryPopupQuery,
+  keybindingDiscoveryPopup,
+} from "../keybinding-discovery-popup.ts";
 import { runtimeFeaturesMessage, runtimeHelpMessage } from "../runtime-help.ts";
 import {
   clearPending,
@@ -310,6 +314,15 @@ function executeExCommand(
   }
 
   if (parsed.type === "runtimeHelp") {
+    if (isKeybindingDiscoveryPopupQuery(parsed.command, parsed.query)) {
+      const popup = keybindingDiscoveryPopup(options);
+      const restored = restoreVisualExState(state);
+      return {
+        state: { ...restored.state, helpPopup: popup },
+        effects: [...restored.effects, { type: "openHelpPopup", popup }],
+      };
+    }
+
     const context = { options, diagnostics };
     const message =
       parsed.command === "help"

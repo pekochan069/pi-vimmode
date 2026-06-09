@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change typed-action-registry-keybindings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt transform actions have canonical registry metadata
 
 The Vim editor SHALL expose a finite typed registry for bindable prompt transform actions using canonical `prompt.transform.*` action IDs.
@@ -201,4 +203,3 @@ The Vim editor SHALL expose named action keybinding presets that are backed by t
 
 - **WHEN** user-facing docs or runtime help describe action keybinding presets
 - **THEN** they identify presets as finite built-in opt-in bundles and do not imply recursive mappings, arbitrary user actions, diagnostic/help action dispatch, or a generic plugin API
-

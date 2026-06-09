@@ -14,10 +14,31 @@ function createEditor(
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
+  const overlays: Array<{ component: any; options: any; hidden: boolean }> = [];
   let hardwareCursorVisible = initialHardwareCursorVisible;
   const tui = {
     terminal: { rows: 24, write: (data: string) => writes.push(data) },
     requestRender() {},
+    showOverlay(component: any, options: any) {
+      const entry = { component, options, hidden: false };
+      overlays.push(entry);
+      return {
+        hide() {
+          entry.hidden = true;
+        },
+        setHidden(hidden: boolean) {
+          entry.hidden = hidden;
+        },
+        isHidden() {
+          return entry.hidden;
+        },
+        focus() {},
+        unfocus() {},
+        isFocused() {
+          return !entry.hidden;
+        },
+      };
+    },
     getShowHardwareCursor() {
       return hardwareCursorVisible;
     },
@@ -45,6 +66,7 @@ function createEditor(
     editor: new VimEditor(tui, theme, keybindings, options, diagnostics),
     writes,
     hardwareCursorChanges,
+    overlays,
     getHardwareCursorVisible: () => hardwareCursorVisible,
   };
 }
@@ -53,7 +75,7 @@ function expectRenderedWidth(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 }
 
-function typeKeys(editor: VimEditor, keys: readonly string[]) {
+function typeKeys(editor: Pick<VimEditor, "handleInput">, keys: readonly string[]) {
   for (const key of keys) editor.handleInput(key);
 }
 
@@ -199,6 +221,87 @@ describe("vim editor integration", () => {
     const visualEx = editor.render(40).join("\n");
     expect(visualEx).toContain("\u001b[7m");
     expect(visualEx).toContain(":'<,'>");
+  });
+
+  test("keybinding discovery popup renders as real overlay panel", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(32);
+
+    runEx(editor, "features keybindings");
+    const editorLines = editor.render(32);
+    const editorText = editorLines.join("\n");
+    const overlay = overlays.at(-1);
+    const overlayLines = overlay?.component.render(64) ?? [];
+    const overlayText = overlayLines.join("\n");
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(editorLines.length).toBe(baseline.length);
+    expect(editorText).not.toContain("Keybinding discovery");
+    expect(overlayText).toContain("╭");
+    expect(overlayText).toContain("Keybinding discovery");
+    expect(overlayText).toContain("1-9/9");
+    expect(overlayText).toContain("│ Source-backed");
+    expect(overlayText).toContain("j/k ↑/↓ scroll");
+    expect(overlayText).toContain("Esc close");
+    expect(overlayText).not.toContain("↓1");
+    expect(overlayText).not.toContain("…");
+    expectRenderedWidth(overlayLines, 64);
+  });
+
+  test("keybinding discovery overlay scroll reveals hidden bounded rows", () => {
+    const options: ResolvedVimEditorOptions = {
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        actions: {
+          accepted: Array.from({ length: 8 }, (_, index) => ({
+            key: `g${index}`,
+            actionId: "prompt.transform.quote",
+            args: { action: "quote" },
+          })),
+        },
+      },
+    };
+    const { editor, overlays } = createEditor(options);
+
+    runEx(editor, "features keybindings");
+    const overlay = overlays.at(-1)?.component;
+    expect(overlay).toBeDefined();
+    const initial = overlay.render(80).join("\n");
+    expect(initial).toContain("1-10/");
+    expect(initial).toContain("Source-backed");
+    expect(initial).not.toContain("prompt.transform.quote -> g7");
+
+    typeKeys(overlay, ["j", "j", "j", "j", "j", "j"]);
+    const scrolled = overlay.render(80).join("\n");
+    expect(scrolled).toContain("7-16/");
+    expect(scrolled).toContain("prompt.transform.quote -> g7");
+    expect(scrolled).toContain("↑");
+    expect(scrolled).not.toContain("Source-backed");
+    expectRenderedWidth(overlay.render(80), 80);
+
+    overlay.handleInput("k");
+    expect(overlay.render(80).join("\n")).toContain("6-15/");
+  });
+
+  test("only keybinding discovery uses popup while other runtime help stays compact", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(48);
+
+    runEx(editor, "help search");
+    let lines = editor.render(48);
+    expect(lines.length).toBe(baseline.length + 1);
+    expect(lines.at(-1)).toContain("prompt search");
+    expect(lines.join("\n")).not.toContain("Keybinding discovery");
+
+    runEx(editor, "features redo");
+    lines = editor.render(48);
+    expect(lines.length).toBe(baseline.length + 1);
+    expect(lines.at(-1)).toContain("command.redo");
+    expect(lines.join("\n")).not.toContain("Keybinding discovery");
   });
 
   test("runtime help, inspect, and messages rows render width-safely", () => {

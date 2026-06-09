@@ -274,6 +274,221 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.exMessage?.kind).toBe("info");
   });
 
+  test("features keybindings opens popup without editing state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(
+      initial,
+      "abc",
+      p(0, 1),
+      [
+        ":",
+        "f",
+        "e",
+        "a",
+        "t",
+        "u",
+        "r",
+        "e",
+        "s",
+        " ",
+        "k",
+        "e",
+        "y",
+        "b",
+        "i",
+        "n",
+        "d",
+        "i",
+        "n",
+        "g",
+        "s",
+        "\r",
+      ],
+      configured,
+    );
+    const popupText = [
+      result.state.helpPopup?.title,
+      ...(result.state.helpPopup?.lines ?? []),
+    ].join("\n");
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe("Keybinding discovery");
+    expect(popupText).toContain("paragraph-editing");
+    expect(popupText).toContain("markdown-wrapping");
+    expect(popupText).toContain("prompt.transform.reflow");
+    expect(popupText).toContain("gq");
+    expect(popupText).toContain("piVimMode.keymap.actions");
+    expect(popupText).toContain("piVimMode.keymap.actionPresets");
+    expect(popupText).toContain("opt-in");
+    expect(popupText).toContain("no defaults");
+    expect(popupText).toContain("no plugin API");
+    expect(popupText).toContain("no runtime :map");
+    expect(popupText).toContain("no runtime :action");
+    expect(popupText).toContain("no command palette");
+    expect(popupText).toContain("no Vim help pager");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("popup dismisses with escape without clearing durable state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: ["prompt.transform.reflow -> gq"],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["\x1b"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.helpPopup).toBeUndefined();
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("popup scroll keys are local and read-only", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+          "eleven",
+          "twelve",
+        ],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["j", "\x1b[B", "x", "k"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.helpPopup?.scrollOffset).toBe(1);
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+
+    const clampedTop = applyModalKeys(result.state, "abc", p(0, 1), ["k", "k", "\x1b[A"]);
+    expect(clampedTop.state.helpPopup?.scrollOffset).toBe(0);
+    const clampedBottom = applyModalKeys(clampedTop.state, "abc", p(0, 1), [
+      "j",
+      "j",
+      "j",
+      "j",
+      "j",
+      "j",
+    ]);
+    expect(clampedBottom.state.helpPopup?.scrollOffset).toBe(2);
+  });
+
+  test("popup scroll and dismissal are excluded from macro recording", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      recordingSlot: "a",
+      macros: { a: [] },
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+          "eleven",
+          "twelve",
+        ],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+    };
+
+    const scrolled = applyModalKeys(initial, "abc", p(0, 1), ["j", "k", "j"]);
+    expect(scrolled.state.helpPopup?.scrollOffset).toBe(1);
+    expect(scrolled.state.macros).toEqual({ a: [] });
+    expect(scrolled.state.recordingSlot).toBe("a");
+
+    const dismissed = applyModalKeys(scrolled.state, "abc", p(0, 1), ["\x1b"]);
+    expect(dismissed.state.helpPopup).toBeUndefined();
+    expect(dismissed.state.macros).toEqual({ a: [] });
+    expect(dismissed.state.recordingSlot).toBe("a");
+  });
+
   test("runtime help Ex commands report info without editing state", () => {
     const initial: ModalState = {
       mode: "normal",
@@ -328,6 +543,65 @@ describe("Ex command-line modal behavior", () => {
       kind: "info",
       text: expect.stringContaining("vimmode.doctor"),
     });
+  });
+
+  test("visual features keybindings popup restores visual state after marker deletion", () => {
+    const opened = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const _ of ["'", ">", ",", "'", "<"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        "\b",
+      ).state;
+    }
+    for (const key of [
+      "f",
+      "e",
+      "a",
+      "t",
+      "u",
+      "r",
+      "e",
+      "s",
+      " ",
+      "k",
+      "e",
+      "y",
+      "b",
+      "i",
+      "n",
+      "d",
+      "i",
+      "n",
+      "g",
+      "s",
+    ]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe("Keybinding discovery");
   });
 
   test("visual runtime help Ex commands preserve visual state after marker deletion", () => {
@@ -490,6 +764,36 @@ describe("Ex command-line modal behavior", () => {
       "messages: 1 retained; latest: Pattern not found: missing",
     );
     expect(messages.state.messageHistory).toEqual(error.state.messageHistory);
+  });
+
+  test("keybinding popup does not pollute retained runtime messages", () => {
+    const history = [{ kind: "info" as const, text: "kept" }];
+    const popup = handleModalInput(
+      {
+        mode: "normal",
+        messageHistory: history,
+        pendingEx: { command: "features keybindings", sourceMode: "normal" },
+      },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(popup.state.helpPopup?.title).toBe("Keybinding discovery");
+    expect(popup.state.messageHistory).toEqual(history);
+
+    const dismissed = handleModalInput(popup.state, snapshot, options, "\x1b");
+    expect(dismissed.state.helpPopup).toBeUndefined();
+    expect(dismissed.state.messageHistory).toEqual(history);
+
+    const messages = handleModalInput(
+      { ...dismissed.state, pendingEx: { command: "messages", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(messages.state.exMessage?.text).toBe("messages: 1 retained; latest: kept");
+    expect(messages.state.exMessage?.text).not.toContain("Keybinding discovery");
+    expect(messages.state.messageHistory).toEqual(history);
   });
 
   test("message history cap discards oldest entries", () => {

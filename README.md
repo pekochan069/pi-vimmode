@@ -1,6 +1,6 @@
 # pi-vimmode
 
-Vim-style prompt editing for [Pi](https://github.com/earendil-works/pi-coding-agent).
+Vim-style prompt editing for [Pi](https://pi.dev/).
 
 `pi-vimmode` replaces Pi's main input editor with a `CustomEditor`-based modal editor. It targets practical prompt editing for agent prompts, not full Vim parity.
 

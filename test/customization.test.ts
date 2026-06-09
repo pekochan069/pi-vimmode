@@ -25,8 +25,24 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
+    expect(keymapMessage(keymap)).toBe("keymap: 72 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
+  });
+
+  test("classifies diagnostic help actions as metadata-only", () => {
+    expect(searchActions(keymap, "vimmode.doctor")[0]).toMatchObject({
+      id: "vimmode.doctor",
+      kind: "diagnostic",
+      keys: [],
+    });
+    expect(actionsMessage(keymap, "vimdoctor")).toContain("vimmode.doctor");
+    expect(actionsMessage(keymap, "vimdoctor")).toContain("metadata-only not bindable");
+    expect(actionsMessage(keymap, "vimmode.help")).toContain("runtimeHelp");
+    expect(actionsMessage(keymap, "vimmode.dump")).toBe("actions: no match for vimmode.dump");
+    expect(actionsMessage(keymap)).toContain("diagnostic metadata");
+    expect(actionsMessage(keymap)).toContain("runtime-help metadata");
+    expect(keymapMessage(keymap, "vimmode.doctor")).toContain("metadata-only not bindable");
   });
 
   test("hides disabled macro and mark actions from diagnostics", () => {

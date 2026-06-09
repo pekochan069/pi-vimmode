@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -951,4 +953,3 @@ Ex prompt transform commands and keymap action bindings SHALL use one shared val
 
 - **WHEN** a keymap action binding object includes an arg key not defined for that prompt transform action
 - **THEN** that binding is rejected with a warning and valid sibling bindings remain usable
-

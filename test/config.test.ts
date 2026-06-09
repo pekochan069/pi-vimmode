@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { VimEditorOptions } from "../src/types.ts";
 
 import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
+import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
 function tempSettings() {
   const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-config-"));
@@ -577,6 +578,29 @@ describe("vim config parsing", () => {
         expect.stringContaining("conflicts with motions.bufferStart"),
       ]),
     );
+  });
+
+  test("rejects every metadata-only diagnostic action from keymap actions", () => {
+    const actions = Object.fromEntries(
+      DIAGNOSTIC_ACTIONS.map((entry, index) => [entry.id, [`g${index}`]]),
+    );
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            ...actions,
+            "prompt.transform.quote": ["g>"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+    ]);
+    for (const entry of DIAGNOSTIC_ACTIONS) {
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining(entry.id)]));
+    }
   });
 
   test("project action bindings replace global bindings and empty arrays unbind", () => {

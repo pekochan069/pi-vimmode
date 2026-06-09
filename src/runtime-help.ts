@@ -13,6 +13,7 @@ import {
   searchActions,
   type VimDiagnostics,
 } from "./customization.ts";
+import { diagnosticActionMessage, searchDiagnosticActions } from "./diagnostic-actions.ts";
 
 export type RuntimeHelpCategory =
   | "modes"
@@ -152,7 +153,13 @@ export function runtimeHelpMessage(topic: string | undefined, context: RuntimeHe
   if (!query) {
     return "help: :help <topic>, :features [query], :vimmode inspect, :messages, :actions, :keymap, :mapcheck, :vimdoctor";
   }
+  const wantsDiagnosticActions = ["actions", "action", "diagnostics", "diagnostic"].includes(
+    query.toLowerCase(),
+  );
   const entry = findEntry(query);
+  if (entry && !wantsDiagnosticActions) return compactEntry(entry, context);
+  const diagnostic = searchDiagnosticActions(query)[0];
+  if (diagnostic) return diagnosticActionMessage(diagnostic);
   if (!entry) return `help: no match for ${query}`;
   return compactEntry(entry, context);
 }
@@ -169,7 +176,7 @@ export function runtimeFeaturesMessage(
 ): string {
   const needle = query?.trim();
   if (!needle) {
-    return "features: modes, motions, editing, search, Ex commands, transforms, registers, marks, macros, diagnostics, settings, Pi shortcuts; :features <query>";
+    return "features: modes, motions, editing, search, Ex commands, transforms, registers, marks, macros, diagnostics, runtime help, settings, Pi shortcuts; :features <query>";
   }
   const state = effectiveStateMessage(needle, context);
   if (state) return state;

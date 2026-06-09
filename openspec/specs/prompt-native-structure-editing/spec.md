@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change prompt-native-structure-objects-and-transforms. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt-native structures resolve to deterministic ranges
 
 The Vim editor SHALL resolve prompt-native structures in the current prompt using deterministic, line-oriented rules for Markdown code fences, Markdown heading sections, list items, XML-ish tags, and pasted error blocks.
@@ -198,4 +200,3 @@ The Vim editor SHALL allow existing prompt transform behavior to be invoked by a
 
 - **WHEN** an action is invoked in a mode or target context it does not support
 - **THEN** prompt text remains unchanged and feedback is emitted only according to resolved feedback settings
-

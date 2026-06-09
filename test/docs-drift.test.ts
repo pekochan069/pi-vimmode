@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
-import { PROMPT_TRANSFORM_ACTIONS } from "../src/prompt-transform-actions.ts";
+import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
+import { parseExCommand } from "../src/ex.ts";
+import {
+  PROMPT_TRANSFORM_ACTIONS,
+  bindablePromptTransformActionIds,
+} from "../src/prompt-transform-actions.ts";
 import { runtimeHelpEntries } from "../src/runtime-help.ts";
 
 const featuresDoc = readFileSync("docs/features.md", "utf8");
@@ -16,6 +21,27 @@ describe("documentation drift guard", () => {
       expect(existsSync(entry.specAnchor)).toBe(true);
       for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);
     }
+  });
+
+  test("diagnostic action metadata anchors exist in feature docs, specs, and tests", () => {
+    for (const entry of DIAGNOSTIC_ACTIONS) {
+      expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
+      expect(existsSync(entry.specAnchor)).toBe(true);
+      for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);
+    }
+  });
+
+  test("diagnostic action metadata maps to finite Ex parser support", () => {
+    const context = { lineCount: 5, cursorLine: 1 };
+    for (const entry of DIAGNOSTIC_ACTIONS) {
+      const command = entry.examples[0]!.replace(/^:/, "");
+      expect(parseExCommand(command, context).type).not.toBe("error");
+    }
+  });
+
+  test("diagnostic action metadata is excluded from bindable action IDs", () => {
+    const bindableIds = bindablePromptTransformActionIds();
+    for (const entry of DIAGNOSTIC_ACTIONS) expect(bindableIds).not.toContain(entry.id);
   });
 
   test("feature docs describe every supported runtime help command", () => {

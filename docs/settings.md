@@ -321,7 +321,37 @@ Example:
 }
 ```
 
-Action keybinding recipes are copy-pasteable opt-in snippets. They are not defaults, not a plugin API, and not diagnostic/help action dispatch. Run `:features keybindings` for compact runtime discovery.
+Action keybinding presets are selectable opt-in bundles backed by the same finite recipe metadata. They create no default keybindings and are not defaults, not recursive mappings, not runtime `:map`, not `.vimrc`, no plugin API, not a plugin API, not diagnostic/help action dispatch, and not Vim/Neovim parity. Run `:features keybindings` or `:features action presets` for compact runtime discovery.
+
+`piVimMode.keymap.actionPresets` accepts:
+
+- `paragraph-editing`
+- `markdown-wrapping`
+
+Resolution order is defaults, global whole-editor `piVimMode.preset`, global `keymap.actionPresets`, global explicit `keymap.actions`, project whole-editor `piVimMode.preset`, project `keymap.actionPresets`, then project explicit `keymap.actions`. Later presets replace earlier preset bindings for the same action ID. Explicit `piVimMode.keymap.actions` entries override preset-provided entries for the same action ID; an explicit empty action array clears that action from the preset.
+
+<!-- action-keybinding-preset:paragraph-editing -->
+<!-- action-keybinding-preset:markdown-wrapping -->
+
+Preset example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actionPresets": ["paragraph-editing", "markdown-wrapping"],
+      "actions": {
+        "prompt.transform.quote": ["zq"],
+        "prompt.transform.unquote": []
+      }
+    }
+  }
+}
+```
+
+In this example, presets provide reflow/fence/quote/unquote bindings, explicit `quote` changes the quote key to `zq`, and explicit empty `unquote` removes the preset-provided unquote binding.
+
+Action keybinding recipes are copy-pasteable opt-in snippets. Recipes and presets share the same canonical action metadata: recipes are pasted under `piVimMode.keymap.actions`, while presets are selected by ID under `piVimMode.keymap.actionPresets`.
 
 <!-- action-keybinding-recipe:paragraph-editing -->
 
@@ -350,7 +380,7 @@ Markdown wrapping recipe:
   "piVimMode": {
     "keymap": {
       "actions": {
-        "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }],
+        "prompt.transform.fence": ["gT"],
         "prompt.transform.quote": ["g>"],
         "prompt.transform.unquote": ["g<"]
       }
@@ -392,6 +422,7 @@ Example shift operator remap:
 With this config, `]]` indents the current line in normal mode, `[[` dedents it, and visual `]` / `[` shifts selected lines.
 
 - Unknown action names warn and are ignored.
+- `keymap.actionPresets` must be an array of supported preset ID strings.
 - Each classic keymap binding value must be an array of strings; `keymap.actions` also accepts `{ "key", "args" }` entries.
 - Protected shortcuts are ignored with warnings.
 - Duplicate bindings inside a classic group warn.

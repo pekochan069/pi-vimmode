@@ -171,6 +171,22 @@ describe("normal command parser", () => {
     });
   });
 
+  test("resolves preset-derived prompt transform action bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } },
+    }).options.keymap;
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("q", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+    });
+  });
+
   test("action bindings do not resolve as operator targets", () => {
     const keymap = resolveVimOptions({
       piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },

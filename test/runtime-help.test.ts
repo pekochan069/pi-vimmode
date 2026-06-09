@@ -55,15 +55,19 @@ describe("runtime help registry", () => {
     );
   });
 
-  test("feature discovery reports opt-in action keybinding recipes", () => {
+  test("feature discovery reports opt-in action keybinding recipes and presets", () => {
     const message = runtimeFeaturesMessage("keybindings", context);
 
     expect(message).toContain("piVimMode.keymap.actions");
+    expect(message).toContain("piVimMode.keymap.actionPresets");
     expect(message).toContain("opt-in");
+    expect(message).toContain("no defaults/plugin API");
     expect(message).toContain("paragraph editing");
+    expect(message).toContain("paragraph-editing");
     expect(message).toContain("prompt.transform.reflow=gq");
     expect(message).toContain("prompt.transform.quote=g>");
     expect(message).toContain("prompt.transform.unquote=g<");
+    expect(runtimeFeaturesMessage("action presets", context)).toContain("markdown-wrapping");
     expect(runtimeFeaturesMessage("markdown wrapping", context)).toContain(
       "prompt.transform.fence",
     );

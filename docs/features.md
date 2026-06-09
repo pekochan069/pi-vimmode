@@ -509,7 +509,7 @@ Prompt transform actions can also be bound to normal/visual keys through `piVimM
     "keymap": {
       "actions": {
         "prompt.transform.reflow": ["gq", { "key": "gQ", "args": { "width": 100 } }],
-        "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }],
+        "prompt.transform.fence": ["gT"],
         "prompt.transform.quote": ["g>"],
         "prompt.transform.unquote": ["g<"]
       }
@@ -518,7 +518,26 @@ Prompt transform actions can also be bound to normal/visual keys through `piVimM
 }
 ```
 
-Action keybinding recipes are opt-in snippets, not defaults, not plugin API, and not diagnostic/help action dispatch. Run `:features keybindings` to discover recommended recipes at runtime.
+Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.actionPresets`; recipes are copy-paste snippets for `piVimMode.keymap.actions`. Both are backed by the same finite canonical action metadata. They are not defaults, not recursive mappings, not runtime `:map`, not `.vimrc`, not plugin API, not diagnostic/help action dispatch, and not Vim/Neovim parity. Run `:features keybindings` or `:features action presets` to discover recommended presets and recipes at runtime.
+
+<!-- action-keybinding-preset:paragraph-editing -->
+<!-- action-keybinding-preset:markdown-wrapping -->
+
+Preset IDs: `paragraph-editing`, `markdown-wrapping`.
+
+Preset example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actionPresets": ["paragraph-editing", "markdown-wrapping"]
+    }
+  }
+}
+```
+
+Explicit `piVimMode.keymap.actions` entries override preset-provided entries for the same action ID; explicit empty action arrays clear preset-provided entries.
 
 <!-- action-keybinding-recipe:paragraph-editing -->
 
@@ -526,14 +545,14 @@ Paragraph editing recipe: `prompt.transform.reflow` on `gq`, `prompt.transform.q
 
 <!-- action-keybinding-recipe:markdown-wrapping -->
 
-Markdown wrapping recipe: `prompt.transform.fence` on `gT` with a configured language, plus `prompt.transform.quote` on `g>` and `prompt.transform.unquote` on `g<`.
+Markdown wrapping recipe: `prompt.transform.fence` on `gT` with no default language specifier, plus `prompt.transform.quote` on `g>` and `prompt.transform.unquote` on `g<`.
 
 Examples:
 
 ```vim
 g>    " quote current line
 3gq   " reflow current line plus next two lines
-gT    " fence current line with configured language, e.g. ts
+gT    " fence current line with no language specifier
 vjjg> " quote touched visual lines, then return to normal mode
 ```
 

@@ -1,6 +1,7 @@
 ---
 title: Pi vimmode typed action registry keybindings
 date: 2026-06-09
+last_updated: 2026-06-09
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -84,6 +85,28 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
 
    Keep `piVimMode.promptTransforms.commands` separate. It remains the Ex command-name config surface. Legacy `promptTransform.*` names are diagnostic/search aliases only, not config keys.
 
+   Keep `vimmode.*` diagnostic/help IDs separate too. IDs such as `vimmode.doctor` are metadata-only quickref entries for discovery surfaces; they are not bindable prompt transform actions and must be rejected from `piVimMode.keymap.actions`.
+
+   ```json
+   {
+     "piVimMode": {
+       "keymap": {
+         "actions": {
+           "vimmode.doctor": ["gd"]
+         }
+       }
+     }
+   }
+   ```
+
+   Expected diagnostic:
+
+   ```text
+   unsupported piVimMode.keymap.actions.vimmode.doctor
+   ```
+
+   Pressing `gd` should do nothing. That no-op is correct because `vimmode.doctor` is metadata-only, not an executable keybinding.
+
 3. **Resolve action bindings before modal dispatch.** `src/config.ts` parses and resolves action keybindings into accepted `{ key, actionId, args }` entries plus diagnostics warnings. Reject invalid entries per key, not per whole action, so valid siblings remain available.
 
    Reject:
@@ -135,9 +158,29 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
    });
    ```
 
-7. **Keep M1 deliberately finite.** This change intentionally did not add Vimscript, recursive mappings, a plugin API, runtime `:map`, runtime `:action`, quickref parity, or dot-repeat for keybound prompt transform actions. Keybound prompt transform edits are not dot-repeatable in M1.
+7. **Test the right surface for each action family.** Manual QA for bindable `prompt.transform.*` actions should exercise normal/visual keybindings and prompt edits. Manual QA for diagnostic/help `vimmode.*` metadata should exercise discovery, help, real Ex commands, and rejection from keymap config.
 
-8. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
+   Diagnostic quickref smoke test:
+
+   ```vim
+   :actions vimmode
+   :actions vimmode.doctor
+   :keymap vimmode.doctor
+   :features vimmode.doctor
+   :help diagnostics
+   :help actions
+   :vimdoctor
+   ```
+
+   Expected:
+   - `:actions`, `:keymap`, and `:features` show `vimmode.doctor` as `metadata-only not bindable`.
+   - `:help diagnostics` and `:help actions` explain the diagnostic/help metadata boundary.
+   - `:vimdoctor` is the real executable diagnostic command.
+   - `:vimmode doctor` is invalid; only `:vimmode inspect` exists under the `vimmode` Ex command.
+
+8. **Keep M1 deliberately finite.** This change intentionally did not add Vimscript, recursive mappings, a plugin API, runtime `:map`, runtime `:action`, quickref parity, or dot-repeat for keybound prompt transform actions. Keybound prompt transform edits are not dot-repeatable in M1.
+
+9. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
 
 ## Why This Matters
 
@@ -155,11 +198,12 @@ The result is user-configurable prompt transform keybindings without implying fu
 
 - Adding configurable keybindings for finite prompt-local actions.
 - Adding action metadata that must appear in config validation, diagnostics, runtime help, docs, and drift tests.
+- Explaining or testing the boundary between bindable `prompt.transform.*` actions and metadata-only `vimmode.*` diagnostic/help actions.
 - Supporting one behavior through multiple surfaces such as Ex commands and normal/visual keybindings.
 - Extending `pi-vimmode` without accepting full Vimscript, recursive mapping, or plugin API scope.
 - Adding parameterized keybindings where validation must reject unknown keys and invalid values.
 
-Do not use this pattern for open-ended user scripting, recursively expanded mappings, arbitrary plugin dispatch, or behavior that needs a separate grammar outside the existing modal command resolver.
+Do not use this pattern for open-ended user scripting, recursively expanded mappings, arbitrary plugin dispatch, or behavior that needs a separate grammar outside the existing modal command resolver. Do not treat diagnostic/help `vimmode.*` IDs as keybinding smoke tests; they are discovery and rejection fixtures.
 
 ## Examples
 
@@ -193,12 +237,13 @@ Do not use this pattern for open-ended user scripting, recursively expanded mapp
 
 Use tests at each boundary instead of one broad integration test:
 
-- Registry and arg validation: `test/prompt-transform-actions.test.ts`
-- Config parsing and conflict rejection: `test/config.test.ts`
-- Resolver counts and prefixes: `test/commands.test.ts`
-- Modal normal/visual dispatch and macro replay: `test/modal.test.ts`
-- Diagnostics/read-only reporting: `test/customization.test.ts`, `test/runtime-help.test.ts`
-- Docs/source alignment: `test/docs-drift.test.ts`
+- Bindable prompt transform registry and arg validation: `test/prompt-transform-actions.test.ts`
+- Metadata-only diagnostic/help registry: `test/diagnostic-actions.test.ts`
+- Config parsing and conflict/rejection behavior: `test/config.test.ts`
+- Resolver counts and prefixes for bindable actions: `test/commands.test.ts`
+- Modal normal/visual dispatch and macro replay for bindable actions: `test/modal.test.ts`
+- Diagnostics/read-only reporting and `metadata-only not bindable` labels: `test/customization.test.ts`, `test/runtime-help.test.ts`
+- Docs/source alignment and bindable-exclusion drift guards: `test/docs-drift.test.ts`
 - Live option cloning: `test/vim-editor.test.ts`
 
 ## Related

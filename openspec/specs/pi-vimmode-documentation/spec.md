@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -245,4 +247,3 @@ User-facing docs SHALL continue to distinguish canonical prompt transform action
 
 - **WHEN** docs explain diagnostic/help action metadata and quickref classification
 - **THEN** detailed setting defaults and accepted shapes remain in `docs/settings.md`, while `docs/features.md` links or summarizes only the behavior needed for feature discovery
-

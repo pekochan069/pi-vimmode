@@ -321,6 +321,44 @@ Example:
 }
 ```
 
+Action keybinding recipes are copy-pasteable opt-in snippets. They are not defaults, not a plugin API, and not diagnostic/help action dispatch. Run `:features keybindings` for compact runtime discovery.
+
+<!-- action-keybinding-recipe:paragraph-editing -->
+
+Paragraph editing recipe:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actions": {
+        "prompt.transform.reflow": ["gq"],
+        "prompt.transform.quote": ["g>"],
+        "prompt.transform.unquote": ["g<"]
+      }
+    }
+  }
+}
+```
+
+<!-- action-keybinding-recipe:markdown-wrapping -->
+
+Markdown wrapping recipe:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "actions": {
+        "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }],
+        "prompt.transform.quote": ["g>"],
+        "prompt.transform.unquote": ["g<"]
+      }
+    }
+  }
+}
+```
+
 Normal mode action keys transform the current line; a count extends the line range, e.g. `3gq` reflows current line plus next two lines. Visual, visual-line, and visual-block action keys transform touched lines once, ignore visual counts, then return to normal mode. Visual-block action transforms are linewise, not rectangular.
 
 Parameterized args:

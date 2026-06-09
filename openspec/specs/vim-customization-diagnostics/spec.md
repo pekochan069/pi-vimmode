@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -265,4 +267,3 @@ Diagnostic/help action metadata SHALL describe existing finite diagnostics witho
 
 - **WHEN** the editor explains a metadata-only diagnostic/help action through keymap-oriented diagnostics
 - **THEN** it reports that the action is metadata-only or not bindable rather than showing it as an unbound configurable action waiting for a user keybinding
-

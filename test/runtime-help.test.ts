@@ -55,6 +55,23 @@ describe("runtime help registry", () => {
     );
   });
 
+  test("feature discovery reports opt-in action keybinding recipes", () => {
+    const message = runtimeFeaturesMessage("keybindings", context);
+
+    expect(message).toContain("piVimMode.keymap.actions");
+    expect(message).toContain("opt-in");
+    expect(message).toContain("paragraph editing");
+    expect(message).toContain("prompt.transform.reflow=gq");
+    expect(message).toContain("prompt.transform.quote=g>");
+    expect(message).toContain("prompt.transform.unquote=g<");
+    expect(runtimeFeaturesMessage("markdown wrapping", context)).toContain(
+      "prompt.transform.fence",
+    );
+    expect(runtimeFeaturesMessage("vimscript mappings", context)).toBe(
+      "features: no match for vimscript mappings",
+    );
+  });
+
   test("feature discovery reuses action and protected shortcut metadata", () => {
     expect(runtimeFeaturesMessage("redo", context)).toContain("command.redo ctrl+r");
     expect(runtimeFeaturesMessage("ctrl+p", context)).toContain(

@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import type { VimEditorOptions } from "../src/types.ts";
 
+import { ACTION_KEYBINDING_RECIPES } from "../src/action-keybinding-recipes.ts";
 import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
@@ -512,6 +513,43 @@ describe("vim config parsing", () => {
     } finally {
       paths.cleanup();
     }
+  });
+
+  test("action keybinding recipes parse and keep no default action bindings", () => {
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    for (const recipe of ACTION_KEYBINDING_RECIPES) {
+      const result = resolveVimOptions({
+        piVimMode: { keymap: { actions: recipe.actions } },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.actions.accepted.map((binding) => binding.actionId)).toEqual(
+        recipe.expected.map((binding) => binding.actionId),
+      );
+      expect(result.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual(
+        recipe.expected.map((binding) => binding.key),
+      );
+    }
+  });
+
+  test("action keybinding recipes preserve existing rejection rules", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { quote: false } },
+        keymap: { actions: ACTION_KEYBINDING_RECIPES[0]!.actions },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("disabled prompt transform action prompt.transform.quote"),
+      ]),
+    );
   });
 
   test("parses action keymap entries and keeps no default action bindings", () => {

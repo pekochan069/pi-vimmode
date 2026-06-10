@@ -258,6 +258,50 @@ describe("vim editor integration", () => {
     expectRenderedWidth(overlayLines, 64);
   });
 
+  test("dedicated keybindings command renders as real overlay panel", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(32);
+
+    runEx(editor, "keybindings");
+    const editorLines = editor.render(32);
+    const editorText = editorLines.join("\n");
+    const overlay = overlays.at(-1);
+    const overlayLines = overlay?.component.render(72) ?? [];
+    const overlayText = overlayLines.join("\n");
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(editorLines.length).toBe(baseline.length);
+    expect(editorText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain(":keybindings");
+    expect(overlayText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain("Key            Mode        Action");
+    expect(overlayText).toContain("j/k ↑/↓ scroll");
+    expectRenderedWidth(overlayLines, 72);
+  });
+
+  test("configured showKeybindings key renders same overlay shell", () => {
+    const { editor, overlays } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, showKeybindings: ["gk"] },
+      },
+    });
+
+    typeKeys(editor, ["g", "k"]);
+    const overlay = overlays.at(-1);
+    const overlayText = overlay?.component.render(72).join("\n") ?? "";
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(overlayText).toContain(":keybindings");
+    expect(overlayText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain("Key            Mode        Action");
+  });
+
   test("keybinding discovery overlay scroll reveals hidden bounded rows", () => {
     const options: ResolvedVimEditorOptions = {
       ...DEFAULT_VIM_OPTIONS,
@@ -1004,6 +1048,39 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["x", "u", "\x12"]);
     expect(editor.getText()).toBe("foo oo");
     expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
+  });
+
+  test("configured showKeybindings key survives live editor option cloning", () => {
+    const { editor, overlays } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["z"] },
+        motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
+        commands: {
+          ...DEFAULT_VIM_OPTIONS.keymap!.commands,
+          showKeybindings: ["gk"],
+          redo: ["R"],
+        },
+        macros: { ...DEFAULT_VIM_OPTIONS.keymap!.macros, record: ["Q"] },
+        marks: { ...DEFAULT_VIM_OPTIONS.keymap!.marks, set: ["M"] },
+        actions: { accepted: [] },
+      },
+    });
+
+    typeKeys(editor, ["g", "k"]);
+    expect(overlays.at(-1)?.component.render(80).join("\n")).toContain(":keybindings");
+    editor.handleInput("\x1b");
+
+    editor.setText("hello world");
+    typeKeys(editor, ["g", "g", "z", "e"]);
+    expect(editor.getText()).toBe("world");
+    typeKeys(editor, ["Q", "a", "Q"]);
+    expect(editor.getVimMode()).toBe("normal");
+    editor.handleInput("M");
+    editor.handleInput("a");
+    expect(editor.getMark("a")).toEqual(editor.getCursor());
   });
 
   test("configured redo key survives live editor keymap cloning", () => {

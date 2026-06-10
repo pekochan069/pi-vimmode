@@ -33,6 +33,7 @@ import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
 import {
   diagnosticPopup,
   inspectPopup,
+  keybindingsPopup,
   runtimeHelpPopup,
   type ReadOnlyPopup,
 } from "../keybinding-discovery-popup.ts";
@@ -308,6 +309,10 @@ function executeExCommand(
       state,
       runtimeHelpPopup(parsed, options, diagnostics, state.messageHistory),
     );
+  }
+
+  if (parsed.type === "keybindings") {
+    return openReadOnlyPopup(state, keybindingsPopup(options, diagnostics, parsed.query));
   }
 
   if (parsed.type === "inspect") {

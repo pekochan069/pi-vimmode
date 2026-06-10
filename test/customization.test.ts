@@ -4,6 +4,8 @@ import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import {
   actionsMessage,
   doctorMessage,
+  keybindingCatalogLines,
+  keybindingDetailLines,
   keymapMessage,
   mapcheckMessage,
   protectedShortcutForKey,
@@ -25,7 +27,7 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 72 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 73 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
   });
@@ -85,6 +87,97 @@ describe("vim customization helpers", () => {
     ).toContain("gq");
     expect(mapcheckMessage(options.keymap!, "gq")).toBe("mapcheck: gq -> prompt.transform.reflow");
     expect(mapcheckMessage(options.keymap!, "gg", warnings)).toContain("rejected");
+  });
+
+  test("formats keybinding catalog from effective resolved bindings", () => {
+    const { options } = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { redo: ["U"] },
+          actions: { "prompt.transform.reflow": ["gq"] },
+        },
+      },
+    });
+    const lines = keybindingCatalogLines({
+      keymap: options.keymap!,
+      promptTransforms: options.promptTransforms,
+      macros: options.macros,
+      marks: options.marks,
+    }).join("\n");
+
+    expect(lines).toContain("Commands");
+    expect(lines).toContain("Motions");
+    expect(lines).toContain("Operators");
+    expect(lines).toContain("Text objects");
+    expect(lines).toContain("Macros");
+    expect(lines).toContain("Marks");
+    expect(lines).toContain("Searches");
+    expect(lines).toContain("Prompt transforms");
+    expect(lines).not.toContain("Effective pi-vimmode keybindings");
+    expect(lines).not.toContain("Diagnostic/help metadata");
+    expect(lines).toContain("Protected Pi shortcuts");
+    expect(lines).toContain("▸ Commands");
+    expect(lines).toContain("Key            Mode        Action");
+    expect(lines).toContain("U              normal      command.redo");
+    expect(lines).toContain("gq             n/v         prompt.transform.reflow");
+    expect(lines).not.toContain(" → ");
+    expect(lines).not.toContain("vimmode.help metadata-only not bindable");
+    expect(lines).toContain("ctrl+p");
+    expect(lines).toContain("protected for Pi command/model palette");
+  });
+
+  test("catalog reports disabled effective feature families", () => {
+    const { options } = resolveVimOptions(undefined, { piVimMode: { preset: "minimal" } });
+    const lines = keybindingCatalogLines({
+      keymap: options.keymap!,
+      promptTransforms: options.promptTransforms,
+      macros: options.macros,
+      marks: options.marks,
+    }).join("\n");
+
+    expect(lines).toContain("▸ Macros (0)\n  disabled");
+    expect(lines).toContain("▸ Marks (0)\n  disabled");
+    expect(lines).not.toContain("macro.record");
+    expect(lines).not.toContain("mark.set");
+  });
+
+  test("formats keybinding detail matches and key ownership", () => {
+    const { options, warnings } = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { redo: ["U"] },
+          actions: {
+            "prompt.transform.reflow": ["gq"],
+            "vimmode.keybindings": ["gk"],
+          },
+        },
+      },
+    });
+    const context = {
+      keymap: options.keymap!,
+      promptTransforms: options.promptTransforms,
+      macros: options.macros,
+      marks: options.marks,
+      warnings,
+    };
+
+    expect(keybindingDetailLines(context, "redo").join("\n")).toContain("command.redo -> U");
+    expect(keybindingDetailLines(context, "wordForward").join("\n")).toContain(
+      "motion.wordForward",
+    );
+    expect(keybindingDetailLines(context, "ctrl+p").join("\n")).toContain(
+      "protected for Pi command/model palette",
+    );
+    expect(keybindingDetailLines(context, "gq").join("\n")).toContain("prompt.transform.reflow");
+    expect(keybindingDetailLines(context, "help").join("\n")).toContain(
+      "No keybinding match for help",
+    );
+    expect(keybindingDetailLines(context, "vimmode.keybindings").join("\n")).toContain(
+      "vimmode.keybindings rejected",
+    );
+    expect(keybindingDetailLines(context, "vimscript").join("\n")).toContain(
+      "No keybinding match for vimscript",
+    );
   });
 
   test("doctor summarizes healthy and warning states", () => {

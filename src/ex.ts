@@ -77,6 +77,12 @@ export type ParsedExRuntimeHelpCommand = {
   query?: string;
 };
 
+export type ParsedExKeybindingsCommand = {
+  type: "keybindings";
+  command: "keybindings";
+  query?: string;
+};
+
 export type ParsedExInspectCommand = {
   type: "inspect";
   command: "vimmode";
@@ -91,6 +97,7 @@ export type ExParseResult =
   | ParsedExTransformCommand
   | ParsedExDiagnosticCommand
   | ParsedExRuntimeHelpCommand
+  | ParsedExKeybindingsCommand
   | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | { type: "empty" }
@@ -125,6 +132,7 @@ type ParsedCommandName =
   | "help"
   | "features"
   | "messages"
+  | "keybindings"
   | "vimmode"
   | "noh"
   | "nohlsearch";
@@ -140,6 +148,7 @@ type ParsedCommandType =
   | "transform"
   | "diagnostic"
   | "runtimeHelp"
+  | "keybindings"
   | "inspect"
   | "nohlsearch";
 
@@ -212,6 +221,8 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "features":
     case "messages":
       return "runtimeHelp";
+    case "keybindings":
+      return "keybindings";
     case "vimmode":
       return "inspect";
     case "noh":
@@ -257,6 +268,7 @@ function parseCommand(
     "help",
     "features",
     "messages",
+    "keybindings",
     "vimmode",
     "noh",
     "nohlsearch",
@@ -463,6 +475,13 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       return { type: "error", message: "Unexpected Ex command arguments" };
     }
     return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
+  }
+
+  if (type === "keybindings") {
+    const args = command.rest.trim();
+    return args.length > 0
+      ? { type, command: "keybindings", query: args }
+      : { type, command: "keybindings" };
   }
 
   if (type === "inspect") {

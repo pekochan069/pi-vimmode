@@ -107,6 +107,7 @@ export const VIM_COMMAND_ACTIONS = [
   "repeatChange",
   "undo",
   "redo",
+  "showKeybindings",
 ] as const satisfies readonly VimCommandAction[];
 export const VIM_STATUS_ITEMS = [
   "mode",
@@ -259,6 +260,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     repeatChange: Object.freeze(["."]),
     undo: Object.freeze(["u"]),
     redo: Object.freeze(["ctrl+r"]),
+    showKeybindings: Object.freeze([]),
   }),
   operatorMotions: Object.freeze({
     delete: Object.freeze([
@@ -557,6 +559,7 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       repeatChange: [...keymap.commands.repeatChange],
       undo: [...keymap.commands.undo],
       redo: [...keymap.commands.redo],
+      showKeybindings: [...keymap.commands.showKeybindings],
     },
     operatorMotions: {
       delete: [...keymap.operatorMotions.delete],
@@ -1687,6 +1690,26 @@ function resolveActionBindings(
   return { accepted, warnings };
 }
 
+function rejectShowKeybindingsConflicts(keymap: ResolvedVimKeymap): string[] {
+  const warnings: string[] = [];
+  const grammarBindings = grammarBindingsForKeymap(keymap).filter(
+    (binding) => binding.label !== "commands.showKeybindings",
+  );
+  const accepted: string[] = [];
+  for (const key of keymap.commands.showKeybindings) {
+    const reason = grammarConflictForActionKey(key, grammarBindings);
+    if (reason) {
+      warnings.push(
+        `resolved settings: rejected piVimMode.keymap.commands.showKeybindings.${key}: ${reason}`,
+      );
+    } else {
+      accepted.push(key);
+    }
+  }
+  keymap.commands = { ...keymap.commands, showKeybindings: accepted };
+  return warnings;
+}
+
 function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   const warnings: string[] = [];
   const seen = new Map<string, string>();
@@ -1840,6 +1863,7 @@ export function resolveVimOptions(
     mergePartialOptions(options, presetOptions(parsedProject.partial.preset));
   mergePartialOptions(options, parsedProject.partial);
   warnings.push(...parsedProject.warnings);
+  warnings.push(...rejectShowKeybindingsConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
   const actionBindings = resolveActionBindings(
     options.keymap ?? DEFAULT_VIM_KEYMAP,
     options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,

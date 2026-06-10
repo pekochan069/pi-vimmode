@@ -8,7 +8,14 @@ import {
   marksForOptions,
   promptTransformsForOptions,
 } from "./config.ts";
-import { actionsMessage, doctorMessage, keymapMessage, mapcheckMessage } from "./customization.ts";
+import {
+  actionsMessage,
+  doctorMessage,
+  keybindingCatalogLines,
+  keybindingDetailLines,
+  keymapMessage,
+  mapcheckMessage,
+} from "./customization.ts";
 import { runtimeMessagesMessage, vimmodeInspectMessage } from "./modal/inspect.ts";
 import { runtimeFeaturesMessage, runtimeHelpMessage } from "./runtime-help.ts";
 
@@ -17,6 +24,7 @@ export const HELP_POPUP_BODY_ROWS = 10;
 export type ReadOnlyPopupSource =
   | "help"
   | "features"
+  | "keybindings"
   | "actions"
   | "keymap"
   | "mapcheck"
@@ -71,6 +79,16 @@ export const READ_ONLY_POPUP_COMMANDS = [
   {
     command: ":features <query>",
     parserExample: "features redo",
+    docsAnchor: "runtime-help:keybinding-discovery-popup",
+  },
+  {
+    command: ":keybindings",
+    parserExample: "keybindings",
+    docsAnchor: "runtime-help:keybinding-discovery-popup",
+  },
+  {
+    command: ":keybindings <query>",
+    parserExample: "keybindings redo",
     docsAnchor: "runtime-help:keybinding-discovery-popup",
   },
   {
@@ -136,6 +154,32 @@ export function keybindingDiscoveryPopup(options: ResolvedVimEditorOptions): Rea
       "Boundaries: opt-in only; no defaults; no plugin API; no diagnostic/help keybinding dispatch.",
       "Non-goals: no runtime :map; no runtime :action; no command palette; no Vim help pager.",
     ],
+  };
+}
+
+export function keybindingsPopup(
+  options: ResolvedVimEditorOptions,
+  diagnostics: VimDiagnostics = { warnings: [] },
+  query?: string,
+): ReadOnlyPopup {
+  const keymap = keymapForOptions(options);
+  const context = {
+    keymap,
+    promptTransforms: promptTransformsForOptions(options),
+    macros: macrosForOptions(options),
+    marks: marksForOptions(options),
+    warnings: diagnostics.warnings,
+  };
+  const trimmedQuery = query?.trim();
+  return {
+    title: trimmedQuery ? `:keybindings ${trimmedQuery}` : ":keybindings",
+    source: "keybindings",
+    query: trimmedQuery || undefined,
+    docsAnchor: "runtime-help:keybinding-discovery-popup",
+    scrollOffset: 0,
+    lines: trimmedQuery
+      ? keybindingDetailLines(context, trimmedQuery)
+      : keybindingCatalogLines(context),
   };
 }
 

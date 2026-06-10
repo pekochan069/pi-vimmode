@@ -42,6 +42,7 @@ import {
 } from "../buffer.ts";
 import { semanticMotionToLegacy } from "../commands.ts";
 import { promptStructuresForOptions } from "../config.ts";
+import { keybindingsPopup } from "../keybinding-discovery-popup.ts";
 import {
   clearCommandPending,
   clearPending,
@@ -395,6 +396,13 @@ export function applyCommand(
       return snapshot.isRedoAvailable
         ? withEffects(nextState, [{ type: "adapterCommand", command: "redo" }])
         : invalidate(withNoopFeedback(nextState, options, "redo stack empty"));
+    case "showKeybindings": {
+      const popup = keybindingsPopup(options);
+      return withEffects({ ...nextState, helpPopup: popup }, [
+        { type: "openReadOnlyPopup", popup },
+        { type: "invalidate" },
+      ]);
+    }
   }
 }
 

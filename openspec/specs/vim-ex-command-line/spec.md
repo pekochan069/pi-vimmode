@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -586,27 +584,27 @@ The change SHALL include automated tests and user-facing documentation for Ex hi
 
 ### Requirement: Ex command-line supports read-only customization commands
 
-The Vim editor SHALL parse and execute finite read-only Ex commands for customization diagnostics.
+The Vim editor SHALL parse and execute finite read-only Ex commands for customization diagnostics, displaying successful diagnostic output in a bounded read-only popup.
 
 #### Scenario: Vimdoctor command executes
 
 - **WHEN** Ex command-line mode is active and the user executes `:vimdoctor`
-- **THEN** the editor exits Ex command-line mode and shows a transient customization diagnostic message
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup containing the customization diagnostic output
 
 #### Scenario: Keymap command executes with optional query
 
 - **WHEN** Ex command-line mode is active and the user executes `:keymap` or `:keymap redo`
-- **THEN** the editor exits Ex command-line mode and shows a transient message describing matching effective keymap entries
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup describing matching effective keymap entries
 
 #### Scenario: Mapcheck command requires a query
 
 - **WHEN** Ex command-line mode is active and the user executes `:mapcheck ctrl+p`
-- **THEN** the editor exits Ex command-line mode and shows a transient message explaining the queried key or key sequence
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup explaining the queried key or key sequence
 
 #### Scenario: Actions command executes with optional query
 
 - **WHEN** Ex command-line mode is active and the user executes `:actions` or `:actions search`
-- **THEN** the editor exits Ex command-line mode and shows a transient message listing or searching supported finite actions
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup listing or searching supported finite actions
 
 ### Requirement: Diagnostic Ex command parsing stays finite
 
@@ -629,7 +627,7 @@ The Ex parser SHALL support customization diagnostics through explicit command n
 
 ### Requirement: Diagnostic Ex commands are side-effect bounded
 
-Read-only diagnostic Ex commands SHALL NOT perform prompt-buffer edits or editing-state mutations beyond transient message display.
+Read-only diagnostic Ex commands SHALL NOT perform prompt-buffer edits or editing-state mutations beyond bounded popup display and existing successful Ex command history semantics.
 
 #### Scenario: Diagnostic command does not write registers
 
@@ -645,6 +643,11 @@ Read-only diagnostic Ex commands SHALL NOT perform prompt-buffer edits or editin
 
 - **WHEN** the user executes a diagnostic Ex command and then presses the repeat-change command
 - **THEN** repeat-change behavior uses the previous real edit when one exists and does not repeat the diagnostic command
+
+#### Scenario: Diagnostic popup does not pollute retained runtime messages
+
+- **WHEN** a diagnostic Ex command opens a read-only popup and the user scrolls or dismisses that popup
+- **THEN** retained runtime message history does not grow solely because the popup content was shown, scrolled, or dismissed
 
 ### Requirement: Ex line ranges support finite address offsets
 
@@ -749,17 +752,17 @@ The change SHALL include automated tests and user-facing documentation for visib
 
 ### Requirement: Ex command-line supports finite inspectability diagnostics
 
-The Vim editor SHALL parse and execute `:vimmode inspect` and `:messages` as finite read-only Ex diagnostic commands without adding arbitrary Vimscript or command dispatch.
+The Vim editor SHALL parse and execute `:vimmode inspect` and `:messages` as finite read-only Ex diagnostic commands without adding arbitrary Vimscript or command dispatch, and SHALL display successful inspectability output in a bounded read-only popup.
 
 #### Scenario: Vimmode inspect command executes
 
 - **WHEN** Ex command-line mode is active and the user executes `:vimmode inspect`
-- **THEN** the editor exits Ex command-line mode, shows a bounded prompt-local inspect diagnostic, and leaves prompt text unchanged
+- **THEN** the editor exits Ex command-line mode, opens a bounded read-only popup containing the prompt-local inspect diagnostic, and leaves prompt text unchanged
 
 #### Scenario: Messages command executes
 
 - **WHEN** Ex command-line mode is active and the user executes `:messages`
-- **THEN** the editor exits Ex command-line mode, shows a bounded recent-message diagnostic, and leaves prompt text unchanged
+- **THEN** the editor exits Ex command-line mode, opens a bounded read-only popup containing recent-message diagnostics or an empty-history message, and leaves prompt text unchanged
 
 #### Scenario: Inspect command supports exact finite syntax
 
@@ -790,43 +793,24 @@ Inspectability diagnostics SHALL follow existing Ex command-line source-mode res
 - **WHEN** `:vimmode inspect` or `:messages` executes successfully
 - **THEN** the command may be recorded according to existing successful Ex history rules, but it does not update registers, search state, visible search highlights, marks, macros, cursor target, or repeat-change state
 
-### Requirement: Inspectability Ex output uses existing workbench feedback surface
-
-The Ex command-line implementation SHALL show inspectability diagnostics through existing bounded diagnostic/workbench feedback rather than adding a new persistent render surface.
-
-#### Scenario: Inspect output appears as bounded diagnostic feedback
-
-- **WHEN** `:vimmode inspect` executes
-- **THEN** the diagnostic appears through the same transient feedback path used by finite read-only diagnostic Ex commands or a bounded message-view path, and total editor rendering remains width-safe
-
-#### Scenario: Messages output does not change prompt viewport rules permanently
-
-- **WHEN** `:messages` executes
-- **THEN** any visible diagnostic feedback uses existing workbench row behavior and clears according to existing transient feedback clearing rules while retained history remains available to future `:messages`
-
-#### Scenario: Pending Ex preview is cleared safely
-
-- **WHEN** an inspectability diagnostic is executed while an Ex substitution preview had been active for the same pending Ex command text
-- **THEN** the preview is cleared, prompt text remains unchanged, and no stale substitution edit is applied
-
 ### Requirement: Ex command-line supports finite runtime help commands
 
-The Vim editor SHALL parse and execute finite read-only runtime help commands from Ex command-line mode.
+The Vim editor SHALL parse and execute finite read-only runtime help commands from Ex command-line mode, displaying successful runtime help output in a bounded read-only popup.
 
 #### Scenario: Help command executes
 
 - **WHEN** the editor executes `:help` or `:help search`
-- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested help entry
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup for the requested help entry or help index
 
 #### Scenario: Features command executes
 
 - **WHEN** the editor executes `:features` or `:features redo`
-- **THEN** the editor exits Ex command-line mode and shows a bounded informational message for the requested feature list or feature match
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup for the requested feature list, feature match, or no-match result
 
 #### Scenario: Messages command executes
 
 - **WHEN** the editor executes `:messages`
-- **THEN** the editor exits Ex command-line mode and shows a bounded informational message describing retained runtime messages
+- **THEN** the editor exits Ex command-line mode and opens a bounded read-only popup describing retained runtime messages without adding the popup output to retained message history
 
 #### Scenario: Unsupported runtime help abbreviation is rejected
 
@@ -840,22 +824,27 @@ The Vim editor SHALL parse and execute finite read-only runtime help commands fr
 
 ### Requirement: Runtime help Ex commands are read-only
 
-Runtime help Ex commands SHALL not edit the prompt buffer or mutate modal editing side effects beyond the bounded informational message.
+Runtime help Ex commands SHALL not edit the prompt buffer or mutate modal editing side effects beyond bounded read-only popup display and existing successful Ex command history semantics.
 
 #### Scenario: Runtime help command preserves normal-mode state
 
 - **WHEN** the editor executes `:help`, `:features`, or `:messages` from normal Ex command-line mode
-- **THEN** prompt text, cursor position, registers, marks, search highlights, macro state, and dot-repeat state remain unchanged except for the transient informational message
+- **THEN** prompt text, cursor position, registers, marks, search highlights, macro state, and dot-repeat state remain unchanged except for the read-only popup display
 
 #### Scenario: Runtime help command preserves visual Ex state
 
 - **WHEN** Ex command-line mode was opened from a visual selection, the user deletes the prefilled visual range marker, and executes `:help`, `:features`, or `:messages`
-- **THEN** the command exits Ex mode without editing prompt text and restores the original visual mode, anchor, cursor, and highlight according to existing visual Ex restoration behavior
+- **THEN** the command exits Ex mode without editing prompt text, restores the original visual mode, anchor, cursor, and highlight according to existing visual Ex restoration behavior, and opens the read-only popup
 
 #### Scenario: Runtime help command does not update dot repeat
 
 - **WHEN** the editor executes `:help`, `:features`, or `:messages` after a repeatable normal-mode edit
 - **THEN** pressing `.` later repeats the previous supported normal-mode edit rather than replaying the runtime help command
+
+#### Scenario: Runtime help popup does not pollute retained messages
+
+- **WHEN** runtime help output opens in a read-only popup and the user scrolls or dismisses that popup
+- **THEN** retained runtime message history does not grow solely because the popup content was shown, scrolled, or dismissed
 
 ### Requirement: Ex substitution supports finite safe additional flags
 
@@ -953,3 +942,33 @@ Ex prompt transform commands and keymap action bindings SHALL use one shared val
 
 - **WHEN** a keymap action binding object includes an arg key not defined for that prompt transform action
 - **THEN** that binding is rejected with a warning and valid sibling bindings remain usable
+
+### Requirement: Read-only Ex output opens a popup
+
+The Vim editor SHALL display successful read-only Ex help, runtime discovery, customization diagnostic, and inspectability output in a bounded read-only popup instead of the inline workbench/message row.
+
+#### Scenario: Read-only popup opens after normal Ex command
+
+- **WHEN** Ex command-line mode was opened from normal mode and the user executes a valid read-only command such as `:help`, `:features redo`, `:actions search`, `:keymap redo`, `:mapcheck ctrl+p`, `:vimdoctor`, `:messages`, or `:vimmode inspect`
+- **THEN** Ex command-line mode closes, the editor remains in normal mode, prompt text and cursor remain unchanged, and a centered bounded read-only popup shows the command output
+
+#### Scenario: Read-only popup opens after visual Ex command
+
+- **WHEN** Ex command-line mode was opened from visual, visual-line, or visual-block mode and the user executes a valid read-only help, diagnostic, runtime discovery, message, or inspect command
+- **THEN** Ex command-line mode closes, the original visual mode and captured selection are restored, prompt text remains unchanged, and a centered bounded read-only popup shows the command output
+
+#### Scenario: Popup command output handles no-match result
+
+- **WHEN** the user executes a valid read-only command that returns a bounded no-match or empty-state result such as `:help vimscript`, `:features unsupported-query`, or `:messages` with no retained messages
+- **THEN** the no-match or empty-state result is shown in the read-only popup and prompt text remains unchanged
+
+#### Scenario: Unsupported command stays inline error
+
+- **WHEN** the user executes an unsupported Ex command or unsupported abbreviation such as `:h`, `:feat`, `:mes`, `:map`, or `:vimmode status`
+- **THEN** the editor reports the existing bounded Ex error through compact command-line feedback, does not open a read-only popup, and leaves prompt text unchanged
+
+#### Scenario: Mutating Ex commands keep existing behavior
+
+- **WHEN** the user executes a mutating or editing Ex command such as `:s`, `:d`, `:y`, `:put`, `:copy`, `:move`, `:join`, a prompt transform, or `:noh`
+- **THEN** the command follows its existing edit, no-op, preview, success, or error behavior and does not route normal edit feedback through the read-only popup
+

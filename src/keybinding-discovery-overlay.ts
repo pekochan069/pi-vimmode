@@ -6,9 +6,20 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 
-import type { HelpPopup } from "./keybinding-discovery-popup.ts";
+import type { ReadOnlyPopup } from "./keybinding-discovery-popup.ts";
 
 import { HELP_POPUP_BODY_ROWS, scrollHelpPopup } from "./keybinding-discovery-popup.ts";
+
+export const READ_ONLY_POPUP_MIN_WIDTH = 48;
+export const READ_ONLY_POPUP_MIN_HEIGHT = 12;
+
+export function canShowReadOnlyPopup(width?: number, height?: number): boolean {
+  return (
+    width === undefined ||
+    height === undefined ||
+    (width >= READ_ONLY_POPUP_MIN_WIDTH && height >= READ_ONLY_POPUP_MIN_HEIGHT)
+  );
+}
 
 type OverlayTheme = {
   fg?: (color: string, text: string) => string;
@@ -47,12 +58,12 @@ function borderedRow(text: string, width: number, style: OverlayStyle): string {
   return `${style.accent(LEFT)}${fit(text, innerWidth)}${style.accent(RIGHT)}`;
 }
 
-export class KeybindingDiscoveryOverlayComponent implements Component {
-  private popup: HelpPopup;
+export class ReadOnlyPopupOverlayComponent implements Component {
+  private popup: ReadOnlyPopup;
 
   constructor(
     private readonly tui: TUI,
-    popup: HelpPopup,
+    popup: ReadOnlyPopup,
     private readonly theme: unknown,
     private readonly onClose: () => void,
   ) {
@@ -102,3 +113,5 @@ export class KeybindingDiscoveryOverlayComponent implements Component {
     ];
   }
 }
+
+export { ReadOnlyPopupOverlayComponent as KeybindingDiscoveryOverlayComponent };

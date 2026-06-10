@@ -67,8 +67,8 @@ pi-vimmode has a finite prompt-local surface. This quickref classifies what is s
 | Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                      |
 | Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                 |
 | Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                      |
-| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keymap`, `:mapcheck`                       | Read-only metadata/help actions; searchable as `vimmode.*`, but metadata-only and not bindable. |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries.                          |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keymap`, `:mapcheck`                       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable. |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.    |
 | Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                    |
 
 <!-- diagnostic-actions:vimmode.doctor -->
@@ -469,13 +469,13 @@ Important semantics:
 - `:dedent` removes at most one tab, two spaces, or one leading space from each addressed line without deleting content.
 - `:reflow [width]` rewraps prose paragraphs to the given width or 80 columns; fenced code, error blocks, blank lines, and bullet lines are preserved.
 - `:nohlsearch` clears visible prompt search highlights but keeps repeat-search state for `n`/`N`.
-- `:vimdoctor` reports live customization health, warning count, and first actionable settings warning behind `vim ⚠`.
-- `:keymap [query]` reports effective resolved semantic keymap entries, e.g. `:keymap redo`.
-- `:mapcheck <key>` explains mapped, unmapped, protected, or warning-related key ownership, e.g. `:mapcheck ctrl+p`.
-- `:actions [query]` lists/searches finite supported actions without adding arbitrary Vim grammar.
-- `:help [topic]` shows compact source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
-- `:features [query]` lists/searches supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
-- `:messages` shows a bounded prompt-local summary of retained recent runtime messages without opening a pager.
+- `:vimdoctor` opens a read-only popup with live customization health, warning count, and first actionable settings warning behind `vim ⚠`.
+- `:keymap [query]` opens a read-only popup with effective resolved semantic keymap entries, e.g. `:keymap redo`.
+- `:mapcheck <key>` opens a read-only popup explaining mapped, unmapped, protected, or warning-related key ownership, e.g. `:mapcheck ctrl+p`.
+- `:actions [query]` opens a read-only popup listing/searching finite supported actions without adding arbitrary Vim grammar.
+- `:help [topic]` opens a read-only popup with source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
+- `:features [query]` opens a read-only popup listing/searching supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
+- `:messages` opens a read-only popup with a bounded prompt-local summary of retained recent runtime messages without opening a pager.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - `Left` / `Right` / `Home` / `End`, forward delete, `Alt-Left`, `Alt-Right`, and `Ctrl-W` edit the pending Ex command text without editing prompt text.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance and move the command cursor to the end of the recalled command.
@@ -485,9 +485,11 @@ Important semantics:
 - Editing or history navigation clears a pending substitution match preview.
 - Unsupported command, range, destination, delimiter, argument, flag, register operand, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Unsupported range syntax includes repeated offsets such as `.+1-2`, repeated range separators, expression ranges, search addresses, mark addresses, `+cmd` suffixes, and broader Vimscript grammar.
-- Successful commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
-- Diagnostic and runtime help commands show transient info text in the same bounded row and do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
-- Success/error/info messages stay in the Ex row until the next handled input.
+- Successful mutating/editing commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
+- Valid read-only help/diagnostic commands open a bounded popup: `:help`, `:help <topic>`, `:features`, `:features <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:vimmode inspect`, and `:vimdoctor`.
+- Popup-backed commands do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
+- Mutating command success/error feedback, parser errors, invalid command feedback, substitution preview/apply messages, `:noh`, prompt transforms, and optional no-op feedback stay in the compact Ex/workbench row.
+- Compact success/error/info messages stay in the Ex row until the next handled input.
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
 - Ex commands do not update dot-repeat. Only documented register operands on `:delete`, `:yank`, and `:put` touch named registers.
@@ -522,17 +524,17 @@ Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.act
 
 <!-- runtime-help:keybinding-discovery-popup -->
 
-### Keybinding discovery popup
+### Read-only Ex popup and keybinding discovery
 
-`:features keybindings` is the initial popup entry point for a dedicated bounded read-only keybinding discovery overlay, similar to Pi picker-style overlay UIs. It expands the cramped one-row feature summary into a centered floating panel with a title, body rows, scroll/range indicator, and footer without changing prompt text or retained runtime messages.
+Valid read-only Ex help and diagnostic commands open a dedicated bounded read-only overlay popup, similar to Pi picker-style overlay UIs. Popup-backed commands include `:help`, `:help <topic>`, `:features`, `:features <query>`, `:features keybindings`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:vimmode inspect`, and `:vimdoctor`.
 
-The popup summarizes action keybinding recipes and presets, canonical `prompt.transform.*` action IDs, accepted configured bindings from `piVimMode.keymap.actions`, the `piVimMode.keymap.actionPresets` surface, and hints for `:actions <query>`, `:keymap <action>`, and `:mapcheck <key>`. Detailed setting shapes, defaults, and validation rules remain in [`settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md).
+`:features keybindings` is the keybinding discovery entry point. The popup summarizes runtime help topics, feature discovery results, action keybinding recipes and presets, canonical `prompt.transform.*` action IDs, accepted configured bindings from `piVimMode.keymap.actions`, the `piVimMode.keymap.actionPresets` surface, customization diagnostics, message-history summaries, inspectability summaries, and hints for `:actions <query>`, `:keymap <action>`, and `:mapcheck <key>`. Detailed setting shapes, defaults, and validation rules remain in [`settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md).
 
-When popup content overflows the bounded body, scroll inside the overlay with `j`/`k` or arrow-down/arrow-up to reach hidden rows. The popup scroll position is local overlay state only; it does not edit the prompt, move the prompt cursor, or append `:messages` history.
+When popup content overflows the bounded body, scroll inside the overlay with `j`/`k` or arrow-down/arrow-up to reach hidden rows. The popup scroll position is local overlay state only; it does not edit the prompt, move the prompt cursor, or append `:messages` history. Popup content, popup scroll, popup dismissal, and the output of `:messages` itself are not retained as runtime message history.
 
-Dismiss the popup with `Esc` or existing reset/cancel behavior. Other runtime help and diagnostic commands remain compact unless a future spec opts them into popup display: `:help`, `:actions`, `:keymap`, `:mapcheck`, `:messages`, and non-keybinding `:features <query>` still use their existing bounded one-row feedback.
+Dismiss the popup with `Esc`, `Ctrl-C`, or `Ctrl-G`. Mutating Ex commands, parser errors, edit-flow success/errors, prompt transforms, `:noh`, substitution preview/apply feedback, and optional no-op feedback keep compact inline/workbench behavior rather than opening the read-only popup.
 
-Popup non-goals: no Vim help tags, no command palette, no runtime `:map`, no runtime `:action`, no recursive mappings, no plugin API, no diagnostic/help action keybinding dispatch, no default action keybindings, and no unbounded output log.
+Popup non-goals: no Vim help tags, no command palette, no runtime `:map`, no runtime `:action`, no recursive mappings, no plugin API, no diagnostic/help action keybinding dispatch, no default action keybindings, no persistent logs, and no unbounded output log.
 
 <!-- action-keybinding-preset:paragraph-editing -->
 <!-- action-keybinding-preset:markdown-wrapping -->
@@ -584,7 +586,7 @@ Limitations: no confirmation flag (`c`), print/list flags (`p`, `#`, `l`), speci
 
 ### Runtime help and diagnostics
 
-Runtime help is finite, compact, source-backed, and prompt-local. It reports supported pi-vimmode behavior and limits; it does not read Vim help files or imply Vimscript/Neovim parity.
+Runtime help is finite, popup-backed, source-backed, and prompt-local. It reports supported pi-vimmode behavior and limits; it does not read Vim help files or imply Vimscript/Neovim parity.
 
 Examples:
 
@@ -603,7 +605,7 @@ Examples:
 
 `:vimmode inspect` is read-only and bounded. It summarizes mode, cursor, pending workbench state, selection kind/anchor, register slots/types/lengths, mark slots/positions, macro slots/token counts, search/Ex history counts, retained warning count, and render-layer activity. It does not dump full prompt text, full register contents, raw macro token streams, Vimscript state, or Neovim/runtime internals.
 
-Runtime messages are in-memory for the current editor, bounded to 20 retained entries, and rendered through the same one-row workbench surface as Ex/search messages. There is no message pager, persistent log, `:messages clear`, or full Vim `:messages` parity.
+Runtime messages are in-memory for the current editor, bounded to 20 retained entries, and shown by `:messages` in the read-only popup. Popup display, popup scroll/dismissal, and `:messages` output itself do not add retained history entries. There is no message pager, persistent log, `:messages clear`, or full Vim `:messages` parity.
 
 ## Registers
 

@@ -1,4 +1,4 @@
-import type { HelpPopup } from "../keybinding-discovery-popup.ts";
+import type { ReadOnlyPopup } from "../keybinding-discovery-popup.ts";
 import type {
   CursorStyle,
   EditResult,
@@ -157,7 +157,7 @@ export type ModalState = {
   exHistory?: string[];
   lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;
-  helpPopup?: HelpPopup;
+  helpPopup?: ReadOnlyPopup;
   messageHistory?: ExMessage[];
   lastCharSearch?: CharSearchState;
   lastSearch?: SearchState;
@@ -189,7 +189,7 @@ export type ModalEffect =
   | { type: "edit"; result: EditResult }
   | { type: "restoreCursor"; position: Position }
   | { type: "playMacro"; slot: MacroSlot; inputs: readonly string[] }
-  | { type: "openHelpPopup"; popup: HelpPopup }
+  | { type: "openReadOnlyPopup"; popup: ReadOnlyPopup }
   | { type: "invalidate" }
   | { type: "terminalCursor"; style: CursorStyle };
 

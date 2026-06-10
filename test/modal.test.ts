@@ -107,6 +107,16 @@ describe("modal contracts", () => {
       { type: "delegate", input: "\r" },
       { type: "adapterCommand", command: "redo" },
       { type: "edit", result: { text: "x", cursor, changed: true } },
+      {
+        type: "openReadOnlyPopup",
+        popup: {
+          title: ":help",
+          lines: ["help"],
+          source: "help",
+          docsAnchor: "runtime-help:runtime-help",
+          scrollOffset: 0,
+        },
+      },
       { type: "playMacro", slot: "a", inputs: ["i", "x", "\x1b"] },
       { type: "invalidate" },
       { type: "terminalCursor", style: "bar" },
@@ -116,6 +126,7 @@ describe("modal contracts", () => {
       "delegate",
       "adapterCommand",
       "edit",
+      "openReadOnlyPopup",
       "playMacro",
       "invalidate",
       "terminalCursor",
@@ -238,10 +249,9 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage).toMatchObject({
-      kind: "info",
-      text: expect.stringContaining("vimmode.help"),
-    });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":actions vimmode.help");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.help");
   });
 
   test("visual diagnostic Ex commands preserve visual state", () => {
@@ -271,7 +281,12 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
-    expect(result.state.exMessage?.kind).toBe("info");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":actions");
+    expect(result.effects).toContainEqual({
+      type: "openReadOnlyPopup",
+      popup: result.state.helpPopup!,
+    });
   });
 
   test("features keybindings opens popup without editing state", () => {
@@ -539,10 +554,9 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage).toMatchObject({
-      kind: "info",
-      text: expect.stringContaining("vimmode.doctor"),
-    });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":features vimmode.doctor");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.doctor");
   });
 
   test("visual features keybindings popup restores visual state after marker deletion", () => {
@@ -638,7 +652,9 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
-    expect(result.state.exMessage?.text).toContain("help:");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":help");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("help:");
   });
 
   test("no-op feedback is quiet by default and bounded when enabled", () => {
@@ -691,7 +707,10 @@ describe("Ex command-line modal behavior", () => {
     const result = handleModalInput(initial, snapshot, options, "\r");
 
     expect(result.state.mode).toBe("normal");
-    expect(result.effects).toEqual([{ type: "invalidate" }]);
+    expect(result.effects).toEqual([
+      { type: "invalidate" },
+      { type: "openReadOnlyPopup", popup: result.state.helpPopup! },
+    ]);
     expect(result.state.register).toEqual(initial.register);
     expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
     expect(result.state.marks).toEqual(initial.marks);
@@ -699,11 +718,13 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage?.kind).toBe("info");
-    expect(result.state.exMessage?.text).toContain("inspect: mode=normal");
-    expect(result.state.exMessage?.text).toContain("registers=unnamed-char:23,named-1(a)");
-    expect(result.state.exMessage?.text).not.toContain("secret register payload");
-    expect(result.state.exMessage?.text).not.toContain("named secret");
+    expect(result.state.exMessage).toBeUndefined();
+    const popupText = result.state.helpPopup?.lines.join("\n") ?? "";
+    expect(result.state.helpPopup?.title).toBe(":vimmode inspect");
+    expect(popupText).toContain("inspect: mode=normal");
+    expect(popupText).toContain("registers=unnamed-char:23,named-1(a)");
+    expect(popupText).not.toContain("secret register payload");
+    expect(popupText).not.toContain("named secret");
   });
 
   test("vimmode inspect from visual Ex restores visual state", () => {
@@ -727,7 +748,8 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.state.pendingEx).toBeUndefined();
-    expect(result.state.exMessage?.text).toContain("inspect: mode=visual");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("inspect: mode=visual");
   });
 
   test("runtime messages are retained with bounded history", () => {
@@ -737,7 +759,9 @@ describe("Ex command-line modal behavior", () => {
       options,
       "\r",
     );
-    expect(empty.state.exMessage).toEqual({ kind: "info", text: "messages: none retained" });
+    expect(empty.state.exMessage).toBeUndefined();
+    expect(empty.state.helpPopup?.title).toBe(":messages");
+    expect(empty.state.helpPopup?.lines).toContain("messages: none retained");
     expect(empty.state.messageHistory).toBeUndefined();
 
     const error = handleModalInput(
@@ -760,9 +784,9 @@ describe("Ex command-line modal behavior", () => {
       options,
       "\r",
     );
-    expect(messages.state.exMessage?.text).toBe(
-      "messages: 1 retained; latest: Pattern not found: missing",
-    );
+    expect(messages.state.exMessage).toBeUndefined();
+    expect(messages.state.helpPopup?.lines).toContain("messages: 1 retained");
+    expect(messages.state.helpPopup?.lines).toContain("latest: Pattern not found: missing");
     expect(messages.state.messageHistory).toEqual(error.state.messageHistory);
   });
 
@@ -791,8 +815,10 @@ describe("Ex command-line modal behavior", () => {
       options,
       "\r",
     );
-    expect(messages.state.exMessage?.text).toBe("messages: 1 retained; latest: kept");
-    expect(messages.state.exMessage?.text).not.toContain("Keybinding discovery");
+    expect(messages.state.exMessage).toBeUndefined();
+    expect(messages.state.helpPopup?.lines).toContain("messages: 1 retained");
+    expect(messages.state.helpPopup?.lines).toContain("latest: kept");
+    expect(messages.state.helpPopup?.lines.join("\n")).not.toContain("Keybinding discovery");
     expect(messages.state.messageHistory).toEqual(history);
   });
 

@@ -8,7 +8,10 @@ import {
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
-import { keybindingDiscoveryPopup } from "../src/keybinding-discovery-popup.ts";
+import {
+  keybindingDiscoveryPopup,
+  READ_ONLY_POPUP_COMMANDS,
+} from "../src/keybinding-discovery-popup.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
@@ -49,10 +52,18 @@ describe("documentation drift guard", () => {
     for (const entry of DIAGNOSTIC_ACTIONS) expect(bindableIds).not.toContain(entry.id);
   });
 
-  test("feature docs describe every supported runtime help command", () => {
-    for (const command of [":help", ":features", ":vimmode inspect", ":messages"]) {
-      expect(featuresDoc).toContain(command);
+  test("feature docs describe every popup-backed read-only Ex command", () => {
+    for (const entry of READ_ONLY_POPUP_COMMANDS) {
+      expect(featuresDoc).toContain(entry.command);
+      expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
+      expect(parseExCommand(entry.parserExample, { lineCount: 5, cursorLine: 1 }).type).not.toBe(
+        "error",
+      );
     }
+    expect(featuresDoc).not.toContain("Other runtime help and diagnostic commands remain compact");
+    expect(featuresDoc).not.toContain(
+      "Diagnostic and runtime help commands show transient info text",
+    );
   });
 
   test("docs cannot regress :noh or :nohlsearch into unsupported claims", () => {
@@ -110,21 +121,22 @@ describe("documentation drift guard", () => {
     expect(allUserDocs).toContain("promptTransform.*");
   });
 
-  test("keybinding discovery popup docs and registry-backed action IDs stay aligned", () => {
+  test("read-only popup docs and registry-backed action IDs stay aligned", () => {
     const popup = keybindingDiscoveryPopup(DEFAULT_VIM_OPTIONS);
     const popupText = [popup.title, ...popup.lines].join("\n");
     const popupIds = new Set(popupText.match(/prompt\.transform\.[a-z]+/g) ?? []);
 
     expect(featuresDoc).toContain(`<!-- ${popup.docsAnchor} -->`);
     expect(featuresDoc).toContain(":features keybindings");
-    expect(featuresDoc).toContain("dedicated bounded read-only keybinding discovery overlay");
-    expect(featuresDoc).toContain("initial popup entry point");
-    expect(featuresDoc).toContain("scroll/range indicator");
+    expect(featuresDoc).toContain("dedicated bounded read-only overlay popup");
+    expect(featuresDoc).toContain("keybinding discovery entry point");
     expect(featuresDoc).toContain("j`/`k`");
     expect(featuresDoc).toContain("arrow-down/arrow-up");
     expect(featuresDoc).toContain("does not edit the prompt");
     expect(featuresDoc).toContain("`:messages` history");
     expect(featuresDoc).toContain("Esc");
+    expect(featuresDoc).toContain("Ctrl-C");
+    expect(featuresDoc).toContain("Ctrl-G");
     expect(featuresDoc).toContain("no runtime `:map`");
     expect(featuresDoc).toContain("no runtime `:action`");
     expect(featuresDoc).toContain("no command palette");

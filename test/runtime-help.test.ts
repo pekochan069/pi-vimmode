@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
-import { keybindingDiscoveryPopup } from "../src/keybinding-discovery-popup.ts";
+import {
+  diagnosticPopup,
+  inspectPopup,
+  keybindingDiscoveryPopup,
+  runtimeHelpPopup,
+} from "../src/keybinding-discovery-popup.ts";
 import {
   runtimeFeaturesMessage,
   runtimeHelpEntries,
@@ -84,6 +89,8 @@ describe("runtime help registry", () => {
     const popup = keybindingDiscoveryPopup(options);
     const text = [popup.title, ...popup.lines].join("\n");
 
+    expect(popup.source).toBe("features");
+    expect(popup.query).toBe("keybindings");
     expect(popup.docsAnchor).toBe("runtime-help:keybinding-discovery-popup");
     expect(text).toContain("Keybinding discovery");
     expect(text).toContain("paragraph-editing");
@@ -100,6 +107,58 @@ describe("runtime help registry", () => {
     expect(text).toContain("no runtime :action");
     expect(text).toContain("no command palette");
     expect(text).toContain("no Vim help pager");
+  });
+
+  test("read-only popup builders expose titles and bounded line arrays", () => {
+    const help = runtimeHelpPopup({ command: "help", query: "search" }, DEFAULT_VIM_OPTIONS);
+    const features = runtimeHelpPopup({ command: "features", query: "redo" }, DEFAULT_VIM_OPTIONS);
+    const actions = diagnosticPopup({ command: "actions", query: "redo" }, DEFAULT_VIM_OPTIONS);
+    const keymap = diagnosticPopup({ command: "keymap", query: "redo" }, DEFAULT_VIM_OPTIONS);
+    const mapcheck = diagnosticPopup({ command: "mapcheck", query: "ctrl+p" }, DEFAULT_VIM_OPTIONS);
+    const doctor = diagnosticPopup({ command: "vimdoctor" }, DEFAULT_VIM_OPTIONS);
+
+    expect(help).toMatchObject({ title: ":help search", source: "help", query: "search" });
+    expect(features).toMatchObject({ title: ":features redo", source: "features" });
+    expect(actions).toMatchObject({ title: ":actions redo", source: "actions" });
+    expect(keymap).toMatchObject({ title: ":keymap redo", source: "keymap" });
+    expect(mapcheck).toMatchObject({ title: ":mapcheck ctrl+p", source: "mapcheck" });
+    expect(doctor).toMatchObject({ title: ":vimdoctor", source: "vimdoctor" });
+    for (const popup of [help, features, actions, keymap, mapcheck, doctor]) {
+      expect(popup.scrollOffset).toBe(0);
+      expect(popup.lines.length).toBeGreaterThan(0);
+      expect(popup.lines.every((line) => line.trim().length > 0)).toBe(true);
+    }
+  });
+
+  test("read-only popup builders keep no-match and empty states visible", () => {
+    expect(
+      runtimeHelpPopup({ command: "help", query: "vimscript" }, DEFAULT_VIM_OPTIONS).lines,
+    ).toContain("help: no match for vimscript");
+    expect(
+      runtimeHelpPopup({ command: "features", query: "unsupported-query" }, DEFAULT_VIM_OPTIONS)
+        .lines,
+    ).toContain("features: no match for unsupported-query");
+    expect(runtimeHelpPopup({ command: "messages" }, DEFAULT_VIM_OPTIONS).lines).toContain(
+      "messages: none retained",
+    );
+  });
+
+  test("inspect popup summarizes state without raw prompt text", () => {
+    const popup = inspectPopup({
+      state: { mode: "normal" },
+      snapshot: {
+        text: "secret raw prompt",
+        lines: ["secret raw prompt"],
+        cursor: { line: 0, col: 0 },
+      },
+      options: DEFAULT_VIM_OPTIONS,
+      diagnostics: { warnings: [] },
+    });
+
+    expect(popup.title).toBe(":vimmode inspect");
+    expect(popup.source).toBe("inspect");
+    expect(popup.lines.join("\n")).toContain("mode=normal");
+    expect(popup.lines.join("\n")).not.toContain("secret raw prompt");
   });
 
   test("feature discovery reuses action and protected shortcut metadata", () => {

@@ -1,32 +1,25 @@
-# vim-runtime-inspectability Specification
+## ADDED Requirements
 
-## Purpose
+### Requirement: Inspectability output uses read-only popup
 
-TBD - created by archiving change architecture-runway-sprint-with-inspectability. Update Purpose after archive.
-## Requirements
-### Requirement: Prompt-local inspect command summarizes current editor state
+The Vim editor SHALL display successful `:vimmode inspect` and `:messages` output in the generic bounded read-only popup while keeping inspectability output finite, redacted, and prompt-local.
 
-The Vim editor SHALL expose a read-only `:vimmode inspect` diagnostic that summarizes the active prompt editor state without dumping raw prompt contents.
+#### Scenario: Inspect output opens popup
 
-#### Scenario: Inspect reports modal and cursor summary
+- **WHEN** the user executes `:vimmode inspect`
+- **THEN** the editor opens a bounded read-only popup containing the inspect summary and does not render the full inspect output only as an inline workbench row
 
-- **WHEN** the editor executes `:vimmode inspect` from normal mode
-- **THEN** it shows a bounded diagnostic message including current mode, cursor line/column, pending modal state summary, search/Ex/workbench summary, and render-layer summary
+#### Scenario: Messages output opens popup
 
-#### Scenario: Inspect reports visual selection summary
+- **WHEN** the user executes `:messages`
+- **THEN** the editor opens a bounded read-only popup containing retained message history or an empty-history summary and does not add the popup output itself to retained message history
 
-- **WHEN** the editor executes `:vimmode inspect` after opening Ex command-line mode from visual, visual-line, or visual-block mode
-- **THEN** it reports the visual mode kind and selection summary without replacing the captured visual selection with raw selected prompt text
+#### Scenario: Inspectability popup omits raw prompt dumps
 
-#### Scenario: Inspect reports storage summaries
+- **WHEN** the current prompt, registers, macro slots, search history, or visual selection contain arbitrary user content and inspectability output is shown in the popup
+- **THEN** the popup uses bounded summaries and does not expose raw prompt text, full register contents, full macro token streams, full search history contents, or raw selected prompt text
 
-- **WHEN** registers, named registers, marks, macro slots, search history, or Ex history exist
-- **THEN** `:vimmode inspect` reports slots, counts, types, positions, and bounded previews only, without showing full register contents, full macro token streams, or full prompt text
-
-#### Scenario: Inspect rejects unsupported subcommands
-
-- **WHEN** the user executes `:vimmode dump`, `:vimmode inspect raw`, or another unsupported inspect subcommand
-- **THEN** the editor reports a bounded Ex error and prompt text remains unchanged
+## MODIFIED Requirements
 
 ### Requirement: Message history is bounded and separate from transient feedback
 
@@ -76,20 +69,6 @@ Runtime inspectability diagnostics SHALL be read-only with respect to prompt-buf
 - **WHEN** Ex command-line mode was opened from a visual selection and the user executes `:messages`
 - **THEN** Ex command-line mode closes without editing prompt text, the original visual mode, visual anchor, and visual cursor are restored according to existing visual Ex diagnostic behavior, and the read-only popup opens
 
-### Requirement: Inspectability output is finite and documented
-
-The inspectability surface SHALL document exact supported command syntax, output scope, redaction limits, and non-goals.
-
-#### Scenario: Feature guide documents inspect commands
-
-- **WHEN** the user opens `docs/features.md`
-- **THEN** it documents `:vimmode inspect`, `:messages`, the summarized state categories, message retention limits, and the fact that raw prompt dumps and full Vim diagnostics are unsupported
-
-#### Scenario: Automated validation covers inspectability
-
-- **WHEN** `bun test` is executed
-- **THEN** tests cover inspect output categories, bounded message history, redaction of large prompt/register/macro content, read-only state preservation, and unsupported inspect command errors
-
 ### Requirement: Keybinding popup remains separate from message history
 
 Runtime read-only popup output and popup-local scroll events SHALL remain separate from retained runtime message history and SHALL NOT turn `:messages` into a help, diagnostic, or popup log.
@@ -127,23 +106,3 @@ Runtime read-only popup output SHALL summarize diagnostic and help metadata with
 
 - **WHEN** a read-only popup is visible
 - **THEN** it describes finite help, feature, diagnostic, message, or inspectability metadata and does not expose a raw inspect dump or persistent runtime log
-
-### Requirement: Inspectability output uses read-only popup
-
-The Vim editor SHALL display successful `:vimmode inspect` and `:messages` output in the generic bounded read-only popup while keeping inspectability output finite, redacted, and prompt-local.
-
-#### Scenario: Inspect output opens popup
-
-- **WHEN** the user executes `:vimmode inspect`
-- **THEN** the editor opens a bounded read-only popup containing the inspect summary and does not render the full inspect output only as an inline workbench row
-
-#### Scenario: Messages output opens popup
-
-- **WHEN** the user executes `:messages`
-- **THEN** the editor opens a bounded read-only popup containing retained message history or an empty-history summary and does not add the popup output itself to retained message history
-
-#### Scenario: Inspectability popup omits raw prompt dumps
-
-- **WHEN** the current prompt, registers, macro slots, search history, or visual selection contain arbitrary user content and inspectability output is shown in the popup
-- **THEN** the popup uses bounded summaries and does not expose raw prompt text, full register contents, full macro token streams, full search history contents, or raw selected prompt text
-

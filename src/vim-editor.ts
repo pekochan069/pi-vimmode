@@ -7,7 +7,7 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 
-import type { HelpPopup } from "./keybinding-discovery-popup.ts";
+import type { ReadOnlyPopup } from "./keybinding-discovery-popup.ts";
 import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
 import type {
   CursorStyle,
@@ -26,7 +26,11 @@ import {
   searchForOptions,
   uiForOptions,
 } from "./config.ts";
-import { KeybindingDiscoveryOverlayComponent } from "./keybinding-discovery-overlay.ts";
+import {
+  canShowReadOnlyPopup,
+  READ_ONLY_POPUP_MIN_WIDTH,
+  ReadOnlyPopupOverlayComponent,
+} from "./keybinding-discovery-overlay.ts";
 import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
@@ -365,8 +369,8 @@ export class VimEditor extends CustomEditor {
       case "playMacro":
         this.playMacro(effect.inputs);
         return;
-      case "openHelpPopup":
-        this.openHelpPopup(effect.popup);
+      case "openReadOnlyPopup":
+        this.openReadOnlyPopup(effect.popup);
         return;
       case "terminalCursor":
         this.applyTerminalCursorStyle(effect.style);
@@ -377,29 +381,36 @@ export class VimEditor extends CustomEditor {
     }
   }
 
-  private openHelpPopup(popup: HelpPopup): void {
+  private openReadOnlyPopup(popup: ReadOnlyPopup): void {
     this.helpOverlay?.hide();
+    const termWidth = this.terminalColumns();
+    const termHeight = this.terminalRows();
+    const { helpPopup: _helpPopup, ...state } = this.modalState;
+    if (!canShowReadOnlyPopup(termWidth, termHeight)) {
+      this.helpOverlay = undefined;
+      this.modalState = {
+        ...state,
+        exMessage: { kind: "info", text: "Read-only popup unavailable: terminal too small" },
+      };
+      this.invalidate();
+      return;
+    }
+
     let handle: OverlayHandle | undefined;
-    const component = new KeybindingDiscoveryOverlayComponent(
-      this.tui,
-      popup,
-      this.overlayTheme,
-      () => {
-        handle?.hide();
-        if (this.helpOverlay === handle) this.helpOverlay = undefined;
-        this.tui.requestRender();
-      },
-    );
+    const component = new ReadOnlyPopupOverlayComponent(this.tui, popup, this.overlayTheme, () => {
+      handle?.hide();
+      if (this.helpOverlay === handle) this.helpOverlay = undefined;
+      this.tui.requestRender();
+    });
     handle = this.tui.showOverlay(component, {
       anchor: "center",
       width: "90%",
-      minWidth: 48,
+      minWidth: READ_ONLY_POPUP_MIN_WIDTH,
       maxHeight: "90%",
       margin: 2,
-      visible: (termWidth, termHeight) => termWidth >= 48 && termHeight >= 12,
+      visible: (termWidth, termHeight) => canShowReadOnlyPopup(termWidth, termHeight),
     });
     this.helpOverlay = handle;
-    const { helpPopup: _helpPopup, ...state } = this.modalState;
     this.modalState = state;
     this.invalidate();
   }
@@ -486,6 +497,11 @@ export class VimEditor extends CustomEditor {
   private terminalRows(): number | undefined {
     const rows = (this.tui as unknown as { terminal?: { rows?: unknown } }).terminal?.rows;
     return typeof rows === "number" ? rows : undefined;
+  }
+
+  private terminalColumns(): number | undefined {
+    const columns = (this.tui as unknown as { terminal?: { columns?: unknown } }).terminal?.columns;
+    return typeof columns === "number" ? columns : undefined;
   }
 
   private terminalWrite(data: string): void {

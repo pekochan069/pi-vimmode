@@ -11,13 +11,18 @@ function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
   initialHardwareCursorVisible = false,
+  terminalSize: { rows?: number; columns?: number } = {},
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
   const overlays: Array<{ component: any; options: any; hidden: boolean }> = [];
   let hardwareCursorVisible = initialHardwareCursorVisible;
   const tui = {
-    terminal: { rows: 24, write: (data: string) => writes.push(data) },
+    terminal: {
+      rows: terminalSize.rows ?? 24,
+      columns: terminalSize.columns,
+      write: (data: string) => writes.push(data),
+    },
     requestRender() {},
     showOverlay(component: any, options: any) {
       const entry = { component, options, hidden: false };
@@ -135,8 +140,8 @@ describe("vim editor integration", () => {
     expectRenderedWidth(message, 20);
   });
 
-  test("diagnostic and feedback info rows render width-safely below prompt", () => {
-    const { editor } = createEditor(
+  test("diagnostic popups and feedback info rows render width-safely", () => {
+    const { editor, overlays } = createEditor(
       { ...DEFAULT_VIM_OPTIONS, startMode: "normal", feedback: { noop: "status" } },
       {
         warnings: [
@@ -148,8 +153,11 @@ describe("vim editor integration", () => {
 
     runEx(editor, "vimdoctor");
     const doctor = editor.render(24);
-    expect(doctor.length).toBe(baseline.length + 1);
-    expect(doctor.at(-1)).toContain("vimdoctor: 1 warning");
+    const overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(doctor.length).toBe(baseline.length);
+    expect(doctor.join("\n")).not.toContain("vimdoctor: 1 warning");
+    expect(overlayText).toContain(":vimdoctor");
+    expect(overlayText).toContain("vimdoctor: 1 warning");
     expectRenderedWidth(doctor, 24);
 
     editor.handleInput("z");
@@ -287,58 +295,120 @@ describe("vim editor integration", () => {
     expect(overlay.render(80).join("\n")).toContain("6-15/");
   });
 
-  test("only keybinding discovery uses popup while other runtime help stays compact", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+  test("runtime help uses generic read-only popup", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     const baseline = editor.render(48);
 
     runEx(editor, "help search");
     let lines = editor.render(48);
-    expect(lines.length).toBe(baseline.length + 1);
-    expect(lines.at(-1)).toContain("prompt search");
-    expect(lines.join("\n")).not.toContain("Keybinding discovery");
+    let overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(lines.length).toBe(baseline.length);
+    expect(lines.join("\n")).not.toContain("prompt search");
+    expect(overlayText).toContain(":help search");
+    expect(overlayText).toContain("prompt search");
 
     runEx(editor, "features redo");
     lines = editor.render(48);
-    expect(lines.length).toBe(baseline.length + 1);
-    expect(lines.at(-1)).toContain("command.redo");
-    expect(lines.join("\n")).not.toContain("Keybinding discovery");
+    overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(lines.length).toBe(baseline.length);
+    expect(lines.join("\n")).not.toContain("command.redo");
+    expect(overlayText).toContain(":features redo");
+    expect(overlayText).toContain("command.redo");
   });
 
-  test("runtime help, inspect, and messages rows render width-safely", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+  test("representative read-only Ex commands open live popups", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const cases = [
+      ["help search", ":help search", "prompt search"],
+      ["features redo", ":features redo", "command.redo"],
+      ["actions redo", ":actions redo", "command.redo"],
+      ["keymap redo", ":keymap redo", "command.redo"],
+      ["mapcheck ctrl+p", ":mapcheck ctrl+p", "protected"],
+      ["vimdoctor", ":vimdoctor", "vimdoctor: ok"],
+      ["messages", ":messages", "messages:"],
+      ["vimmode inspect", ":vimmode inspect", "inspect:"],
+    ] as const;
+
+    for (const [command, title, body] of cases) {
+      runEx(editor, command);
+      const overlayText = overlays.at(-1)?.component.render(72).join("\n") ?? "";
+      expect(overlayText).toContain(title);
+      expect(overlayText).toContain(body);
+    }
+  });
+
+  test("runtime help, inspect, and messages popups render width-safely", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("abc");
     editor.handleInput(":");
     typeKeys(editor, ["s", "/", "m", "i", "s", "s", "i", "n", "g", "/", "x", "/", "\r"]);
     runEx(editor, "vimmode inspect");
     let lines = editor.render(48);
-    expect(lines.at(-1)).toContain("inspect: mode=normal");
+    let overlayLines = overlays.at(-1)?.component.render(48) ?? [];
+    expect(lines.join("\n")).not.toContain("inspect: mode=normal");
+    expect(overlayLines.join("\n")).toContain("inspect: mode=normal");
     expectRenderedWidth(lines, 48);
+    expectRenderedWidth(overlayLines, 48);
 
     editor.handleInput(":");
     typeKeys(editor, ["m", "e", "s", "s", "a", "g", "e", "s", "\r"]);
 
     lines = editor.render(32);
-    expect(lines.at(-1)).toContain("messages: 2 retained");
+    overlayLines = overlays.at(-1)?.component.render(48) ?? [];
+    expect(lines.join("\n")).not.toContain("messages: 1 retained");
+    expect(overlayLines.join("\n")).toContain("messages: 1 retained");
     expectRenderedWidth(lines, 32);
+    expectRenderedWidth(overlayLines, 48);
   });
 
-  test("runtime help row composes with visual selection and search highlights", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+  test("runtime help popup composes with visual selection and search highlights", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one old\ntwo old");
     editor.handleInput("/");
     typeKeys(editor, ["o", "l", "d", "\r"]);
     runEx(editor, "help search");
     const searchHelp = editor.render(60).join("\n");
+    let overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
     expect(searchHelp).toContain(SEARCH_START);
-    expect(searchHelp).toContain("prompt search");
+    expect(searchHelp).not.toContain("prompt search");
+    expect(overlayText).toContain("prompt search");
 
     editor.handleInput("V");
     editor.handleInput("j");
     editor.handleInput(":");
     typeKeys(editor, ["\b", "\b", "\b", "\b", "\b", "h", "e", "l", "p", "\r"]);
     const visualHelp = editor.render(60).join("\n");
+    overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
     expect(visualHelp).toContain("\u001b[7m");
-    expect(visualHelp).toContain("help:");
+    expect(visualHelp).not.toContain("help:");
+    expect(overlayText).toContain("help:");
+  });
+
+  test("read-only popup local controls and too-small fallback stay prompt-safe", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    runEx(editor, "help search");
+    const overlay = overlays.at(-1);
+    expect(overlay?.hidden).toBe(false);
+    overlay?.component.handleInput("\x03");
+    expect(overlay?.hidden).toBe(true);
+    expect(editor.getText()).toBe("abc");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 3 });
+
+    const small = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      { columns: 40, rows: 10 },
+    );
+    const baseline = small.editor.render(40);
+    runEx(small.editor, "help search");
+    const fallback = small.editor.render(40);
+    expect(small.overlays).toHaveLength(0);
+    expect(fallback.length).toBe(baseline.length + 1);
+    expect(fallback.at(-1)).toContain("Read-only popup unavailable");
+    expect(small.editor.getText()).toBe("");
+    expect(small.editor.getCursor()).toEqual({ line: 0, col: 0 });
   });
 
   test("renders configured mode labels", () => {

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -308,4 +310,3 @@ The keybinding discovery popup SHALL describe bindings using the same finite met
 
 - **WHEN** the popup mentions protected Pi shortcuts or directs users to `:mapcheck <key>`
 - **THEN** it preserves the protected shortcut catalog boundary and does not present protected Pi shortcuts as available pi-vimmode bindings
-

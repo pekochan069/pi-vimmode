@@ -34,11 +34,12 @@ describe("vim config parsing", () => {
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     const redoOptions = {
-      keymap: { commands: { redo: ["ctrl+r"] } },
+      keymap: { commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
+    expect(redoOptions.keymap?.commands?.showKeybindings).toEqual(["gk"]);
     const backwardSearchOptions = {
       keymap: { commands: { startSearchBackward: ["?"] } },
     } satisfies VimEditorOptions;
@@ -215,6 +216,44 @@ describe("vim config parsing", () => {
         warning.includes("unsupported piVimMode.keymap.operatorMotions.dedent"),
       ),
     ).toBe(true);
+  });
+
+  test("keybindings popup command defaults unbound and validates configured bindings", () => {
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.showKeybindings).toEqual([]);
+
+    const valid = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"], redo: ["U"] } } },
+    });
+    expect(valid.options.keymap?.commands.showKeybindings).toEqual(["gk"]);
+    expect(valid.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(valid.warnings).toEqual([]);
+
+    const protectedKey = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["ctrl+p"], redo: ["U"] } } },
+    });
+    expect(protectedKey.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(protectedKey.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(protectedKey.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+
+    const exactConflict = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["u"], redo: ["U"] } } },
+    });
+    expect(exactConflict.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(exactConflict.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(exactConflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("commands.showKeybindings.u")]),
+    );
+
+    const prefixConflict = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["g"], redo: ["U"] } } },
+    });
+    expect(prefixConflict.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(prefixConflict.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(prefixConflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("prefix-shadow conflict")]),
+    );
   });
 
   test("default keymap includes roadmap actions and configurable word-end", () => {

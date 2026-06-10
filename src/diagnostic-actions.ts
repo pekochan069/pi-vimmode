@@ -61,6 +61,14 @@ export const DIAGNOSTIC_ACTIONS = [
     [":keymap redo"],
   ),
   entry(
+    "vimmode.keybindings",
+    "diagnostic",
+    ":keybindings",
+    ["keybindings", "bindings", "keys", "effective keybindings"],
+    "metadata-only diagnostic action for effective keybinding discovery popup",
+    [":keybindings", ":keybindings redo"],
+  ),
+  entry(
     "vimmode.mapcheck",
     "diagnostic",
     ":mapcheck",

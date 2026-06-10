@@ -216,6 +216,11 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                    |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                            |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                   |
+| `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.           |
+
+`showKeybindings` has no default keybinding. Configure it like other semantic normal-mode commands, for example `{ "piVimMode": { "keymap": { "commands": { "showKeybindings": ["gk"] } } } }`. It follows normal keymap validation: protected Pi shortcuts such as `ctrl+p`, `enter`, and `tab` are rejected; exact conflicts and prefix-shadow conflicts with the finite grammar are rejected; valid sibling settings stay intact; multi-key sequences use the same finite pending-prefix matcher as other commands. Insert mode remains Pi-owned, so the same physical key sequence delegates to Pi while inserting text unless pi-vimmode otherwise supports that insert-mode input.
+
+Use this command path for a shortcut to keybinding discovery. Do not configure `vimmode.*` diagnostic/help metadata IDs under `piVimMode.keymap.actions`: `vimmode.keybindings`, `vimmode.keymap`, `vimmode.help`, and other `vimmode.*` IDs are metadata-only, not bindable prompt transform actions.
 
 ### Macro keymap
 

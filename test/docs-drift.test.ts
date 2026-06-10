@@ -10,6 +10,7 @@ import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
 import {
   keybindingDiscoveryPopup,
+  keybindingsPopup,
   READ_ONLY_POPUP_COMMANDS,
 } from "../src/keybinding-discovery-popup.ts";
 import {
@@ -123,11 +124,20 @@ describe("documentation drift guard", () => {
 
   test("read-only popup docs and registry-backed action IDs stay aligned", () => {
     const popup = keybindingDiscoveryPopup(DEFAULT_VIM_OPTIONS);
-    const popupText = [popup.title, ...popup.lines].join("\n");
+    const dedicatedPopup = keybindingsPopup(DEFAULT_VIM_OPTIONS);
+    const popupText = [
+      popup.title,
+      ...popup.lines,
+      dedicatedPopup.title,
+      ...dedicatedPopup.lines,
+    ].join("\n");
     const popupIds = new Set(popupText.match(/prompt\.transform\.[a-z]+/g) ?? []);
 
     expect(featuresDoc).toContain(`<!-- ${popup.docsAnchor} -->`);
     expect(featuresDoc).toContain(":features keybindings");
+    expect(featuresDoc).toContain(":keybindings");
+    expect(featuresDoc).toContain(":keybindings <query>");
+    expect(settingsDoc).toContain("piVimMode.keymap.commands.showKeybindings");
     expect(featuresDoc).toContain("dedicated bounded read-only overlay popup");
     expect(featuresDoc).toContain("keybinding discovery entry point");
     expect(featuresDoc).toContain("j`/`k`");
@@ -139,9 +149,13 @@ describe("documentation drift guard", () => {
     expect(featuresDoc).toContain("Ctrl-G");
     expect(featuresDoc).toContain("no runtime `:map`");
     expect(featuresDoc).toContain("no runtime `:action`");
+    expect(featuresDoc).toContain("no recursive mappings");
+    expect(featuresDoc).toContain("no Vimscript");
     expect(featuresDoc).toContain("no command palette");
     expect(featuresDoc).toContain("no Vim help tags");
+    expect(featuresDoc).toContain("no diagnostic/help action keybinding dispatch");
     expect(featuresDoc).toContain("no default action keybindings");
+    expect(featuresDoc).toContain("no default keybinding for `:keybindings`");
     expect(featuresDoc).toContain("no unbounded output log");
     const bindableIds: readonly string[] = bindablePromptTransformActionIds();
     for (const id of popupIds) {

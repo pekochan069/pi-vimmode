@@ -289,6 +289,125 @@ describe("Ex command-line modal behavior", () => {
     });
   });
 
+  test("keybindings opens catalog popup without editing state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(
+      initial,
+      "abc",
+      p(0, 1),
+      [":", "k", "e", "y", "b", "i", "n", "d", "i", "n", "g", "s", "\r"],
+      configured,
+    );
+    const popupText = [
+      result.state.helpPopup?.title,
+      ...(result.state.helpPopup?.lines ?? []),
+    ].join("\n");
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.state.helpPopup?.source).toBe("keybindings");
+    expect(popupText).not.toContain("Effective pi-vimmode keybindings");
+    expect(popupText).toContain("Key            Mode        Action");
+    expect(popupText).toContain("prompt.transform.reflow");
+    expect(popupText).toContain("gq");
+    expect(popupText).toContain("no runtime :map");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("keybindings detail popup preserves message history while scrolling and dismissing", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      messageHistory: [{ kind: "info", text: "kept" }],
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const opened = applyModalKeys(initial, "abc", p(0, 1), [
+      ":",
+      "k",
+      "e",
+      "y",
+      "b",
+      "i",
+      "n",
+      "d",
+      "i",
+      "n",
+      "g",
+      "s",
+      " ",
+      "r",
+      "e",
+      "d",
+      "o",
+      "\r",
+    ]);
+
+    expect(opened.state.helpPopup?.title).toBe(":keybindings redo");
+    expect(opened.state.helpPopup?.lines.join("\n")).toContain("command.redo");
+    expect(opened.state.messageHistory).toEqual(initial.messageHistory);
+    const scrolled = applyModalKeys(opened.state, "abc", p(0, 1), ["j", "\x1b"]);
+    expect(scrolled.state.helpPopup).toBeUndefined();
+    expect(scrolled.state.messageHistory).toEqual(initial.messageHistory);
+    expect(scrolled.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+  });
+
+  test("visual keybindings Ex command restores visual source state", () => {
+    const opened = handleModalInput(
+      { mode: "visualLine", visualAnchor: p(0, 0) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const key of ["k", "e", "y", "b", "i", "n", "d", "i", "n", "g", "s"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visualLine");
+    expect(result.state.visualAnchor).toEqual(p(0, 0));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.effects).toContainEqual({
+      type: "openReadOnlyPopup",
+      popup: result.state.helpPopup!,
+    });
+  });
+
   test("features keybindings opens popup without editing state", () => {
     const configured = resolveVimOptions({
       piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
@@ -1734,6 +1853,51 @@ describe("modal engine", () => {
       state: { mode: "normal" },
       effects: [{ type: "invalidate" }],
     });
+  });
+
+  test("normal showKeybindings semantic command opens popup without modal side effects", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["g", "k"], configured);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.state.helpPopup?.source).toBe("keybindings");
+    expect(result.state.helpPopup?.lines.join("\n")).not.toContain(
+      "Effective pi-vimmode keybindings",
+    );
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("Key            Mode        Action");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("insert mode delegates configured showKeybindings keys to Pi", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options;
+    const update = handleModalInput({ mode: "insert" }, snapshot, configured, "g");
+
+    expect(update.state.helpPopup).toBeUndefined();
+    expect(update.effects).toContainEqual({ type: "delegate", input: "g" });
   });
 
   test("normal mode emits redo through semantic keymap without modal side effects", () => {

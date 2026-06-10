@@ -222,6 +222,21 @@ describe("normal command parser", () => {
     });
   });
 
+  test("resolves configured keybindings popup command through semantic parser", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options.keymap;
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("k", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "command",
+      command: "showKeybindings",
+    });
+  });
+
   test("resolves configured semantic operators, motions, and commands", () => {
     const keymap = {
       ...DEFAULT_VIM_KEYMAP,

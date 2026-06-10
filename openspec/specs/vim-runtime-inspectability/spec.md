@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change architecture-runway-sprint-with-inspectability. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt-local inspect command summarizes current editor state
 
 The Vim editor SHALL expose a read-only `:vimmode inspect` diagnostic that summarizes the active prompt editor state without dumping raw prompt contents.
@@ -146,4 +148,3 @@ The Vim editor SHALL display successful `:vimmode inspect` and `:messages` outpu
 
 - **WHEN** the current prompt, registers, macro slots, search history, or visual selection contain arbitrary user content and inspectability output is shown in the popup
 - **THEN** the popup uses bounded summaries and does not expose raw prompt text, full register contents, full macro token streams, full search history contents, or raw selected prompt text
-

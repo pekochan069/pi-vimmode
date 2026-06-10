@@ -69,6 +69,14 @@ export type VimDiagnostics = {
   warnings: readonly string[];
 };
 
+export type KeybindingCatalogContext = {
+  keymap: ResolvedVimKeymap;
+  promptTransforms?: ResolvedVimPromptTransforms;
+  macros?: ResolvedVimMacros;
+  marks?: ResolvedVimMarks;
+  warnings?: readonly string[];
+};
+
 const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   insertBefore: "enter insert mode before cursor",
   insertAfter: "enter insert mode after cursor",
@@ -106,6 +114,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   repeatChange: "repeat last change",
   undo: "undo prompt edit",
   redo: "redo prompt edit",
+  showKeybindings: "show keybindings popup",
 };
 
 const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {
@@ -411,6 +420,158 @@ export function keymapMessage(
     return `keymap: ${bindingEntries.length} entries; :keymap <action>`;
   }
   return matches[0] ? summarizeEntry(matches[0]) : `keymap: no match for ${query.trim()}`;
+}
+
+export function keybindingCatalogLines(context: KeybindingCatalogContext): string[] {
+  const entries = actionEntriesForKeymap(
+    context.keymap,
+    context.promptTransforms,
+    context.macros,
+    context.marks,
+  );
+  return [
+    "Type :keybindings <key|action|text> to filter. Edit settings to rebind.",
+    ...whichKeyCategoryLines("Commands", entries, "command"),
+    ...whichKeyCategoryLines("Motions", entries, "motion"),
+    ...whichKeyCategoryLines("Operators", entries, "operator"),
+    ...whichKeyCategoryLines("Text objects", entries, "textObject"),
+    ...featureWhichKeyCategoryLines("Macros", entries, "macro", context.macros?.enabled !== false),
+    ...featureWhichKeyCategoryLines("Marks", entries, "mark", context.marks?.enabled !== false),
+    ...whichKeyCategoryLines("Searches", entries, "search"),
+    ...featureWhichKeyCategoryLines(
+      "Prompt transforms",
+      entries,
+      "promptTransform",
+      context.promptTransforms?.enabled !== false,
+    ),
+    ...protectedShortcutTableLines(),
+    "Boundaries: no runtime :map; no recursive mappings; no Vimscript; no command palette; no diagnostic/help action keybinding dispatch.",
+  ];
+}
+
+export function keybindingDetailLines(context: KeybindingCatalogContext, query: string): string[] {
+  const needle = query.trim();
+  const matches = searchActions(
+    context.keymap,
+    needle,
+    context.promptTransforms,
+    context.macros,
+    context.marks,
+  );
+  const ownership = keyOwnershipLine(context, needle);
+  const detailLines = matches
+    .filter((entry) => entry.bindable !== false && entry.keys.length > 0)
+    .slice(0, 12)
+    .map(detailEntryLine);
+  if (ownership && !detailLines.includes(ownership)) detailLines.unshift(ownership);
+  if (detailLines.length > 0) {
+    return [
+      `Query: ${needle}`,
+      ...detailLines,
+      "Read-only: discovery only; edit settings to rebind.",
+    ];
+  }
+  return [
+    `Query: ${needle}`,
+    `No keybinding match for ${needle}`,
+    "No runtime :map, recursive mappings, Vimscript, command palette, or metadata action dispatch.",
+  ];
+}
+
+function whichKeyCategoryLines(
+  title: string,
+  entries: readonly VimActionEntry[],
+  kind: VimActionKind,
+): string[] {
+  const matches = entries.filter(
+    (entry) => entry.kind === kind && entry.bindable !== false && entry.keys.length > 0,
+  );
+  return [sectionHeader(title, matches.length), gridHeader(), ...matches.map(whichKeyRow)];
+}
+
+function featureWhichKeyCategoryLines(
+  title: string,
+  entries: readonly VimActionEntry[],
+  kind: VimActionKind,
+  enabled: boolean,
+): string[] {
+  if (!enabled) return [sectionHeader(title, 0), "  disabled"];
+  return whichKeyCategoryLines(title, entries, kind);
+}
+
+function protectedShortcutTableLines(): string[] {
+  return [
+    sectionHeader("Protected Pi shortcuts", PROTECTED_SHORTCUTS.length),
+    "  Key            Mode        Behavior",
+    "  ────────────── ─────────── ──────────────────────────────────────",
+    ...PROTECTED_SHORTCUTS.map(
+      (shortcut) =>
+        `  ${padCell(shortcut.key, 14)} ${padCell("delegated", 11)} protected for ${shortcut.reason}; ${shortcut.behavior}`,
+    ),
+  ];
+}
+
+function sectionHeader(title: string, count: number): string {
+  return `▸ ${title} (${count})`;
+}
+
+function gridHeader(): string {
+  return "  Key            Mode        Action                         Description";
+}
+
+function whichKeyRow(entry: VimActionEntry): string {
+  return `  ${padCell(keyDisplay(entry), 14)} ${padCell(modeDisplay(entry), 11)} ${padCell(actionIdDisplay(entry), 30)} ${entry.description}`;
+}
+
+function keyDisplay(entry: VimActionEntry): string {
+  return entry.keys.length > 0 ? entry.keys.join(",") : "unbound";
+}
+
+function actionIdDisplay(entry: VimActionEntry): string {
+  return entry.kind === "promptTransform" || entry.id.includes(".")
+    ? entry.id
+    : `${entry.kind}.${entry.id}`;
+}
+
+function modeDisplay(entry: VimActionEntry): string {
+  if (entry.kind === "motion" || entry.kind === "search" || entry.kind === "mark") return "n/v/op";
+  if (entry.kind === "operator" || entry.kind === "promptTransform") return "n/v";
+  if (entry.kind === "textObject") return "op";
+  return "normal";
+}
+
+function padCell(value: string, width: number): string {
+  return value.length >= width ? `${value.slice(0, Math.max(0, width - 1))}…` : value.padEnd(width);
+}
+
+function detailEntryLine(entry: VimActionEntry): string {
+  const target = actionIdDisplay(entry);
+  const keys = entry.keys.length > 0 ? entry.keys.join(",") : "unbound";
+  if (entry.bindable === false)
+    return `${target} metadata-only not bindable -> ${keys} — ${entry.description}`;
+  return `${target} -> ${keys} [${modeDisplay(entry)}] — ${entry.description}`;
+}
+
+function keyOwnershipLine(context: KeybindingCatalogContext, query: string): string | undefined {
+  const normalized = normalizeShortcutKey(query);
+  const protectedShortcut = protectedShortcutForKey(normalized);
+  if (protectedShortcut) return mapcheckMessage(context.keymap, normalized, context.warnings ?? []);
+  const binding = context.keymap.actions.accepted.find((entry) => entry.key === normalized);
+  if (binding) return `${normalized} -> ${binding.actionId}`;
+  const conflict = (context.warnings ?? []).find((warning) => warning.includes(normalized));
+  if (conflict) return `${normalized} rejected: ${conflict}`;
+  const matches = actionEntriesForKeymap(
+    context.keymap,
+    context.promptTransforms,
+    context.macros,
+    context.marks,
+  ).filter((entry) => entry.keys.includes(normalized));
+  if (matches.length > 0) return `${normalized} -> ${matches.map(detailEntryLine).join(" | ")}`;
+  return isKeyLikeQuery(normalized) ? `mapcheck: ${normalized} is unmapped` : undefined;
+}
+
+function isKeyLikeQuery(query: string): boolean {
+  return query.length <= 3 || query.includes("+") || /^<[^>]+>$/.test(query);
 }
 
 export function mapcheckMessage(

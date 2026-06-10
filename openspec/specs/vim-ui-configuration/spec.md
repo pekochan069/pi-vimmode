@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Status UI items are configurable
 
 The Vim editor SHALL read `piVimMode.ui.status` to determine which status items are rendered and in what order while preserving the current status UI by default.
@@ -493,4 +495,3 @@ The Vim editor SHALL display read-only Ex help and diagnostic output through a b
 
 - **WHEN** a valid read-only Ex command completes but the terminal cannot fit the minimum supported overlay viewport
 - **THEN** the editor provides bounded visible feedback that the popup cannot be shown at the current size without silently dropping the command result or corrupting prompt editing state
-

@@ -12,6 +12,7 @@ describe("diagnostic/help action metadata", () => {
       "vimmode.doctor",
       "vimmode.actions",
       "vimmode.keymap",
+      "vimmode.keybindings",
       "vimmode.mapcheck",
       "vimmode.help",
       "vimmode.features",

@@ -1,6 +1,6 @@
 # pi-vimmode
 
-Vim-style prompt editing for [Pi](https://github.com/earendil-works/pi-coding-agent).
+Vim-style prompt editing for [Pi](https://pi.dev/).
 
 `pi-vimmode` replaces Pi's main input editor with a `CustomEditor`-based modal editor. It targets practical prompt editing for agent prompts, not full Vim parity.
 
@@ -58,9 +58,9 @@ Default modes:
 
 Canonical user-facing docs live under `docs/`:
 
-- [`docs/features.md`](docs/features.md): supported modes, motions, edits, operators, prompt-native text objects, prompt transforms, character search, prompt search, visual modes, Ex command-line commands, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
-- [`docs/settings.md`](docs/settings.md): every supported `piVimMode` setting, defaults, accepted value shapes, merge behavior, key sequence syntax, protected-key validation, warnings, troubleshooting, and practical config examples.
-- [`docs/adr/0002-user-facing-pi-vimmode-docs.md`](docs/adr/0002-user-facing-pi-vimmode-docs.md): documentation source-of-truth decision and maintenance rules.
+- [`docs/features.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/features.md): supported modes, motions, edits, operators, prompt-native text objects, prompt transforms, character search, prompt search, visual modes, Ex command-line commands, registers, marks, macros, UI/status rendering, Pi shortcut compatibility, limitations, recovery, and validation examples.
+- [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md): every supported `piVimMode` setting, defaults, accepted value shapes, merge behavior, key sequence syntax, protected-key validation, warnings, troubleshooting, and practical config examples.
+- [`docs/adr/0002-user-facing-pi-vimmode-docs.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/adr/0002-user-facing-pi-vimmode-docs.md): documentation source-of-truth decision and maintenance rules.
 
 README is the quickstart and index. Keep detailed behavior and settings reference in the canonical docs above.
 
@@ -99,7 +99,7 @@ Example keymap/UI override:
 }
 ```
 
-See [`docs/settings.md`](docs/settings.md) for the full default reference and all settings.
+See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for the full default reference and all settings.
 
 ## Recover or disable
 
@@ -107,7 +107,7 @@ If the extension blocks editing or configuration goes wrong:
 
 - Run `/vimmode off` to restore Pi's previous editor for the current extension runtime.
 - Run `/vimmode on` or `/vimmode` to enable the Vim editor again.
-- Start with [`docs/features.md#disable-or-recover`](docs/features.md#disable-or-recover).
+- Start with [`docs/features.md#disable-or-recover`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/features.md#disable-or-recover).
 - Use `pi list` to inspect installed extensions.
 - Use `pi remove` or `pi uninstall` with the installed extension identifier to remove it.
 - Use `pi config` or edit Pi config files to remove `piVimMode` overrides.
@@ -141,7 +141,11 @@ bun test
 bun run check-types
 bun run lint
 bun run format:check
+bun run build
+bun pm pack --dry-run
 ```
+
+Before publishing, inspect dry-run package contents and confirm extension entrypoint plus runtime source/build output are included, not docs only.
 
 Manual smoke checklist:
 

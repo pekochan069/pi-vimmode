@@ -1,7 +1,9 @@
+import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 import type {
   CommandResult,
   NormalCommand,
   PendingOperator,
+  PromptTransform,
   ResolvedVimKeymap,
   VimCommandAction,
   VimMotion,
@@ -18,10 +20,26 @@ import { DEFAULT_VIM_KEYMAP } from "./config.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(["d", "c", "y"]);
 const LINE_ONLY_OPERATORS = new Set<VimOperatorAction>(["indent", "dedent"]);
-const LEGACY_OPERATOR_MOTIONS = new Set<string>(["w", "b", "e", "0", "^", "$"]);
+const LEGACY_OPERATOR_MOTIONS = new Set<string>([
+  "h",
+  "j",
+  "k",
+  "l",
+  "w",
+  "b",
+  "e",
+  "0",
+  "^",
+  "$",
+  "gg",
+  "G",
+  "%",
+]);
 const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
 const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
 const OPERATOR_SEARCH_SEPARATOR = "\u0000search\u0000";
+const OPERATOR_CHAR_SEARCH_SEPARATOR = "\u0000opchar\u0000";
+const OPERATOR_CHAR_SEARCH_REPEAT_SEPARATOR = "\u0000opcharrepeat\u0000";
 const COUNT_SEPARATOR = "\u0000count\u0000";
 const CHAR_COMMAND_SEPARATOR = "\u0000char\u0000";
 const TEXT_OBJECT_SEPARATOR = "\u0000textobj\u0000";
@@ -30,6 +48,12 @@ export type SemanticCommandResult =
   | { type: "pending"; pending: string }
   | { type: "motion"; motion: VimMotionAction; count?: number }
   | { type: "command"; command: VimCommandAction; count?: number }
+  | {
+      type: "action";
+      actionId: BindablePromptTransformActionId;
+      args: PromptTransform;
+      count?: number;
+    }
   | { type: "charCommand"; command: VimCommandAction; char: string; count?: number }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
   | {
@@ -42,6 +66,22 @@ export type SemanticCommandResult =
       type: "operatorSearch";
       operator: VimMotionOperatorAction;
       direction: "forward" | "backward";
+      count?: number;
+    }
+  | {
+      type: "operatorCharSearch";
+      operator: VimMotionOperatorAction;
+      command: Extract<
+        VimCommandAction,
+        "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward"
+      >;
+      char: string;
+      count?: number;
+    }
+  | {
+      type: "operatorCharSearchRepeat";
+      operator: VimMotionOperatorAction;
+      reverse: boolean;
       count?: number;
     }
   | {
@@ -67,7 +107,13 @@ export type MacroCommandResult =
 type Binding =
   | { sequence: string; kind: "operator"; operator: VimOperatorAction }
   | { sequence: string; kind: "motion"; motion: VimMotionAction }
-  | { sequence: string; kind: "command"; command: VimCommandAction };
+  | { sequence: string; kind: "command"; command: VimCommandAction }
+  | {
+      sequence: string;
+      kind: "action";
+      actionId: BindablePromptTransformActionId;
+      args: PromptTransform;
+    };
 
 type EncodedCountPending = { type: "count"; count: string; inner: string };
 type EncodedCharCommandPending = { type: "charCommand"; command: VimCommandAction; count?: number };
@@ -95,6 +141,24 @@ type EncodedOperatorSearchPending = {
   searchPrefix: string;
   count?: number;
 };
+type OperatorCharSearchCommand = Extract<
+  VimCommandAction,
+  "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward"
+>;
+type EncodedOperatorCharSearchPending = {
+  type: "operatorCharSearch";
+  operatorSequence: string;
+  commandPrefix: string;
+  count?: number;
+  targetCount?: number;
+  command?: OperatorCharSearchCommand;
+};
+type EncodedOperatorCharSearchRepeatPending = {
+  type: "operatorCharSearchRepeat";
+  operatorSequence: string;
+  repeatPrefix: string;
+  count?: number;
+};
 
 const LEGACY_OPERATOR_TO_ACTION: Record<VimOperator, VimOperatorAction> = {
   d: "delete",
@@ -107,20 +171,34 @@ const ACTION_TO_LEGACY_OPERATOR: Record<VimMotionOperatorAction, VimOperator> = 
   yank: "y",
 };
 const LEGACY_MOTION_TO_ACTION: Record<VimMotion, VimMotionAction> = {
+  h: "left",
+  j: "down",
+  k: "up",
+  l: "right",
   w: "wordForward",
   b: "wordBackward",
   e: "wordEnd",
   "0": "lineStart",
   "^": "firstNonBlank",
   $: "lineEnd",
+  gg: "bufferStart",
+  G: "bufferEnd",
+  "%": "matchingPair",
 };
 const ACTION_TO_LEGACY_MOTION: Partial<Record<VimMotionAction, VimMotion>> = {
+  left: "h",
+  down: "j",
+  up: "k",
+  right: "l",
   wordForward: "w",
   wordBackward: "b",
   wordEnd: "e",
   lineStart: "0",
   firstNonBlank: "^",
   lineEnd: "$",
+  bufferStart: "gg",
+  bufferEnd: "G",
+  matchingPair: "%",
 };
 
 const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>([
@@ -195,6 +273,14 @@ function bindingsFor(keymap: ResolvedVimKeymap): Binding[] {
   ][]) {
     for (const sequence of sequences) bindings.push({ sequence, kind: "command", command });
   }
+  for (const binding of keymap.actions.accepted) {
+    bindings.push({
+      sequence: binding.key,
+      kind: "action",
+      actionId: binding.actionId,
+      args: binding.args,
+    });
+  }
   return bindings;
 }
 
@@ -223,6 +309,50 @@ function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boo
   return [...keymap.commands.startSearch, ...keymap.commands.startSearchBackward].some(
     (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
   );
+}
+
+function charSearchCommandForBinding(
+  sequence: string,
+  keymap: ResolvedVimKeymap,
+): OperatorCharSearchCommand | undefined {
+  const binding = exactBinding(sequence, keymap);
+  if (binding?.kind !== "command") return undefined;
+  if (!CHAR_ARGUMENT_COMMANDS.has(binding.command) || binding.command === "replaceChar") {
+    return undefined;
+  }
+  return binding.command as OperatorCharSearchCommand;
+}
+
+function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
+  return (
+    [
+      ...keymap.commands.findCharForward,
+      ...keymap.commands.findCharBackward,
+      ...keymap.commands.tillCharForward,
+      ...keymap.commands.tillCharBackward,
+    ] as readonly string[]
+  ).some((binding) => binding.startsWith(sequence) && binding.length > sequence.length);
+}
+
+function repeatCharSearchCommandForBinding(
+  sequence: string,
+  keymap: ResolvedVimKeymap,
+): Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> | undefined {
+  const binding = exactBinding(sequence, keymap);
+  if (binding?.kind !== "command") return undefined;
+  if (binding.command === "repeatCharSearch" || binding.command === "repeatCharSearchReverse") {
+    return binding.command;
+  }
+  return undefined;
+}
+
+function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
+  return (
+    [
+      ...keymap.commands.repeatCharSearch,
+      ...keymap.commands.repeatCharSearchReverse,
+    ] as readonly string[]
+  ).some((binding) => binding.startsWith(sequence) && binding.length > sequence.length);
 }
 
 export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -285,6 +415,12 @@ export function pendingDisplay(pending: string | undefined): string | undefined 
   if (operatorLine) return `${operatorLine.operatorSequence}${operatorLine.repeatPrefix}`;
   const operatorSearch = decodeOperatorSearchPending(pending);
   if (operatorSearch) return `${operatorSearch.operatorSequence}${operatorSearch.searchPrefix}`;
+  const operatorCharSearch = decodeOperatorCharSearchPending(pending);
+  if (operatorCharSearch)
+    return `${operatorCharSearch.operatorSequence}${operatorCharSearch.targetCount ?? ""}${operatorCharSearch.commandPrefix}`;
+  const operatorCharSearchRepeat = decodeOperatorCharSearchRepeatPending(pending);
+  if (operatorCharSearchRepeat)
+    return `${operatorCharSearchRepeat.operatorSequence}${operatorCharSearchRepeat.repeatPrefix}`;
   return pending;
 }
 
@@ -358,6 +494,26 @@ function encodeOperatorSearchPending(
   return `${operatorSequence}${OPERATOR_SEARCH_SEPARATOR}${searchPrefix}${OPERATOR_SEARCH_SEPARATOR}${count ?? ""}`;
 }
 
+function encodeOperatorCharSearchPending(
+  operatorSequence: string,
+  commandPrefix: string,
+  count?: number,
+  targetCount?: number,
+  command?: OperatorCharSearchCommand,
+): string {
+  return [operatorSequence, commandPrefix, count ?? "", targetCount ?? "", command ?? ""].join(
+    OPERATOR_CHAR_SEARCH_SEPARATOR,
+  );
+}
+
+function encodeOperatorCharSearchRepeatPending(
+  operatorSequence: string,
+  repeatPrefix: string,
+  count?: number,
+): string {
+  return [operatorSequence, repeatPrefix, count ?? ""].join(OPERATOR_CHAR_SEARCH_REPEAT_SEPARATOR);
+}
+
 function decodeOperatorMotionPending(pending: string): EncodedOperatorMotionPending | undefined {
   const parts = pending.split(OPERATOR_MOTION_SEPARATOR);
   if (parts.length === 2) {
@@ -397,6 +553,35 @@ function decodeOperatorSearchPending(pending: string): EncodedOperatorSearchPend
     type: "operatorSearch",
     operatorSequence: parts[0] ?? "",
     searchPrefix: parts[1] ?? "",
+    count: parts[2] ? Number(parts[2]) : undefined,
+  };
+}
+
+function decodeOperatorCharSearchPending(
+  pending: string,
+): EncodedOperatorCharSearchPending | undefined {
+  const parts = pending.split(OPERATOR_CHAR_SEARCH_SEPARATOR);
+  if (parts.length !== 5) return undefined;
+  const command = parts[4] as OperatorCharSearchCommand | "";
+  return {
+    type: "operatorCharSearch",
+    operatorSequence: parts[0] ?? "",
+    commandPrefix: parts[1] ?? "",
+    count: parts[2] ? Number(parts[2]) : undefined,
+    targetCount: parts[3] ? Number(parts[3]) : undefined,
+    command: command || undefined,
+  };
+}
+
+function decodeOperatorCharSearchRepeatPending(
+  pending: string,
+): EncodedOperatorCharSearchRepeatPending | undefined {
+  const parts = pending.split(OPERATOR_CHAR_SEARCH_REPEAT_SEPARATOR);
+  if (parts.length !== 3) return undefined;
+  return {
+    type: "operatorCharSearchRepeat",
+    operatorSequence: parts[0] ?? "",
+    repeatPrefix: parts[1] ?? "",
     count: parts[2] ? Number(parts[2]) : undefined,
   };
 }
@@ -467,6 +652,11 @@ function withCount<T extends SemanticCommandResult>(
 ): SemanticCommandResult {
   if (!count || result.type === "pending" || result.type === "invalid" || result.type === "none") {
     return result;
+  }
+  if ("count" in result && result.count) {
+    return result.type === "operatorCharSearch"
+      ? { ...result, count: result.count * count }
+      : result;
   }
   return { ...result, count };
 }
@@ -541,6 +731,120 @@ function resolveOperatorSearchPending(
   return { type: "invalid" };
 }
 
+function effectiveOperatorCharSearchCount(
+  count: number | undefined,
+  targetCount: number | undefined,
+): number | undefined {
+  if (!count) return targetCount;
+  if (!targetCount) return count;
+  return count * targetCount;
+}
+
+function resolveOperatorCharSearchPending(
+  pending: EncodedOperatorCharSearchPending,
+  key: string,
+  keymap: ResolvedVimKeymap,
+): SemanticCommandResult {
+  const operator = operatorActionForSequence(pending.operatorSequence, keymap);
+  if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
+  if (pending.command) {
+    if (!isPrintableCharArgument(key)) return { type: "invalid" };
+    return {
+      type: "operatorCharSearch",
+      operator,
+      command: pending.command,
+      char: key,
+      count: effectiveOperatorCharSearchCount(pending.count, pending.targetCount),
+    };
+  }
+  if (!pending.commandPrefix && !pending.targetCount && /^[1-9]$/.test(key)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        pending.operatorSequence,
+        "",
+        pending.count,
+        Number(key),
+      ),
+    };
+  }
+  if (!pending.commandPrefix && pending.targetCount && /^\d$/.test(key)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        pending.operatorSequence,
+        "",
+        pending.count,
+        Number(`${pending.targetCount}${key}`),
+      ),
+    };
+  }
+  if (!pending.commandPrefix && pending.targetCount) {
+    return resolveAfterOperator(
+      pending.operatorSequence,
+      key,
+      keymap,
+      effectiveOperatorCharSearchCount(pending.count, pending.targetCount),
+    );
+  }
+  const commandSequence = pending.commandPrefix + key;
+  const command = charSearchCommandForBinding(commandSequence, keymap);
+  if (command) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        pending.operatorSequence,
+        commandSequence,
+        pending.count,
+        pending.targetCount,
+        command,
+      ),
+    };
+  }
+  if (hasCharSearchLongerPrefix(commandSequence, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        pending.operatorSequence,
+        commandSequence,
+        pending.count,
+        pending.targetCount,
+      ),
+    };
+  }
+  return { type: "invalid" };
+}
+
+function resolveOperatorCharSearchRepeatPending(
+  pending: EncodedOperatorCharSearchRepeatPending,
+  key: string,
+  keymap: ResolvedVimKeymap,
+): SemanticCommandResult {
+  const operator = operatorActionForSequence(pending.operatorSequence, keymap);
+  if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
+  const repeatSequence = pending.repeatPrefix + key;
+  const command = repeatCharSearchCommandForBinding(repeatSequence, keymap);
+  if (command) {
+    return {
+      type: "operatorCharSearchRepeat",
+      operator,
+      reverse: command === "repeatCharSearchReverse",
+      count: pending.count,
+    };
+  }
+  if (hasRepeatCharSearchLongerPrefix(repeatSequence, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchRepeatPending(
+        pending.operatorSequence,
+        repeatSequence,
+        pending.count,
+      ),
+    };
+  }
+  return { type: "invalid" };
+}
+
 function resolveTextObjectPending(
   pending: EncodedTextObjectPending,
   key: string,
@@ -572,6 +876,48 @@ function resolveAfterOperator(
     return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key, count) };
   }
   if (!isMotionOperator(operator)) return { type: "invalid" };
+  if (/^[1-9]$/.test(key)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(operatorSequence, "", count, Number(key)),
+    };
+  }
+  const charSearchCommand = charSearchCommandForBinding(key, keymap);
+  if (charSearchCommand) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        operatorSequence,
+        key,
+        count,
+        undefined,
+        charSearchCommand,
+      ),
+    };
+  }
+  if (hasCharSearchLongerPrefix(key, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(operatorSequence, key, count),
+    };
+  }
+
+  const repeatCharSearchCommand = repeatCharSearchCommandForBinding(key, keymap);
+  if (repeatCharSearchCommand) {
+    return {
+      type: "operatorCharSearchRepeat",
+      operator,
+      reverse: repeatCharSearchCommand === "repeatCharSearchReverse",
+      count,
+    };
+  }
+  if (hasRepeatCharSearchLongerPrefix(key, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchRepeatPending(operatorSequence, key, count),
+    };
+  }
+
   const searchDirection = searchDirectionForBinding(key, keymap);
   if (searchDirection) {
     return { type: "operatorSearch", operator, direction: searchDirection, count };
@@ -615,6 +961,9 @@ function resolveWithoutPending(
       return { type: "pending", pending: encodeCharCommandPending(binding.command, count) };
     }
     return { type: "command", command: binding.command, count };
+  }
+  if (binding?.kind === "action") {
+    return { type: "action", actionId: binding.actionId, args: binding.args, count };
   }
   return { type: "none" };
 }
@@ -660,6 +1009,15 @@ export function resolveNormalCommand(
     if (operatorLine) return resolveOperatorLinePending(operatorLine, key, keymap);
     const operatorSearch = decodeOperatorSearchPending(pending);
     if (operatorSearch) return resolveOperatorSearchPending(operatorSearch, key, keymap);
+    const operatorCharSearch = decodeOperatorCharSearchPending(pending);
+    if (operatorCharSearch)
+      return resolveOperatorCharSearchPending(operatorCharSearch, key, keymap);
+    const operatorCharSearchRepeat = decodeOperatorCharSearchRepeatPending(pending);
+    if (operatorCharSearchRepeat)
+      return resolveOperatorCharSearchRepeatPending(operatorCharSearchRepeat, key, keymap);
+
+    const pendingOperator = operatorActionForSequence(pending, keymap);
+    if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
 
     const combined = pending + key;
     if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
@@ -673,9 +1031,14 @@ export function resolveNormalCommand(
       return { type: "command", command: combinedBinding.command };
     }
     if (combinedBinding?.kind === "operator") return { type: "pending", pending: combined };
+    if (combinedBinding?.kind === "action") {
+      return {
+        type: "action",
+        actionId: combinedBinding.actionId,
+        args: combinedBinding.args,
+      };
+    }
 
-    const pendingOperator = operatorActionForSequence(pending, keymap);
-    if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
     return { type: "invalid" };
   }
 

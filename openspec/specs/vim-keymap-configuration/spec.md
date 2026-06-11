@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -460,3 +458,253 @@ The Vim editor SHALL support curated customization presets as typed option basel
 
 - **WHEN** any built-in preset is resolved
 - **THEN** the resulting keymap does not bind Pi-owned protected shortcuts unless pi-vimmode explicitly owns that shortcut for the relevant mode
+
+### Requirement: Action keymap configuration binds finite prompt transform actions
+
+The Vim editor SHALL support `piVimMode.keymap.actions` as an additive semantic keymap group for finite bindable prompt transform actions.
+
+#### Scenario: No action keybindings by default
+
+- **WHEN** the editor resolves default options without explicit `piVimMode.keymap.actions`
+- **THEN** no prompt transform action keybindings are accepted by default
+
+#### Scenario: String action binding is accepted
+
+- **WHEN** settings configure `piVimMode.keymap.actions` with `{ "prompt.transform.reflow": ["gq"] }`
+- **THEN** the resolved keymap accepts `gq` as a binding for `prompt.transform.reflow` with default args
+
+#### Scenario: Object action binding with args is accepted
+
+- **WHEN** settings configure `piVimMode.keymap.actions` with `{ "prompt.transform.fence": [{ "key": "gT", "args": { "language": "ts" } }] }`
+- **THEN** the resolved keymap accepts `gT` with the `language` arg attached to that binding
+
+#### Scenario: Object action binding without args is accepted
+
+- **WHEN** settings configure `piVimMode.keymap.actions` with `{ "prompt.transform.reflow": [{ "key": "gq" }] }`
+- **THEN** the resolved keymap accepts `gq` as a binding for `prompt.transform.reflow` with default args
+
+#### Scenario: Unknown action ID is ignored
+
+- **WHEN** settings configure an unsupported action ID under `piVimMode.keymap.actions`
+- **THEN** that entry is ignored, a warning is recorded, and sibling action bindings remain usable
+
+#### Scenario: Legacy action alias is rejected in config
+
+- **WHEN** settings configure a legacy action ID such as `promptTransform.reflow` under `piVimMode.keymap.actions`
+- **THEN** that entry is ignored, a warning names the canonical `prompt.transform.reflow` ID, and diagnostics search aliases remain available
+
+#### Scenario: Invalid action args are ignored per binding
+
+- **WHEN** settings configure `{ "prompt.transform.reflow": ["gq", { "key": "gQ", "args": { "width": "wide" } }] }`
+- **THEN** the invalid `gQ` binding entry is ignored, a warning is recorded, and the valid `gq` binding remains usable
+
+#### Scenario: Protected action key is rejected
+
+- **WHEN** `piVimMode.keymap.actions` attempts to bind a Pi-owned protected shortcut such as `ctrl+p`
+- **THEN** that key entry is rejected with a warning and the shortcut continues to delegate to Pi behavior
+
+#### Scenario: Disabled prompt transform rejects action keybindings
+
+- **WHEN** `piVimMode.promptTransforms.actions.reflow` is false and `piVimMode.keymap.actions` binds `prompt.transform.reflow`
+- **THEN** the reflow action key entries are ignored with a warning and `:reflow` remains unsupported
+
+#### Scenario: Disabled prompt transform suite rejects all action keybindings
+
+- **WHEN** `piVimMode.promptTransforms.enabled` is false and `piVimMode.keymap.actions` binds any `prompt.transform.*` action
+- **THEN** all prompt transform action key entries are ignored with warnings and prompt transform Ex commands remain unsupported
+
+#### Scenario: Project action bindings replace global bindings per action ID
+
+- **WHEN** global settings bind an action and project settings configure the same action ID with a different binding list
+- **THEN** the project binding list replaces the global list for that action ID before conflict resolution
+
+#### Scenario: Empty action binding list unbinds scoped action
+
+- **WHEN** project settings configure an action ID as an empty array
+- **THEN** the resolved keymap has no accepted bindings for that action from the replaced scope
+
+### Requirement: Action binding conflicts are rejected before dispatch
+
+The Vim editor SHALL precompute accepted action bindings and diagnostics warnings for rejected entries so rejected action keys never dispatch at runtime.
+
+#### Scenario: Action conflicts with existing grammar binding
+
+- **WHEN** an action binding uses a key sequence already claimed by a resolved operator, motion, command, macro, mark, or text-object grammar binding
+- **THEN** that action key entry is rejected with a warning, the existing grammar binding keeps its behavior, and the action can use that key only after the existing binding is explicitly unbound
+
+#### Scenario: Action prefix would shadow existing grammar
+
+- **WHEN** an action binding is a strict prefix of an existing grammar sequence, or an existing executable grammar sequence is a strict prefix of the action binding
+- **THEN** that action key entry is rejected with a warning so neither action dispatch nor existing grammar dispatch is shadowed
+
+#### Scenario: Action shares non-executable prefix with existing grammar
+
+- **WHEN** an action binding and an existing grammar binding share a common prefix that is not itself an executable grammar binding, such as `gq` and `gg`
+- **THEN** both bindings remain valid and the shared prefix waits for the next key
+
+#### Scenario: Same action repeats the same key
+
+- **WHEN** one action binding list contains the same key sequence more than once
+- **THEN** the resolved keymap keeps one accepted binding and does not emit a duplicate warning for that same-action repetition
+
+#### Scenario: Two actions claim the same key
+
+- **WHEN** two different action IDs claim the same key sequence
+- **THEN** both conflicting action key entries are rejected and the warning names both action IDs
+
+#### Scenario: Non-conflicting key for same action remains accepted
+
+- **WHEN** one key entry for an action conflicts and another key entry for the same action does not
+- **THEN** only the conflicting key entry is rejected and the non-conflicting key entry remains accepted
+
+#### Scenario: Mapcheck can explain rejected action key
+
+- **WHEN** a key sequence was rejected from `piVimMode.keymap.actions` and the user executes `:mapcheck` for that key
+- **THEN** the diagnostic reports that the action key was rejected and includes the reason when available
+
+### Requirement: Action keybinding presets resolve to finite action bindings
+
+The Vim editor SHALL support `piVimMode.keymap.actionPresets` as an opt-in array of named built-in action keybinding presets that expand to canonical `piVimMode.keymap.actions` bindings before explicit action entries are resolved.
+
+#### Scenario: No action presets by default
+
+- **WHEN** the editor resolves default options without `piVimMode.keymap.actionPresets` or explicit `piVimMode.keymap.actions`
+- **THEN** no prompt transform action keybindings are accepted by default
+
+#### Scenario: Paragraph editing preset applies bindings
+
+- **WHEN** settings configure `piVimMode.keymap.actionPresets` with `["paragraph-editing"]`
+- **THEN** the resolved keymap accepts `prompt.transform.reflow` on `gq`, `prompt.transform.quote` on `g>`, and `prompt.transform.unquote` on `g<`
+
+#### Scenario: Markdown wrapping preset applies bindings
+
+- **WHEN** settings configure `piVimMode.keymap.actionPresets` with `["markdown-wrapping"]`
+- **THEN** the resolved keymap accepts `prompt.transform.fence` on `gT` with no language arg, `prompt.transform.quote` on `g>`, and `prompt.transform.unquote` on `g<`
+
+#### Scenario: Multiple presets merge in listed order
+
+- **WHEN** settings configure `piVimMode.keymap.actionPresets` with `["paragraph-editing", "markdown-wrapping"]`
+- **THEN** the resolved keymap contains the union of compatible preset bindings and later preset bindings replace earlier preset bindings for the same action ID
+
+#### Scenario: Explicit actions override preset actions
+
+- **WHEN** settings configure `piVimMode.keymap.actionPresets` with `["paragraph-editing"]` and also configure `piVimMode.keymap.actions.prompt.transform.quote` with an explicit keybinding entry
+- **THEN** the explicit `prompt.transform.quote` entries replace the preset-provided quote entries while unrelated preset bindings remain accepted
+
+#### Scenario: Explicit empty action array clears preset action
+
+- **WHEN** settings configure `piVimMode.keymap.actionPresets` with `["paragraph-editing"]` and explicit `piVimMode.keymap.actions.prompt.transform.quote` as an empty array
+- **THEN** the resolved keymap contains no accepted `prompt.transform.quote` binding from that preset and preserves unrelated preset bindings
+
+#### Scenario: Project settings layer overrides global preset layer
+
+- **WHEN** global settings configure an action preset and project settings configure explicit `piVimMode.keymap.actions` for one of the same action IDs
+- **THEN** the project explicit action entries override the global preset entries for that action ID while valid unrelated global preset bindings remain available
+
+#### Scenario: Invalid preset names preserve valid siblings
+
+- **WHEN** `piVimMode.keymap.actionPresets` contains a supported preset ID and an unsupported preset ID
+- **THEN** settings resolution records a warning for the unsupported preset ID, applies the supported preset ID, and continues resolving valid sibling settings
+
+#### Scenario: Invalid preset shape is ignored safely
+
+- **WHEN** `piVimMode.keymap.actionPresets` is not an array of strings
+- **THEN** settings resolution records a warning, ignores the invalid preset value, and continues resolving valid sibling settings
+
+#### Scenario: Preset bindings obey disabled transform validation
+
+- **WHEN** `piVimMode.promptTransforms.actions.reflow` is false and `piVimMode.keymap.actionPresets` includes `paragraph-editing`
+- **THEN** the preset-provided `prompt.transform.reflow` binding is rejected with a warning and valid preset bindings for enabled actions remain accepted
+
+#### Scenario: Preset bindings obey keymap conflict validation
+
+- **WHEN** a preset-provided key sequence conflicts with a configured grammar binding or another action binding during resolution
+- **THEN** the conflicting preset-provided action binding is rejected with the same warning style as explicit `piVimMode.keymap.actions` entries
+
+### Requirement: Keybindings popup command participates in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose a finite semantic command for opening the keybindings popup while preserving existing protected-shortcut, conflict, and insert-mode delegation rules.
+
+#### Scenario: Keybindings popup command has no default binding
+
+- **WHEN** Pi starts with no `piVimMode.keymap.commands.showKeybindings` setting
+- **THEN** no normal-mode key sequence opens the keybindings popup by default and existing default bindings remain unchanged
+
+#### Scenario: Configured keybindings popup command opens popup
+
+- **WHEN** `piVimMode.keymap.commands.showKeybindings` is set to a valid non-conflicting key sequence and the editor is in normal mode
+- **THEN** pressing that key sequence opens the same bounded read-only popup as `:keybindings`
+
+#### Scenario: Configured keybindings popup command is read-only
+
+- **WHEN** the configured keybindings popup command opens the popup from normal mode
+- **THEN** prompt text, cursor position, registers, marks, macros, search state, resolved options, retained diagnostics, and dot-repeat state remain unchanged except for displaying the popup
+
+#### Scenario: Insert mode remains Pi-owned for configured key
+
+- **WHEN** the editor is in insert mode and the user presses a key sequence configured for `showKeybindings`
+- **THEN** input delegates to Pi default editor behavior unless that insert-mode input is otherwise supported by pi-vimmode
+
+#### Scenario: Protected key binding is rejected
+
+- **WHEN** `piVimMode.keymap.commands.showKeybindings` attempts to bind a protected Pi-owned shortcut such as `ctrl+p`, `enter`, or `tab`
+- **THEN** the binding is ignored or rejected with a warning and the protected shortcut continues to delegate to Pi behavior
+
+#### Scenario: Conflicting keybinding is rejected
+
+- **WHEN** `piVimMode.keymap.commands.showKeybindings` attempts to use a key sequence that exactly conflicts with or prefix-shadows an existing resolved grammar binding
+- **THEN** the invalid binding is ignored or rejected with a warning and the existing grammar binding keeps its behavior
+
+#### Scenario: Live editor uses resolved keybindings popup command
+
+- **WHEN** a live `VimEditor` is constructed with resolved options that include `commands.showKeybindings`
+- **THEN** the editor uses that binding without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
+
+### Requirement: Diagnostic metadata remains separate from keymap commands
+
+The keymap configuration SHALL keep the new keybindings popup command separate from metadata-only diagnostic/help action IDs and prompt transform action bindings.
+
+#### Scenario: Metadata IDs are not accepted as action keybindings
+
+- **WHEN** settings configure `piVimMode.keymap.actions` with a metadata ID such as `vimmode.keybindings`, `vimmode.keymap`, or `vimmode.help`
+- **THEN** that entry is ignored with a warning and no user keybinding dispatch is created for the metadata ID
+
+#### Scenario: Prompt transform action bindings keep existing scope
+
+- **WHEN** settings configure valid `piVimMode.keymap.actions` entries for `prompt.transform.*` IDs while also configuring `commands.showKeybindings`
+- **THEN** prompt transform action bindings continue to dispatch prompt transforms, and `showKeybindings` opens only the keybindings popup
+
+### Requirement: Configured character search commands resolve as operator targets
+
+The Vim keymap configuration SHALL allow configured semantic character-search command bindings to serve as targets after motion-capable operators without adding arbitrary Vim grammar.
+
+#### Scenario: Configured find-forward command works after operator
+
+- **WHEN** `piVimMode.keymap.commands.findCharForward` is configured to a valid key sequence and the editor is in normal mode with a pending delete operator
+- **THEN** pressing that configured key sequence followed by a printable target character deletes through the resolved current-line character match
+
+#### Scenario: Configured till-forward command works after configured operator
+
+- **WHEN** `piVimMode.keymap.operators.change` and `piVimMode.keymap.commands.tillCharForward` are configured to valid key sequences
+- **THEN** pressing the configured change operator, configured till-forward command, and printable target character removes text up to but not including the resolved target and enters insert mode
+
+#### Scenario: Multi-key character search command resolves deterministically after operator
+
+- **WHEN** a character-search command is configured with a valid multi-key sequence that shares a prefix with another supported binding
+- **THEN** the finite key sequence matcher waits for the full configured command sequence before consuming the printable target character
+
+#### Scenario: Configured repeated character search command works after operator
+
+- **WHEN** `piVimMode.keymap.commands.repeatCharSearch` or `piVimMode.keymap.commands.repeatCharSearchReverse` is configured to a valid key sequence and a previous character search exists
+- **THEN** pressing a motion-capable operator followed by that configured repeat command applies the operator to the repeated character-search target
+
+#### Scenario: Unsupported command after operator remains invalid
+
+- **WHEN** the editor is in normal mode with a pending delete, change, or yank operator and the user enters a configured command that is not a supported operator target
+- **THEN** the pending operator clears, prompt text is unchanged, and the unmatched key sequence is not inserted into the prompt
+
+#### Scenario: Insert mode remains Pi-owned for character search keys
+
+- **WHEN** the editor is in insert mode and the user presses keys configured for `findCharForward`, `findCharBackward`, `tillCharForward`, or `tillCharBackward`
+- **THEN** those keys continue to delegate to Pi default editing behavior unless otherwise supported by pi-vimmode insert-mode input
+

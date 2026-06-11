@@ -1,5 +1,6 @@
 import type { ResolvedVimEditorOptions } from "./types.ts";
 
+import { actionKeybindingRecipeMessage } from "./action-keybinding-recipes.ts";
 import {
   keymapForOptions,
   macrosForOptions,
@@ -13,6 +14,7 @@ import {
   searchActions,
   type VimDiagnostics,
 } from "./customization.ts";
+import { diagnosticActionMessage, searchDiagnosticActions } from "./diagnostic-actions.ts";
 
 export type RuntimeHelpCategory =
   | "modes"
@@ -51,8 +53,8 @@ const ENTRIES = [
     category: "diagnostics",
     topics: ["help", "features", "messages", "runtime", "inspect", "vimmode"],
     summary:
-      ":help and :features show compact source-backed pi-vimmode help; :vimmode inspect summarizes current prompt-local state; :messages shows recent runtime messages",
-    examples: [":help search", ":features redo", ":vimmode inspect", ":messages"],
+      ":help, :features, and :keybindings show compact source-backed pi-vimmode help; :vimmode inspect summarizes current prompt-local state; :messages shows recent runtime messages",
+    examples: [":help search", ":features redo", ":keybindings", ":vimmode inspect", ":messages"],
     limits: ["finite topics only", "no pager", "no Vim help tags"],
     docsAnchor: "runtime-help:runtime-help",
     specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
@@ -85,10 +87,10 @@ const ENTRIES = [
   {
     id: "actions",
     category: "diagnostics",
-    topics: ["actions", "keymap", "mapcheck", "vimdoctor", "customization"],
+    topics: ["actions", "keybindings", "keymap", "mapcheck", "vimdoctor", "customization"],
     summary:
-      ":actions, :keymap, :mapcheck, and :vimdoctor explain finite actions, bindings, protected shortcuts, and settings warnings",
-    examples: [":actions redo", ":mapcheck ctrl+p", ":vimdoctor"],
+      ":actions, :keybindings, :keymap, :mapcheck, and :vimdoctor explain finite actions, bindings, protected shortcuts, and settings warnings",
+    examples: [":actions redo", ":keybindings redo", ":mapcheck ctrl+p", ":vimdoctor"],
     limits: ["no full command palette", "no .vimrc", "no Vimscript"],
     docsAnchor: "runtime-help:customization-diagnostics",
     specAnchor: "openspec/specs/vim-customization-diagnostics/spec.md",
@@ -150,9 +152,15 @@ export function runtimeHelpEntries(_context?: RuntimeHelpContext): readonly Runt
 export function runtimeHelpMessage(topic: string | undefined, context: RuntimeHelpContext): string {
   const query = topic?.trim();
   if (!query) {
-    return "help: :help <topic>, :features [query], :vimmode inspect, :messages, :actions, :keymap, :mapcheck, :vimdoctor";
+    return "help: :help <topic>, :features [query], :keybindings [query], :vimmode inspect, :messages, :actions, :keymap, :mapcheck, :vimdoctor";
   }
+  const wantsDiagnosticActions = ["actions", "action", "diagnostics", "diagnostic"].includes(
+    query.toLowerCase(),
+  );
   const entry = findEntry(query);
+  if (entry && !wantsDiagnosticActions) return compactEntry(entry, context);
+  const diagnostic = searchDiagnosticActions(query)[0];
+  if (diagnostic) return diagnosticActionMessage(diagnostic);
   if (!entry) return `help: no match for ${query}`;
   return compactEntry(entry, context);
 }
@@ -169,8 +177,10 @@ export function runtimeFeaturesMessage(
 ): string {
   const needle = query?.trim();
   if (!needle) {
-    return "features: modes, motions, editing, search, Ex commands, transforms, registers, marks, macros, diagnostics, settings, Pi shortcuts; :features <query>";
+    return "features: modes, motions, editing, search, Ex commands, transforms, registers, marks, macros, keybindings, diagnostics, runtime help, settings, Pi shortcuts; :features <query>";
   }
+  const recipe = actionKeybindingRecipeMessage(needle);
+  if (recipe) return recipe;
   const state = effectiveStateMessage(needle, context);
   if (state) return state;
   const action = actionFeatureMessage(needle, context);
@@ -234,7 +244,7 @@ function effectiveStateMessage(query: string, context: RuntimeHelpContext): stri
   }
   if (needle === "reflow" && transforms.actions.reflow === false) return "reflow disabled";
   if (needle === "quote" && transforms.actions.quote !== false) {
-    return `promptTransform.quote ${transforms.commands.quote.map((name) => `:${name}`).join(",")}`;
+    return `prompt.transform.quote ${transforms.commands.quote.map((name) => `:${name}`).join(",")}`;
   }
   return undefined;
 }

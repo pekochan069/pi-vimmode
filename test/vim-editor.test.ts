@@ -11,13 +11,39 @@ function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
   initialHardwareCursorVisible = false,
+  terminalSize: { rows?: number; columns?: number } = {},
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
+  const overlays: Array<{ component: any; options: any; hidden: boolean }> = [];
   let hardwareCursorVisible = initialHardwareCursorVisible;
   const tui = {
-    terminal: { rows: 24, write: (data: string) => writes.push(data) },
+    terminal: {
+      rows: terminalSize.rows ?? 24,
+      columns: terminalSize.columns,
+      write: (data: string) => writes.push(data),
+    },
     requestRender() {},
+    showOverlay(component: any, options: any) {
+      const entry = { component, options, hidden: false };
+      overlays.push(entry);
+      return {
+        hide() {
+          entry.hidden = true;
+        },
+        setHidden(hidden: boolean) {
+          entry.hidden = hidden;
+        },
+        isHidden() {
+          return entry.hidden;
+        },
+        focus() {},
+        unfocus() {},
+        isFocused() {
+          return !entry.hidden;
+        },
+      };
+    },
     getShowHardwareCursor() {
       return hardwareCursorVisible;
     },
@@ -45,6 +71,7 @@ function createEditor(
     editor: new VimEditor(tui, theme, keybindings, options, diagnostics),
     writes,
     hardwareCursorChanges,
+    overlays,
     getHardwareCursorVisible: () => hardwareCursorVisible,
   };
 }
@@ -53,7 +80,7 @@ function expectRenderedWidth(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 }
 
-function typeKeys(editor: VimEditor, keys: readonly string[]) {
+function typeKeys(editor: Pick<VimEditor, "handleInput">, keys: readonly string[]) {
   for (const key of keys) editor.handleInput(key);
 }
 
@@ -113,8 +140,8 @@ describe("vim editor integration", () => {
     expectRenderedWidth(message, 20);
   });
 
-  test("diagnostic and feedback info rows render width-safely below prompt", () => {
-    const { editor } = createEditor(
+  test("diagnostic popups and feedback info rows render width-safely", () => {
+    const { editor, overlays } = createEditor(
       { ...DEFAULT_VIM_OPTIONS, startMode: "normal", feedback: { noop: "status" } },
       {
         warnings: [
@@ -126,8 +153,11 @@ describe("vim editor integration", () => {
 
     runEx(editor, "vimdoctor");
     const doctor = editor.render(24);
-    expect(doctor.length).toBe(baseline.length + 1);
-    expect(doctor.at(-1)).toContain("vimdoctor: 1 warning");
+    const overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(doctor.length).toBe(baseline.length);
+    expect(doctor.join("\n")).not.toContain("vimdoctor: 1 warning");
+    expect(overlayText).toContain(":vimdoctor");
+    expect(overlayText).toContain("vimdoctor: 1 warning");
     expectRenderedWidth(doctor, 24);
 
     editor.handleInput("z");
@@ -201,41 +231,228 @@ describe("vim editor integration", () => {
     expect(visualEx).toContain(":'<,'>");
   });
 
-  test("runtime help, inspect, and messages rows render width-safely", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+  test("keybinding discovery popup renders as real overlay panel", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(32);
+
+    runEx(editor, "features keybindings");
+    const editorLines = editor.render(32);
+    const editorText = editorLines.join("\n");
+    const overlay = overlays.at(-1);
+    const overlayLines = overlay?.component.render(64) ?? [];
+    const overlayText = overlayLines.join("\n");
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(editorLines.length).toBe(baseline.length);
+    expect(editorText).not.toContain("Keybinding discovery");
+    expect(overlayText).toContain("╭");
+    expect(overlayText).toContain("Keybinding discovery");
+    expect(overlayText).toContain("1-9/9");
+    expect(overlayText).toContain("│ Source-backed");
+    expect(overlayText).toContain("j/k ↑/↓ scroll");
+    expect(overlayText).toContain("Esc close");
+    expect(overlayText).not.toContain("↓1");
+    expect(overlayText).not.toContain("…");
+    expectRenderedWidth(overlayLines, 64);
+  });
+
+  test("dedicated keybindings command renders as real overlay panel", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(32);
+
+    runEx(editor, "keybindings");
+    const editorLines = editor.render(32);
+    const editorText = editorLines.join("\n");
+    const overlay = overlays.at(-1);
+    const overlayLines = overlay?.component.render(72) ?? [];
+    const overlayText = overlayLines.join("\n");
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(editorLines.length).toBe(baseline.length);
+    expect(editorText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain(":keybindings");
+    expect(overlayText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain("Key            Mode        Action");
+    expect(overlayText).toContain("j/k ↑/↓ scroll");
+    expectRenderedWidth(overlayLines, 72);
+  });
+
+  test("configured showKeybindings key renders same overlay shell", () => {
+    const { editor, overlays } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, showKeybindings: ["gk"] },
+      },
+    });
+
+    typeKeys(editor, ["g", "k"]);
+    const overlay = overlays.at(-1);
+    const overlayText = overlay?.component.render(72).join("\n") ?? "";
+
+    expect(overlay).toBeDefined();
+    expect(overlay?.options).toMatchObject({ anchor: "center", width: "90%", maxHeight: "90%" });
+    expect(overlayText).toContain(":keybindings");
+    expect(overlayText).not.toContain("Effective pi-vimmode keybindings");
+    expect(overlayText).toContain("Key            Mode        Action");
+  });
+
+  test("keybinding discovery overlay scroll reveals hidden bounded rows", () => {
+    const options: ResolvedVimEditorOptions = {
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        actions: {
+          accepted: Array.from({ length: 8 }, (_, index) => ({
+            key: `g${index}`,
+            actionId: "prompt.transform.quote",
+            args: { action: "quote" },
+          })),
+        },
+      },
+    };
+    const { editor, overlays } = createEditor(options);
+
+    runEx(editor, "features keybindings");
+    const overlay = overlays.at(-1)?.component;
+    expect(overlay).toBeDefined();
+    const initial = overlay.render(80).join("\n");
+    expect(initial).toContain("1-10/");
+    expect(initial).toContain("Source-backed");
+    expect(initial).not.toContain("prompt.transform.quote -> g7");
+
+    typeKeys(overlay, ["j", "j", "j", "j", "j", "j"]);
+    const scrolled = overlay.render(80).join("\n");
+    expect(scrolled).toContain("7-16/");
+    expect(scrolled).toContain("prompt.transform.quote -> g7");
+    expect(scrolled).toContain("↑");
+    expect(scrolled).not.toContain("Source-backed");
+    expectRenderedWidth(overlay.render(80), 80);
+
+    overlay.handleInput("k");
+    expect(overlay.render(80).join("\n")).toContain("6-15/");
+  });
+
+  test("runtime help uses generic read-only popup", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(48);
+
+    runEx(editor, "help search");
+    let lines = editor.render(48);
+    let overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(lines.length).toBe(baseline.length);
+    expect(lines.join("\n")).not.toContain("prompt search");
+    expect(overlayText).toContain(":help search");
+    expect(overlayText).toContain("prompt search");
+
+    runEx(editor, "features redo");
+    lines = editor.render(48);
+    overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
+    expect(lines.length).toBe(baseline.length);
+    expect(lines.join("\n")).not.toContain("command.redo");
+    expect(overlayText).toContain(":features redo");
+    expect(overlayText).toContain("command.redo");
+  });
+
+  test("representative read-only Ex commands open live popups", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const cases = [
+      ["help search", ":help search", "prompt search"],
+      ["features redo", ":features redo", "command.redo"],
+      ["actions redo", ":actions redo", "command.redo"],
+      ["keymap redo", ":keymap redo", "command.redo"],
+      ["mapcheck ctrl+p", ":mapcheck ctrl+p", "protected"],
+      ["vimdoctor", ":vimdoctor", "vimdoctor: ok"],
+      ["messages", ":messages", "messages:"],
+      ["vimmode inspect", ":vimmode inspect", "inspect:"],
+    ] as const;
+
+    for (const [command, title, body] of cases) {
+      runEx(editor, command);
+      const overlayText = overlays.at(-1)?.component.render(72).join("\n") ?? "";
+      expect(overlayText).toContain(title);
+      expect(overlayText).toContain(body);
+    }
+  });
+
+  test("runtime help, inspect, and messages popups render width-safely", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("abc");
     editor.handleInput(":");
     typeKeys(editor, ["s", "/", "m", "i", "s", "s", "i", "n", "g", "/", "x", "/", "\r"]);
     runEx(editor, "vimmode inspect");
     let lines = editor.render(48);
-    expect(lines.at(-1)).toContain("inspect: mode=normal");
+    let overlayLines = overlays.at(-1)?.component.render(48) ?? [];
+    expect(lines.join("\n")).not.toContain("inspect: mode=normal");
+    expect(overlayLines.join("\n")).toContain("inspect: mode=normal");
     expectRenderedWidth(lines, 48);
+    expectRenderedWidth(overlayLines, 48);
 
     editor.handleInput(":");
     typeKeys(editor, ["m", "e", "s", "s", "a", "g", "e", "s", "\r"]);
 
     lines = editor.render(32);
-    expect(lines.at(-1)).toContain("messages: 2 retained");
+    overlayLines = overlays.at(-1)?.component.render(48) ?? [];
+    expect(lines.join("\n")).not.toContain("messages: 1 retained");
+    expect(overlayLines.join("\n")).toContain("messages: 1 retained");
     expectRenderedWidth(lines, 32);
+    expectRenderedWidth(overlayLines, 48);
   });
 
-  test("runtime help row composes with visual selection and search highlights", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+  test("runtime help popup composes with visual selection and search highlights", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one old\ntwo old");
     editor.handleInput("/");
     typeKeys(editor, ["o", "l", "d", "\r"]);
     runEx(editor, "help search");
     const searchHelp = editor.render(60).join("\n");
+    let overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
     expect(searchHelp).toContain(SEARCH_START);
-    expect(searchHelp).toContain("prompt search");
+    expect(searchHelp).not.toContain("prompt search");
+    expect(overlayText).toContain("prompt search");
 
     editor.handleInput("V");
     editor.handleInput("j");
     editor.handleInput(":");
     typeKeys(editor, ["\b", "\b", "\b", "\b", "\b", "h", "e", "l", "p", "\r"]);
     const visualHelp = editor.render(60).join("\n");
+    overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
     expect(visualHelp).toContain("\u001b[7m");
-    expect(visualHelp).toContain("help:");
+    expect(visualHelp).not.toContain("help:");
+    expect(overlayText).toContain("help:");
+  });
+
+  test("read-only popup local controls and too-small fallback stay prompt-safe", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    runEx(editor, "help search");
+    const overlay = overlays.at(-1);
+    expect(overlay?.hidden).toBe(false);
+    overlay?.component.handleInput("\x03");
+    expect(overlay?.hidden).toBe(true);
+    expect(editor.getText()).toBe("abc");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 3 });
+
+    const small = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      { columns: 40, rows: 10 },
+    );
+    const baseline = small.editor.render(40);
+    runEx(small.editor, "help search");
+    const fallback = small.editor.render(40);
+    expect(small.overlays).toHaveLength(0);
+    expect(fallback.length).toBe(baseline.length + 1);
+    expect(fallback.at(-1)).toContain("Read-only popup unavailable");
+    expect(small.editor.getText()).toBe("");
+    expect(small.editor.getCursor()).toEqual({ line: 0, col: 0 });
   });
 
   test("renders configured mode labels", () => {
@@ -831,6 +1048,39 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["x", "u", "\x12"]);
     expect(editor.getText()).toBe("foo oo");
     expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
+  });
+
+  test("configured showKeybindings key survives live editor option cloning", () => {
+    const { editor, overlays } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["z"] },
+        motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
+        commands: {
+          ...DEFAULT_VIM_OPTIONS.keymap!.commands,
+          showKeybindings: ["gk"],
+          redo: ["R"],
+        },
+        macros: { ...DEFAULT_VIM_OPTIONS.keymap!.macros, record: ["Q"] },
+        marks: { ...DEFAULT_VIM_OPTIONS.keymap!.marks, set: ["M"] },
+        actions: { accepted: [] },
+      },
+    });
+
+    typeKeys(editor, ["g", "k"]);
+    expect(overlays.at(-1)?.component.render(80).join("\n")).toContain(":keybindings");
+    editor.handleInput("\x1b");
+
+    editor.setText("hello world");
+    typeKeys(editor, ["g", "g", "z", "e"]);
+    expect(editor.getText()).toBe("world");
+    typeKeys(editor, ["Q", "a", "Q"]);
+    expect(editor.getVimMode()).toBe("normal");
+    editor.handleInput("M");
+    editor.handleInput("a");
+    expect(editor.getMark("a")).toEqual(editor.getCursor());
   });
 
   test("configured redo key survives live editor keymap cloning", () => {

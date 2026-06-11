@@ -7,9 +7,9 @@ import {
   resolveMacroCommand,
   resolveNormalCommand,
 } from "../src/commands.ts";
-import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
+import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
 
-const operatorMotions = ["w", "b", "0", "^", "$"] as const;
+const operatorMotions = ["h", "j", "k", "l", "w", "b", "e", "0", "^", "$", "G", "%"] as const;
 
 describe("normal command parser", () => {
   test("creates pending state for operators and g prefix", () => {
@@ -57,6 +57,15 @@ describe("normal command parser", () => {
           motion,
         });
       }
+      const pendingG = resolveNormalCommand("g", operator);
+      expect(pendingG.type).toBe("pending");
+      expect(
+        resolveNormalCommand("g", pendingG.type === "pending" ? pendingG.pending : ""),
+      ).toEqual({
+        type: "operatorMotion",
+        operator: operator === "d" ? "delete" : operator === "c" ? "change" : "yank",
+        motion: "bufferStart",
+      });
     }
   });
 
@@ -128,6 +137,112 @@ describe("normal command parser", () => {
     ).toEqual({ type: "startRecording", slot: "x" });
     expect(resolveMacroCommand("q", undefined, false, { enabled: false })).toEqual({
       type: "none",
+    });
+  });
+
+  test("resolves configured prompt transform action bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: { "prompt.transform.reflow": ["gq", { key: "gQ", args: { width: 72 } }] },
+        },
+      },
+    }).options.keymap;
+    expect(keymap?.actions.accepted).toHaveLength(2);
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("q", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+    });
+
+    const count = resolveNormalCommand("3", undefined, keymap);
+    const countedPrefix = resolveNormalCommand(
+      "g",
+      count.type === "pending" ? count.pending : "",
+      keymap,
+    );
+    expect(
+      resolveNormalCommand(
+        "Q",
+        countedPrefix.type === "pending" ? countedPrefix.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow", width: 72 },
+      count: 3,
+    });
+  });
+
+  test("resolves preset-derived prompt transform action bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } },
+    }).options.keymap;
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("q", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "action",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+    });
+  });
+
+  test("action bindings do not resolve as operator targets", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options.keymap;
+    const operatorPrefix = resolveNormalCommand("g", "d", keymap);
+    expect(operatorPrefix).toEqual({
+      type: "pending",
+      pending: "d\u0000motion\u0000g\u0000motion\u0000",
+    });
+    expect(
+      resolveNormalCommand(
+        "q",
+        operatorPrefix.type === "pending" ? operatorPrefix.pending : "",
+        keymap,
+      ),
+    ).toEqual({
+      type: "invalid",
+    });
+  });
+
+  test("rejected action conflicts preserve legacy command behavior", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["gg"] } } },
+    });
+    expect(result.options.keymap?.actions.accepted).toEqual([]);
+    expect(resolveNormalCommand("g", undefined, result.options.keymap)).toEqual({
+      type: "pending",
+      pending: "g",
+    });
+    expect(resolveNormalCommand("g", "g", result.options.keymap)).toEqual({
+      type: "motion",
+      motion: "bufferStart",
+    });
+  });
+
+  test("resolves configured keybindings popup command through semantic parser", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options.keymap;
+
+    const pending = resolveNormalCommand("g", undefined, keymap);
+    expect(pending).toEqual({ type: "pending", pending: "g" });
+    expect(
+      resolveNormalCommand("k", pending.type === "pending" ? pending.pending : "", keymap),
+    ).toEqual({
+      type: "command",
+      command: "showKeybindings",
     });
   });
 
@@ -315,6 +430,180 @@ describe("normal command parser", () => {
       operator: "delete",
       direction: "backward",
       count: undefined,
+    });
+  });
+
+  test("resolves operator character search targets", () => {
+    const deletePending = resolveNormalCommand("d", undefined);
+    const findPending = resolveNormalCommand(
+      "f",
+      deletePending.type === "pending" ? deletePending.pending : "",
+    );
+    expect(findPending.type).toBe("pending");
+    expect(
+      resolveNormalCommand("x", findPending.type === "pending" ? findPending.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "delete",
+      command: "findCharForward",
+      char: "x",
+    });
+
+    const tillPending = resolveNormalCommand("t", "d");
+    expect(tillPending.type).toBe("pending");
+    expect(
+      resolveNormalCommand(",", tillPending.type === "pending" ? tillPending.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "delete",
+      command: "tillCharForward",
+      char: ",",
+    });
+
+    const changeTill = resolveNormalCommand("t", "c");
+    expect(changeTill.type).toBe("pending");
+    expect(
+      resolveNormalCommand(",", changeTill.type === "pending" ? changeTill.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "change",
+      command: "tillCharForward",
+      char: ",",
+    });
+
+    const changeBackward = resolveNormalCommand("F", "c");
+    expect(changeBackward.type).toBe("pending");
+    expect(
+      resolveNormalCommand(":", changeBackward.type === "pending" ? changeBackward.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "change",
+      command: "findCharBackward",
+      char: ":",
+    });
+
+    const yankTillBackward = resolveNormalCommand("T", "y");
+    expect(yankTillBackward.type).toBe("pending");
+    expect(
+      resolveNormalCommand(
+        "[",
+        yankTillBackward.type === "pending" ? yankTillBackward.pending : "",
+      ),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "yank",
+      command: "tillCharBackward",
+      char: "[",
+    });
+  });
+
+  test("resolves counted and configured operator character search targets", () => {
+    const countedAfter = resolveNormalCommand("2", "d");
+    expect(countedAfter.type).toBe("pending");
+    const countedFind = resolveNormalCommand(
+      "f",
+      countedAfter.type === "pending" ? countedAfter.pending : "",
+    );
+    expect(countedFind.type).toBe("pending");
+    expect(
+      resolveNormalCommand(",", countedFind.type === "pending" ? countedFind.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "delete",
+      command: "findCharForward",
+      char: ",",
+      count: 2,
+    });
+
+    const countBefore = resolveNormalCommand("2", undefined);
+    const deletePending = resolveNormalCommand(
+      "d",
+      countBefore.type === "pending" ? countBefore.pending : "",
+    );
+    const targetCount = resolveNormalCommand(
+      "3",
+      deletePending.type === "pending" ? deletePending.pending : "",
+    );
+    const findPending = resolveNormalCommand(
+      "f",
+      targetCount.type === "pending" ? targetCount.pending : "",
+    );
+    expect(
+      resolveNormalCommand(",", findPending.type === "pending" ? findPending.pending : ""),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "delete",
+      command: "findCharForward",
+      char: ",",
+      count: 6,
+    });
+
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, change: ["qq"] },
+      commands: { ...DEFAULT_VIM_KEYMAP.commands, tillCharForward: ["gf"] },
+    };
+    const qPrefix = resolveNormalCommand("q", undefined, keymap);
+    const change = resolveNormalCommand(
+      "q",
+      qPrefix.type === "pending" ? qPrefix.pending : "",
+      keymap,
+    );
+    const gPrefix = resolveNormalCommand(
+      "g",
+      change.type === "pending" ? change.pending : "",
+      keymap,
+    );
+    expect(gPrefix.type).toBe("pending");
+    const till = resolveNormalCommand(
+      "f",
+      gPrefix.type === "pending" ? gPrefix.pending : "",
+      keymap,
+    );
+    expect(till.type).toBe("pending");
+    expect(resolveNormalCommand(":", till.type === "pending" ? till.pending : "", keymap)).toEqual({
+      type: "operatorCharSearch",
+      operator: "change",
+      command: "tillCharForward",
+      char: ":",
+    });
+
+    expect(resolveNormalCommand("x", "d")).toEqual({ type: "invalid" });
+  });
+
+  test("resolves operator character search repeats", () => {
+    expect(resolveNormalCommand(";", "d")).toEqual({
+      type: "operatorCharSearchRepeat",
+      operator: "delete",
+      reverse: false,
+    });
+    expect(resolveNormalCommand(",", "c")).toEqual({
+      type: "operatorCharSearchRepeat",
+      operator: "change",
+      reverse: true,
+    });
+
+    const counted = resolveNormalCommand("2", "y");
+    expect(counted.type).toBe("pending");
+    expect(resolveNormalCommand(";", counted.type === "pending" ? counted.pending : "")).toEqual({
+      type: "operatorCharSearchRepeat",
+      operator: "yank",
+      reverse: false,
+      count: 2,
+    });
+
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      commands: { ...DEFAULT_VIM_KEYMAP.commands, repeatCharSearch: ["rr"] },
+    };
+    const prefix = resolveNormalCommand("r", "d", keymap);
+    expect(prefix.type).toBe("pending");
+    expect(
+      resolveNormalCommand("r", prefix.type === "pending" ? prefix.pending : "", keymap),
+    ).toEqual({
+      type: "operatorCharSearchRepeat",
+      operator: "delete",
+      reverse: false,
     });
   });
 

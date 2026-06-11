@@ -170,3 +170,233 @@ The project SHALL keep `docs/settings.md` aligned with supported `piVimMode` set
 
 - **WHEN** a runtime help or feature registry entry references a setting-controlled feature area
 - **THEN** the corresponding setting path is documented in `docs/settings.md` or the registry entry declares that no user setting controls the feature
+
+### Requirement: Documentation explains action keybindings and non-goals
+
+User-facing docs SHALL describe named prompt transform action keybindings, examples, validation commands, and explicit non-goals without implying full Vim/Neovim parity. Detailed behavior SHALL live in `docs/features.md` and `docs/settings.md`; README SHALL remain a quickstart and docs index.
+
+#### Scenario: Settings docs describe keymap actions config
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.actions`, supported `prompt.transform.*` action IDs, string entries, `{ key, args }` entries, invalid config warnings, and protected shortcut behavior
+
+#### Scenario: Feature docs include prompt transform action examples
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it includes examples for binding reflow, fence, quote, or unquote prompt transform actions
+
+#### Scenario: README remains an index
+
+- **WHEN** the user opens `README.md`
+- **THEN** it links to detailed feature/settings documentation without duplicating the full action keybinding reference
+
+#### Scenario: Docs explain existing prompt transform settings remain separate
+
+- **WHEN** docs describe action keybindings
+- **THEN** they state that `piVimMode.promptTransforms.actions` remains the existing transform enable-flag surface, `piVimMode.promptTransforms.commands` remains the Ex command-name configuration surface, and neither moves into `keymap.actions`
+
+#### Scenario: Docs explain legacy alias transition
+
+- **WHEN** docs describe runtime diagnostics and action keybinding config for prompt transform actions
+- **THEN** they explain that canonical `prompt.transform.*` IDs are required in config and legacy `promptTransform.*` aliases are temporary diagnostic/search aliases only
+
+#### Scenario: Docs list first milestone non-goals
+
+- **WHEN** docs describe the action registry milestone
+- **THEN** they explicitly exclude full Vimscript, recursive mappings, plugin API, `:map`, `:action`, quickref parity, and rectangular visualBlock transforms
+
+#### Scenario: Release docs include package artifact verification
+
+- **WHEN** release or validation docs describe publishing the package
+- **THEN** they include `bun run build` and package contents inspection in addition to tests, typecheck, lint, and format checks
+
+### Requirement: Feature guide quickref classifies diagnostic and help surfaces
+
+The project SHALL document a concise pi-vimmode quick reference that classifies supported commands and actions by actual pi-vimmode behavior rather than Vim/Neovim parity.
+
+#### Scenario: Quickref separates supported surface categories
+
+- **WHEN** a user opens `docs/features.md`
+- **THEN** the quick reference groups modal motions/edits, Ex line commands, prompt transforms, customization diagnostics, runtime help/inspectability, and keybindable prompt transform actions as distinct categories
+
+#### Scenario: Quickref identifies metadata-only diagnostic actions
+
+- **WHEN** a user reads quickref entries for `:vimdoctor`, `:actions`, `:keymap`, `:mapcheck`, `:help`, `:features`, `:messages`, or `:vimmode inspect`
+- **THEN** the document identifies them as finite read-only diagnostic/runtime-help commands and does not present their `vimmode.*` metadata IDs as configurable keybinding targets
+
+#### Scenario: Quickref documents unsupported parity boundaries
+
+- **WHEN** a user reads the quick reference or runtime-help documentation
+- **THEN** it states that pi-vimmode does not provide a public plugin action API, diagnostic action keybinding dispatch, runtime `:map`, runtime `:action`, Vimscript, Neovim Lua, full Vim help tags, or broad quickref parity
+
+### Requirement: Documentation preserves prompt transform alias transition
+
+User-facing docs SHALL continue to distinguish canonical prompt transform action IDs from temporary legacy diagnostic aliases.
+
+#### Scenario: Canonical config IDs remain documented
+
+- **WHEN** a user reads action keybinding documentation in `docs/features.md` or `docs/settings.md`
+- **THEN** the docs require canonical `prompt.transform.*` IDs for `piVimMode.keymap.actions` config examples and supported ID lists
+
+#### Scenario: Legacy aliases remain documented as diagnostics-only
+
+- **WHEN** a user reads runtime diagnostics or action keybinding documentation during the alias transition release
+- **THEN** the docs state that legacy `promptTransform.*` names remain searchable in diagnostics but are rejected in config with a warning that names the canonical `prompt.transform.*` ID
+
+#### Scenario: Diagnostic metadata docs do not duplicate full settings reference
+
+- **WHEN** docs explain diagnostic/help action metadata and quickref classification
+- **THEN** detailed setting defaults and accepted shapes remain in `docs/settings.md`, while `docs/features.md` links or summarizes only the behavior needed for feature discovery
+
+### Requirement: Documentation explains action keybinding presets
+
+User-facing pi-vimmode documentation SHALL describe named action keybinding presets as finite opt-in config bundles for `piVimMode.keymap.actionPresets`, including accepted preset IDs, examples, override behavior, and non-goals.
+
+#### Scenario: Settings docs list accepted preset IDs
+
+- **WHEN** a user reads `docs/settings.md` for action keybindings
+- **THEN** the docs list accepted `piVimMode.keymap.actionPresets` IDs such as `paragraph-editing` and `markdown-wrapping`
+
+#### Scenario: Settings docs show copy-pasteable preset config
+
+- **WHEN** a user reads action keybinding preset docs
+- **THEN** the docs include a complete JSON example using `piVimMode.keymap.actionPresets`
+
+#### Scenario: Docs explain preset override and clearing behavior
+
+- **WHEN** docs describe action keybinding preset resolution
+- **THEN** they explain that explicit `piVimMode.keymap.actions` entries override preset-provided entries for the same action ID and that explicit empty action arrays can clear preset-provided bindings
+
+#### Scenario: Docs distinguish presets from recipes
+
+- **WHEN** docs describe both action keybinding recipes and action keybinding presets
+- **THEN** they explain that recipes are copy-paste snippets, presets are selectable config bundles, and both are backed by the same finite canonical action metadata
+
+#### Scenario: Docs state preset non-goals
+
+- **WHEN** docs describe action keybinding presets
+- **THEN** they state that presets create no default keybindings and do not provide recursive mappings, runtime `:map`, `.vimrc`, plugin API, diagnostic/help action dispatch, or full Vim/Neovim parity
+
+#### Scenario: Feature docs mention runtime discovery
+
+- **WHEN** a user reads `docs/features.md` action keybinding guidance
+- **THEN** it explains how to discover presets with finite runtime help queries such as `:features keybindings` or `:features action presets`
+
+### Requirement: Feature guide documents keybinding discovery popup
+
+The project SHALL document the finite read-only Ex popup, including keybinding discovery popup content, in user-facing feature docs.
+
+#### Scenario: Docs explain popup entry point
+
+- **WHEN** a user opens `docs/features.md`
+- **THEN** the feature guide documents that read-only Ex help and diagnostic commands open a dedicated bounded read-only overlay popup, including `:features keybindings` as the keybinding discovery entry point
+
+#### Scenario: Docs explain popup contents
+
+- **WHEN** a user reads the read-only popup documentation
+- **THEN** it explains that popup content can include runtime help topics, feature discovery results, action keybinding recipes or presets, canonical `prompt.transform.*` action IDs, accepted configured action bindings, customization diagnostics, message history summaries, and inspectability summaries
+
+#### Scenario: Docs explain popup scrolling
+
+- **WHEN** a user reads the read-only popup documentation
+- **THEN** it explains that overflowing popup content can be scrolled inside the popup with popup-local controls such as `j`/`k` or arrow keys
+
+#### Scenario: Docs explain popup dismissal
+
+- **WHEN** a user reads the read-only popup documentation
+- **THEN** it explains the supported dismissal behavior such as `Esc`, `Ctrl-C`, `Ctrl-G`, or existing reset/cancel behavior when applicable
+
+#### Scenario: Docs explain popup non-goals
+
+- **WHEN** a user reads the read-only popup documentation
+- **THEN** it states that the popup does not provide full Vim help tags, a command palette, runtime `:map`, runtime `:action`, recursive mappings, plugin API, diagnostic/help action keybinding dispatch, default action keybindings, persistent logs, or an unbounded output log
+
+### Requirement: Documentation keeps one-line and popup discovery distinct
+
+User-facing docs SHALL distinguish popup-backed read-only Ex help/diagnostic output from existing compact runtime feedback and edit-flow messages.
+
+#### Scenario: Docs preserve compact edit feedback expectations
+
+- **WHEN** docs describe `:actions`, `:keymap`, `:mapcheck`, `:help`, `:features`, `:messages`, `:vimmode inspect`, and `:vimdoctor`
+- **THEN** they identify those valid read-only help/diagnostic outputs as popup-backed while preserving compact inline/workbench expectations for mutating Ex commands, parser errors, edit-flow success/errors, prompt transforms, `:noh`, search input, substitution preview/apply feedback, and optional no-op feedback
+
+#### Scenario: Docs keep settings reference separate
+
+- **WHEN** docs describe read-only popup contents
+- **THEN** detailed setting shapes, defaults, and validation rules remain in `docs/settings.md`, while `docs/features.md` summarizes only the behavior needed to discover and understand read-only popup output
+
+### Requirement: Feature guide documents read-only Ex popup output
+
+The project SHALL document the generic read-only Ex help/diagnostic popup in user-facing feature docs.
+
+#### Scenario: Docs list popup-backed commands
+
+- **WHEN** a user opens `docs/features.md`
+- **THEN** the feature guide lists popup-backed read-only Ex commands including `:help`, `:help <topic>`, `:features`, `:features <query>`, `:actions <query>`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:vimmode inspect`, and `:vimdoctor`
+
+#### Scenario: Docs explain popup controls
+
+- **WHEN** a user reads the read-only Ex popup documentation
+- **THEN** it explains popup dismissal with `Esc`, `Ctrl-C`, or `Ctrl-G` and popup-local scrolling with `j`/`k` or arrow keys
+
+#### Scenario: Docs explain compact feedback boundary
+
+- **WHEN** a user reads the Ex command-line or runtime help documentation
+- **THEN** it explains that mutating Ex commands, parser errors, edit-flow success/errors, prompt transforms, `:noh`, and optional no-op feedback keep compact inline/workbench behavior rather than opening the read-only popup
+
+#### Scenario: Docs explain popup history behavior
+
+- **WHEN** a user reads the runtime message or inspectability documentation
+- **THEN** it explains that popup content and popup scroll/dismiss actions do not create retained runtime message history entries, and that `:messages` output itself is not retained as message history
+
+### Requirement: User-facing docs document keybindings command
+
+The user-facing feature guide SHALL document the dedicated keybindings popup command, query behavior, read-only state boundaries, and current limitations.
+
+#### Scenario: Feature guide names keybindings command
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents `:keybindings` as the direct read-only popup entry point for effective keybinding discovery
+
+#### Scenario: Feature guide documents keybindings query behavior
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents `:keybindings <query>` examples for action lookup, key ownership lookup, protected shortcuts, or finite no-match behavior
+
+#### Scenario: Feature guide documents popup controls and boundaries
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents that the keybindings popup is bounded, width-safe, locally scrollable, dismissible, and read-only with respect to prompt editing state
+
+#### Scenario: Feature guide documents keybindings non-goals
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it states that keybinding discovery does not provide runtime `:map`, recursive mappings, Vimscript, a command palette, plugin dispatch, diagnostic/help action keybinding dispatch, or default action keybindings
+
+### Requirement: Settings docs document keybindings popup command binding
+
+The settings reference SHALL document how users can configure an optional normal-mode keybinding for the dedicated keybindings popup command.
+
+#### Scenario: Settings reference lists command path
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it lists `piVimMode.keymap.commands.showKeybindings`, its default empty binding list, and its effect of opening the keybindings popup
+
+#### Scenario: Settings reference documents validation rules
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it explains that `showKeybindings` follows normal semantic keymap validation, including protected shortcut rejection, conflict rejection, finite multi-key matching, and insert-mode Pi delegation
+
+#### Scenario: Settings reference keeps metadata boundary clear
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it clarifies that `vimmode.*` diagnostic/help metadata IDs are not accepted by `piVimMode.keymap.actions`, and users should configure `piVimMode.keymap.commands.showKeybindings` for a shortcut to the keybindings popup
+
+### Requirement: README remains a quickstart and docs index
+
+The README SHALL stay concise and point users to canonical feature/settings docs rather than duplicating the full keybindings command reference.
+
+#### Scenario: README does not become full keybindings reference
+
+- **WHEN** this change updates documentation
+- **THEN** README remains a quickstart/index and any detailed `:keybindings` behavior or config examples live in `docs/features.md` and `docs/settings.md`

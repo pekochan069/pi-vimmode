@@ -26,9 +26,12 @@ import {
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
+import { scrollHelpPopup } from "../keybinding-discovery-popup.ts";
+import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
 import {
   clearCommandPending,
   clearExMessage,
+  clearHelpPopup,
   clearPending,
   delegate,
   editState,
@@ -62,6 +65,8 @@ import {
 import {
   applyCommand,
   applyLineCommand,
+  applyOperatorCharSearch,
+  applyOperatorCharSearchRepeat,
   applyOperatorMotion,
   applyOperatorTextObject,
   moveUpdate,
@@ -314,6 +319,10 @@ function handleNormalInput(
   }
   if (pendingResult.type === "command")
     return applyCommand(state, snapshot, options, pendingResult.command, pendingResult.count);
+  if (pendingResult.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyPromptTransformAction(state, snapshot, options, pendingResult);
+  }
   if (pendingResult.type === "charCommand")
     return applyCommand(
       state,
@@ -338,6 +347,27 @@ function handleNormalInput(
   }
   if (pendingResult.type === "operatorSearch") {
     return startSearchUpdate(state, pendingResult.direction, pendingResult.operator);
+  }
+  if (pendingResult.type === "operatorCharSearch") {
+    return applyOperatorCharSearch(
+      state,
+      snapshot,
+      pendingResult.operator,
+      pendingResult.command,
+      pendingResult.char,
+      options,
+      pendingResult.count,
+    );
+  }
+  if (pendingResult.type === "operatorCharSearchRepeat") {
+    return applyOperatorCharSearchRepeat(
+      state,
+      snapshot,
+      pendingResult.operator,
+      pendingResult.reverse,
+      options,
+      pendingResult.count,
+    );
   }
   if (pendingResult.type === "operatorTextObject") {
     return applyOperatorTextObject(
@@ -409,6 +439,10 @@ function handleVisualInput(
       result.char,
     );
   }
+  if (result.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyVisualPromptTransformAction(state, snapshot, options, result);
+  }
   if (result.type === "command") {
     const registerAware = result.command === "deleteChar" || result.command === "pasteAfter";
     if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
@@ -475,6 +509,34 @@ function handleVisualInput(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
+function handleHelpPopupInput(state: ModalState, options: ModalOptions, data: string): ModalUpdate {
+  if (matchesKey(data, "escape")) return invalidate(clearHelpPopup(state));
+  if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
+
+  if (!state.helpPopup) return invalidate(state);
+  if (matchesKey(data, "down")) {
+    return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, 1) });
+  }
+  if (matchesKey(data, "up")) {
+    return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, -1) });
+  }
+
+  const key = keySequence(data);
+  if (key === "j") return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, 1) });
+  if (key === "k") return invalidate({ ...state, helpPopup: scrollHelpPopup(state.helpPopup, -1) });
+  if (key === "g")
+    return invalidate({ ...state, helpPopup: { ...state.helpPopup, scrollOffset: 0 } });
+  if (key === "G") {
+    return invalidate({
+      ...state,
+      helpPopup: scrollHelpPopup(state.helpPopup, state.helpPopup.lines.length),
+    });
+  }
+
+  return invalidate(state);
+}
+
 function routeModalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -483,6 +545,7 @@ function routeModalInput(
   diagnostics: VimDiagnostics,
 ): ModalUpdate {
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
+  if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
   if (routedState.pendingEx)
     return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
   if (routedState.pendingSearch)

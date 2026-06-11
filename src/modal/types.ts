@@ -1,3 +1,4 @@
+import type { ReadOnlyPopup } from "../keybinding-discovery-popup.ts";
 import type {
   CursorStyle,
   EditResult,
@@ -124,6 +125,16 @@ export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
   | {
+      type: "operatorCharSearch";
+      operator: VimMotionOperatorAction;
+      command: Extract<
+        VimCommandAction,
+        "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward"
+      >;
+      char: string;
+      count?: number;
+    }
+  | {
       type: "operatorMotion";
       operator: VimMotionOperatorAction;
       motion: VimMotionAction;
@@ -156,6 +167,7 @@ export type ModalState = {
   exHistory?: string[];
   lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;
+  helpPopup?: ReadOnlyPopup;
   messageHistory?: ExMessage[];
   lastCharSearch?: CharSearchState;
   lastSearch?: SearchState;
@@ -187,6 +199,7 @@ export type ModalEffect =
   | { type: "edit"; result: EditResult }
   | { type: "restoreCursor"; position: Position }
   | { type: "playMacro"; slot: MacroSlot; inputs: readonly string[] }
+  | { type: "openReadOnlyPopup"; popup: ReadOnlyPopup }
   | { type: "invalidate" }
   | { type: "terminalCursor"; style: CursorStyle };
 

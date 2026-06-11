@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -20,6 +20,9 @@
     "url": "git+https://github.com/pekochan069/pi-vimmode.git"
   },
   "files": [
+    "index.ts",
+    "src",
+    "dist",
     "README.md",
     "LICENSE",
     "docs/features.md",
@@ -40,8 +43,8 @@
     "check-types": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.76.0",
-    "@earendil-works/pi-tui": "^0.76.0",
+    "@earendil-works/pi-coding-agent": "^0.77.0",
+    "@earendil-works/pi-tui": "^0.77.0",
     "@typescript/native-preview": "^7.0.0-dev.20260527.2",
     "bun-types": "^1.3.14",
     "oxfmt": "^0.52.0",
@@ -50,8 +53,8 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.76.0",
-    "@earendil-works/pi-tui": "^0.76.0"
+    "@earendil-works/pi-coding-agent": "^0.77.0",
+    "@earendil-works/pi-tui": "^0.77.0"
   },
   "pi": {
     "extensions": [

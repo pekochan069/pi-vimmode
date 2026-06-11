@@ -190,3 +190,176 @@ Runtime feature discovery SHALL describe the current editor's effective customiz
 
 - **WHEN** the editor executes `:features marks` and resolved mark options restrict allowed mark slots
 - **THEN** the feature result reports that marks are enabled with the current slot limits rather than listing unrestricted mark support
+
+### Requirement: Diagnostics describe prompt transform action keybindings
+
+Runtime customization diagnostics SHALL report canonical prompt transform action IDs, accepted bindings, rejected action binding warnings, and temporary legacy aliases.
+
+#### Scenario: Actions diagnostic shows canonical transform action ID
+
+- **WHEN** the editor executes `:actions reflow` after `prompt.transform.reflow` is available
+- **THEN** the diagnostic reports `prompt.transform.reflow` with its current binding state and transform description
+
+#### Scenario: Legacy promptTransform alias remains searchable
+
+- **WHEN** the editor executes `:actions promptTransform.reflow` during the alias transition period
+- **THEN** the diagnostic resolves the query to the canonical `prompt.transform.reflow` action
+
+#### Scenario: Keymap diagnostic lists action keybindings
+
+- **WHEN** the editor executes `:keymap prompt.transform.reflow`
+- **THEN** the diagnostic reports accepted keymap action bindings for `prompt.transform.reflow` and prints the canonical action ID exactly
+
+#### Scenario: Mapcheck reports accepted action binding
+
+- **WHEN** `gq` is an accepted binding for `prompt.transform.reflow` and the editor executes `:mapcheck gq`
+- **THEN** the diagnostic reports that `gq` maps to `prompt.transform.reflow` without adding a duplicate `promptTransform.` kind prefix
+
+#### Scenario: Vimdoctor reports action binding warnings
+
+- **WHEN** settings contain rejected action key entries
+- **THEN** `:vimdoctor` includes action binding warnings in the retained diagnostics summary
+
+#### Scenario: Features query reports action keybindings
+
+- **WHEN** `gq` is an accepted binding for `prompt.transform.reflow` and the editor executes `:features reflow`
+- **THEN** the feature summary includes the reflow enabled state, Ex command names, and a compact action keybinding summary such as `keys=gq`
+
+#### Scenario: Diagnostic commands remain read-only
+
+- **WHEN** the editor executes `:actions`, `:keymap`, `:mapcheck`, or `:vimdoctor` for action keybindings
+- **THEN** prompt text, cursor position, mode, visual selection, search highlights, registers, marks, macros, and dot-repeat state remain unchanged except for diagnostic messages
+
+### Requirement: Diagnostic help actions have metadata-only registry entries
+
+The Vim editor SHALL expose finite metadata for diagnostic and runtime-help actions without making those actions keybindable or plugin-dispatchable.
+
+#### Scenario: Actions search finds diagnostic metadata
+
+- **WHEN** the editor executes `:actions vimmode.doctor`, `:actions vimmode.actions`, or another supported diagnostic/help action ID
+- **THEN** it shows the matching metadata entry with its canonical `vimmode.*` ID, command name, diagnostic/runtime-help classification, and metadata-only or non-bindable status
+
+#### Scenario: Actions summary separates metadata-only diagnostics
+
+- **WHEN** the editor executes `:actions` without a query
+- **THEN** diagnostic/help metadata entries are summarized separately from bindable prompt transform actions and are not counted as prompt transforms, motions, operators, text objects, macros, marks, searches, or editing commands
+
+#### Scenario: Unsupported diagnostic action remains unsupported
+
+- **WHEN** the editor executes `:actions vimmode.dump`, `:actions actionspalette`, or another unsupported diagnostic-like action query
+- **THEN** it shows a bounded no-match message rather than inventing a command, action, plugin API, or keybinding target
+
+### Requirement: Diagnostic action metadata preserves diagnostic command boundaries
+
+Diagnostic/help action metadata SHALL describe existing finite diagnostics without changing execution or editing side effects.
+
+#### Scenario: Metadata entry points to existing Ex command
+
+- **WHEN** a metadata entry names `vimmode.doctor`, `vimmode.actions`, `vimmode.keymap`, `vimmode.mapcheck`, `vimmode.help`, `vimmode.features`, `vimmode.messages`, or `vimmode.inspect`
+- **THEN** the described command is one of the explicit supported diagnostic/runtime-help Ex commands and no additional dispatch path is implied
+
+#### Scenario: Metadata lookup is read-only
+
+- **WHEN** the editor executes `:actions vimmode.help` or another metadata lookup from normal or visual Ex mode
+- **THEN** prompt text, cursor position, mode restoration, visual selection, search highlights, registers, marks, macro slots, and dot-repeat state remain unchanged except for the transient diagnostic message and existing message-history rules
+
+#### Scenario: Keymap diagnostics do not treat metadata-only actions as bindable
+
+- **WHEN** the editor explains a metadata-only diagnostic/help action through keymap-oriented diagnostics
+- **THEN** it reports that the action is metadata-only or not bindable rather than showing it as an unbound configurable action waiting for a user keybinding
+
+### Requirement: Keybinding discovery popup preserves customization state boundaries
+
+Runtime keybinding discovery popup display, popup-local scrolling, and dismissal SHALL be read-only with respect to prompt editing state and effective customization state.
+
+#### Scenario: Popup display is read-only
+
+- **WHEN** the editor executes `:features keybindings` from normal mode
+- **THEN** prompt text, cursor position, mode, search highlights, registers, marks, macro slots, dot-repeat state, resolved options, effective keymaps, and retained diagnostics remain unchanged except for displaying the popup
+
+#### Scenario: Popup from visual Ex restores visual state
+
+- **WHEN** Ex command-line mode was opened from a visual selection and the user executes `:features keybindings`
+- **THEN** the command exits Ex mode without editing prompt text and restores the original visual mode state while displaying the popup
+
+#### Scenario: Popup scrolling is read-only
+
+- **WHEN** the keybinding discovery popup is visible and the user scrolls inside it with popup-local controls
+- **THEN** only the popup scroll position changes, while prompt text, cursor position, mode, visual selection, search highlights, registers, marks, macro slots, dot-repeat state, resolved options, effective keymaps, retained diagnostics, and retained messages remain unchanged
+
+#### Scenario: Popup dismissal is read-only
+
+- **WHEN** the keybinding discovery popup is visible and the user dismisses it with `Esc` or existing reset behavior
+- **THEN** prompt text, cursor position, mode, visual selection, search highlights, registers, marks, macro slots, dot-repeat state, resolved options, effective keymaps, and retained diagnostics remain unchanged except for removing the popup
+
+### Requirement: Keybinding popup reuses customization diagnostics vocabulary
+
+The keybinding discovery popup SHALL describe bindings using the same finite metadata boundaries as existing customization diagnostics.
+
+#### Scenario: Accepted bindings use canonical action IDs
+
+- **WHEN** the popup lists accepted prompt transform action bindings
+- **THEN** it prints canonical `prompt.transform.*` IDs exactly and does not use legacy `promptTransform.*` names as bindable config keys
+
+#### Scenario: Metadata-only diagnostic actions remain non-bindable
+
+- **WHEN** the popup explains diagnostic or runtime-help action metadata such as `vimmode.doctor` or `vimmode.features`
+- **THEN** it identifies those IDs as metadata-only or non-bindable rather than presenting them as configurable keybinding targets
+
+#### Scenario: Protected shortcuts remain protected
+
+- **WHEN** the popup mentions protected Pi shortcuts or directs users to `:mapcheck <key>`
+- **THEN** it preserves the protected shortcut catalog boundary and does not present protected Pi shortcuts as available pi-vimmode bindings
+
+### Requirement: Keybinding catalog describes effective bindings
+
+The Vim editor SHALL provide a source-backed keybinding catalog that describes the current editor's effective resolved keybindings without requiring users to inspect settings files or source code.
+
+#### Scenario: Catalog groups supported binding categories
+
+- **WHEN** the editor displays the keybindings catalog
+- **THEN** it lists finite supported categories such as commands, motions, operators, text objects, macros, marks, searches, prompt transform actions, and protected Pi shortcuts when those categories are available
+
+#### Scenario: Catalog reflects configured overrides
+
+- **WHEN** resolved settings change a semantic binding such as `piVimMode.keymap.commands.redo` or accept a prompt transform action binding such as `prompt.transform.reflow`
+- **THEN** the keybindings catalog reports the effective configured binding rather than only built-in defaults or raw settings text
+
+#### Scenario: Catalog reflects disabled effective features
+
+- **WHEN** resolved options disable macros, marks, or prompt transforms
+- **THEN** the keybindings catalog does not present disabled bindings as active behavior and reports bounded disabled or unavailable state when relevant
+
+#### Scenario: Catalog rows show mode scope
+
+- **WHEN** the editor displays the keybindings catalog
+- **THEN** each binding row is rendered as a fixed grid with key, supported mode scope, action ID, and source-backed description
+
+#### Scenario: Ex commands and metadata are not catalog keybindings
+
+- **WHEN** the editor displays the keybindings catalog
+- **THEN** it excludes Ex commands and diagnostic/runtime-help metadata IDs because they are not keybindings and are covered by other diagnostic/help commands
+
+#### Scenario: Protected shortcuts remain protected
+
+- **WHEN** the keybindings catalog or detail output mentions Pi-owned shortcuts such as `ctrl+p`, `tab`, or `enter`
+- **THEN** it preserves the protected shortcut vocabulary and does not present protected Pi shortcuts as available pi-vimmode bindings
+
+### Requirement: Keybinding detail search is finite and source-backed
+
+The Vim editor SHALL search keybinding catalog metadata across finite supported fields without inventing unsupported Vim mapping behavior.
+
+#### Scenario: Detail search finds action by ID or description
+
+- **WHEN** the editor displays `:keybindings redo` or `:keybindings wordForward`
+- **THEN** the popup shows matching action ID, action kind, current key sequence, and source-backed description when a match exists
+
+#### Scenario: Detail search finds key ownership
+
+- **WHEN** the editor displays `:keybindings ctrl+p` or another key sequence query
+- **THEN** the popup reports whether the key is mapped, unmapped, protected, rejected by retained diagnostics, or otherwise unsupported using the same vocabulary as customization diagnostics
+
+#### Scenario: Detail search rejects unsupported parity queries
+
+- **WHEN** the editor displays `:keybindings vimscript`, `:keybindings nmap`, or another query with no finite supported match
+- **THEN** the popup shows a bounded no-match result rather than inventing Vimscript, recursive mapping, or command-palette behavior

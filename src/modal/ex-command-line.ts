@@ -28,15 +28,15 @@ import {
   substituteLineRangeRegex,
   yankExLineRange,
 } from "../buffer.ts";
-import {
-  keymapForOptions,
-  macrosForOptions,
-  marksForOptions,
-  promptTransformsForOptions,
-} from "../config.ts";
-import { actionsMessage, doctorMessage, keymapMessage, mapcheckMessage } from "../customization.ts";
+import { promptTransformsForOptions } from "../config.ts";
 import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
-import { runtimeFeaturesMessage, runtimeHelpMessage } from "../runtime-help.ts";
+import {
+  diagnosticPopup,
+  inspectPopup,
+  keybindingsPopup,
+  runtimeHelpPopup,
+  type ReadOnlyPopup,
+} from "../keybinding-discovery-popup.ts";
 import {
   clearPending,
   clearPendingEx,
@@ -48,7 +48,6 @@ import {
   withEffects,
   withRuntimeMessage,
 } from "./core.ts";
-import { runtimeMessagesMessage, vimmodeInspectMessage } from "./inspect.ts";
 import { registerToRead, writeRegisters } from "./registers.ts";
 
 export function exDisplay(pendingEx: PendingExCommand | undefined): string | undefined {
@@ -175,6 +174,14 @@ function cancelExCommand(state: ModalState): ModalUpdate {
   return restoreVisualExState(state);
 }
 
+function openReadOnlyPopup(state: ModalState, popup: ReadOnlyPopup): ModalUpdate {
+  const restored = restoreVisualExState(state);
+  return {
+    state: { ...restored.state, helpPopup: popup },
+    effects: [...restored.effects, { type: "openReadOnlyPopup", popup }],
+  };
+}
+
 function substitutionMessage(matches: number): string {
   return `${matches} ${matches === 1 ? "substitution" : "substitutions"}`;
 }
@@ -294,39 +301,22 @@ function executeExCommand(
   }
 
   if (parsed.type === "diagnostic") {
-    const keymap = keymapForOptions(options);
-    const transforms = promptTransformsForOptions(options);
-    const macros = macrosForOptions(options);
-    const marks = marksForOptions(options);
-    const message =
-      parsed.command === "vimdoctor"
-        ? doctorMessage(options, diagnostics)
-        : parsed.command === "keymap"
-          ? keymapMessage(keymap, parsed.query, transforms, macros, marks)
-          : parsed.command === "mapcheck"
-            ? mapcheckMessage(keymap, parsed.query ?? "", diagnostics.warnings)
-            : actionsMessage(keymap, parsed.query, transforms, macros, marks);
-    return restoreVisualExState(state, { kind: "info", text: message });
+    return openReadOnlyPopup(state, diagnosticPopup(parsed, options, diagnostics));
   }
 
   if (parsed.type === "runtimeHelp") {
-    const context = { options, diagnostics };
-    const message =
-      parsed.command === "help"
-        ? runtimeHelpMessage(parsed.query, context)
-        : parsed.command === "features"
-          ? runtimeFeaturesMessage(parsed.query, context)
-          : runtimeMessagesMessage(state.messageHistory);
-    return restoreVisualExState(
+    return openReadOnlyPopup(
       state,
-      { kind: "info", text: message },
-      parsed.command !== "messages",
+      runtimeHelpPopup(parsed, options, diagnostics, state.messageHistory),
     );
   }
 
+  if (parsed.type === "keybindings") {
+    return openReadOnlyPopup(state, keybindingsPopup(options, diagnostics, parsed.query));
+  }
+
   if (parsed.type === "inspect") {
-    const message = vimmodeInspectMessage({ state, snapshot, options, diagnostics });
-    return restoreVisualExState(state, { kind: "info", text: message });
+    return openReadOnlyPopup(state, inspectPopup({ state, snapshot, options, diagnostics }));
   }
 
   if (parsed.type === "transform") {

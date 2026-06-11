@@ -1,3 +1,5 @@
+import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
+
 export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
 
 export type StartupMode = Extract<VimMode, "insert" | "normal">;
@@ -72,7 +74,8 @@ export type VimCommandAction =
   | "startExCommand"
   | "repeatChange"
   | "undo"
-  | "redo";
+  | "redo"
+  | "showKeybindings";
 
 export type VimTextObjectKind = "inner" | "around";
 
@@ -115,6 +118,16 @@ export type VimTextObjectKeymapOptions = {
   targets?: Partial<Record<VimTextObjectTarget, readonly string[]>>;
 };
 
+export type VimActionKeyBindingEntry =
+  | string
+  | { key: string; args?: Readonly<Record<string, unknown>> };
+
+export type VimActionKeymapOptions = Partial<
+  Record<BindablePromptTransformActionId, readonly VimActionKeyBindingEntry[]>
+>;
+
+export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
+
 export type VimKeymapOptions = {
   operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
   motions?: Partial<Record<VimMotionAction, readonly string[]>>;
@@ -123,6 +136,8 @@ export type VimKeymapOptions = {
   marks?: VimMarkKeymapOptions;
   textObjects?: VimTextObjectKeymapOptions;
   operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
+  actionPresets?: readonly VimActionKeybindingPreset[];
+  actions?: VimActionKeymapOptions;
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
@@ -130,6 +145,16 @@ export type ResolvedVimMarkKeymap = Required<VimMarkKeymapOptions>;
 export type ResolvedVimTextObjectKeymap = {
   kinds: Record<VimTextObjectKind, readonly string[]>;
   targets: Record<VimTextObjectTarget, readonly string[]>;
+};
+
+export type ResolvedVimActionBinding = {
+  key: string;
+  actionId: BindablePromptTransformActionId;
+  args: PromptTransform;
+};
+
+export type ResolvedVimActionKeymap = {
+  accepted: readonly ResolvedVimActionBinding[];
 };
 
 export type ResolvedVimKeymap = {
@@ -140,6 +165,7 @@ export type ResolvedVimKeymap = {
   marks: ResolvedVimMarkKeymap;
   textObjects: ResolvedVimTextObjectKeymap;
   operatorMotions: Record<VimMotionOperatorAction, readonly VimMotionAction[]>;
+  actions: ResolvedVimActionKeymap;
 };
 
 export type VimSearchOptions = {
@@ -293,7 +319,20 @@ export type PromptTransform = {
 
 export type VimOperator = "d" | "c" | "y";
 
-export type VimMotion = "w" | "b" | "e" | "0" | "^" | "$";
+export type VimMotion =
+  | "h"
+  | "j"
+  | "k"
+  | "l"
+  | "w"
+  | "b"
+  | "e"
+  | "0"
+  | "^"
+  | "$"
+  | "gg"
+  | "G"
+  | "%";
 
 export type PendingOperator = string;
 

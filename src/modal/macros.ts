@@ -68,6 +68,7 @@ export function shouldRecordInput(
   data: string,
 ): boolean {
   if (!state.recordingSlot) return false;
+  if (state.helpPopup) return false;
   if (snapshot.isMacroReplaying) return false;
   if (!state.pendingEx && isDelegatedResetKey(data)) return false;
 

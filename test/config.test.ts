@@ -5,7 +5,12 @@ import { join } from "node:path";
 
 import type { VimEditorOptions } from "../src/types.ts";
 
+import {
+  ACTION_KEYBINDING_PRESETS,
+  ACTION_KEYBINDING_RECIPES,
+} from "../src/action-keybinding-recipes.ts";
 import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
+import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
 function tempSettings() {
   const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-config-"));
@@ -29,11 +34,12 @@ describe("vim config parsing", () => {
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     const redoOptions = {
-      keymap: { commands: { redo: ["ctrl+r"] } },
+      keymap: { commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
+    expect(redoOptions.keymap?.commands?.showKeybindings).toEqual(["gk"]);
     const backwardSearchOptions = {
       keymap: { commands: { startSearchBackward: ["?"] } },
     } satisfies VimEditorOptions;
@@ -212,6 +218,44 @@ describe("vim config parsing", () => {
     ).toBe(true);
   });
 
+  test("keybindings popup command defaults unbound and validates configured bindings", () => {
+    expect(DEFAULT_VIM_OPTIONS.keymap?.commands.showKeybindings).toEqual([]);
+
+    const valid = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"], redo: ["U"] } } },
+    });
+    expect(valid.options.keymap?.commands.showKeybindings).toEqual(["gk"]);
+    expect(valid.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(valid.warnings).toEqual([]);
+
+    const protectedKey = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["ctrl+p"], redo: ["U"] } } },
+    });
+    expect(protectedKey.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(protectedKey.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(protectedKey.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+
+    const exactConflict = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["u"], redo: ["U"] } } },
+    });
+    expect(exactConflict.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(exactConflict.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(exactConflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("commands.showKeybindings.u")]),
+    );
+
+    const prefixConflict = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["g"], redo: ["U"] } } },
+    });
+    expect(prefixConflict.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(prefixConflict.options.keymap?.commands.redo).toEqual(["U"]);
+    expect(prefixConflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("prefix-shadow conflict")]),
+    );
+  });
+
   test("default keymap includes roadmap actions and configurable word-end", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
@@ -346,15 +390,47 @@ describe("vim config parsing", () => {
     expect(result.options.promptTransforms?.commands.fence).toEqual(["wrap"]);
   });
 
-  test("rejects operator motions without range semantics", () => {
+  test("accepts every supported normal motion as an operator motion", () => {
     const result = resolveVimOptions({
-      piVimMode: { keymap: { operatorMotions: { delete: ["right", "wordForward"] } } },
+      piVimMode: {
+        keymap: {
+          operatorMotions: {
+            delete: [
+              "left",
+              "down",
+              "up",
+              "right",
+              "wordForward",
+              "wordBackward",
+              "wordEnd",
+              "lineStart",
+              "firstNonBlank",
+              "lineEnd",
+              "bufferStart",
+              "bufferEnd",
+              "matchingPair",
+            ],
+          },
+        },
+      },
     });
 
-    expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
-    expect(result.warnings.some((warning) => warning.includes("unsupported operator motion"))).toBe(
-      true,
-    );
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.operatorMotions.delete).toEqual([
+      "left",
+      "down",
+      "up",
+      "right",
+      "wordForward",
+      "wordBackward",
+      "wordEnd",
+      "lineStart",
+      "firstNonBlank",
+      "lineEnd",
+      "bufferStart",
+      "bufferEnd",
+      "matchingPair",
+    ]);
   });
 
   test("warns for cross-group keymap conflicts", () => {
@@ -511,5 +587,286 @@ describe("vim config parsing", () => {
     } finally {
       paths.cleanup();
     }
+  });
+
+  test("action keybinding recipes parse and keep no default action bindings", () => {
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    for (const recipe of ACTION_KEYBINDING_RECIPES) {
+      const result = resolveVimOptions({
+        piVimMode: { keymap: { actions: recipe.actions } },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.actions.accepted.map((binding) => binding.actionId)).toEqual(
+        recipe.expected.map((binding) => binding.actionId),
+      );
+      expect(result.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual(
+        recipe.expected.map((binding) => binding.key),
+      );
+    }
+  });
+
+  test("action keybinding recipes preserve existing rejection rules", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { quote: false } },
+        keymap: { actions: ACTION_KEYBINDING_RECIPES[0]!.actions },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("disabled prompt transform action prompt.transform.quote"),
+      ]),
+    );
+  });
+
+  test("action keybinding presets expand through config", () => {
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    for (const preset of ACTION_KEYBINDING_PRESETS) {
+      const result = resolveVimOptions({
+        piVimMode: { keymap: { actionPresets: [preset.id] } },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.actions.accepted).toEqual(preset.expected);
+    }
+  });
+
+  test("action keybinding presets merge before explicit actions", () => {
+    const merged = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actionPresets: ["paragraph-editing", "markdown-wrapping"],
+          actions: {
+            "prompt.transform.quote": ["zq"],
+            "prompt.transform.unquote": [],
+          },
+        },
+      },
+    });
+    expect(merged.warnings).toEqual([]);
+    expect(merged.options.keymap?.actions.accepted).toHaveLength(3);
+    expect(merged.options.keymap?.actions.accepted).toEqual(
+      expect.arrayContaining([
+        { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+        {
+          key: "gT",
+          actionId: "prompt.transform.fence",
+          args: { action: "fence" },
+        },
+        { key: "zq", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      ]),
+    );
+
+    const projectOverride = resolveVimOptions(
+      { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["zq"] } } } },
+    );
+    expect(projectOverride.options.keymap?.actions.accepted).toEqual([
+      { key: "zq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+  });
+
+  test("action keybinding presets warn per invalid entry and preserve valid siblings", () => {
+    const invalid = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: { actionPresets: ["paragraph-editing", "nope", 3] },
+      },
+    });
+    expect(invalid.options.startMode).toBe("normal");
+    expect(invalid.options.keymap?.actions.accepted).toEqual(
+      ACTION_KEYBINDING_PRESETS[0]!.expected,
+    );
+    expect(invalid.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("unsupported piVimMode.keymap.actionPresets.nope"),
+        expect.stringContaining("piVimMode.keymap.actionPresets contains unsupported preset"),
+      ]),
+    );
+
+    const notArray = resolveVimOptions({
+      piVimMode: { keymap: { actionPresets: "paragraph-editing" } },
+    });
+    expect(notArray.options.keymap?.actions.accepted).toEqual([]);
+    expect(notArray.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("piVimMode.keymap.actionPresets must be an array"),
+      ]),
+    );
+  });
+
+  test("action keybinding presets preserve existing rejection rules", () => {
+    const disabled = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { quote: false } },
+        keymap: { actionPresets: ["paragraph-editing"] },
+      },
+    });
+    expect(disabled.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(disabled.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("disabled prompt transform action prompt.transform.quote"),
+      ]),
+    );
+
+    const conflict = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actionPresets: ["paragraph-editing"],
+          motions: { bufferStart: ["gq"] },
+        },
+      },
+    });
+    expect(conflict.options.keymap?.actions.accepted).toEqual([
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+      { key: "g<", actionId: "prompt.transform.unquote", args: { action: "unquote" } },
+    ]);
+    expect(conflict.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("conflicts with motions.bufferStart")]),
+    );
+  });
+
+  test("parses action keymap entries and keeps no default action bindings", () => {
+    const options = {
+      keymap: {
+        actions: {
+          "prompt.transform.reflow": ["gq", { key: "gQ", args: { width: 100 } }],
+          "prompt.transform.fence": [{ key: "gT", args: { language: "ts" } }],
+          "prompt.transform.quote": [{ key: "g>" }],
+        },
+        commands: { visualBlock: ["ctrl+v"] },
+      },
+    } satisfies VimEditorOptions;
+    expect(options.keymap?.actions?.["prompt.transform.reflow"]?.length).toBe(2);
+
+    const defaults = resolveVimOptions(undefined);
+    expect(defaults.options.keymap?.actions.accepted).toEqual([]);
+
+    const result = resolveVimOptions({ piVimMode: options });
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+      { key: "gQ", actionId: "prompt.transform.reflow", args: { action: "reflow", width: 100 } },
+      { key: "gT", actionId: "prompt.transform.fence", args: { action: "fence", language: "ts" } },
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+    ]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v"]);
+  });
+
+  test("resolves action keymap warnings per binding", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { dedent: false } },
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": [
+              "gq",
+              "gq",
+              { key: "gQ", args: { width: "wide" } },
+              { key: "ctrl+p" },
+            ],
+            "prompt.transform.fence": [{ key: "gF", args: { unknown: "ts" } }],
+            "prompt.transform.quote": ["gg"],
+            "prompt.transform.dedent": ["g<"],
+            "promptTransform.reflow": ["gr"],
+            "vimmode.doctor": ["gd"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "gq", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("promptTransform.reflow"),
+        expect.stringContaining("prompt.transform.reflow"),
+        expect.stringContaining("vimmode.doctor"),
+        expect.stringContaining("Invalid reflow width"),
+        expect.stringContaining("Unknown action arg: unknown"),
+        expect.stringContaining("protected key ctrl+p"),
+        expect.stringContaining("disabled prompt transform action prompt.transform.dedent"),
+        expect.stringContaining("conflicts with motions.bufferStart"),
+      ]),
+    );
+  });
+
+  test("rejects every metadata-only diagnostic action from keymap actions", () => {
+    const actions = Object.fromEntries(
+      DIAGNOSTIC_ACTIONS.map((entry, index) => [entry.id, [`g${index}`]]),
+    );
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            ...actions,
+            "prompt.transform.quote": ["g>"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "g>", actionId: "prompt.transform.quote", args: { action: "quote" } },
+    ]);
+    for (const entry of DIAGNOSTIC_ACTIONS) {
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining(entry.id)]));
+    }
+  });
+
+  test("project action bindings replace global bindings and empty arrays unbind", () => {
+    const replaced = resolveVimOptions(
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gQ"] } } } },
+    );
+    expect(replaced.options.keymap?.actions.accepted).toEqual([
+      { key: "gQ", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+
+    const unbound = resolveVimOptions(
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": [] } } } },
+    );
+    expect(unbound.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("rejects action conflicts but allows shared non-executable prefixes", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": ["gq", "g", "ga"],
+            "prompt.transform.fence": ["gq", "zq"],
+            "prompt.transform.quote": ["zq"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "ga", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("prefix-shadow conflict"),
+        expect.stringContaining("conflict with motions.bufferStart"),
+        expect.stringContaining("duplicate action key gq"),
+        expect.stringContaining("duplicate action key zq"),
+      ]),
+    );
   });
 });

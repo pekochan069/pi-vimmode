@@ -303,6 +303,29 @@ describe("Ex command parser", () => {
     });
   });
 
+  test("parses dedicated keybindings popup command", () => {
+    expect(parseExCommand("keybindings", context)).toEqual({
+      type: "keybindings",
+      command: "keybindings",
+    });
+    expect(parseExCommand("keybindings redo", context)).toEqual({
+      type: "keybindings",
+      command: "keybindings",
+      query: "redo",
+    });
+    expect(parseExCommand("keybindings ctrl+p", context)).toEqual({
+      type: "keybindings",
+      command: "keybindings",
+      query: "ctrl+p",
+    });
+    for (const command of ["keybinding", "keys", "map", "nmap"]) {
+      expect(parseExCommand(command, context)).toEqual({
+        type: "error",
+        message: `Unsupported Ex command: ${command}`,
+      });
+    }
+  });
+
   test("parses read-only customization diagnostic commands", () => {
     expect(parseExCommand("vimdoctor", context)).toEqual({
       type: "diagnostic",

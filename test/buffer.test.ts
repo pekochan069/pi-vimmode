@@ -9,6 +9,7 @@ import {
   copyResolvedLineRange,
   deleteBlockRange,
   deleteByMotion,
+  deleteByCharSearch,
   deleteExLineRange,
   deleteResolvedBlockRange,
   deleteResolvedCharacterRange,
@@ -57,6 +58,7 @@ import {
   visualSelectionText,
   wordEndPosition,
   yankByMotion,
+  yankByCharSearch,
   yankExLineRange,
   yankResolvedCharacterRange,
   yankResolvedLineRange,
@@ -554,6 +556,39 @@ describe("operator-motion helpers", () => {
       register: { type: "char", text: "hello" },
     });
   });
+
+  test("supports character, linewise, buffer, and matching-pair operator motions", () => {
+    expect(deleteByMotion("abcd", p(0, 1), "l", 2)).toMatchObject({
+      text: "ad",
+      register: { type: "char", text: "bc" },
+    });
+    expect(deleteByMotion("abcd", p(0, 2), "h", 2)).toMatchObject({
+      text: "cd",
+      cursor: p(0, 0),
+      register: { type: "char", text: "ab" },
+    });
+    expect(deleteByMotion("one\ntwo\nthree", p(1, 1), "j")).toMatchObject({
+      text: "one",
+      cursor: p(0, 0),
+      register: { type: "line", text: "two\nthree" },
+    });
+    expect(yankByMotion("one\ntwo\nthree", p(1, 1), "k")).toEqual({
+      type: "line",
+      text: "one\ntwo",
+    });
+    expect(deleteByMotion("one\ntwo\nthree", p(1, 1), "gg")).toMatchObject({
+      text: "three",
+      register: { type: "line", text: "one\ntwo" },
+    });
+    expect(yankByMotion("one\ntwo\nthree", p(1, 1), "G")).toEqual({
+      type: "line",
+      text: "two\nthree",
+    });
+    expect(deleteByMotion("a(b)c", p(0, 1), "%")).toMatchObject({
+      text: "ac",
+      register: { type: "char", text: "(b)" },
+    });
+  });
 });
 
 describe("roadmap buffer helpers", () => {
@@ -614,6 +649,46 @@ describe("roadmap buffer helpers", () => {
     expect(findCharOnLine("a:b:c", p(0, 4), "findBackward", ":")).toEqual(p(0, 3));
     expect(findCharOnLine("a:b:c", p(0, 0), "tillForward", ":", 2)).toEqual(p(0, 2));
     expect(findCharOnLine("a:b:c", p(0, 0), "findForward", "z")).toBeUndefined();
+  });
+
+  test("applies character search targets as operator ranges", () => {
+    expect(deleteByCharSearch("a:b:c", p(0, 0), "findForward", ":")).toMatchObject({
+      text: "b:c",
+      cursor: p(0, 0),
+      register: { type: "char", text: "a:" },
+      changed: true,
+    });
+    expect(deleteByCharSearch("a:b:c", p(0, 0), "tillForward", ":", 2)).toMatchObject({
+      text: ":c",
+      cursor: p(0, 0),
+      register: { type: "char", text: "a:b" },
+      changed: true,
+    });
+    expect(deleteByCharSearch("a:b:c", p(0, 2), "findBackward", ":")).toMatchObject({
+      text: "a:c",
+      cursor: p(0, 1),
+      register: { type: "char", text: ":b" },
+      changed: true,
+    });
+    expect(yankByCharSearch("a[b]c", p(0, 3), "tillBackward", "[")).toEqual({
+      type: "char",
+      text: "b]",
+    });
+  });
+
+  test("character search operator ranges no-op safely", () => {
+    expect(deleteByCharSearch("a:b", p(0, 0), "tillForward", ":")).toMatchObject({
+      text: "a:b",
+      cursor: p(0, 0),
+      changed: false,
+    });
+    expect(yankByCharSearch("a:b", p(0, 0), "tillForward", ":")).toBeUndefined();
+    expect(deleteByCharSearch("a:b\n:c", p(0, 2), "findForward", ":")).toMatchObject({
+      text: "a:b\n:c",
+      cursor: p(0, 2),
+      changed: false,
+    });
+    expect(yankByCharSearch("a:b", p(0, 0), "findForward", "z")).toBeUndefined();
   });
 
   test("resolves word and delimiter text objects", () => {

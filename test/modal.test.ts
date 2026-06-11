@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
-import { DEFAULT_VIM_KEYMAP } from "../src/config.ts";
+import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
 import { handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
@@ -107,6 +107,16 @@ describe("modal contracts", () => {
       { type: "delegate", input: "\r" },
       { type: "adapterCommand", command: "redo" },
       { type: "edit", result: { text: "x", cursor, changed: true } },
+      {
+        type: "openReadOnlyPopup",
+        popup: {
+          title: ":help",
+          lines: ["help"],
+          source: "help",
+          docsAnchor: "runtime-help:runtime-help",
+          scrollOffset: 0,
+        },
+      },
       { type: "playMacro", slot: "a", inputs: ["i", "x", "\x1b"] },
       { type: "invalidate" },
       { type: "terminalCursor", style: "bar" },
@@ -116,6 +126,7 @@ describe("modal contracts", () => {
       "delegate",
       "adapterCommand",
       "edit",
+      "openReadOnlyPopup",
       "playMacro",
       "invalidate",
       "terminalCursor",
@@ -216,10 +227,18 @@ describe("Ex command-line modal behavior", () => {
       "n",
       "s",
       " ",
-      "r",
-      "e",
-      "d",
+      "v",
+      "i",
+      "m",
+      "m",
       "o",
+      "d",
+      "e",
+      ".",
+      "h",
+      "e",
+      "l",
+      "p",
       "\r",
     ]);
 
@@ -230,10 +249,9 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage).toMatchObject({
-      kind: "info",
-      text: expect.stringContaining("redo"),
-    });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":actions vimmode.help");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.help");
   });
 
   test("visual diagnostic Ex commands preserve visual state", () => {
@@ -263,7 +281,346 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
-    expect(result.state.exMessage?.kind).toBe("info");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":actions");
+    expect(result.effects).toContainEqual({
+      type: "openReadOnlyPopup",
+      popup: result.state.helpPopup!,
+    });
+  });
+
+  test("keybindings opens catalog popup without editing state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(
+      initial,
+      "abc",
+      p(0, 1),
+      [":", "k", "e", "y", "b", "i", "n", "d", "i", "n", "g", "s", "\r"],
+      configured,
+    );
+    const popupText = [
+      result.state.helpPopup?.title,
+      ...(result.state.helpPopup?.lines ?? []),
+    ].join("\n");
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.state.helpPopup?.source).toBe("keybindings");
+    expect(popupText).not.toContain("Effective pi-vimmode keybindings");
+    expect(popupText).toContain("Key            Mode        Action");
+    expect(popupText).toContain("prompt.transform.reflow");
+    expect(popupText).toContain("gq");
+    expect(popupText).toContain("no runtime :map");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("keybindings detail popup preserves message history while scrolling and dismissing", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      messageHistory: [{ kind: "info", text: "kept" }],
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const opened = applyModalKeys(initial, "abc", p(0, 1), [
+      ":",
+      "k",
+      "e",
+      "y",
+      "b",
+      "i",
+      "n",
+      "d",
+      "i",
+      "n",
+      "g",
+      "s",
+      " ",
+      "r",
+      "e",
+      "d",
+      "o",
+      "\r",
+    ]);
+
+    expect(opened.state.helpPopup?.title).toBe(":keybindings redo");
+    expect(opened.state.helpPopup?.lines.join("\n")).toContain("command.redo");
+    expect(opened.state.messageHistory).toEqual(initial.messageHistory);
+    const scrolled = applyModalKeys(opened.state, "abc", p(0, 1), ["j", "\x1b"]);
+    expect(scrolled.state.helpPopup).toBeUndefined();
+    expect(scrolled.state.messageHistory).toEqual(initial.messageHistory);
+    expect(scrolled.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+  });
+
+  test("visual keybindings Ex command restores visual source state", () => {
+    const opened = handleModalInput(
+      { mode: "visualLine", visualAnchor: p(0, 0) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const key of ["k", "e", "y", "b", "i", "n", "d", "i", "n", "g", "s"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visualLine");
+    expect(result.state.visualAnchor).toEqual(p(0, 0));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.effects).toContainEqual({
+      type: "openReadOnlyPopup",
+      popup: result.state.helpPopup!,
+    });
+  });
+
+  test("features keybindings opens popup without editing state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(
+      initial,
+      "abc",
+      p(0, 1),
+      [
+        ":",
+        "f",
+        "e",
+        "a",
+        "t",
+        "u",
+        "r",
+        "e",
+        "s",
+        " ",
+        "k",
+        "e",
+        "y",
+        "b",
+        "i",
+        "n",
+        "d",
+        "i",
+        "n",
+        "g",
+        "s",
+        "\r",
+      ],
+      configured,
+    );
+    const popupText = [
+      result.state.helpPopup?.title,
+      ...(result.state.helpPopup?.lines ?? []),
+    ].join("\n");
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe("Keybinding discovery");
+    expect(popupText).toContain("paragraph-editing");
+    expect(popupText).toContain("markdown-wrapping");
+    expect(popupText).toContain("prompt.transform.reflow");
+    expect(popupText).toContain("gq");
+    expect(popupText).toContain("piVimMode.keymap.actions");
+    expect(popupText).toContain("piVimMode.keymap.actionPresets");
+    expect(popupText).toContain("opt-in");
+    expect(popupText).toContain("no defaults");
+    expect(popupText).toContain("no plugin API");
+    expect(popupText).toContain("no runtime :map");
+    expect(popupText).toContain("no runtime :action");
+    expect(popupText).toContain("no command palette");
+    expect(popupText).toContain("no Vim help pager");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("popup dismisses with escape without clearing durable state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: ["prompt.transform.reflow -> gq"],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["\x1b"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.helpPopup).toBeUndefined();
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("popup scroll keys are local and read-only", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+          "eleven",
+          "twelve",
+        ],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastPlayedMacro: "a",
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["j", "\x1b[B", "x", "k"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.helpPopup?.scrollOffset).toBe(1);
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastPlayedMacro).toEqual(initial.lastPlayedMacro);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+
+    const clampedTop = applyModalKeys(result.state, "abc", p(0, 1), ["k", "k", "\x1b[A"]);
+    expect(clampedTop.state.helpPopup?.scrollOffset).toBe(0);
+    const clampedBottom = applyModalKeys(clampedTop.state, "abc", p(0, 1), [
+      "j",
+      "j",
+      "j",
+      "j",
+      "j",
+      "j",
+    ]);
+    expect(clampedBottom.state.helpPopup?.scrollOffset).toBe(2);
+  });
+
+  test("popup scroll and dismissal are excluded from macro recording", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      recordingSlot: "a",
+      macros: { a: [] },
+      helpPopup: {
+        title: "Keybinding discovery",
+        lines: [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+          "eleven",
+          "twelve",
+        ],
+        source: "features",
+        query: "keybindings",
+        docsAnchor: "runtime-help:keybinding-discovery-popup",
+        scrollOffset: 0,
+      },
+    };
+
+    const scrolled = applyModalKeys(initial, "abc", p(0, 1), ["j", "k", "j"]);
+    expect(scrolled.state.helpPopup?.scrollOffset).toBe(1);
+    expect(scrolled.state.macros).toEqual({ a: [] });
+    expect(scrolled.state.recordingSlot).toBe("a");
+
+    const dismissed = applyModalKeys(scrolled.state, "abc", p(0, 1), ["\x1b"]);
+    expect(dismissed.state.helpPopup).toBeUndefined();
+    expect(dismissed.state.macros).toEqual({ a: [] });
+    expect(dismissed.state.recordingSlot).toBe("a");
   });
 
   test("runtime help Ex commands report info without editing state", () => {
@@ -289,10 +646,20 @@ describe("Ex command-line modal behavior", () => {
       "e",
       "s",
       " ",
-      "r",
+      "v",
+      "i",
+      "m",
+      "m",
+      "o",
+      "d",
       "e",
+      ".",
       "d",
       "o",
+      "c",
+      "t",
+      "o",
+      "r",
       "\r",
     ]);
 
@@ -306,10 +673,68 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage).toMatchObject({
-      kind: "info",
-      text: expect.stringContaining("redo"),
-    });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":features vimmode.doctor");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.doctor");
+  });
+
+  test("visual features keybindings popup restores visual state after marker deletion", () => {
+    const opened = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    for (const _ of ["'", ">", ",", "'", "<"]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        "\b",
+      ).state;
+    }
+    for (const key of [
+      "f",
+      "e",
+      "a",
+      "t",
+      "u",
+      "r",
+      "e",
+      "s",
+      " ",
+      "k",
+      "e",
+      "y",
+      "b",
+      "i",
+      "n",
+      "d",
+      "i",
+      "n",
+      "g",
+      "s",
+    ]) {
+      state = handleModalInput(
+        state,
+        { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+        options,
+        key,
+      ).state;
+    }
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+    expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe("Keybinding discovery");
   });
 
   test("visual runtime help Ex commands preserve visual state after marker deletion", () => {
@@ -346,7 +771,9 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.effects).toContainEqual({ type: "restoreCursor", position: p(1, 2) });
-    expect(result.state.exMessage?.text).toContain("help:");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.title).toBe(":help");
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("help:");
   });
 
   test("no-op feedback is quiet by default and bounded when enabled", () => {
@@ -399,7 +826,10 @@ describe("Ex command-line modal behavior", () => {
     const result = handleModalInput(initial, snapshot, options, "\r");
 
     expect(result.state.mode).toBe("normal");
-    expect(result.effects).toEqual([{ type: "invalidate" }]);
+    expect(result.effects).toEqual([
+      { type: "invalidate" },
+      { type: "openReadOnlyPopup", popup: result.state.helpPopup! },
+    ]);
     expect(result.state.register).toEqual(initial.register);
     expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
     expect(result.state.marks).toEqual(initial.marks);
@@ -407,11 +837,13 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.lastSearch).toEqual(initial.lastSearch);
     expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
     expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
-    expect(result.state.exMessage?.kind).toBe("info");
-    expect(result.state.exMessage?.text).toContain("inspect: mode=normal");
-    expect(result.state.exMessage?.text).toContain("registers=unnamed-char:23,named-1(a)");
-    expect(result.state.exMessage?.text).not.toContain("secret register payload");
-    expect(result.state.exMessage?.text).not.toContain("named secret");
+    expect(result.state.exMessage).toBeUndefined();
+    const popupText = result.state.helpPopup?.lines.join("\n") ?? "";
+    expect(result.state.helpPopup?.title).toBe(":vimmode inspect");
+    expect(popupText).toContain("inspect: mode=normal");
+    expect(popupText).toContain("registers=unnamed-char:23,named-1(a)");
+    expect(popupText).not.toContain("secret register payload");
+    expect(popupText).not.toContain("named secret");
   });
 
   test("vimmode inspect from visual Ex restores visual state", () => {
@@ -435,7 +867,8 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("visual");
     expect(result.state.visualAnchor).toEqual(p(0, 1));
     expect(result.state.pendingEx).toBeUndefined();
-    expect(result.state.exMessage?.text).toContain("inspect: mode=visual");
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("inspect: mode=visual");
   });
 
   test("runtime messages are retained with bounded history", () => {
@@ -445,7 +878,9 @@ describe("Ex command-line modal behavior", () => {
       options,
       "\r",
     );
-    expect(empty.state.exMessage).toEqual({ kind: "info", text: "messages: none retained" });
+    expect(empty.state.exMessage).toBeUndefined();
+    expect(empty.state.helpPopup?.title).toBe(":messages");
+    expect(empty.state.helpPopup?.lines).toContain("messages: none retained");
     expect(empty.state.messageHistory).toBeUndefined();
 
     const error = handleModalInput(
@@ -468,10 +903,42 @@ describe("Ex command-line modal behavior", () => {
       options,
       "\r",
     );
-    expect(messages.state.exMessage?.text).toBe(
-      "messages: 1 retained; latest: Pattern not found: missing",
-    );
+    expect(messages.state.exMessage).toBeUndefined();
+    expect(messages.state.helpPopup?.lines).toContain("messages: 1 retained");
+    expect(messages.state.helpPopup?.lines).toContain("latest: Pattern not found: missing");
     expect(messages.state.messageHistory).toEqual(error.state.messageHistory);
+  });
+
+  test("keybinding popup does not pollute retained runtime messages", () => {
+    const history = [{ kind: "info" as const, text: "kept" }];
+    const popup = handleModalInput(
+      {
+        mode: "normal",
+        messageHistory: history,
+        pendingEx: { command: "features keybindings", sourceMode: "normal" },
+      },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(popup.state.helpPopup?.title).toBe("Keybinding discovery");
+    expect(popup.state.messageHistory).toEqual(history);
+
+    const dismissed = handleModalInput(popup.state, snapshot, options, "\x1b");
+    expect(dismissed.state.helpPopup).toBeUndefined();
+    expect(dismissed.state.messageHistory).toEqual(history);
+
+    const messages = handleModalInput(
+      { ...dismissed.state, pendingEx: { command: "messages", sourceMode: "normal" } },
+      snapshot,
+      options,
+      "\r",
+    );
+    expect(messages.state.exMessage).toBeUndefined();
+    expect(messages.state.helpPopup?.lines).toContain("messages: 1 retained");
+    expect(messages.state.helpPopup?.lines).toContain("latest: kept");
+    expect(messages.state.helpPopup?.lines.join("\n")).not.toContain("Keybinding discovery");
+    expect(messages.state.messageHistory).toEqual(history);
   });
 
   test("message history cap discards oldest entries", () => {
@@ -1057,6 +1524,172 @@ describe("Ex command-line modal behavior", () => {
     expect(fenced.state.mode).toBe("normal");
   });
 
+  test("keybound prompt transform actions edit normal ranges silently", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": ["g>"],
+            "prompt.transform.bulletize": ["g*"],
+            "prompt.transform.fence": [{ key: "gT", args: { language: "ts" } }],
+            "prompt.transform.reflow": [{ key: "gq", args: { width: 20 } }],
+          },
+        },
+      },
+    }).options;
+
+    const quoted = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo",
+      p(0, 0),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(quoted.text).toBe("> one\ntwo");
+    expect(quoted.state.exMessage).toBeUndefined();
+
+    const bulletized = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo\nthree\nfour",
+      p(1, 0),
+      ["3", "g", "*"],
+      actionOptions,
+    );
+    expect(bulletized.text).toBe("one\n- two\n- three\n- four");
+
+    const fenced = applyModalKeys(
+      { mode: "normal" },
+      "const x = 1;",
+      p(0, 0),
+      ["g", "T"],
+      actionOptions,
+    );
+    expect(fenced.text).toBe("```ts\nconst x = 1;\n```");
+
+    const reflowed = applyModalKeys(
+      { mode: "normal" },
+      "alpha beta gamma delta epsilon",
+      p(0, 0),
+      ["g", "q"],
+      actionOptions,
+    );
+    expect(reflowed.text).toBe("alpha beta gamma\ndelta epsilon");
+  });
+
+  test("keybound prompt transform actions edit visual touched lines", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },
+    }).options;
+
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "one\ntwo\nthree",
+      p(1, 1),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(visual.text).toBe("> one\n> two\nthree");
+    expect(visual.state.mode).toBe("normal");
+    expect(visual.state.visualAnchor).toBeUndefined();
+
+    const visualLine = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(1, 0) },
+      "one\ntwo\nthree",
+      p(2, 0),
+      ["3", "g", ">"],
+      actionOptions,
+    );
+    expect(visualLine.text).toBe("one\n> two\n> three");
+
+    const visualBlock = applyModalKeys(
+      { mode: "visualBlock", visualAnchor: p(0, 1) },
+      "one\ntwo\nthree",
+      p(2, 1),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(visualBlock.text).toBe("> one\n> two\n> three");
+  });
+
+  test("keybound prompt transform actions report no-op feedback and skip dot-repeat", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        feedback: { noop: "status" },
+        keymap: {
+          actions: { "prompt.transform.unquote": ["g<"], "prompt.transform.quote": ["g>"] },
+        },
+      },
+    }).options;
+
+    const unchanged = applyModalKeys({ mode: "normal" }, "one", p(0, 0), ["g", "<"], actionOptions);
+    expect(unchanged.text).toBe("one");
+    expect(unchanged.state.exMessage).toEqual({
+      kind: "info",
+      text: "prompt transform made no changes",
+    });
+
+    const quoted = applyModalKeys(
+      {
+        mode: "normal",
+        register: { type: "char", text: "x" },
+        marks: { a: p(0, 0) },
+        searchHighlight: { query: "one", current: p(0, 0) },
+        lastSearch: { query: "one", direction: "forward" },
+        messageHistory: [{ kind: "info", text: "old" }],
+        lastRepeatableChange: { type: "command", command: "deleteChar" },
+      },
+      "one",
+      p(0, 0),
+      ["g", ">"],
+      actionOptions,
+    );
+    expect(quoted.text).toBe("> one");
+    expect(quoted.state.register).toEqual({ type: "char", text: "x" });
+    expect(quoted.state.marks).toEqual({ a: p(0, 0) });
+    expect(quoted.state.searchHighlight).toBeUndefined();
+    expect(quoted.state.lastSearch).toEqual({ query: "one", direction: "forward" });
+    expect(quoted.state.messageHistory).toEqual([{ kind: "info", text: "old" }]);
+    expect(quoted.state.lastRepeatableChange).toEqual({ type: "command", command: "deleteChar" });
+
+    const noPreviousRepeat = applyModalKeys(
+      { mode: "normal" },
+      "one",
+      p(0, 0),
+      ["g", ">", "."],
+      actionOptions,
+    );
+    expect(noPreviousRepeat.text).toBe("> one");
+  });
+
+  test("macro recording captures and replays action key sequences", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },
+    }).options;
+    const recorded = applyModalKeys(
+      { mode: "normal" },
+      "one",
+      p(0, 0),
+      ["q", "a", "g", ">", "q"],
+      actionOptions,
+    );
+    expect(recorded.text).toBe("> one");
+    expect(recorded.state.macros?.a).toEqual(["g", ">"]);
+
+    const played = handleModalInput(
+      recorded.state,
+      { text: "two", lines: ["two"], cursor },
+      actionOptions,
+      "@",
+    );
+    const playback = handleModalInput(
+      played.state,
+      { text: "two", lines: ["two"], cursor },
+      actionOptions,
+      "a",
+    );
+    expect(playback.effects).toContainEqual({ type: "playMacro", slot: "a", inputs: ["g", ">"] });
+  });
+
   test("Ex transform argument errors do not edit text", () => {
     const update = handleModalInput(
       { mode: "normal", pendingEx: { command: "reflow wide", sourceMode: "normal" } },
@@ -1220,6 +1853,51 @@ describe("modal engine", () => {
       state: { mode: "normal" },
       effects: [{ type: "invalidate" }],
     });
+  });
+
+  test("normal showKeybindings semantic command opens popup without modal side effects", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), ["g", "k"], configured);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.helpPopup?.title).toBe(":keybindings");
+    expect(result.state.helpPopup?.source).toBe("keybindings");
+    expect(result.state.helpPopup?.lines.join("\n")).not.toContain(
+      "Effective pi-vimmode keybindings",
+    );
+    expect(result.state.helpPopup?.lines.join("\n")).toContain("Key            Mode        Action");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test("insert mode delegates configured showKeybindings keys to Pi", () => {
+    const configured = resolveVimOptions({
+      piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },
+    }).options;
+    const update = handleModalInput({ mode: "insert" }, snapshot, configured, "g");
+
+    expect(update.state.helpPopup).toBeUndefined();
+    expect(update.effects).toContainEqual({ type: "delegate", input: "g" });
   });
 
   test("normal mode emits redo through semantic keymap without modal side effects", () => {
@@ -1510,6 +2188,134 @@ describe("modal engine", () => {
     expect(repeated.text).toBe("\n\nthree");
     expect(repeated.state.mode).toBe("insert");
     expect(repeated.state.register).toEqual({ type: "line", text: "two" });
+  });
+
+  test("configured keymaps support operator character search targets", () => {
+    const keymapOptions: ModalOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        operators: { ...DEFAULT_VIM_KEYMAP.operators, change: ["zz"], yank: ["xx"] },
+        commands: {
+          ...DEFAULT_VIM_KEYMAP.commands,
+          findCharForward: ["gf"],
+          tillCharForward: ["gt"],
+        },
+      },
+    };
+
+    const changed = applyModalKeys(
+      { mode: "normal" },
+      "ab:c",
+      p(0, 0),
+      ["z", "z", "g", "t", ":"],
+      keymapOptions,
+    );
+    expect(changed.text).toBe(":c");
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "char", text: "ab" });
+
+    const yanked = applyModalKeys(
+      { mode: "normal" },
+      "a:b:c",
+      p(0, 0),
+      ["x", "x", "g", "f", ":"],
+      keymapOptions,
+    );
+    expect(yanked.text).toBe("a:b:c");
+    expect(yanked.state.register).toEqual({ type: "char", text: "a:" });
+
+    const inserted = handleModalInput(
+      { mode: "insert" },
+      { text: "a:b", lines: ["a:b"], cursor: p(0, 0) },
+      keymapOptions,
+      "g",
+    );
+    expect(inserted.state.mode).toBe("insert");
+    expect(inserted.effects).toEqual([{ type: "delegate", input: "g" }]);
+  });
+
+  test("normal operators support character search targets", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 0), ["d", "f", ":"]);
+    expect(deleted.text).toBe("b:c");
+    expect(deleted.cursor).toEqual(p(0, 0));
+    expect(deleted.state.mode).toBe("normal");
+    expect(deleted.state.register).toEqual({ type: "char", text: "a:" });
+    expect(deleted.state.lastCharSearch).toEqual({ command: "findCharForward", target: ":" });
+
+    const counted = applyModalKeys({ mode: "normal" }, "a,b,c", p(0, 0), ["d", "2", "f", ","]);
+    expect(counted.text).toBe("c");
+    expect(counted.state.register).toEqual({ type: "char", text: "a,b," });
+
+    const changed = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 2), ["c", "F", ":"]);
+    expect(changed.text).toBe("a:c");
+    expect(changed.cursor).toEqual(p(0, 1));
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "char", text: ":b" });
+
+    const changedTill = applyModalKeys({ mode: "normal" }, "foo,bar", p(0, 0), ["c", "t", ","]);
+    expect(changedTill.text).toBe(",bar");
+    expect(changedTill.cursor).toEqual(p(0, 0));
+    expect(changedTill.state.mode).toBe("insert");
+    expect(changedTill.state.register).toEqual({ type: "char", text: "foo" });
+
+    const yanked = applyModalKeys({ mode: "normal" }, "a[b]c", p(0, 3), ["y", "T", "["]);
+    expect(yanked.text).toBe("a[b]c");
+    expect(yanked.cursor).toEqual(p(0, 3));
+    expect(yanked.state.register).toEqual({ type: "char", text: "b]" });
+    expect(yanked.state.lastRepeatableChange).toBeUndefined();
+
+    const noOp = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "old" } },
+      "a:b",
+      p(0, 0),
+      ["d", "t", ":"],
+    );
+    expect(noOp.text).toBe("a:b");
+    expect(noOp.cursor).toEqual(p(0, 0));
+    expect(noOp.state.register).toEqual({ type: "char", text: "old" });
+  });
+
+  test("normal dot repeat applies character search operator changes", () => {
+    const changed = applyModalKeys({ mode: "normal" }, "a:b c:d", p(0, 0), ["d", "f", ":"]);
+    const repeated = applyModalKeys(changed.state, changed.text, p(0, 2), ["."]);
+    expect(repeated.text).toBe("b d");
+    expect(repeated.state.register).toEqual({ type: "char", text: "c:" });
+  });
+
+  test("normal operators support repeated character search targets", () => {
+    const searched = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 0), ["f", ":"]);
+    const deleted = applyModalKeys(searched.state, searched.text, p(0, 1), ["d", ";"]);
+    expect(deleted.text).toBe("ac");
+    expect(deleted.state.register).toEqual({ type: "char", text: ":b:" });
+
+    const reversed = applyModalKeys(searched.state, searched.text, p(0, 3), ["c", ","]);
+    expect(reversed.text).toBe("ac");
+    expect(reversed.state.mode).toBe("insert");
+    expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
+  });
+
+  test("normal operators support line, buffer, and matching-pair motions", () => {
+    const deletedDown = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["d", "j"]);
+    expect(deletedDown.text).toBe("three");
+    expect(deletedDown.state.register).toEqual({ type: "line", text: "one\ntwo" });
+
+    const changedStart = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(1, 0), [
+      "c",
+      "g",
+      "g",
+    ]);
+    expect(changedStart.text).toBe("three");
+    expect(changedStart.state.mode).toBe("insert");
+    expect(changedStart.state.register).toEqual({ type: "line", text: "one\ntwo" });
+
+    const yankedEnd = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(1, 0), ["y", "G"]);
+    expect(yankedEnd.text).toBe("one\ntwo\nthree");
+    expect(yankedEnd.state.register).toEqual({ type: "line", text: "two\nthree" });
+
+    const deletedPair = applyModalKeys({ mode: "normal" }, "a(b)c", p(0, 1), ["d", "%"]);
+    expect(deletedPair.text).toBe("ac");
+    expect(deletedPair.state.register).toEqual({ type: "char", text: "(b)" });
   });
 
   test("normal operators support text objects", () => {

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change self-explaining-customization-suite. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime customization diagnostics are available
 
 The Vim editor SHALL provide runtime diagnostics that explain the current customization state without requiring users to inspect settings files or source code.
@@ -361,4 +363,3 @@ The Vim editor SHALL search keybinding catalog metadata across finite supported 
 
 - **WHEN** the editor displays `:keybindings vimscript`, `:keybindings nmap`, or another query with no finite supported match
 - **THEN** the popup shows a bounded no-match result rather than inventing Vimscript, recursive mapping, or command-palette behavior
-

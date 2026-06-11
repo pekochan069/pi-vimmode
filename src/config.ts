@@ -154,14 +154,7 @@ const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
 const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
 const COMMAND_ACTION_SET = new Set<string>(VIM_COMMAND_ACTIONS);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
-const OPERATOR_MOTION_ACTION_SET = new Set<string>([
-  "wordForward",
-  "wordBackward",
-  "wordEnd",
-  "lineStart",
-  "firstNonBlank",
-  "lineEnd",
-]);
+const OPERATOR_MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
 const STATUS_ITEM_SET = new Set<string>(VIM_STATUS_ITEMS);
 const TEXT_OBJECT_KIND_SET = new Set<string>(VIM_TEXT_OBJECT_KINDS);
 const TEXT_OBJECT_TARGET_SET = new Set<string>(VIM_TEXT_OBJECT_TARGETS);
@@ -263,30 +256,9 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     showKeybindings: Object.freeze([]),
   }),
   operatorMotions: Object.freeze({
-    delete: Object.freeze([
-      "wordForward",
-      "wordBackward",
-      "wordEnd",
-      "lineStart",
-      "firstNonBlank",
-      "lineEnd",
-    ]),
-    change: Object.freeze([
-      "wordForward",
-      "wordBackward",
-      "wordEnd",
-      "lineStart",
-      "firstNonBlank",
-      "lineEnd",
-    ]),
-    yank: Object.freeze([
-      "wordForward",
-      "wordBackward",
-      "wordEnd",
-      "lineStart",
-      "firstNonBlank",
-      "lineEnd",
-    ]),
+    delete: Object.freeze([...VIM_MOTION_ACTIONS]),
+    change: Object.freeze([...VIM_MOTION_ACTIONS]),
+    yank: Object.freeze([...VIM_MOTION_ACTIONS]),
   }),
   actions: Object.freeze({
     accepted: Object.freeze([]),

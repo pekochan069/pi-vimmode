@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change runtime-help-docs-spec-drift-guard. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Runtime help is finite and source-backed
 
 The Vim editor SHALL provide finite runtime help that describes supported pi-vimmode behavior and explicit limitations without implying full Vim or Neovim parity.
@@ -435,4 +437,3 @@ The project SHALL validate that the dedicated keybindings popup command stays al
 
 - **WHEN** keybindings popup output references `prompt.transform.*` action IDs or `vimmode.*` diagnostic/help metadata IDs
 - **THEN** automated validation verifies that those IDs remain backed by the appropriate source registry and docs anchors
-

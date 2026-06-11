@@ -177,6 +177,8 @@ function orderedOffsetRange(
 function motionTargetOffset(text: string, offset: number, motion: VimMotion): number {
   const cursor = offsetToPosition(text, offset);
   const bounds = lineBoundsForPosition(text, cursor);
+  if (motion === "l") return Math.min(text.length, offset + 1);
+  if (motion === "h") return Math.max(0, offset - 1);
   if (motion === "$") return bounds.end;
   if (motion === "0") return bounds.start;
   if (motion === "^") return bounds.start + firstNonBlankColumn(bounds.line);
@@ -192,6 +194,16 @@ function motionOffsetRange(
   count = 1,
 ): { start: number; end: number } | undefined {
   const current = positionToOffset(text, cursor);
+  if (motion === "%") {
+    const target = navigateBuffer(text, cursor, "matchingPair");
+    if (!target) return undefined;
+    const targetOffset = positionToOffset(text, target);
+    if (targetOffset === current) return undefined;
+    return orderedOffsetRange(
+      Math.min(current, targetOffset),
+      Math.min(text.length, Math.max(current, targetOffset) + 1),
+    );
+  }
   let target = current;
   const repetitions = Math.max(1, count);
   for (let index = 0; index < repetitions; index++) {
@@ -201,7 +213,32 @@ function motionOffsetRange(
   }
   if (motion === "e" && target >= current)
     return orderedOffsetRange(current, Math.min(text.length, target + 1));
+  if (motion === "l" && target >= current)
+    return orderedOffsetRange(current, Math.min(text.length, target));
   return orderedOffsetRange(current, target);
+}
+
+function motionLineRange(
+  text: string,
+  cursor: Position,
+  motion: VimMotion,
+  count = 1,
+): LineRange | undefined {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const lastLine = Math.max(0, lines.length - 1);
+  if (motion === "j") {
+    const target = Math.min(lastLine, pos.line + Math.max(1, count));
+    return target === pos.line ? undefined : { startLine: pos.line, endLine: target };
+  }
+  if (motion === "k") {
+    const target = Math.max(0, pos.line - Math.max(1, count));
+    return target === pos.line ? undefined : { startLine: target, endLine: pos.line };
+  }
+  if (motion === "gg") return pos.line === 0 ? undefined : { startLine: 0, endLine: pos.line };
+  if (motion === "G")
+    return pos.line === lastLine ? undefined : { startLine: pos.line, endLine: lastLine };
+  return undefined;
 }
 
 function deleteOffsetRange(text: string, start: number, end: number): EditResult {
@@ -1603,6 +1640,81 @@ export function findCharOnLine(
   return { line: pos.line, col: Math.max(0, Math.min(line.length, found + tillOffset)) };
 }
 
+function charSearchMatchColumn(
+  line: string,
+  cursorCol: number,
+  kind: CharSearchKind,
+  target: string,
+  count = 1,
+): number | undefined {
+  if (target.length !== 1 || target === "\n") return undefined;
+  const forward = kind === "findForward" || kind === "tillForward";
+  let remaining = Math.max(1, count);
+  if (forward) {
+    for (let index = cursorCol + 1; index < line.length; index++) {
+      if (line[index] === target && --remaining === 0) return index;
+    }
+    return undefined;
+  }
+  for (let index = cursorCol - 1; index >= 0; index--) {
+    if (line[index] === target && --remaining === 0) return index;
+  }
+  return undefined;
+}
+
+function charSearchOperatorOffsetRange(
+  text: string,
+  cursor: Position,
+  kind: CharSearchKind,
+  target: string,
+  count = 1,
+): { start: number; end: number; cursor: Position } | undefined {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const bounds = lineBoundsForPosition(text, pos);
+  const found = charSearchMatchColumn(bounds.line, pos.col, kind, target, count);
+  if (found === undefined) return undefined;
+
+  if (kind === "tillForward" && found === pos.col + 1) return undefined;
+  if (kind === "tillBackward" && found === pos.col - 1) return undefined;
+  const cursorColEnd = Math.min(pos.col + 1, bounds.line.length);
+  const range =
+    kind === "findForward"
+      ? { start: pos.col, end: found + 1 }
+      : kind === "tillForward"
+        ? { start: pos.col, end: found }
+        : kind === "findBackward"
+          ? { start: found, end: cursorColEnd }
+          : { start: found + 1, end: cursorColEnd };
+  if (range.end <= range.start) return undefined;
+  return { start: bounds.start + range.start, end: bounds.start + range.end, cursor: pos };
+}
+
+export function deleteByCharSearch(
+  text: string,
+  cursor: Position,
+  kind: CharSearchKind,
+  target: string,
+  count = 1,
+): EditResult {
+  const range = charSearchOperatorOffsetRange(text, cursor, kind, target, count);
+  if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
+  return deleteOffsetRange(text, range.start, range.end);
+}
+
+export function yankByCharSearch(
+  text: string,
+  cursor: Position,
+  kind: CharSearchKind,
+  target: string,
+  count = 1,
+): VimRegister | undefined {
+  const range = charSearchOperatorOffsetRange(text, cursor, kind, target, count);
+  if (!range) return undefined;
+  const selected = text.slice(range.start, range.end);
+  return selected.length > 0 ? { type: "char", text: selected } : undefined;
+}
+
 export function wordEndPosition(text: string, cursor: Position, count = 1): Position {
   let offset = positionToOffset(text, cursor);
   for (let index = 0; index < Math.max(1, count); index++) {
@@ -1619,6 +1731,14 @@ export function deleteByMotion(
   motion: VimMotion,
   count = 1,
 ): EditResult {
+  const lineRange = motionLineRange(text, cursor, motion, count);
+  if (lineRange) {
+    return deleteLineRange(
+      text,
+      { line: lineRange.startLine, col: 0 },
+      { line: lineRange.endLine, col: 0 },
+    );
+  }
   const range = motionOffsetRange(text, cursor, motion, count);
   if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
   return deleteOffsetRange(text, range.start, range.end);
@@ -1630,6 +1750,14 @@ export function yankByMotion(
   motion: VimMotion,
   count = 1,
 ): VimRegister | undefined {
+  const lineRange = motionLineRange(text, cursor, motion, count);
+  if (lineRange) {
+    return yankLineRange(
+      text,
+      { line: lineRange.startLine, col: 0 },
+      { line: lineRange.endLine, col: 0 },
+    );
+  }
   const range = motionOffsetRange(text, cursor, motion, count);
   if (!range) return undefined;
   const selected = text.slice(range.start, range.end);

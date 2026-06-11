@@ -164,7 +164,7 @@ Counts work for supported edits:
 10<C-a> increment number by 10
 ```
 
-Dot-repeat is intentionally finite. It repeats supported recorded normal-mode changes such as `x`, `D`, `C`, `Ctrl-a`, `Ctrl-x`, `~`, `r`, `s`, `S`, `dd`, `cc`, `>>`, `<<`, operator motions, and text-object changes. It does not replay arbitrary insert-mode text, macros, Ex substitutions, visual-mode edits, joins, or pastes.
+Dot-repeat is intentionally finite. It repeats supported recorded normal-mode changes such as `x`, `D`, `C`, `Ctrl-a`, `Ctrl-x`, `~`, `r`, `s`, `S`, `dd`, `cc`, `>>`, `<<`, operator motions, operator character-search changes, and text-object changes. It does not replay arbitrary insert-mode text, yanks, macros, Ex substitutions, visual-mode edits, joins, or pastes.
 
 Redo is intentionally prompt-local and linear. `Ctrl-r` restores the latest text/cursor state undone by normal-mode `u`, remains a safe no-op when no redo state exists, survives cursor movement, and clears when a new text edit creates a different branch. pi-vimmode does not implement Vim's undo tree, redo counts, `:redo`, `g-`, or `g+`.
 
@@ -187,10 +187,10 @@ Line-only shift examples:
 2<<  dedent current line and next line
 ```
 
-Supported operator motions:
+Supported operator targets:
 
-- `w`, `b`, `e`
-- `0`, `^`, `$`
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`, `%`
+- character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
 - text objects listed below
@@ -199,13 +199,26 @@ Examples:
 
 ```text
 dw        delete to next word start
+dl        delete one character to the right
+dj        delete current and next line
+dgg       delete through buffer start
+yG        yank through buffer end
+d%        delete through matching pair
 y$        yank through line end
 c^        change back to first non-blank
 3dw       delete three word motions
+df)       delete from cursor through next ) on current line
+dt,       delete from cursor up to, but not including, next comma on current line
+d;        delete through repeated character-search target
+cf:       change from cursor through next : and enter insert
+yt]       yank from cursor up to, but not including, next ]
+d2f,      delete through the second next comma on current line
 d/foo⏎    delete from cursor through next literal foo match
 ```
 
-Operator motions are smaller than Vim's full grammar. Motions such as `h`, `l`, `gg`, `G`, and `%` remain normal/visual motions unless future buffer range semantics are added. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
+Successful `d`/`c` motion and character-search targets record dot-repeat. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
+
+Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
 
 ## Text objects
 
@@ -248,7 +261,7 @@ Limitations:
 
 ## Character search
 
-`f`, `F`, `t`, and `T` search within the current line only.
+`f`, `F`, `t`, and `T` search within the current line only. They work as normal-mode motions and as targets after `d`, `c`, or `y`.
 
 Example:
 
@@ -261,7 +274,7 @@ f_  -> first underscore
 T_  -> character after previous underscore
 ```
 
-Search misses are safe no-ops.
+Search misses are safe no-ops. After operators, `f`/`F` include the matched character in the operated range; `t`/`T` exclude it. Counts target later/earlier matches, e.g. `d2f,` deletes through the second next comma. Adjacent `t`/`T` matches are treated as empty operator ranges and no-op safely.
 
 <!-- runtime-help:search -->
 

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-ex-command-line-substitution. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal and visual modes enter Ex command-line mode
 
 The Vim editor SHALL support Ex command-line mode for line-oriented prompt-buffer commands from normal mode and visual modes.
@@ -1014,4 +1016,3 @@ The `:keybindings` Ex command SHALL NOT mutate prompt-editing state beyond bound
 
 - **WHEN** the editor executes `:keybindings` after a repeatable normal-mode edit and then the user presses the repeat-change command
 - **THEN** repeat-change behavior uses the previous supported edit rather than replaying the keybindings popup command
-

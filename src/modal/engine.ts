@@ -65,6 +65,8 @@ import {
 import {
   applyCommand,
   applyLineCommand,
+  applyOperatorCharSearch,
+  applyOperatorCharSearchRepeat,
   applyOperatorMotion,
   applyOperatorTextObject,
   moveUpdate,
@@ -345,6 +347,27 @@ function handleNormalInput(
   }
   if (pendingResult.type === "operatorSearch") {
     return startSearchUpdate(state, pendingResult.direction, pendingResult.operator);
+  }
+  if (pendingResult.type === "operatorCharSearch") {
+    return applyOperatorCharSearch(
+      state,
+      snapshot,
+      pendingResult.operator,
+      pendingResult.command,
+      pendingResult.char,
+      options,
+      pendingResult.count,
+    );
+  }
+  if (pendingResult.type === "operatorCharSearchRepeat") {
+    return applyOperatorCharSearchRepeat(
+      state,
+      snapshot,
+      pendingResult.operator,
+      pendingResult.reverse,
+      options,
+      pendingResult.count,
+    );
   }
   if (pendingResult.type === "operatorTextObject") {
     return applyOperatorTextObject(

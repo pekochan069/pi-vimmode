@@ -178,45 +178,47 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 
 ### Commands
 
-| Path                                                | Default      | Effect                                                                                                 |
-| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------ |
-| `piVimMode.keymap.commands.insertBefore`            | `["i"]`      | Enter insert mode at cursor.                                                                           |
-| `piVimMode.keymap.commands.insertAfter`             | `["a"]`      | Move right, then enter insert.                                                                         |
-| `piVimMode.keymap.commands.insertLineStart`         | `["I"]`      | Move to line start, then insert. In visual block mode, starts block insert before selected block.      |
-| `piVimMode.keymap.commands.insertLineEnd`           | `["A"]`      | Move to line end, then insert. In visual block mode, starts block append after selected block.         |
-| `piVimMode.keymap.commands.openLineBelow`           | `["o"]`      | Open blank line below and enter insert.                                                                |
-| `piVimMode.keymap.commands.openLineAbove`           | `["O"]`      | Open blank line above and enter insert.                                                                |
-| `piVimMode.keymap.commands.visualChar`              | `["v"]`      | Enter/switch visual character mode.                                                                    |
-| `piVimMode.keymap.commands.visualLine`              | `["V"]`      | Enter/switch visual line mode.                                                                         |
-| `piVimMode.keymap.commands.visualBlock`             | `[]`         | Additional bindings for visual block mode. Built-in `Ctrl-v` always enters/switches visual block mode. |
-| `piVimMode.keymap.commands.deleteChar`              | `["x"]`      | Delete character under cursor. In visual modes, deletes selection.                                     |
-| `piVimMode.keymap.commands.deleteToLineEnd`         | `["D"]`      | Delete from cursor through line end.                                                                   |
-| `piVimMode.keymap.commands.changeToLineEnd`         | `["C"]`      | Delete from cursor through line end and enter insert.                                                  |
-| `piVimMode.keymap.commands.yankLine`                | `["Y"]`      | Yank current line into linewise register.                                                              |
-| `piVimMode.keymap.commands.joinLine`                | `["J"]`      | Join current line with next line.                                                                      |
-| `piVimMode.keymap.commands.pasteAfter`              | `["p"]`      | Paste register after cursor or below current line. In visual line mode, replaces selected lines.       |
-| `piVimMode.keymap.commands.pasteBefore`             | `["P"]`      | Paste register before cursor or above current line.                                                    |
-| `piVimMode.keymap.commands.incrementNumber`         | `["ctrl+a"]` | Increment signed integer under or after cursor. Count changes delta.                                   |
-| `piVimMode.keymap.commands.decrementNumber`         | `["ctrl+x"]` | Decrement signed integer under or after cursor. Count changes delta.                                   |
-| `piVimMode.keymap.commands.toggleCase`              | `["~"]`      | Toggle case under cursor or visual selection. Count toggles current-line span.                         |
-| `piVimMode.keymap.commands.replaceChar`             | `["r"]`      | Wait for one printable char, replace character(s) or visual selection.                                 |
-| `piVimMode.keymap.commands.substituteChar`          | `["s"]`      | Delete character(s), then enter insert.                                                                |
-| `piVimMode.keymap.commands.substituteLine`          | `["S"]`      | Change line(s), then enter insert.                                                                     |
-| `piVimMode.keymap.commands.findCharForward`         | `["f"]`      | Wait for char and find it forward on current line.                                                     |
-| `piVimMode.keymap.commands.findCharBackward`        | `["F"]`      | Wait for char and find it backward on current line.                                                    |
-| `piVimMode.keymap.commands.tillCharForward`         | `["t"]`      | Wait for char and move before it on current line.                                                      |
-| `piVimMode.keymap.commands.tillCharBackward`        | `["T"]`      | Wait for char and move after it on current line.                                                       |
-| `piVimMode.keymap.commands.repeatCharSearch`        | `[";"]`      | Repeat last character search same direction.                                                           |
-| `piVimMode.keymap.commands.repeatCharSearchReverse` | `[","]`      | Repeat last character search opposite direction.                                                       |
-| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start prompt-local forward search. Also works after operator as search motion.                         |
-| `piVimMode.keymap.commands.startSearchBackward`     | `["?"]`      | Start prompt-local backward search. Also works after operator as search motion.                        |
-| `piVimMode.keymap.commands.repeatSearch`            | `["n"]`      | Repeat last prompt search direction.                                                                   |
-| `piVimMode.keymap.commands.repeatSearchReverse`     | `["N"]`      | Repeat prompt search opposite direction.                                                               |
-| `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                 |
-| `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                    |
-| `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                            |
-| `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                   |
-| `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.           |
+| Path                                                | Default      | Effect                                                                                                       |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `piVimMode.keymap.commands.insertBefore`            | `["i"]`      | Enter insert mode at cursor.                                                                                 |
+| `piVimMode.keymap.commands.insertAfter`             | `["a"]`      | Move right, then enter insert.                                                                               |
+| `piVimMode.keymap.commands.insertLineStart`         | `["I"]`      | Move to line start, then insert. In visual block mode, starts block insert before selected block.            |
+| `piVimMode.keymap.commands.insertLineEnd`           | `["A"]`      | Move to line end, then insert. In visual block mode, starts block append after selected block.               |
+| `piVimMode.keymap.commands.openLineBelow`           | `["o"]`      | Open blank line below and enter insert.                                                                      |
+| `piVimMode.keymap.commands.openLineAbove`           | `["O"]`      | Open blank line above and enter insert.                                                                      |
+| `piVimMode.keymap.commands.visualChar`              | `["v"]`      | Enter/switch visual character mode.                                                                          |
+| `piVimMode.keymap.commands.visualLine`              | `["V"]`      | Enter/switch visual line mode.                                                                               |
+| `piVimMode.keymap.commands.visualBlock`             | `[]`         | Additional bindings for visual block mode. Built-in `Ctrl-v` always enters/switches visual block mode.       |
+| `piVimMode.keymap.commands.deleteChar`              | `["x"]`      | Delete character under cursor. In visual modes, deletes selection.                                           |
+| `piVimMode.keymap.commands.deleteToLineEnd`         | `["D"]`      | Delete from cursor through line end.                                                                         |
+| `piVimMode.keymap.commands.changeToLineEnd`         | `["C"]`      | Delete from cursor through line end and enter insert.                                                        |
+| `piVimMode.keymap.commands.yankLine`                | `["Y"]`      | Yank current line into linewise register.                                                                    |
+| `piVimMode.keymap.commands.joinLine`                | `["J"]`      | Join current line with next line.                                                                            |
+| `piVimMode.keymap.commands.pasteAfter`              | `["p"]`      | Paste register after cursor or below current line. In visual line mode, replaces selected lines.             |
+| `piVimMode.keymap.commands.pasteBefore`             | `["P"]`      | Paste register before cursor or above current line.                                                          |
+| `piVimMode.keymap.commands.incrementNumber`         | `["ctrl+a"]` | Increment signed integer under or after cursor. Count changes delta.                                         |
+| `piVimMode.keymap.commands.decrementNumber`         | `["ctrl+x"]` | Decrement signed integer under or after cursor. Count changes delta.                                         |
+| `piVimMode.keymap.commands.toggleCase`              | `["~"]`      | Toggle case under cursor or visual selection. Count toggles current-line span.                               |
+| `piVimMode.keymap.commands.replaceChar`             | `["r"]`      | Wait for one printable char, replace character(s) or visual selection.                                       |
+| `piVimMode.keymap.commands.substituteChar`          | `["s"]`      | Delete character(s), then enter insert.                                                                      |
+| `piVimMode.keymap.commands.substituteLine`          | `["S"]`      | Change line(s), then enter insert.                                                                           |
+| `piVimMode.keymap.commands.findCharForward`         | `["f"]`      | Wait for char and find it forward on current line. Also works after delete/change/yank as `f{char}` target.  |
+| `piVimMode.keymap.commands.findCharBackward`        | `["F"]`      | Wait for char and find it backward on current line. Also works after delete/change/yank as `F{char}` target. |
+| `piVimMode.keymap.commands.tillCharForward`         | `["t"]`      | Wait for char and move before it on current line. Also works after delete/change/yank as `t{char}` target.   |
+| `piVimMode.keymap.commands.tillCharBackward`        | `["T"]`      | Wait for char and move after it on current line. Also works after delete/change/yank as `T{char}` target.    |
+| `piVimMode.keymap.commands.repeatCharSearch`        | `[";"]`      | Repeat last character search same direction.                                                                 |
+| `piVimMode.keymap.commands.repeatCharSearchReverse` | `[","]`      | Repeat last character search opposite direction.                                                             |
+| `piVimMode.keymap.commands.startSearch`             | `["/"]`      | Start prompt-local forward search. Also works after operator as search motion.                               |
+| `piVimMode.keymap.commands.startSearchBackward`     | `["?"]`      | Start prompt-local backward search. Also works after operator as search motion.                              |
+| `piVimMode.keymap.commands.repeatSearch`            | `["n"]`      | Repeat last prompt search direction.                                                                         |
+| `piVimMode.keymap.commands.repeatSearchReverse`     | `["N"]`      | Repeat prompt search opposite direction.                                                                     |
+| `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                       |
+| `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                          |
+| `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                  |
+| `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                         |
+| `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                 |
+
+`findCharForward`, `findCharBackward`, `tillCharForward`, and `tillCharBackward` are character-argument commands. Their configured semantic key sequences work as normal-mode motions and after motion-capable `delete`, `change`, and `yank` operators. For example, mapping `findCharForward` to `["gf"]` makes `dgf,` delete through the next comma on the current line. Counts after the operator target later/earlier matches (`d2gf,`), and counts before and after the operator multiply for this finite character-search grammar. These command bindings do not make shift operators (`>`/`<`) accept character-search targets.
 
 `showKeybindings` has no default keybinding. Configure it like other semantic normal-mode commands, for example `{ "piVimMode": { "keymap": { "commands": { "showKeybindings": ["gk"] } } } }`. It follows normal keymap validation: protected Pi shortcuts such as `ctrl+p`, `enter`, and `tab` are rejected; exact conflicts and prefix-shadow conflicts with the finite grammar are rejected; valid sibling settings stay intact; multi-key sequences use the same finite pending-prefix matcher as other commands. Insert mode remains Pi-owned, so the same physical key sequence delegates to Pi while inserting text unless pi-vimmode otherwise supports that insert-mode input.
 
@@ -277,16 +279,16 @@ Example:
 These settings decide which semantic motions are valid after each operator. Accepted motion action names:
 
 ```text
-wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd
+left, down, up, right, wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd, bufferStart, bufferEnd, matchingPair
 ```
 
-| Path                                      | Default                                                                               | Effect                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `piVimMode.keymap.operatorMotions.delete` | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after delete operator. Remove entries to disable combinations. |
-| `piVimMode.keymap.operatorMotions.change` | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after change operator.                                         |
-| `piVimMode.keymap.operatorMotions.yank`   | `['wordForward', 'wordBackward', 'wordEnd', 'lineStart', 'firstNonBlank', 'lineEnd']` | Motions allowed after yank operator.                                           |
+| Path                                      | Default                                                      | Effect                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `piVimMode.keymap.operatorMotions.delete` | all supported motion actions (`left` through `matchingPair`) | Motions allowed after delete operator. Remove entries to disable combinations. |
+| `piVimMode.keymap.operatorMotions.change` | all supported motion actions (`left` through `matchingPair`) | Motions allowed after change operator.                                         |
+| `piVimMode.keymap.operatorMotions.yank`   | all supported motion actions (`left` through `matchingPair`) | Motions allowed after yank operator.                                           |
 
-Motions such as `right`, `bufferStart`, and `matchingPair` are valid normal/visual motions but invalid operator motions until range semantics exist. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
+Character-search commands are configured under `piVimMode.keymap.commands`, not `operatorMotions`; they are current-line operator targets for motion-capable `delete`, `change`, and `yank` when their `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, or `repeatCharSearchReverse` command bindings resolve. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
 ### Action keybindings
 
@@ -706,22 +708,50 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
       },
       "operatorMotions": {
         "delete": [
+          "left",
+          "down",
+          "up",
+          "right",
           "wordForward",
           "wordBackward",
           "wordEnd",
           "lineStart",
           "firstNonBlank",
-          "lineEnd"
+          "lineEnd",
+          "bufferStart",
+          "bufferEnd",
+          "matchingPair"
         ],
         "change": [
+          "left",
+          "down",
+          "up",
+          "right",
           "wordForward",
           "wordBackward",
           "wordEnd",
           "lineStart",
           "firstNonBlank",
-          "lineEnd"
+          "lineEnd",
+          "bufferStart",
+          "bufferEnd",
+          "matchingPair"
         ],
-        "yank": ["wordForward", "wordBackward", "wordEnd", "lineStart", "firstNonBlank", "lineEnd"]
+        "yank": [
+          "left",
+          "down",
+          "up",
+          "right",
+          "wordForward",
+          "wordBackward",
+          "wordEnd",
+          "lineStart",
+          "firstNonBlank",
+          "lineEnd",
+          "bufferStart",
+          "bufferEnd",
+          "matchingPair"
+        ]
       }
     },
     "macros": {

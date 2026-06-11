@@ -125,6 +125,16 @@ export type RepeatableChange =
   | { type: "command"; command: VimCommandAction; count?: number; char?: string }
   | { type: "lineCommand"; operator: VimOperatorAction; count?: number }
   | {
+      type: "operatorCharSearch";
+      operator: VimMotionOperatorAction;
+      command: Extract<
+        VimCommandAction,
+        "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward"
+      >;
+      char: string;
+      count?: number;
+    }
+  | {
       type: "operatorMotion";
       operator: VimMotionOperatorAction;
       motion: VimMotionAction;

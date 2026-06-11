@@ -19,6 +19,7 @@ import type {
 import {
   adjustNumberAtOrAfterCursor,
   changeLine,
+  deleteByCharSearch,
   deleteByMotion,
   deleteCharAt,
   deleteLine,
@@ -35,6 +36,7 @@ import {
   substituteCharAt,
   toggleCaseAt,
   wordEndPosition,
+  yankByCharSearch,
   yankByMotion,
   yankLine,
   yankLineCount,
@@ -406,25 +408,29 @@ export function applyCommand(
   }
 }
 
-function charSearchKind(command: VimCommandAction) {
+type CharSearchCommand = Extract<
+  VimCommandAction,
+  "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward"
+>;
+
+function charSearchKind(command: CharSearchCommand) {
   if (command === "findCharBackward") return "findBackward" as const;
   if (command === "tillCharForward") return "tillForward" as const;
   if (command === "tillCharBackward") return "tillBackward" as const;
   return "findForward" as const;
 }
 
-function oppositeCharSearch(command: VimCommandAction): VimCommandAction {
+function oppositeCharSearch(command: CharSearchCommand): CharSearchCommand {
   if (command === "findCharForward") return "findCharBackward";
   if (command === "findCharBackward") return "findCharForward";
   if (command === "tillCharForward") return "tillCharBackward";
-  if (command === "tillCharBackward") return "tillCharForward";
-  return command;
+  return "tillCharForward";
 }
 
 function applyCharSearch(
   state: ModalState,
   snapshot: EditorSnapshot,
-  command: VimCommandAction,
+  command: CharSearchCommand,
   target: string,
   count = 1,
 ): ModalUpdate {
@@ -463,6 +469,64 @@ function repeatCharSearch(
     ? oppositeCharSearch(state.lastCharSearch.command)
     : state.lastCharSearch.command;
   return applyCharSearch(state, snapshot, command, state.lastCharSearch.target, count);
+}
+
+export function applyOperatorCharSearchRepeat(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  operator: VimMotionOperatorAction,
+  reverse: boolean,
+  options: ModalOptions,
+  count = 1,
+): ModalUpdate {
+  if (!state.lastCharSearch) return invalidate(clearCommandPending(state));
+  const command = reverse
+    ? oppositeCharSearch(state.lastCharSearch.command)
+    : state.lastCharSearch.command;
+  return applyOperatorCharSearch(
+    state,
+    snapshot,
+    operator,
+    command,
+    state.lastCharSearch.target,
+    options,
+    count,
+  );
+}
+
+export function applyOperatorCharSearch(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  operator: VimMotionOperatorAction,
+  command: CharSearchCommand,
+  target: string,
+  options: ModalOptions,
+  count = 1,
+  recordRepeat = true,
+): ModalUpdate {
+  const baseState = clearCommandPending(state);
+  const lastCharSearch = { command, target };
+  const kind = charSearchKind(command);
+  if (operator === "yank") {
+    const register = yankByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
+    return yankUpdate(register ? { ...baseState, lastCharSearch } : baseState, register);
+  }
+
+  const result = deleteByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
+  let edited = editState(result.changed ? { ...baseState, lastCharSearch } : baseState, result);
+  if (recordRepeat) {
+    edited = withRepeatableChange(
+      edited,
+      { type: "operatorCharSearch", operator, command, char: target, count },
+      result.changed,
+    );
+  }
+  const effects: ModalEffect[] = result.changed
+    ? [{ type: "edit", result }]
+    : [{ type: "invalidate" }];
+  if (operator === "change" && result.changed)
+    return modeUpdate(edited, "insert", options, effects);
+  return withEffects(edited, effects);
 }
 
 export function applyOperatorTextObject(
@@ -514,6 +578,18 @@ export function repeatChange(
       snapshot,
       change.operator,
       change.motion,
+      options,
+      change.count,
+      false,
+    );
+  }
+  if (change.type === "operatorCharSearch") {
+    return applyOperatorCharSearch(
+      state,
+      snapshot,
+      change.operator,
+      change.command,
+      change.char,
       options,
       change.count,
       false,

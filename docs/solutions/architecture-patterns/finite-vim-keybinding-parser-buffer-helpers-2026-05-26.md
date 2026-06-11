@@ -1,7 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
-last_updated: 2026-05-27
+last_updated: 2026-06-11
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -33,10 +33,12 @@ tags:
 
 The risky part was not wiring individual keys. The risky part was keeping three concerns from collapsing into one fragile editor switch:
 
-- pending command grammar (`g`, `d`, `c`, `y`, and custom multi-key prefixes),
+- pending command grammar (`g`, `d`, `c`, `y`, operator character-search targets, and custom multi-key prefixes),
 - text-buffer transforms and register semantics,
 - Pi editor dispatch and shortcut delegation,
 - config validation so a user-visible mapping never resolves to a no-op executor path.
+
+A later `ct,` regression confirmed that parser precedence is part of this architecture, not incidental cleanup. With `c` pending, `t` must be interpreted as the start of an operator character-search target before generic multi-key prefix checks append it into a raw `ct` sequence. Otherwise textual control-key bindings like `ctrl+a`, `ctrl+x`, and `ctrl+r` can make `ct` look like a longer prefix and turn valid Vim grammar into an invalid pending sequence.
 
 ## Guidance
 
@@ -74,6 +76,30 @@ if (isVimMotion(key)) return { type: "operatorMotion", operator: pending, motion
 Unsupported pending combinations return `invalid`; normal mode clears pending state without inserting text.
 
 When mappings become configurable, keep semantic actions separate from raw keys. Prefix state should carry enough structure to distinguish an operator prefix from a motion prefix after an operator. A raw concatenated string works for `d` + `w`, but it breaks once operators or motions can be multi-key.
+
+Resolve exact operator-pending state before generic prefix matching. Once pending input is a complete operator such as `c`, `d`, or `y`, the next key belongs to operator-specific grammar first. For example, `ct,` should parse as `change` + `tillCharForward` + target `,`, not as literal pending prefix `ct` because `ct` happens to prefix normalized control-key strings.
+
+Bad ordering:
+
+```ts
+const combined = pending + key;
+if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
+
+const pendingOperator = operatorActionForSequence(pending, keymap);
+if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
+```
+
+Good ordering:
+
+```ts
+const pendingOperator = operatorActionForSequence(pending, keymap);
+if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
+
+const combined = pending + key;
+if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
+```
+
+This keeps parser namespaces scoped by state: normal-mode command prefixes, operator-pending continuations, and textual control-key names are not interchangeable.
 
 Good pattern:
 
@@ -235,6 +261,22 @@ Use four tiers:
 2. `test/buffer.test.ts` — range helpers, `%`, line open/join, paste-before, no-op cases.
 3. `test/modal.test.ts` — modal state/effect contracts, insert/normal/visual transitions, register preservation, TUI-free status derivation.
 4. `test/vim-editor.test.ts` — adapter integration smoke for command groups, cursor restoration, terminal cursor hints, visual render/status integration.
+
+For parser-precedence regressions, cover both the semantic parser and modal behavior. The `ct,` regression needed both:
+
+```ts
+expect(changeTill.type).toBe("pending");
+expect(resolveNormalCommand(",", changeTill.type === "pending" ? changeTill.pending : "")).toEqual({
+  type: "operatorCharSearch",
+  operator: "change",
+  command: "tillCharForward",
+  char: ",",
+});
+```
+
+and a modal smoke test proving `foo,bar` + `ct,` leaves `,bar`, enters insert mode, and yanks `foo` into the unnamed register.
+
+Manual checks must respect Vim range semantics. `2d2f,` on `a,b,c,d` should no-op because the multiplied count seeks the fourth comma. `dT,` from `b` in `foo,bar` should no-op because the exclusive backward-till range is empty; from `a`, it deletes `ba` and leaves `foo,r`.
 
 Avoid exploding editor integration tests for every parser combination when parser, buffer, and modal tests already cover the matrix.
 

@@ -319,7 +319,20 @@ export type PromptTransform = {
 
 export type VimOperator = "d" | "c" | "y";
 
-export type VimMotion = "w" | "b" | "e" | "0" | "^" | "$";
+export type VimMotion =
+  | "h"
+  | "j"
+  | "k"
+  | "l"
+  | "w"
+  | "b"
+  | "e"
+  | "0"
+  | "^"
+  | "$"
+  | "gg"
+  | "G"
+  | "%";
 
 export type PendingOperator = string;
 

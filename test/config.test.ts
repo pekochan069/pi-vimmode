@@ -390,15 +390,47 @@ describe("vim config parsing", () => {
     expect(result.options.promptTransforms?.commands.fence).toEqual(["wrap"]);
   });
 
-  test("rejects operator motions without range semantics", () => {
+  test("accepts every supported normal motion as an operator motion", () => {
     const result = resolveVimOptions({
-      piVimMode: { keymap: { operatorMotions: { delete: ["right", "wordForward"] } } },
+      piVimMode: {
+        keymap: {
+          operatorMotions: {
+            delete: [
+              "left",
+              "down",
+              "up",
+              "right",
+              "wordForward",
+              "wordBackward",
+              "wordEnd",
+              "lineStart",
+              "firstNonBlank",
+              "lineEnd",
+              "bufferStart",
+              "bufferEnd",
+              "matchingPair",
+            ],
+          },
+        },
+      },
     });
 
-    expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
-    expect(result.warnings.some((warning) => warning.includes("unsupported operator motion"))).toBe(
-      true,
-    );
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.operatorMotions.delete).toEqual([
+      "left",
+      "down",
+      "up",
+      "right",
+      "wordForward",
+      "wordBackward",
+      "wordEnd",
+      "lineStart",
+      "firstNonBlank",
+      "lineEnd",
+      "bufferStart",
+      "bufferEnd",
+      "matchingPair",
+    ]);
   });
 
   test("warns for cross-group keymap conflicts", () => {

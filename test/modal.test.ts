@@ -2190,6 +2190,134 @@ describe("modal engine", () => {
     expect(repeated.state.register).toEqual({ type: "line", text: "two" });
   });
 
+  test("configured keymaps support operator character search targets", () => {
+    const keymapOptions: ModalOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        operators: { ...DEFAULT_VIM_KEYMAP.operators, change: ["zz"], yank: ["xx"] },
+        commands: {
+          ...DEFAULT_VIM_KEYMAP.commands,
+          findCharForward: ["gf"],
+          tillCharForward: ["gt"],
+        },
+      },
+    };
+
+    const changed = applyModalKeys(
+      { mode: "normal" },
+      "ab:c",
+      p(0, 0),
+      ["z", "z", "g", "t", ":"],
+      keymapOptions,
+    );
+    expect(changed.text).toBe(":c");
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "char", text: "ab" });
+
+    const yanked = applyModalKeys(
+      { mode: "normal" },
+      "a:b:c",
+      p(0, 0),
+      ["x", "x", "g", "f", ":"],
+      keymapOptions,
+    );
+    expect(yanked.text).toBe("a:b:c");
+    expect(yanked.state.register).toEqual({ type: "char", text: "a:" });
+
+    const inserted = handleModalInput(
+      { mode: "insert" },
+      { text: "a:b", lines: ["a:b"], cursor: p(0, 0) },
+      keymapOptions,
+      "g",
+    );
+    expect(inserted.state.mode).toBe("insert");
+    expect(inserted.effects).toEqual([{ type: "delegate", input: "g" }]);
+  });
+
+  test("normal operators support character search targets", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 0), ["d", "f", ":"]);
+    expect(deleted.text).toBe("b:c");
+    expect(deleted.cursor).toEqual(p(0, 0));
+    expect(deleted.state.mode).toBe("normal");
+    expect(deleted.state.register).toEqual({ type: "char", text: "a:" });
+    expect(deleted.state.lastCharSearch).toEqual({ command: "findCharForward", target: ":" });
+
+    const counted = applyModalKeys({ mode: "normal" }, "a,b,c", p(0, 0), ["d", "2", "f", ","]);
+    expect(counted.text).toBe("c");
+    expect(counted.state.register).toEqual({ type: "char", text: "a,b," });
+
+    const changed = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 2), ["c", "F", ":"]);
+    expect(changed.text).toBe("a:c");
+    expect(changed.cursor).toEqual(p(0, 1));
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "char", text: ":b" });
+
+    const changedTill = applyModalKeys({ mode: "normal" }, "foo,bar", p(0, 0), ["c", "t", ","]);
+    expect(changedTill.text).toBe(",bar");
+    expect(changedTill.cursor).toEqual(p(0, 0));
+    expect(changedTill.state.mode).toBe("insert");
+    expect(changedTill.state.register).toEqual({ type: "char", text: "foo" });
+
+    const yanked = applyModalKeys({ mode: "normal" }, "a[b]c", p(0, 3), ["y", "T", "["]);
+    expect(yanked.text).toBe("a[b]c");
+    expect(yanked.cursor).toEqual(p(0, 3));
+    expect(yanked.state.register).toEqual({ type: "char", text: "b]" });
+    expect(yanked.state.lastRepeatableChange).toBeUndefined();
+
+    const noOp = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "old" } },
+      "a:b",
+      p(0, 0),
+      ["d", "t", ":"],
+    );
+    expect(noOp.text).toBe("a:b");
+    expect(noOp.cursor).toEqual(p(0, 0));
+    expect(noOp.state.register).toEqual({ type: "char", text: "old" });
+  });
+
+  test("normal dot repeat applies character search operator changes", () => {
+    const changed = applyModalKeys({ mode: "normal" }, "a:b c:d", p(0, 0), ["d", "f", ":"]);
+    const repeated = applyModalKeys(changed.state, changed.text, p(0, 2), ["."]);
+    expect(repeated.text).toBe("b d");
+    expect(repeated.state.register).toEqual({ type: "char", text: "c:" });
+  });
+
+  test("normal operators support repeated character search targets", () => {
+    const searched = applyModalKeys({ mode: "normal" }, "a:b:c", p(0, 0), ["f", ":"]);
+    const deleted = applyModalKeys(searched.state, searched.text, p(0, 1), ["d", ";"]);
+    expect(deleted.text).toBe("ac");
+    expect(deleted.state.register).toEqual({ type: "char", text: ":b:" });
+
+    const reversed = applyModalKeys(searched.state, searched.text, p(0, 3), ["c", ","]);
+    expect(reversed.text).toBe("ac");
+    expect(reversed.state.mode).toBe("insert");
+    expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
+  });
+
+  test("normal operators support line, buffer, and matching-pair motions", () => {
+    const deletedDown = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["d", "j"]);
+    expect(deletedDown.text).toBe("three");
+    expect(deletedDown.state.register).toEqual({ type: "line", text: "one\ntwo" });
+
+    const changedStart = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(1, 0), [
+      "c",
+      "g",
+      "g",
+    ]);
+    expect(changedStart.text).toBe("three");
+    expect(changedStart.state.mode).toBe("insert");
+    expect(changedStart.state.register).toEqual({ type: "line", text: "one\ntwo" });
+
+    const yankedEnd = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(1, 0), ["y", "G"]);
+    expect(yankedEnd.text).toBe("one\ntwo\nthree");
+    expect(yankedEnd.state.register).toEqual({ type: "line", text: "two\nthree" });
+
+    const deletedPair = applyModalKeys({ mode: "normal" }, "a(b)c", p(0, 1), ["d", "%"]);
+    expect(deletedPair.text).toBe("ac");
+    expect(deletedPair.state.register).toEqual({ type: "char", text: "(b)" });
+  });
+
   test("normal operators support text objects", () => {
     const change = handleModalInput(
       { mode: "normal" },

@@ -97,6 +97,7 @@ describe("runtime help registry", () => {
     expect(text).toContain("markdown-wrapping");
     expect(text).toContain("prompt.transform.reflow");
     expect(text).toContain("gq");
+    expect(text).not.toContain("promptTransform");
     expect(text).toContain("piVimMode.keymap.actions");
     expect(text).toContain("piVimMode.keymap.actionPresets");
     expect(text).toContain("accepted bindings");
@@ -177,8 +178,11 @@ describe("runtime help registry", () => {
     }).options;
     expect(runtimeFeaturesMessage("reflow", { ...context, options: actions })).toContain("gq");
     expect(
-      runtimeFeaturesMessage("promptTransform.reflow", { ...context, options: actions }),
-    ).toContain("prompt.transform.reflow");
+      runtimeFeaturesMessage("prompt.transform.reflow", { ...context, options: actions }),
+    ).toContain("gq");
+    expect(runtimeFeaturesMessage("promptTransform.reflow", { ...context, options: actions })).toBe(
+      "features: no match for promptTransform.reflow",
+    );
   });
 
   test("feature discovery reflects effective options", () => {

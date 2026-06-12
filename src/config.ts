@@ -38,7 +38,6 @@ import {
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   bindablePromptTransformActionIds,
-  canonicalPromptTransformActionIdForLegacyAlias,
   normalizePromptTransformActionArgs,
   promptTransformActionForId,
 } from "./prompt-transform-actions.ts";
@@ -804,13 +803,6 @@ function parseActionBindings(
 
   const parsed: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
   for (const [rawActionId, entries] of Object.entries(value)) {
-    const legacyCanonical = canonicalPromptTransformActionIdForLegacyAlias(rawActionId);
-    if (legacyCanonical) {
-      warnings.push(
-        `${sourceLabel}: unsupported piVimMode.keymap.actions.${rawActionId}; use canonical ${legacyCanonical}`,
-      );
-      continue;
-    }
     if (!BINDABLE_PROMPT_TRANSFORM_ACTION_SET.has(rawActionId)) {
       warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.actions.${rawActionId}`);
       continue;

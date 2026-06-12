@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-more-vim-keybindings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode supports additional navigation bindings
 
 The Vim editor SHALL support additional normal-mode navigation bindings for common prompt movement.
@@ -539,4 +541,3 @@ The Vim editor SHALL allow motion-capable normal-mode operators to target every 
 
 - **WHEN** the editor is in normal mode and the user presses `d2w`, `d2j`, or `d2;`
 - **THEN** the after-operator count is applied to that finite operator target
-

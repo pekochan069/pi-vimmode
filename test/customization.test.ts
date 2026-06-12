@@ -65,7 +65,7 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(keymap, "zz")).toBe("mapcheck: zz is unmapped");
   });
 
-  test("reports canonical prompt transform action bindings and legacy aliases", () => {
+  test("reports canonical prompt transform action bindings only", () => {
     const { options, warnings } = resolveVimOptions({
       piVimMode: {
         keymap: {
@@ -78,10 +78,13 @@ describe("vim customization helpers", () => {
     });
     const message = actionsMessage(options.keymap!, "reflow", options.promptTransforms);
     expect(message).toContain("prompt.transform.reflow");
-    expect(message).not.toContain("promptTransform.prompt.transform.reflow");
+    expect(message).not.toContain("promptTransform");
     expect(
       actionsMessage(options.keymap!, "promptTransform.reflow", options.promptTransforms),
-    ).toContain("prompt.transform.reflow");
+    ).toBe("actions: no match for promptTransform.reflow");
+    expect(keymapMessage(options.keymap!, "promptTransform.reflow", options.promptTransforms)).toBe(
+      "keymap: no match for promptTransform.reflow",
+    );
     expect(
       keymapMessage(options.keymap!, "prompt.transform.reflow", options.promptTransforms),
     ).toContain("gq");
@@ -120,6 +123,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("Key            Mode        Action");
     expect(lines).toContain("U              normal      command.redo");
     expect(lines).toContain("gq             n/v         prompt.transform.reflow");
+    expect(lines).not.toContain("promptTransform");
     expect(lines).not.toContain(" → ");
     expect(lines).not.toContain("vimmode.help metadata-only not bindable");
     expect(lines).toContain("ctrl+p");

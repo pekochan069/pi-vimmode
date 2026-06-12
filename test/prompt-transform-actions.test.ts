@@ -5,7 +5,6 @@ import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
   canonicalPromptTransformActionIdForShortName,
-  legacyPromptTransformActionAliasForId,
   normalizePromptTransformActionArgs,
   promptTransformActionForId,
 } from "../src/prompt-transform-actions.ts";
@@ -41,12 +40,11 @@ describe("prompt transform action registry", () => {
     }
   });
 
-  test("maps canonical IDs, short transform names, and legacy aliases", () => {
+  test("maps canonical IDs and short transform names only", () => {
     expect(promptTransformActionForId("prompt.transform.reflow")).toBe("reflow");
     expect(canonicalPromptTransformActionIdForShortName("fence")).toBe("prompt.transform.fence");
-    expect(legacyPromptTransformActionAliasForId("prompt.transform.quote")).toBe(
-      "promptTransform.quote",
-    );
+    expect(promptTransformActionForId("promptTransform.reflow")).toBeUndefined();
+    expect(PROMPT_TRANSFORM_ACTIONS.some((entry) => "aliases" in entry)).toBe(false);
     expect(promptTransformActionForId("vimmode.doctor")).toBeUndefined();
   });
 

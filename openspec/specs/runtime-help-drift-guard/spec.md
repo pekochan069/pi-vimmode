@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change runtime-help-docs-spec-drift-guard. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Runtime help is finite and source-backed
 
 The Vim editor SHALL provide finite runtime help that describes supported pi-vimmode behavior and explicit limitations without implying full Vim or Neovim parity.
@@ -135,10 +133,10 @@ The project SHALL validate that prompt transform action registry metadata, runti
 - **WHEN** docs include an example `piVimMode.keymap.actions` configuration
 - **THEN** an automated test parses the example or an equivalent fixture successfully
 
-#### Scenario: Legacy alias behavior is tested
+#### Scenario: Stale legacy alias claims fail validation
 
-- **WHEN** legacy `promptTransform.*` aliases are supported for diagnostics
-- **THEN** tests verify the alias maps to canonical `prompt.transform.*` output until the alias removal TODO is completed
+- **WHEN** user-facing docs, runtime help metadata, source-backed popup content, or tests claim that `promptTransform.*` aliases are supported or searchable
+- **THEN** docs/source drift validation fails before the change is considered complete
 
 ### Requirement: Runtime help classifies diagnostic action metadata
 
@@ -437,3 +435,4 @@ The project SHALL validate that the dedicated keybindings popup command stays al
 
 - **WHEN** keybindings popup output references `prompt.transform.*` action IDs or `vimmode.*` diagnostic/help metadata IDs
 - **THEN** automated validation verifies that those IDs remain backed by the appropriate source registry and docs anchors
+

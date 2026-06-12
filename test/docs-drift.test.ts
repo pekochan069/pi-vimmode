@@ -119,7 +119,12 @@ describe("documentation drift guard", () => {
     for (const id of documentedIds) {
       expect(PROMPT_TRANSFORM_ACTIONS.some((action) => action.id === id)).toBe(true);
     }
-    expect(allUserDocs).toContain("promptTransform.*");
+    expect(allUserDocs).not.toContain("promptTransform.*");
+    expect(allUserDocs).not.toContain("promptTransform.reflow");
+    expect(allUserDocs).not.toMatch(
+      /legacy `promptTransform\.\*`[^\n]*(supported|searchable|alias)/i,
+    );
+    expect(allUserDocs).not.toMatch(/promptTransform\.\*[^\n]*(diagnostic|search|config)/i);
   });
 
   test("read-only popup docs and registry-backed action IDs stay aligned", () => {

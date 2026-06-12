@@ -405,9 +405,9 @@ Parameterized args:
 - `quote`, `unquote`, `bulletize`, `indent`, and `dedent` reject args.
 - Unknown arg keys reject that binding so typos do not silently fall back to defaults.
 
-Rejected action key entries are ignored with warnings while valid sibling entries stay usable. Rejections include unknown action IDs, legacy alias IDs, invalid args, protected Pi shortcuts, disabled prompt transform actions, duplicate keys across different actions, exact grammar conflicts, and prefix-shadow conflicts. Same-action repeated keys dedupe without warning. Use `:vimdoctor` for retained warnings and `:mapcheck <key>` to inspect accepted or rejected action keys.
+Rejected action key entries are ignored with warnings while valid sibling entries stay usable. Rejections include unknown action IDs, invalid args, protected Pi shortcuts, disabled prompt transform actions, duplicate keys across different actions, exact grammar conflicts, and prefix-shadow conflicts. Same-action repeated keys dedupe without warning. Use `:vimdoctor` for retained warnings and `:mapcheck <key>` to inspect accepted or rejected action keys.
 
-`piVimMode.keymap.actions` accepts canonical `prompt.transform.*` IDs only. Legacy `promptTransform.*` names are temporary diagnostic/search aliases, not config input. `piVimMode.promptTransforms.actions` remains the enable/disable boolean surface for transforms, and `piVimMode.promptTransforms.commands` remains the Ex command-name surface; neither moves into `keymap.actions`.
+`piVimMode.keymap.actions` accepts canonical `prompt.transform.*` IDs only. Non-canonical action IDs are unsupported and do not install keybinding dispatch. `piVimMode.promptTransforms.actions` remains the enable/disable boolean surface for transforms, and `piVimMode.promptTransforms.commands` remains the Ex command-name surface; neither moves into `keymap.actions`.
 
 ### Keymap validation
 

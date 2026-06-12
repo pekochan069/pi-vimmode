@@ -488,10 +488,10 @@ The Vim editor SHALL support `piVimMode.keymap.actions` as an additive semantic 
 - **WHEN** settings configure an unsupported action ID under `piVimMode.keymap.actions`
 - **THEN** that entry is ignored, a warning is recorded, and sibling action bindings remain usable
 
-#### Scenario: Legacy action alias is rejected in config
+#### Scenario: Legacy-style action ID is rejected as unsupported
 
-- **WHEN** settings configure a legacy action ID such as `promptTransform.reflow` under `piVimMode.keymap.actions`
-- **THEN** that entry is ignored, a warning names the canonical `prompt.transform.reflow` ID, and diagnostics search aliases remain available
+- **WHEN** settings configure a legacy-style action ID such as `promptTransform.reflow` under `piVimMode.keymap.actions`
+- **THEN** that entry is ignored as an unsupported action ID, no keybinding dispatch is installed for it, and valid sibling canonical bindings remain usable
 
 #### Scenario: Invalid action args are ignored per binding
 

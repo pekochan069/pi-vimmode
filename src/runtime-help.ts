@@ -109,6 +109,22 @@ const ENTRIES = [
     testAnchors: ["test/modal.test.ts", "test/config.test.ts"],
   },
   {
+    id: "registers",
+    category: "registers",
+    topics: ["registers", "register", "clipboard", "black-hole", "unnamed", '"+', '"*', '"_'],
+    summary:
+      'registers are prompt-local; unnamed and a-z named registers work with yank/delete/change/paste, "_ discards, and "+/"* copy to and paste from host clipboard with prompt-local mirror fallback',
+    examples: ['"ayy', '"ap', '"_dd', '"+yy', ":yank +", ":put *"],
+    limits: [
+      "no full Vim register parity",
+      "normal-mode clipboard reads depend on platform tools",
+      "no numbered/expression/read-only registers",
+    ],
+    docsAnchor: "runtime-help:registers",
+    specAnchor: "openspec/specs/vim-named-registers/spec.md",
+    testAnchors: ["test/registers.test.ts", "test/modal.test.ts", "test/vim-editor.test.ts"],
+  },
+  {
     id: "marks",
     category: "marks",
     topics: ["marks", "mark", "jump"],

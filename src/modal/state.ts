@@ -11,6 +11,7 @@ export function resetTransientState(state: ModalState, mode: VimMode): ModalStat
   const nextState: ModalState = { mode };
   if (state.register) nextState.register = state.register;
   if (state.namedRegisters) nextState.namedRegisters = state.namedRegisters;
+  if (state.clipboardRegisters) nextState.clipboardRegisters = state.clipboardRegisters;
   if (state.macros) nextState.macros = state.macros;
   if (state.recordingSlot) nextState.recordingSlot = state.recordingSlot;
   if (state.lastPlayedMacro) nextState.lastPlayedMacro = state.lastPlayedMacro;

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-vimeditor-pi-adapter-modal-editing-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: VimEditor acts as the Pi adapter
 
 The Vim editor SHALL keep `VimEditor` as the Pi-facing `CustomEditor` adapter while moving modal editing semantics out of the adapter class.
@@ -246,4 +248,3 @@ Read-only popup helper extraction SHALL preserve `ModalEffect` as the only contr
 
 - **WHEN** a read-only popup is opened, scrolled, or dismissed after the seam extraction
 - **THEN** prompt text, cursor position, registers, named registers, marks, macro slots, macro recording state, search highlights, visual state, dot-repeat state, and Pi delegation behavior remain governed by the existing modal effect and overlay contracts
-

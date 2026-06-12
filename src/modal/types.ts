@@ -34,8 +34,15 @@ export type MacroStore = Partial<Record<MacroSlot, readonly string[]>>;
 export type PendingMacroTarget = "record" | "play";
 
 export type RegisterSlot = string;
+export type ClipboardRegisterSlot = "+" | "*";
 export type RegisterStore = Partial<Record<RegisterSlot, VimRegister>>;
-export type PendingRegisterTarget = { slot: RegisterSlot; append: boolean } | "awaitingSlot";
+export type ClipboardRegisterStore = Partial<Record<ClipboardRegisterSlot, VimRegister>>;
+export type ActiveRegisterTarget =
+  | { kind: "named"; slot: RegisterSlot; append: boolean }
+  | { kind: "unnamed" }
+  | { kind: "blackHole" }
+  | { kind: "clipboard"; slot: ClipboardRegisterSlot };
+export type PendingRegisterTarget = ActiveRegisterTarget | "awaitingSlot";
 
 export type MarkSlot = string;
 export type MarkStore = Partial<Record<MarkSlot, Position>>;
@@ -158,6 +165,7 @@ export type ModalState = {
   lastPlayedMacro?: MacroSlot;
   pendingMacro?: PendingMacroTarget;
   namedRegisters?: RegisterStore;
+  clipboardRegisters?: ClipboardRegisterStore;
   pendingRegister?: PendingRegisterTarget;
   marks?: MarkStore;
   pendingMark?: PendingMarkTarget;
@@ -200,6 +208,13 @@ export type ModalEffect =
   | { type: "restoreCursor"; position: Position }
   | { type: "playMacro"; slot: MacroSlot; inputs: readonly string[] }
   | { type: "openReadOnlyPopup"; popup: ReadOnlyPopup }
+  | { type: "copyClipboard"; register: ClipboardRegisterSlot; text: string }
+  | {
+      type: "readClipboard";
+      register: ClipboardRegisterSlot;
+      placement: "after" | "before";
+      fallback?: VimRegister;
+    }
   | { type: "invalidate" }
   | { type: "terminalCursor"; style: CursorStyle };
 

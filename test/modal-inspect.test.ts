@@ -20,6 +20,7 @@ describe("modal inspect diagnostics", () => {
       visualAnchor: { line: 0, col: 1 },
       register: { type: "char", text: "very secret register content" },
       namedRegisters: { a: { type: "line", text: "hidden line" } },
+      clipboardRegisters: { "+": { type: "char", text: "clipboard secret" } },
       marks: { a: { line: 0, col: 0 } },
       macros: { q: ["i", "x", "\x1b"] },
       recordingSlot: "q",
@@ -40,7 +41,7 @@ describe("modal inspect diagnostics", () => {
     expect(message).toContain("inspect: mode=visual");
     expect(message).toContain("cursor=2:3");
     expect(message).toContain("selection=visual@1:2");
-    expect(message).toContain("registers=unnamed-char:28,named-1(a)");
+    expect(message).toContain("registers=unnamed-char:28,named-1(a),clipboard-(+:char:16)");
     expect(message).toContain("macros=q:3,recording=q");
     expect(message).toContain("search=last=forward:literal:6");
     expect(message).toContain("warnings=1");
@@ -50,6 +51,7 @@ describe("modal inspect diagnostics", () => {
     expect(message).not.toContain("secret prompt text");
     expect(message).not.toContain("very secret register content");
     expect(message).not.toContain("hidden line");
+    expect(message).not.toContain("clipboard secret");
   });
 
   test("message history is bounded and retained message output is redacted", () => {

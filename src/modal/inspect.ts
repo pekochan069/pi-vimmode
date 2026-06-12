@@ -79,8 +79,14 @@ function selectionSummary(state: ModalState): string | undefined {
 
 function registerSummary(state: ModalState): string | undefined {
   const named = Object.keys(state.namedRegisters ?? {}).sort();
+  const clipboard = ["+", "*"].flatMap((slot) => {
+    const register = state.clipboardRegisters?.[slot as "+" | "*"];
+    return register ? [`${slot}:${register.type}:${register.text.length}`] : [];
+  });
   const unnamed = state.register ? `${state.register.type}:${state.register.text.length}` : "empty";
-  return `registers=unnamed-${unnamed},named-${named.length}${named.length ? `(${named.join(",")})` : ""}`;
+  const namedSummary = `named-${named.length}${named.length ? `(${named.join(",")})` : ""}`;
+  const clipboardSummary = clipboard.length ? `,clipboard-(${clipboard.join(",")})` : "";
+  return `registers=unnamed-${unnamed},${namedSummary}${clipboardSummary}`;
 }
 
 function marksSummary(state: ModalState): string | undefined {

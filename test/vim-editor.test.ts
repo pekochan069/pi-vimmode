@@ -1,8 +1,9 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
+import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
@@ -1554,5 +1555,42 @@ describe("status border fitting", () => {
   test("handles extremely narrow widths", () => {
     expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 1))).toBe(1);
     expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 0))).toBe(0);
+  });
+});
+
+describe("vim editor clipboard register integration", () => {
+  afterEach(() => setClipboardTextReaderForTesting(undefined));
+
+  test("clipboard register command updates modal state without breaking editor effects", () => {
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "y", "y"]);
+
+    expect(editor.getText()).toBe("one");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "one" });
+    expect(editor.getClipboardRegister("+")).toEqual({ type: "line", text: "one" });
+
+    typeKeys(editor, ["o", "\x1b"]);
+    expect(editor.getText()).toBe("one\n");
+  });
+
+  test("clipboard paste reads host clipboard text before prompt-local mirror", async () => {
+    setClipboardTextReaderForTesting(async () => "host");
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "p"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editor.getText()).toBe("onehost");
+    expect(editor.getClipboardRegister("+")).toEqual({ type: "char", text: "host" });
+  });
+
+  test("clipboard paste falls back to prompt-local mirror on host read failure", async () => {
+    setClipboardTextReaderForTesting(async () => {
+      throw new Error("no clipboard");
+    });
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "y", "y", "o", "\x1b", '"', "+", "P"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editor.getText()).toBe("one\none\n");
   });
 });

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change architecture-runway-sprint-with-inspectability. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt-local inspect command summarizes current editor state
 
 The Vim editor SHALL expose a read-only `:vimmode inspect` diagnostic that summarizes the active prompt editor state without dumping raw prompt contents.
@@ -170,4 +172,3 @@ Runtime inspectability output SHALL continue to use the generic bounded read-onl
 
 - **WHEN** an inspectability popup is shown, scrolled, or dismissed
 - **THEN** prompt text, cursor position, mode, visual anchor/cursor restoration, registers, named registers, marks, macro slots, search state, visible search highlights, Ex history, repeat-change state, and retained message history semantics remain unchanged except for existing popup display and scroll state
-

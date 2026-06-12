@@ -48,7 +48,7 @@ import {
   withEffects,
   withRuntimeMessage,
 } from "./core.ts";
-import { registerToRead, writeRegisters } from "./registers.ts";
+import { applyRegisterWrite, registerToRead, writeRegisters } from "./registers.ts";
 
 export function exDisplay(pendingEx: PendingExCommand | undefined): string | undefined {
   return pendingEx ? `:${pendingEx.command}` : undefined;
@@ -206,13 +206,14 @@ function finishExEdit(
   result: { edit: EditResult; lines: number },
   message: string,
   register?: VimRegister,
+  extraEffects: ModalEffect[] = [],
 ): ModalUpdate {
   const base = result.edit.changed ? clearSearchHighlight(state) : state;
   const next = register ? { ...base, register } : base;
   const finished = finishExState(next, "success", message);
   const effects: ModalEffect[] = result.edit.changed
-    ? [{ type: "edit", result: result.edit }]
-    : [{ type: "invalidate" }];
+    ? [{ type: "edit", result: result.edit }, ...extraEffects]
+    : [{ type: "invalidate" }, ...extraEffects];
   return withEffects(finished, effects);
 }
 
@@ -333,12 +334,10 @@ function executeExCommand(
   if (parsed.type === "yank") {
     const result = yankExLineRange(snapshot.text, parsed.range);
     const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
-    return invalidate(
-      finishExState(
-        writeRegisters(base, result.register),
-        "success",
-        lineMessage(result.lines, "yanked"),
-      ),
+    const written = applyRegisterWrite(base, result.register);
+    return withEffects(
+      finishExState(written.state, "success", lineMessage(result.lines, "yanked")),
+      [...written.effects, { type: "invalidate" }],
     );
   }
 
@@ -346,8 +345,14 @@ function executeExCommand(
     const result = deleteExLineRange(snapshot.text, parsed.range);
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
     const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
-    const next = writeRegisters(base, result.edit.register);
-    return finishExEdit(next, result, lineMessage(result.lines, "deleted"));
+    const written = applyRegisterWrite(base, result.edit.register);
+    return finishExEdit(
+      written.state,
+      result,
+      lineMessage(result.lines, "deleted"),
+      undefined,
+      written.effects,
+    );
   }
 
   if (parsed.type === "put") {

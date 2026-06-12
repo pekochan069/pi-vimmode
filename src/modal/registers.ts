@@ -1,20 +1,26 @@
 import type { VimRegister } from "../types.ts";
-import type { ModalState, PendingRegisterTarget } from "./types.ts";
+import type {
+  ActiveRegisterTarget,
+  ModalEffect,
+  ModalState,
+  PendingRegisterTarget,
+} from "./types.ts";
 
 export function isRegisterPrefixKey(key: string): boolean {
   return key === '"';
 }
 
-export function registerTargetForKey(
-  key: string,
-): Exclude<PendingRegisterTarget, "awaitingSlot"> | undefined {
-  if (!/^[A-Za-z]$/.test(key)) return undefined;
-  return { slot: key.toLowerCase(), append: key >= "A" && key <= "Z" };
+export function registerTargetForKey(key: string): ActiveRegisterTarget | undefined {
+  if (/^[A-Za-z]$/.test(key)) {
+    return { kind: "named", slot: key.toLowerCase(), append: key >= "A" && key <= "Z" };
+  }
+  if (key === '"') return { kind: "unnamed" };
+  if (key === "_") return { kind: "blackHole" };
+  if (key === "+" || key === "*") return { kind: "clipboard", slot: key };
+  return undefined;
 }
 
-function activeTarget(
-  target: PendingRegisterTarget | undefined,
-): Exclude<PendingRegisterTarget, "awaitingSlot"> | undefined {
+function activeTarget(target: PendingRegisterTarget | undefined): ActiveRegisterTarget | undefined {
   return typeof target === "object" ? target : undefined;
 }
 
@@ -32,17 +38,14 @@ export function clearRegisterTarget(state: ModalState): ModalState {
   return rest;
 }
 
-export function writeRegisters(state: ModalState, register: VimRegister | undefined): ModalState {
-  const target = activeTarget(state.pendingRegister);
-  const base = clearRegisterTarget(state);
-  if (!register) return base;
-
-  const nextState: ModalState = { ...base, register };
-  if (!target) return nextState;
-
+function writeNamedRegister(
+  state: ModalState,
+  target: Extract<ActiveRegisterTarget, { kind: "named" }>,
+  register: VimRegister,
+): ModalState {
   const current = state.namedRegisters?.[target.slot];
   return {
-    ...nextState,
+    ...state,
     namedRegisters: {
       ...state.namedRegisters,
       [target.slot]: target.append ? appendRegister(current, register) : register,
@@ -50,7 +53,49 @@ export function writeRegisters(state: ModalState, register: VimRegister | undefi
   };
 }
 
+export function applyRegisterWrite(
+  state: ModalState,
+  register: VimRegister | undefined,
+): { state: ModalState; effects: ModalEffect[] } {
+  const target = activeTarget(state.pendingRegister);
+  const base = clearRegisterTarget(state);
+  if (!register) return { state: base, effects: [] };
+  if (target?.kind === "blackHole") return { state: base, effects: [] };
+
+  let nextState: ModalState = { ...base, register };
+  if (!target || target.kind === "unnamed") return { state: nextState, effects: [] };
+  if (target.kind === "named") {
+    return { state: writeNamedRegister(nextState, target, register), effects: [] };
+  }
+
+  nextState = {
+    ...nextState,
+    clipboardRegisters: {
+      ...state.clipboardRegisters,
+      [target.slot]: register,
+    },
+  };
+  return {
+    state: nextState,
+    effects: [{ type: "copyClipboard", register: target.slot, text: register.text }],
+  };
+}
+
+export function writeRegisters(state: ModalState, register: VimRegister | undefined): ModalState {
+  return applyRegisterWrite(state, register).state;
+}
+
+export function clipboardTargetToRead(
+  state: ModalState,
+): Extract<ActiveRegisterTarget, { kind: "clipboard" }> | undefined {
+  const target = activeTarget(state.pendingRegister);
+  return target?.kind === "clipboard" ? target : undefined;
+}
+
 export function registerToRead(state: ModalState): VimRegister | undefined {
   const target = activeTarget(state.pendingRegister);
-  return target ? state.namedRegisters?.[target.slot] : state.register;
+  if (!target || target.kind === "unnamed") return state.register;
+  if (target.kind === "named") return state.namedRegisters?.[target.slot];
+  if (target.kind === "clipboard") return state.clipboardRegisters?.[target.slot];
+  return undefined;
 }

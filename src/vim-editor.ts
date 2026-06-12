@@ -1,4 +1,8 @@
-import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import {
+  copyToClipboard,
+  CustomEditor,
+  type KeybindingsManager,
+} from "@earendil-works/pi-coding-agent";
 import {
   truncateToWidth,
   visibleWidth,
@@ -16,9 +20,11 @@ import type {
   ResolvedVimEditorOptions,
   VimDiagnostics,
   VimMode,
+  VimRegister,
 } from "./types.ts";
 
-import { normalizeBufferPosition } from "./buffer.ts";
+import { normalizeBufferPosition, pasteRegister, pasteRegisterBefore } from "./buffer.ts";
+import { readClipboardText } from "./clipboard.ts";
 import { pendingDisplay } from "./commands.ts";
 import {
   cursorStyleForMode,
@@ -32,6 +38,7 @@ import {
   ReadOnlyPopupOverlayComponent,
 } from "./keybinding-discovery-overlay.ts";
 import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
+import { appendMessageHistory } from "./modal/inspect.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import {
@@ -192,6 +199,10 @@ export class VimEditor extends CustomEditor {
 
   getNamedRegister(slot: string) {
     return this.modalState.namedRegisters?.[slot.toLowerCase()];
+  }
+
+  getClipboardRegister(slot: "+" | "*") {
+    return this.modalState.clipboardRegisters?.[slot];
   }
 
   getPendingOperator() {
@@ -372,6 +383,12 @@ export class VimEditor extends CustomEditor {
       case "openReadOnlyPopup":
         this.openReadOnlyPopup(effect.popup);
         return;
+      case "copyClipboard":
+        this.copyClipboard(effect.text);
+        return;
+      case "readClipboard":
+        this.readClipboardAndPaste(effect.register, effect.placement, effect.fallback);
+        return;
       case "terminalCursor":
         this.applyTerminalCursorStyle(effect.style);
         return;
@@ -379,6 +396,57 @@ export class VimEditor extends CustomEditor {
         this.invalidate();
         return;
     }
+  }
+
+  private copyClipboard(text: string): void {
+    void copyToClipboard(text).catch(() => {
+      this.addRuntimeMessage({ kind: "error", text: "Clipboard copy failed" });
+    });
+  }
+
+  private readClipboardAndPaste(
+    slot: "+" | "*",
+    placement: "after" | "before",
+    fallback?: VimRegister,
+  ): void {
+    void readClipboardText()
+      .then((text) => {
+        const register: VimRegister = { type: "char", text };
+        this.pasteClipboardRegister(slot, placement, register);
+      })
+      .catch(() => {
+        if (fallback) {
+          this.pasteClipboardRegister(slot, placement, fallback);
+          return;
+        }
+        this.addRuntimeMessage({ kind: "error", text: "Clipboard paste failed" });
+      });
+  }
+
+  private pasteClipboardRegister(
+    slot: "+" | "*",
+    placement: "after" | "before",
+    register: VimRegister,
+  ): void {
+    const result =
+      placement === "before"
+        ? pasteRegisterBefore(this.getText(), this.getCursor(), register)
+        : pasteRegister(this.getText(), this.getCursor(), register);
+    this.modalState = {
+      ...this.modalState,
+      clipboardRegisters: { ...this.modalState.clipboardRegisters, [slot]: register },
+    };
+    this.applyEdit(result);
+    if (result.changed) this.clearRedoStack();
+  }
+
+  private addRuntimeMessage(message: { kind: "error" | "success" | "info"; text: string }): void {
+    this.modalState = {
+      ...this.modalState,
+      exMessage: message,
+      messageHistory: appendMessageHistory(this.modalState.messageHistory, message),
+    };
+    this.invalidate();
   }
 
   private openReadOnlyPopup(popup: ReadOnlyPopup): void {

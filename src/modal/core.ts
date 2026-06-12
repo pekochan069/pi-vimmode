@@ -13,7 +13,7 @@ import type {
 import { feedbackForOptions, searchForOptions } from "../config.ts";
 import { appendMessageHistory } from "./inspect.ts";
 import { clearMarkTarget } from "./marks.ts";
-import { clearRegisterTarget, writeRegisters } from "./registers.ts";
+import { applyRegisterWrite, clearRegisterTarget } from "./registers.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
 
 export function keySequence(data: string): string | undefined {
@@ -143,17 +143,26 @@ export function clearPending(state: ModalState): ModalState {
   return clearMarkTarget(clearRegisterTarget(clearCommandPending(state)));
 }
 
-export function editState(state: ModalState, result: EditResult): ModalState {
+export function editStateAndEffects(
+  state: ModalState,
+  result: EditResult,
+): { state: ModalState; effects: ModalEffect[] } {
   const nextState = result.changed ? clearSearchHighlight(state) : state;
-  return writeRegisters(nextState, result.register);
+  return applyRegisterWrite(nextState, result.register);
+}
+
+export function editState(state: ModalState, result: EditResult): ModalState {
+  return editStateAndEffects(state, result).state;
 }
 
 export function editUpdate(state: ModalState, result: EditResult): ModalUpdate {
-  return withEffects(editState(state, result), [{ type: "edit", result }]);
+  const written = editStateAndEffects(state, result);
+  return withEffects(written.state, [{ type: "edit", result }, ...written.effects]);
 }
 
 export function yankUpdate(state: ModalState, register: VimRegister | undefined): ModalUpdate {
-  return invalidate(writeRegisters(state, register));
+  const written = applyRegisterWrite(state, register);
+  return withEffects(written.state, [...written.effects, { type: "invalidate" }]);
 }
 
 export function modeUpdate(

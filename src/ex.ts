@@ -1,3 +1,4 @@
+import type { ActiveRegisterTarget } from "./modal/types.ts";
 import type {
   LineRange,
   PromptTransform,
@@ -36,10 +37,7 @@ export type ParsedExRepeatSubstitution = {
   rangeExplicit: boolean;
 };
 
-export type ParsedExRegisterOperand = {
-  slot: string;
-  append: boolean;
-};
+export type ParsedExRegisterOperand = ActiveRegisterTarget;
 
 export type ParsedExLineCommand = {
   type: "delete" | "yank" | "put" | "join";
@@ -391,11 +389,23 @@ function parseRegisterOperand(
 ): { ok: true; register?: ParsedExRegisterOperand } | { ok: false; message: string } {
   const operand = rest.trim();
   if (operand.length === 0) return { ok: true };
-  if (!/^[A-Za-z]$/.test(operand)) return { ok: false, message: "Invalid Ex register operand" };
-  return {
-    ok: true,
-    register: { slot: operand.toLowerCase(), append: operand >= "A" && operand <= "Z" },
-  };
+  if (operand.length !== 1) return { ok: false, message: "Invalid Ex register operand" };
+  if (/^[A-Za-z]$/.test(operand)) {
+    return {
+      ok: true,
+      register: {
+        kind: "named",
+        slot: operand.toLowerCase(),
+        append: operand >= "A" && operand <= "Z",
+      },
+    };
+  }
+  if (operand === '"') return { ok: true, register: { kind: "unnamed" } };
+  if (operand === "_") return { ok: true, register: { kind: "blackHole" } };
+  if (operand === "+" || operand === "*") {
+    return { ok: true, register: { kind: "clipboard", slot: operand } };
+  }
+  return { ok: false, message: "Invalid Ex register operand" };
 }
 
 function parseTransformArgs(

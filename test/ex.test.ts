@@ -209,15 +209,35 @@ describe("Ex command parser", () => {
   test("parses Ex register operands for line commands", () => {
     expect(parseExCommand("delete a", context)).toMatchObject({
       type: "delete",
-      register: { slot: "a", append: false },
+      register: { kind: "named", slot: "a", append: false },
     });
     expect(parseExCommand("%yank A", context)).toMatchObject({
       type: "yank",
-      register: { slot: "a", append: true },
+      register: { kind: "named", slot: "a", append: true },
     });
     expect(parseExCommand("put A", context)).toMatchObject({
       type: "put",
-      register: { slot: "a", append: true },
+      register: { kind: "named", slot: "a", append: true },
+    });
+    expect(parseExCommand('delete "', context)).toMatchObject({
+      type: "delete",
+      register: { kind: "unnamed" },
+    });
+    expect(parseExCommand("%yank +", context)).toMatchObject({
+      type: "yank",
+      register: { kind: "clipboard", slot: "+" },
+    });
+    expect(parseExCommand("put *", context)).toMatchObject({
+      type: "put",
+      register: { kind: "clipboard", slot: "*" },
+    });
+    expect(parseExCommand("delete _", context)).toMatchObject({
+      type: "delete",
+      register: { kind: "blackHole" },
+    });
+    expect(parseExCommand('yank "+', context)).toEqual({
+      type: "error",
+      message: "Invalid Ex register operand",
     });
   });
 
@@ -502,7 +522,7 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Invalid Ex register operand",
     });
-    expect(parseExCommand("yank _", context)).toEqual({
+    expect(parseExCommand('yank "_', context)).toEqual({
       type: "error",
       message: "Invalid Ex register operand",
     });

@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -195,10 +193,10 @@ User-facing docs SHALL describe named prompt transform action keybindings, examp
 - **WHEN** docs describe action keybindings
 - **THEN** they state that `piVimMode.promptTransforms.actions` remains the existing transform enable-flag surface, `piVimMode.promptTransforms.commands` remains the Ex command-name configuration surface, and neither moves into `keymap.actions`
 
-#### Scenario: Docs explain legacy alias transition
+#### Scenario: Docs require canonical action IDs only
 
 - **WHEN** docs describe runtime diagnostics and action keybinding config for prompt transform actions
-- **THEN** they explain that canonical `prompt.transform.*` IDs are required in config and legacy `promptTransform.*` aliases are temporary diagnostic/search aliases only
+- **THEN** they state that canonical `prompt.transform.*` IDs are required and do not describe legacy `promptTransform.*` aliases as supported or searchable
 
 #### Scenario: Docs list first milestone non-goals
 
@@ -228,25 +226,6 @@ The project SHALL document a concise pi-vimmode quick reference that classifies 
 
 - **WHEN** a user reads the quick reference or runtime-help documentation
 - **THEN** it states that pi-vimmode does not provide a public plugin action API, diagnostic action keybinding dispatch, runtime `:map`, runtime `:action`, Vimscript, Neovim Lua, full Vim help tags, or broad quickref parity
-
-### Requirement: Documentation preserves prompt transform alias transition
-
-User-facing docs SHALL continue to distinguish canonical prompt transform action IDs from temporary legacy diagnostic aliases.
-
-#### Scenario: Canonical config IDs remain documented
-
-- **WHEN** a user reads action keybinding documentation in `docs/features.md` or `docs/settings.md`
-- **THEN** the docs require canonical `prompt.transform.*` IDs for `piVimMode.keymap.actions` config examples and supported ID lists
-
-#### Scenario: Legacy aliases remain documented as diagnostics-only
-
-- **WHEN** a user reads runtime diagnostics or action keybinding documentation during the alias transition release
-- **THEN** the docs state that legacy `promptTransform.*` names remain searchable in diagnostics but are rejected in config with a warning that names the canonical `prompt.transform.*` ID
-
-#### Scenario: Diagnostic metadata docs do not duplicate full settings reference
-
-- **WHEN** docs explain diagnostic/help action metadata and quickref classification
-- **THEN** detailed setting defaults and accepted shapes remain in `docs/settings.md`, while `docs/features.md` links or summarizes only the behavior needed for feature discovery
 
 ### Requirement: Documentation explains action keybinding presets
 
@@ -400,3 +379,4 @@ The README SHALL stay concise and point users to canonical feature/settings docs
 
 - **WHEN** this change updates documentation
 - **THEN** README remains a quickstart/index and any detailed `:keybindings` behavior or config examples live in `docs/features.md` and `docs/settings.md`
+

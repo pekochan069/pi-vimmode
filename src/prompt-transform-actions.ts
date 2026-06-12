@@ -110,24 +110,6 @@ export function canonicalPromptTransformActionIdForShortName(
   return `prompt.transform.${action}` as BindablePromptTransformActionId;
 }
 
-export function legacyPromptTransformActionAliasForId(
-  id: BindablePromptTransformActionId,
-): `promptTransform.${PromptTransformAction}` {
-  return id.replace(
-    "prompt.transform.",
-    "promptTransform.",
-  ) as `promptTransform.${PromptTransformAction}`;
-}
-
-export function canonicalPromptTransformActionIdForLegacyAlias(
-  alias: string,
-): BindablePromptTransformActionId | undefined {
-  if (!alias.startsWith("promptTransform.")) return undefined;
-  const action = alias.slice("promptTransform.".length) as PromptTransformAction;
-  const id = canonicalPromptTransformActionIdForShortName(action);
-  return ACTION_BY_ID.has(id) ? id : undefined;
-}
-
 function plainObject(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;

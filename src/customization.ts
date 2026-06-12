@@ -17,10 +17,7 @@ import {
   diagnosticActionMessage,
   type DiagnosticActionEntry,
 } from "./diagnostic-actions.ts";
-import {
-  canonicalPromptTransformActionIdForShortName,
-  legacyPromptTransformActionAliasForId,
-} from "./prompt-transform-actions.ts";
+import { canonicalPromptTransformActionIdForShortName } from "./prompt-transform-actions.ts";
 
 export type VimActionKind =
   | "command"
@@ -347,7 +344,6 @@ export function actionEntriesForKeymap(
         kind: "promptTransform",
         description: TRANSFORM_DESCRIPTIONS[id],
         keys: actionKeys,
-        aliases: [legacyPromptTransformActionAliasForId(actionId)],
         exCommands,
       });
     }

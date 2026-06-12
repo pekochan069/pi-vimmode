@@ -3,12 +3,10 @@
 ## Purpose
 
 TBD - created by archiving change typed-action-registry-keybindings. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Prompt transform actions have canonical registry metadata
 
-The Vim editor SHALL expose a finite typed registry for bindable prompt transform actions using canonical `prompt.transform.*` action IDs.
+The Vim editor SHALL expose a finite typed registry for bindable prompt transform actions using only canonical `prompt.transform.*` action IDs.
 
 #### Scenario: Registry contains first milestone transform actions
 
@@ -24,6 +22,11 @@ The Vim editor SHALL expose a finite typed registry for bindable prompt transfor
 
 - **WHEN** the registry is validated
 - **THEN** no two action entries share the same canonical action ID
+
+#### Scenario: Registry excludes legacy aliases
+
+- **WHEN** config validation, diagnostics, runtime help, keybinding popup output, or tests inspect prompt transform action metadata
+- **THEN** no `promptTransform.*` action IDs or aliases are exposed, and callers must use canonical `prompt.transform.*` IDs
 
 ### Requirement: Action keybindings resolve through modal grammar
 
@@ -122,25 +125,6 @@ The Vim editor SHALL keep diagnostic/help action metadata separate from the bind
 - **WHEN** config validation, command resolution, or tests enumerate accepted bindable action IDs
 - **THEN** the accepted set contains only canonical `prompt.transform.*` IDs for supported prompt transforms and excludes `vimmode.*` diagnostic/help metadata IDs
 
-### Requirement: Legacy promptTransform aliases remain diagnostics-only during transition
-
-The Vim editor SHALL preserve legacy `promptTransform.*` aliases for diagnostic/search compatibility until the planned one-release-cycle transition ends, while rejecting those aliases from keybinding config.
-
-#### Scenario: Legacy alias remains searchable
-
-- **WHEN** the editor executes `:actions promptTransform.reflow` or `:features promptTransform.reflow` during the transition release
-- **THEN** the diagnostic resolves the alias to canonical `prompt.transform.reflow` output
-
-#### Scenario: Legacy alias is rejected in config
-
-- **WHEN** settings configure `piVimMode.keymap.actions` with a legacy ID such as `promptTransform.reflow`
-- **THEN** the entry is rejected with a warning that names the canonical `prompt.transform.reflow` ID and accepted sibling bindings remain active
-
-#### Scenario: Alias transition is covered by validation
-
-- **WHEN** automated docs/source drift validation runs during the transition release
-- **THEN** it verifies that docs mention the temporary `promptTransform.*` diagnostic alias behavior and that tests cover canonical output for legacy alias queries
-
 ### Requirement: Action keybinding recipes are copy-pasteable and opt-in
 
 The Vim editor SHALL document curated prompt transform action keybinding recipes as copy-pasteable `piVimMode.keymap.actions` snippets that use existing canonical `prompt.transform.*` action IDs and do not create default bindings.
@@ -203,3 +187,4 @@ The Vim editor SHALL expose named action keybinding presets that are backed by t
 
 - **WHEN** user-facing docs or runtime help describe action keybinding presets
 - **THEN** they identify presets as finite built-in opt-in bundles and do not imply recursive mappings, arbitrary user actions, diagnostic/help action dispatch, or a generic plugin API
+

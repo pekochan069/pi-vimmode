@@ -793,8 +793,7 @@ describe("vim config parsing", () => {
     ]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("promptTransform.reflow"),
-        expect.stringContaining("prompt.transform.reflow"),
+        expect.stringContaining("unsupported piVimMode.keymap.actions.promptTransform.reflow"),
         expect.stringContaining("vimmode.doctor"),
         expect.stringContaining("Invalid reflow width"),
         expect.stringContaining("Unknown action arg: unknown"),
@@ -803,6 +802,7 @@ describe("vim config parsing", () => {
         expect.stringContaining("conflicts with motions.bufferStart"),
       ]),
     );
+    expect(result.warnings.join("\n")).not.toContain("use canonical prompt.transform.reflow");
   });
 
   test("rejects every metadata-only diagnostic action from keymap actions", () => {

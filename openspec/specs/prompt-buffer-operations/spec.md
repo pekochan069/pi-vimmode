@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-buffer-ts-prompt-buffer-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt buffer exposes operation-level navigation
 
 The prompt buffer module SHALL expose navigation operations that resolve cursor targets for supported prompt motions without requiring callers to compose low-level line, offset, or clamp helpers.
@@ -183,4 +185,3 @@ The prompt buffer module SHALL expose operation-level APIs that resolve and appl
 
 - **WHEN** a matching character exists only on another prompt line
 - **THEN** the prompt buffer treats the target as missing for operator character-search operations
-

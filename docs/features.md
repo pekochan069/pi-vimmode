@@ -81,7 +81,7 @@ pi-vimmode has a finite prompt-local surface. This quickref classifies what is s
 <!-- diagnostic-actions:vimmode.messages -->
 <!-- diagnostic-actions:vimmode.inspect -->
 
-Diagnostic/help metadata IDs are for discovery only: `vimmode.doctor`, `vimmode.actions`, `vimmode.keymap`, `vimmode.keybindings`, `vimmode.mapcheck`, `vimmode.help`, `vimmode.features`, `vimmode.messages`, and `vimmode.inspect` are not accepted by `piVimMode.keymap.actions` and cannot dispatch from user keybindings. Use `piVimMode.keymap.commands.showKeybindings` for an optional normal-mode shortcut to the keybindings popup. Use canonical `prompt.transform.*` IDs for prompt transform keybindings. Legacy `promptTransform.*` names remain diagnostics-only search aliases for one transition release and are rejected in config with a warning naming the canonical ID.
+Diagnostic/help metadata IDs are for discovery only: `vimmode.doctor`, `vimmode.actions`, `vimmode.keymap`, `vimmode.keybindings`, `vimmode.mapcheck`, `vimmode.help`, `vimmode.features`, `vimmode.messages`, and `vimmode.inspect` are not accepted by `piVimMode.keymap.actions` and cannot dispatch from user keybindings. Use `piVimMode.keymap.commands.showKeybindings` for an optional normal-mode shortcut to the keybindings popup. Use canonical `prompt.transform.*` IDs for prompt transform keybindings and diagnostic queries.
 
 Non-goals: no public plugin action API, diagnostic action keybinding dispatch, runtime `:map`, runtime `:action`, Vimscript, Neovim Lua, full Vim help tags, help pager, or broad quickref parity.
 
@@ -594,7 +594,7 @@ vjjg> " quote touched visual lines, then return to normal mode
 
 Action keybindings call the same prompt transform behavior as Ex commands, but changed action edits are silent and do not update dot-repeat in this milestone. Visual actions use touched lines; visual-block action transforms are linewise, not rectangular. `piVimMode.promptTransforms.commands` remains the Ex command-name config surface. `piVimMode.promptTransforms.actions` remains the transform enable-flag surface. `piVimMode.keymap.actions` is only for key bindings.
 
-Canonical config IDs are required: `prompt.transform.quote`, `prompt.transform.unquote`, `prompt.transform.bulletize`, `prompt.transform.fence`, `prompt.transform.indent`, `prompt.transform.dedent`, and `prompt.transform.reflow`. Legacy `promptTransform.*` aliases remain searchable in diagnostics for one transition release, but are rejected in config with a warning that names the canonical ID.
+Canonical config and diagnostic IDs are required: `prompt.transform.quote`, `prompt.transform.unquote`, `prompt.transform.bulletize`, `prompt.transform.fence`, `prompt.transform.indent`, `prompt.transform.dedent`, and `prompt.transform.reflow`. Non-canonical action IDs are rejected in config and do not match diagnostic/help searches.
 
 Regex substitution bounds: pattern length 256, addressed prompt text length 50,000 UTF-16 code units, and match-count cap 10,000.
 

@@ -1,7 +1,7 @@
 ---
 title: Pi vimmode typed action registry keybindings
 date: 2026-06-09
-last_updated: 2026-06-09
+last_updated: 2026-06-11
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -83,7 +83,7 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
    }
    ```
 
-   Keep `piVimMode.promptTransforms.commands` separate. It remains the Ex command-name config surface. Legacy `promptTransform.*` names are diagnostic/search aliases only, not config keys.
+   Keep `piVimMode.promptTransforms.commands` separate. It remains the Ex command-name config surface. Canonical `prompt.transform.*` IDs are required for config and diagnostics. Legacy `promptTransform.*` names were a transition-only compatibility surface and are now removed: they are not config keys, not diagnostic search aliases, and not displayed in keybinding catalogs.
 
    Keep `vimmode.*` diagnostic/help IDs separate too. IDs such as `vimmode.doctor` are metadata-only quickref entries for discovery surfaces; they are not bindable prompt transform actions and must be rejected from `piVimMode.keymap.actions`.
 
@@ -111,12 +111,20 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
 
    Reject:
    - protected Pi shortcuts,
-   - unknown or legacy IDs in config,
+   - unknown or non-canonical IDs in config,
    - invalid or unknown args,
    - disabled prompt transform actions,
    - duplicate keys across different actions,
    - exact grammar conflicts,
    - prefix-shadow conflicts with existing command grammar.
+
+   After the `remove-legacy-prompt-transform-aliases` cleanup, do not special-case legacy alias warnings. `promptTransform.reflow` should fail the same way as any other unsupported action ID:
+
+   ```text
+   unsupported piVimMode.keymap.actions.promptTransform.reflow
+   ```
+
+   That generic rejection is intentional. Keeping canonical-specific hints after alias removal keeps the old surface alive in diagnostics and tests.
 
 4. **Route through the existing command resolver.** `src/commands.ts` returns an action result from the same finite parser that already owns counts, pending prefixes, operator state, macro recording, and invalid-key behavior.
 
@@ -180,7 +188,15 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
 
 8. **Keep M1 deliberately finite.** This change intentionally did not add Vimscript, recursive mappings, a plugin API, runtime `:map`, runtime `:action`, quickref parity, or dot-repeat for keybound prompt transform actions. Keybound prompt transform edits are not dot-repeatable in M1.
 
-9. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
+9. **Retire compatibility aliases completely once the transition window ends.** Alias removal must cover every user-facing and source-backed surface together:
+   - delete alias helper exports from `src/prompt-transform-actions.ts`,
+   - remove config parser special-cases in `src/config.ts`,
+   - remove diagnostic aliases from `src/customization.ts`,
+   - update `docs/features.md` and `docs/settings.md` to say canonical-only,
+   - add drift guards so user docs cannot reintroduce `promptTransform.*` support claims,
+   - keep canonical dispatch behavior covered by existing normal/visual, macro, and dot-repeat tests.
+
+10. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
 
 ## Why This Matters
 
@@ -202,6 +218,7 @@ The result is user-configurable prompt transform keybindings without implying fu
 - Supporting one behavior through multiple surfaces such as Ex commands and normal/visual keybindings.
 - Extending `pi-vimmode` without accepting full Vimscript, recursive mapping, or plugin API scope.
 - Adding parameterized keybindings where validation must reject unknown keys and invalid values.
+- Removing a retired compatibility alias from config, diagnostics, docs, and tests without changing canonical behavior.
 
 Do not use this pattern for open-ended user scripting, recursively expanded mappings, arbitrary plugin dispatch, or behavior that needs a separate grammar outside the existing modal command resolver. Do not treat diagnostic/help `vimmode.*` IDs as keybinding smoke tests; they are discovery and rejection fixtures.
 
@@ -224,6 +241,30 @@ Do not use this pattern for open-ended user scripting, recursively expanded mapp
   },
 ];
 ```
+
+### Canonical-only alias retirement
+
+Before transition cleanup, `promptTransform.*` aliases existed as diagnostics-only search aliases. After the cleanup, every surface should use only `prompt.transform.*`:
+
+```ts
+expect(promptTransformActionForId("prompt.transform.reflow")).toBe("reflow");
+expect(promptTransformActionForId("promptTransform.reflow")).toBeUndefined();
+```
+
+```ts
+expect(runtimeFeaturesMessage("prompt.transform.reflow", context)).toContain("gq");
+expect(runtimeFeaturesMessage("promptTransform.reflow", context)).toBe(
+  "features: no match for promptTransform.reflow",
+);
+```
+
+Config warnings should also be generic unsupported-ID warnings, not migration hints:
+
+```text
+unsupported piVimMode.keymap.actions.promptTransform.reflow
+```
+
+The important invariant is that canonical accepted bindings still dispatch through the same action path. Alias removal should not touch normal/visual execution, search highlight clearing, register and mark preservation, macro replay, or the M1 rule that keybound prompt transform actions do not update dot-repeat.
 
 ### Good conflict behavior
 
@@ -254,6 +295,7 @@ Use tests at each boundary instead of one broad integration test:
 - `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — config propagation and live `VimEditor` drift lessons for prompt transforms.
 - `docs/solutions/logic-errors/pi-vimmode-customization-diagnostics-edge-cases-2026-06-04.md` — diagnostic action metadata should respect resolved enabled/disabled settings.
 - `docs/solutions/tooling-decisions/pi-extension-root-source-dist-publish-fields-2026-06-04.md` — package `files` and dry-run inspection guard for published extension contents.
+- `openspec/changes/archive/2026-06-11-remove-legacy-prompt-transform-aliases/` — follow-up cleanup that removed transition-only `promptTransform.*` aliases from config, diagnostics, docs, and tests.
 - `openspec/changes/typed-action-registry-keybindings/` — source change proposal, design, specs, and completed task checklist.
 
 ## Validation
@@ -271,4 +313,16 @@ openspec validate typed-action-registry-keybindings --strict
 openspec validate --specs --strict
 ```
 
-Final result: 396 tests passed, OpenSpec reported 53/53 tasks complete, and package dry-run included the extension entrypoint, runtime source, generated build, README, and docs.
+Final result for the original registry change: 396 tests passed, OpenSpec reported 53/53 tasks complete, and package dry-run included the extension entrypoint, runtime source, generated build, README, and docs.
+
+The 2026-06-11 alias-retirement update was verified with:
+
+```bash
+bun test
+bun run check-types
+bun run lint
+bun run format:check
+openspec validate --specs --strict
+```
+
+Final result: 463 tests passed, OpenSpec specs validated 20/20, and both active OpenSpec changes were archived.

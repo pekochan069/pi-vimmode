@@ -6,9 +6,9 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 
-import type { ReadOnlyPopup } from "./keybinding-discovery-popup.ts";
+import type { ReadOnlyPopup } from "./read-only-popup.ts";
 
-import { HELP_POPUP_BODY_ROWS, scrollHelpPopup } from "./keybinding-discovery-popup.ts";
+import { HELP_POPUP_BODY_ROWS, scrollHelpPopup } from "./read-only-popup.ts";
 
 export const READ_ONLY_POPUP_MIN_WIDTH = 48;
 export const READ_ONLY_POPUP_MIN_HEIGHT = 12;

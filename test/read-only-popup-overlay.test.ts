@@ -1,7 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, test } from "bun:test";
 
-import type { ReadOnlyPopup } from "../src/keybinding-discovery-popup.ts";
+import type { ReadOnlyPopup } from "../src/read-only-popup.ts";
 
 import { ReadOnlyPopupOverlayComponent } from "../src/keybinding-discovery-overlay.ts";
 

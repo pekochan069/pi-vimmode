@@ -7,8 +7,8 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 
-import type { ReadOnlyPopup } from "./keybinding-discovery-popup.ts";
 import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
+import type { ReadOnlyPopup } from "./read-only-popup.ts";
 import type {
   CursorStyle,
   EditResult,

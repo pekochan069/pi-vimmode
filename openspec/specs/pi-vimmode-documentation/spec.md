@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -379,4 +381,3 @@ The README SHALL stay concise and point users to canonical feature/settings docs
 
 - **WHEN** this change updates documentation
 - **THEN** README remains a quickstart/index and any detailed `:keybindings` behavior or config examples live in `docs/features.md` and `docs/settings.md`
-

@@ -26,7 +26,7 @@ import {
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
-import { scrollHelpPopup } from "../keybinding-discovery-popup.ts";
+import { scrollHelpPopup } from "../read-only-popup.ts";
 import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
 import {
   clearCommandPending,

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -707,4 +709,3 @@ The Vim keymap configuration SHALL allow configured semantic character-search co
 
 - **WHEN** the editor is in insert mode and the user presses keys configured for `findCharForward`, `findCharBackward`, `tillCharForward`, or `tillCharBackward`
 - **THEN** those keys continue to delegate to Pi default editing behavior unless otherwise supported by pi-vimmode insert-mode input
-

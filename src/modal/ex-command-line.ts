@@ -35,8 +35,8 @@ import {
   inspectPopup,
   keybindingsPopup,
   runtimeHelpPopup,
-  type ReadOnlyPopup,
 } from "../keybinding-discovery-popup.ts";
+import { type ReadOnlyPopup } from "../read-only-popup.ts";
 import {
   clearPending,
   clearPendingEx,

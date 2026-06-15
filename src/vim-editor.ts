@@ -37,7 +37,11 @@ import {
   READ_ONLY_POPUP_MIN_WIDTH,
   ReadOnlyPopupOverlayComponent,
 } from "./keybinding-discovery-overlay.ts";
-import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
+import {
+  canFastDelegateInsertInput,
+  handleModalInput,
+  modalPendingDisplay,
+} from "./modal/engine.ts";
 import { appendMessageHistory } from "./modal/inspect.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
@@ -224,6 +228,16 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
+    if (
+      canFastDelegateInsertInput(this.modalState, data, {
+        isAutocompleteOpen: this.isShowingAutocomplete(),
+        isMacroReplaying: this.isMacroReplaying,
+      })
+    ) {
+      this.delegateDefaultInput(data);
+      return;
+    }
+
     const update = handleModalInput(
       this.modalState,
       this.snapshot(),
@@ -359,14 +373,17 @@ export class VimEditor extends CustomEditor {
     for (const effect of effects) this.applyEffect(effect);
   }
 
+  private delegateDefaultInput(input: string): void {
+    const before = this.redoSnapshot();
+    super.handleInput(input);
+    this.clearRedoAfterTextChange(before);
+  }
+
   private applyEffect(effect: ModalEffect): void {
     switch (effect.type) {
-      case "delegate": {
-        const before = this.redoSnapshot();
-        super.handleInput(effect.input);
-        this.clearRedoAfterTextChange(before);
+      case "delegate":
+        this.delegateDefaultInput(effect.input);
         return;
-      }
       case "adapterCommand":
         this.applyAdapterCommand(effect.command);
         return;

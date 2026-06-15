@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-more-vim-keybindings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Normal mode supports additional navigation bindings
 
 The Vim editor SHALL support additional normal-mode navigation bindings for common prompt movement.
@@ -578,4 +580,3 @@ The Vim editor SHALL support explicit whitespace-delimited WORD motions and prev
 
 - **WHEN** the editor is in visual character mode with an active selection
 - **THEN** pressing `W`, `B`, `E`, `ge`, or `gE` moves the active end of the selection using the same prompt-local target semantics as normal mode
-

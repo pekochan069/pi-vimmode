@@ -184,6 +184,11 @@ export type ModalState = {
   lastRepeatableChange?: RepeatableChange;
 };
 
+export type FastInsertDelegateContext = {
+  isAutocompleteOpen?: boolean;
+  isMacroReplaying?: boolean;
+};
+
 export type AdapterCommand =
   | "left"
   | "right"

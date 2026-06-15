@@ -40,7 +40,9 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "bun test",
-    "check-types": "tsgo --noEmit"
+    "check-types": "tsgo --noEmit",
+    "measure:insert": "bun scripts/measure-insert-fast-path.ts",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",

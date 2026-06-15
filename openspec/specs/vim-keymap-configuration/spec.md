@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -741,4 +743,3 @@ The Vim keymap configuration SHALL expose WORD and previous-end word motions as 
 
 - **WHEN** a live `VimEditor` is constructed with resolved keymap options that include configured WORD or previous-end motion bindings
 - **THEN** the editor uses those bindings without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
-

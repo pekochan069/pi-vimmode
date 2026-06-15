@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change deepen-buffer-ts-prompt-buffer-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Prompt buffer exposes operation-level navigation
 
 The prompt buffer module SHALL expose navigation operations that resolve cursor targets for supported prompt motions without requiring callers to compose low-level line, offset, or clamp helpers.
@@ -231,4 +233,3 @@ The prompt buffer module SHALL resolve delete, change, and yank ranges for WORD 
 
 - **WHEN** caller requests an operator range for a WORD or previous-end motion and no valid non-empty range exists
 - **THEN** the prompt buffer returns a safe no-op edit result or no register and does not corrupt prompt text
-

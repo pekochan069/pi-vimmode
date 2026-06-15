@@ -1,9 +1,9 @@
 ---
 name: Bug report
 about: Something broken in pi-vimmode
-title: '[BUG] '
+title: "[BUG] "
 labels: bug
-assignees: ''
+assignees: ""
 ---
 
 **Describe the bug**
@@ -12,15 +12,13 @@ assignees: ''
 
 **Steps to reproduce**
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 **Expected behavior**
 
-
 **Actual behavior**
-
 
 **Environment**
 

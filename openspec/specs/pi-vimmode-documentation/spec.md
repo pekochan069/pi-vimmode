@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change document-pi-vimmode-features-settings. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Feature guide covers pi-vimmode behavior
 
 The project SHALL provide `docs/features.md` as a user-facing guide that explains every supported pi-vimmode feature area with concrete examples and explicit limitations.
@@ -408,4 +410,3 @@ User-facing pi-vimmode documentation SHALL describe supported WORD and previous-
 
 - **WHEN** docs describe `w`, `b`, `e`, `W`, `B`, `E`, `ge`, or `gE`
 - **THEN** they do not claim that lowercase word motions were changed to a new punctuation-aware boundary model unless source behavior and tests actually implement that boundary model
-

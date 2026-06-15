@@ -1,9 +1,10 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
-import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
+import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
@@ -928,6 +929,34 @@ describe("vim editor integration", () => {
     expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
   });
 
+  test("VimEditor honors configured WORD and previous-end motion keymap", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { wordForwardBig: ["gw"], wordPreviousEnd: ["g-"] },
+          operatorMotions: { delete: ["wordForwardBig", "wordPreviousEnd"] },
+          commands: { redo: ["U"], showKeybindings: ["gk"] },
+          macros: { record: ["q"], play: ["@"] },
+          marks: { set: ["m"], jumpExact: ["`"], jumpLine: ["'"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("run --foo=bar /tmp/a-b");
+    typeKeys(editor, ["g", "g", "g", "w"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 4 });
+
+    editor.setText("alpha beta.gamma /tmp/file");
+    typeKeys(editor, ["g", "g", "g", "w", "g", "w", "g", "-"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 15 });
+
+    editor.setText("run --foo=bar /tmp/a-b");
+    typeKeys(editor, ["g", "g", "d", "g", "w"]);
+    expect(editor.getText()).toBe("--foo=bar /tmp/a-b");
+  });
+
   test("macro records and replays Ex substitutions and cancellation", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("old\nold");
@@ -1119,7 +1148,7 @@ describe("vim editor integration", () => {
         ...DEFAULT_VIM_OPTIONS.keymap!,
         operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["z"] },
         motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
-        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["B"] },
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["ctrl+v"] },
       },
     });
     editor.setText("hello world");
@@ -1129,7 +1158,7 @@ describe("vim editor integration", () => {
     editor.handleInput("e");
     expect(editor.getText()).toBe("world");
     expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
-    editor.handleInput("B");
+    editor.handleInput("\x16");
     expect(editor.getVimMode()).toBe("visualBlock");
   });
 
@@ -1554,5 +1583,42 @@ describe("status border fitting", () => {
   test("handles extremely narrow widths", () => {
     expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 1))).toBe(1);
     expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 0))).toBe(0);
+  });
+});
+
+describe("vim editor clipboard register integration", () => {
+  afterEach(() => setClipboardTextReaderForTesting(undefined));
+
+  test("clipboard register command updates modal state without breaking editor effects", () => {
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "y", "y"]);
+
+    expect(editor.getText()).toBe("one");
+    expect(editor.getRegister()).toEqual({ type: "line", text: "one" });
+    expect(editor.getClipboardRegister("+")).toEqual({ type: "line", text: "one" });
+
+    typeKeys(editor, ["o", "\x1b"]);
+    expect(editor.getText()).toBe("one\n");
+  });
+
+  test("clipboard paste reads host clipboard text before prompt-local mirror", async () => {
+    setClipboardTextReaderForTesting(async () => "host");
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "p"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editor.getText()).toBe("onehost");
+    expect(editor.getClipboardRegister("+")).toEqual({ type: "char", text: "host" });
+  });
+
+  test("clipboard paste falls back to prompt-local mirror on host read failure", async () => {
+    setClipboardTextReaderForTesting(async () => {
+      throw new Error("no clipboard");
+    });
+    const { editor } = createEditor();
+    typeKeys(editor, ["o", "n", "e", "\x1b", '"', "+", "y", "y", "o", "\x1b", '"', "+", "P"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editor.getText()).toBe("one\none\n");
   });
 });

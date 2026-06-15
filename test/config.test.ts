@@ -258,6 +258,11 @@ describe("vim config parsing", () => {
 
   test("default keymap includes roadmap actions and configurable word-end", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForwardBig).toEqual(["W"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordBackwardBig).toEqual(["B"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEndBig).toEqual(["E"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordPreviousEnd).toEqual(["ge"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordPreviousEndBig).toEqual(["gE"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.incrementNumber).toEqual(["ctrl+a"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.decrementNumber).toEqual(["ctrl+x"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
@@ -269,21 +274,26 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordForwardBig");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("wordPreviousEnd");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank).toContain("wordPreviousEndBig");
 
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          motions: { wordEnd: ["E"] },
+          motions: { wordEnd: ["E"], wordForwardBig: ["gw"], wordPreviousEnd: ["g-"] },
           commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"], redo: ["U"] },
-          operatorMotions: { change: ["wordEnd"] },
+          operatorMotions: { change: ["wordEnd", "wordPreviousEnd"] },
         },
       },
     });
     expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
+    expect(result.options.keymap?.motions.wordForwardBig).toEqual(["gw"]);
+    expect(result.options.keymap?.motions.wordPreviousEnd).toEqual(["g-"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
     expect(result.options.keymap?.commands.redo).toEqual(["U"]);
-    expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd"]);
+    expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd", "wordPreviousEnd"]);
   });
 
   test("parses macro behavior options", () => {
@@ -503,7 +513,7 @@ describe("vim config parsing", () => {
       piVimMode: {
         preset: "vim-heavy",
         startMode: "insert",
-        keymap: { commands: { visualBlock: ["B"] } },
+        keymap: { commands: { visualBlock: ["ctrl+v"] } },
         ui: { cursorPosition: { enabled: true } },
       },
     });
@@ -511,7 +521,7 @@ describe("vim config parsing", () => {
     expect(result.warnings).toEqual([]);
     expect(result.options.preset).toBe("vim-heavy");
     expect(result.options.startMode).toBe("insert");
-    expect(result.options.keymap?.commands.visualBlock).toEqual(["B"]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v"]);
     expect(result.options.ui?.status.items).toContain("cursorPosition");
     expect(result.options.ui?.cursorPosition.enabled).toBe(true);
   });
@@ -863,7 +873,7 @@ describe("vim config parsing", () => {
     expect(result.warnings).toEqual(
       expect.arrayContaining([
         expect.stringContaining("prefix-shadow conflict"),
-        expect.stringContaining("conflict with motions.bufferStart"),
+        expect.stringContaining("conflict with motions.wordPreviousEnd"),
         expect.stringContaining("duplicate action key gq"),
         expect.stringContaining("duplicate action key zq"),
       ]),

@@ -127,7 +127,34 @@ function isWhitespace(char: string | undefined): boolean {
   return char === undefined || /\s/.test(char);
 }
 
+function isKeywordWordChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9_]/.test(char);
+}
+
+function wordKind(char: string | undefined): "keyword" | "punctuation" | "whitespace" {
+  if (isWhitespace(char)) return "whitespace";
+  return isKeywordWordChar(char) ? "keyword" : "punctuation";
+}
+
+function isSameSmallWordKind(left: string | undefined, right: string | undefined): boolean {
+  const leftKind = wordKind(left);
+  return leftKind !== "whitespace" && leftKind === wordKind(right);
+}
+
 function nextWordStartOffset(text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (index >= text.length) return index;
+
+  if (!isWhitespace(text[index])) {
+    const kind = wordKind(text[index]);
+    while (index < text.length && wordKind(text[index]) === kind) index++;
+  }
+
+  while (index < text.length && isWhitespace(text[index])) index++;
+  return index;
+}
+
+function nextWORDStartOffset(text: string, offset: number): number {
   let index = Math.max(0, Math.min(offset, text.length));
   if (index >= text.length) return index;
 
@@ -144,6 +171,28 @@ function wordEndOffset(text: string, offset: number): number {
   if (text.length === 0) return 0;
   if (index >= text.length) return text.length;
 
+  if (isWhitespace(text[index])) {
+    while (index < text.length && isWhitespace(text[index])) index++;
+  } else if (index + 1 < text.length && isSameSmallWordKind(text[index], text[index + 1])) {
+    const kind = wordKind(text[index]);
+    while (index + 1 < text.length && wordKind(text[index + 1]) === kind) index++;
+    return index;
+  } else {
+    index++;
+  }
+
+  while (index < text.length && isWhitespace(text[index])) index++;
+  if (index >= text.length) return text.length;
+  const kind = wordKind(text[index]);
+  while (index + 1 < text.length && wordKind(text[index + 1]) === kind) index++;
+  return index;
+}
+
+function wordEndWORDOffset(text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (text.length === 0) return 0;
+  if (index >= text.length) return text.length;
+
   if (!isWhitespace(text[index]) && index + 1 < text.length && !isWhitespace(text[index + 1])) {
     while (index + 1 < text.length && !isWhitespace(text[index + 1])) index++;
     return index;
@@ -156,7 +205,43 @@ function wordEndOffset(text: string, offset: number): number {
   return index;
 }
 
+function previousWordEndOffset(text: string, offset: number): number {
+  const current = Math.max(0, Math.min(offset, text.length));
+  if (current === 0 || text.length === 0) return 0;
+
+  let index = current - 1;
+  if (current < text.length && isSameSmallWordKind(text[index], text[current])) {
+    const kind = wordKind(text[current]);
+    while (index >= 0 && wordKind(text[index]) === kind) index--;
+  }
+  while (index >= 0 && isWhitespace(text[index])) index--;
+  return Math.max(0, index);
+}
+
+function previousWordEndWORDOffset(text: string, offset: number): number {
+  const current = Math.max(0, Math.min(offset, text.length));
+  if (current === 0 || text.length === 0) return 0;
+
+  let index = current - 1;
+  if (!isWhitespace(text[index]) && !isWhitespace(text[current])) {
+    while (index >= 0 && !isWhitespace(text[index])) index--;
+  }
+  while (index >= 0 && isWhitespace(text[index])) index--;
+  return Math.max(0, index);
+}
+
 function previousWordStartOffset(text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (index === 0) return 0;
+
+  index--;
+  while (index > 0 && isWhitespace(text[index])) index--;
+  const kind = wordKind(text[index]);
+  while (index > 0 && wordKind(text[index - 1]) === kind) index--;
+  return index;
+}
+
+function previousWORDStartOffset(text: string, offset: number): number {
   let index = Math.max(0, Math.min(offset, text.length));
   if (index === 0) return 0;
 
@@ -183,7 +268,12 @@ function motionTargetOffset(text: string, offset: number, motion: VimMotion): nu
   if (motion === "0") return bounds.start;
   if (motion === "^") return bounds.start + firstNonBlankColumn(bounds.line);
   if (motion === "w") return nextWordStartOffset(text, offset);
+  if (motion === "W") return nextWORDStartOffset(text, offset);
   if (motion === "e") return wordEndOffset(text, offset);
+  if (motion === "E") return wordEndWORDOffset(text, offset);
+  if (motion === "ge") return previousWordEndOffset(text, offset);
+  if (motion === "gE") return previousWordEndWORDOffset(text, offset);
+  if (motion === "B") return previousWORDStartOffset(text, offset);
   return previousWordStartOffset(text, offset);
 }
 
@@ -211,8 +301,10 @@ function motionOffsetRange(
     if (next === target) break;
     target = next;
   }
-  if (motion === "e" && target >= current)
+  if ((motion === "e" || motion === "E") && target >= current)
     return orderedOffsetRange(current, Math.min(text.length, target + 1));
+  if ((motion === "ge" || motion === "gE") && target <= current)
+    return orderedOffsetRange(target, current);
   if (motion === "l" && target >= current)
     return orderedOffsetRange(current, Math.min(text.length, target));
   return orderedOffsetRange(current, target);
@@ -1715,14 +1807,51 @@ export function yankByCharSearch(
   return selected.length > 0 ? { type: "char", text: selected } : undefined;
 }
 
-export function wordEndPosition(text: string, cursor: Position, count = 1): Position {
+function countedWordPosition(
+  text: string,
+  cursor: Position,
+  count: number,
+  nextOffset: (text: string, offset: number) => number,
+): Position {
   let offset = positionToOffset(text, cursor);
   for (let index = 0; index < Math.max(1, count); index++) {
-    const next = wordEndOffset(text, offset);
+    const next = nextOffset(text, offset);
     if (next === offset) break;
     offset = next;
   }
   return offsetToPosition(text, offset);
+}
+
+export function wordForwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, nextWordStartOffset);
+}
+
+export function wordBackwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, previousWordStartOffset);
+}
+
+export function wordEndPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, wordEndOffset);
+}
+
+export function wordForwardBigPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, nextWORDStartOffset);
+}
+
+export function wordBackwardBigPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, previousWORDStartOffset);
+}
+
+export function wordEndBigPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, wordEndWORDOffset);
+}
+
+export function wordPreviousEndPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, previousWordEndOffset);
+}
+
+export function wordPreviousEndBigPosition(text: string, cursor: Position, count = 1): Position {
+  return countedWordPosition(text, cursor, count, previousWordEndWORDOffset);
 }
 
 export function deleteByMotion(

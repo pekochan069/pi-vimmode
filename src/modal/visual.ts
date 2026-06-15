@@ -15,6 +15,7 @@ import {
 import {
   delegate,
   editState,
+  editStateAndEffects,
   invalidate,
   isDelegatedResetKey,
   isProtectedPiDelegateKey,
@@ -25,7 +26,7 @@ import {
   shiftActionForOperator,
   withEffects,
 } from "./core.ts";
-import { registerToRead, writeRegisters } from "./registers.ts";
+import { applyRegisterWrite, registerToRead } from "./registers.ts";
 
 export type VisualKind = "char" | "line" | "block";
 
@@ -92,7 +93,8 @@ export function yankVisualUpdate(
 ): ModalUpdate {
   if (!state.visualAnchor) return modeUpdate(state, "normal", options);
   const register = yankVisualSelection(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
-  return modeUpdate(writeRegisters(state, register), "normal", options);
+  const written = applyRegisterWrite(state, register);
+  return modeUpdate(written.state, "normal", options, written.effects);
 }
 
 export function deleteVisualSelection(
@@ -109,7 +111,11 @@ export function deleteVisualSelection(
       : kind === "block"
         ? deleteBlockRange(snapshot.text, state.visualAnchor, snapshot.cursor)
         : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
-  return modeUpdate(editState(state, result), nextMode, options, [{ type: "edit", result }]);
+  const written = editStateAndEffects(state, result);
+  return modeUpdate(written.state, nextMode, options, [
+    { type: "edit", result },
+    ...written.effects,
+  ]);
 }
 
 export function toggleVisualSelection(

@@ -97,6 +97,18 @@ const ENTRIES = [
     testAnchors: ["test/customization.test.ts", "test/modal.test.ts"],
   },
   {
+    id: "motions",
+    category: "motions",
+    topics: ["motions", "motion", "word", "WORD", "ge", "gE"],
+    summary:
+      "normal and visual modes support prompt-local motions including word/WORD movement, previous word end, line, buffer, pair, search, mark, and character-search targets",
+    examples: ["W", "gE", "dW", "cE", "dge"],
+    limits: ["prompt-local", "no subword/camelCase motions", "no display-line motions"],
+    docsAnchor: "runtime-help:motions",
+    specAnchor: "openspec/specs/extended-vim-keybindings/spec.md",
+    testAnchors: ["test/commands.test.ts", "test/buffer.test.ts", "test/modal.test.ts"],
+  },
+  {
     id: "transforms",
     category: "transforms",
     topics: ["transforms", "transform", "quote", "reflow", "fence", "bulletize"],
@@ -107,6 +119,22 @@ const ENTRIES = [
     docsAnchor: "runtime-help:prompt-transforms",
     specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
     testAnchors: ["test/modal.test.ts", "test/config.test.ts"],
+  },
+  {
+    id: "registers",
+    category: "registers",
+    topics: ["registers", "register", "clipboard", "black-hole", "unnamed", '"+', '"*', '"_'],
+    summary:
+      'registers are prompt-local; unnamed and a-z named registers work with yank/delete/change/paste, "_ discards, and "+/"* copy to and paste from host clipboard with prompt-local mirror fallback',
+    examples: ['"ayy', '"ap', '"_dd', '"+yy', ":yank +", ":put *"],
+    limits: [
+      "no full Vim register parity",
+      "normal-mode clipboard reads depend on platform tools",
+      "no numbered/expression/read-only registers",
+    ],
+    docsAnchor: "runtime-help:registers",
+    specAnchor: "openspec/specs/vim-named-registers/spec.md",
+    testAnchors: ["test/registers.test.ts", "test/modal.test.ts", "test/vim-editor.test.ts"],
   },
   {
     id: "marks",

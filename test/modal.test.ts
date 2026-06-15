@@ -32,6 +32,8 @@ function applyModalKeys(
   let text = initialText;
   let cursor = initialCursor;
 
+  const effects: ModalEffect[] = [];
+
   for (const key of keys) {
     const update = handleModalInput(
       state,
@@ -40,6 +42,7 @@ function applyModalKeys(
       key,
     );
     state = update.state;
+    effects.push(...update.effects);
     for (const effect of update.effects) {
       if (effect.type === "edit") {
         text = effect.result.text;
@@ -49,7 +52,7 @@ function applyModalKeys(
     }
   }
 
-  return { state, text, cursor };
+  return { state, text, cursor, effects };
 }
 
 describe("modal contracts", () => {
@@ -61,7 +64,7 @@ describe("modal contracts", () => {
     const state: ModalState = {
       mode: "visual",
       pending: "d",
-      pendingRegister: { slot: "a", append: false },
+      pendingRegister: { kind: "named", slot: "a", append: false },
       visualAnchor: cursor,
       register: { type: "char", text: "x" },
       namedRegisters: { a: { type: "line", text: "one" } },
@@ -118,6 +121,8 @@ describe("modal contracts", () => {
         },
       },
       { type: "playMacro", slot: "a", inputs: ["i", "x", "\x1b"] },
+      { type: "copyClipboard", register: "+", text: "copied" },
+      { type: "readClipboard", register: "+", placement: "after" },
       { type: "invalidate" },
       { type: "terminalCursor", style: "bar" },
     ];
@@ -128,6 +133,8 @@ describe("modal contracts", () => {
       "edit",
       "openReadOnlyPopup",
       "playMacro",
+      "copyClipboard",
+      "readClipboard",
       "invalidate",
       "terminalCursor",
     ]);
@@ -2295,6 +2302,85 @@ describe("modal engine", () => {
     expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
   });
 
+  test("normal mode supports WORD and previous-end motions", () => {
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 0), ["W"]).cursor,
+    ).toEqual(p(0, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 4), ["E"]).cursor,
+    ).toEqual(p(0, 12));
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 14), ["B"]).cursor,
+    ).toEqual(p(0, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), ["g", "e"]).cursor,
+    ).toEqual(p(0, 15));
+    expect(
+      applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), ["2", "g", "E"])
+        .cursor,
+    ).toEqual(p(0, 4));
+  });
+
+  test("visual mode extends selection with WORD and previous-end motions", () => {
+    const word = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "run --foo=bar /tmp/a-b",
+      p(0, 0),
+      ["W"],
+    );
+    expect(word.cursor).toEqual(p(0, 4));
+    expect(word.state.visualAnchor).toEqual(p(0, 0));
+
+    const previous = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 17) },
+      "alpha beta.gamma /tmp/file",
+      p(0, 17),
+      ["g", "E"],
+    );
+    expect(previous.cursor).toEqual(p(0, 15));
+    expect(previous.state.visualAnchor).toEqual(p(0, 17));
+  });
+
+  test("normal operators support WORD and previous-end motions", () => {
+    const deletedWord = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 0), [
+      "d",
+      "W",
+    ]);
+    expect(deletedWord.text).toBe("--foo=bar /tmp/a-b");
+    expect(deletedWord.state.register).toEqual({ type: "char", text: "run " });
+
+    const changedEnd = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 4), [
+      "c",
+      "E",
+    ]);
+    expect(changedEnd.text).toBe("run  /tmp/a-b");
+    expect(changedEnd.state.mode).toBe("insert");
+    expect(changedEnd.state.register).toEqual({ type: "char", text: "--foo=bar" });
+
+    const yankedBack = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 14), [
+      "y",
+      "B",
+    ]);
+    expect(yankedBack.text).toBe("run --foo=bar /tmp/a-b");
+    expect(yankedBack.state.register).toEqual({ type: "char", text: "--foo=bar " });
+
+    const previousEnd = applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), [
+      "d",
+      "g",
+      "e",
+    ]);
+    expect(previousEnd.text).toBe("alpha beta.gamm/tmp/file");
+    expect(previousEnd.state.register).toEqual({ type: "char", text: "a " });
+
+    const repeatedChange = applyModalKeys(changedEnd.state, "run next-token", p(0, 4), [
+      "\x1b",
+      ".",
+    ]);
+    expect(repeatedChange.text).toBe("run ");
+    expect(repeatedChange.state.mode).toBe("insert");
+    expect(repeatedChange.state.register).toEqual({ type: "char", text: "next-token" });
+  });
+
   test("normal operators support line, buffer, and matching-pair motions", () => {
     const deletedDown = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["d", "j"]);
     expect(deletedDown.text).toBe("three");
@@ -2918,14 +3004,14 @@ describe("modal engine", () => {
     const targeted = handleModalInput(prefix.state, snapshot, options, "a");
     expect(targeted.state).toEqual({
       mode: "normal",
-      pendingRegister: { slot: "a", append: false },
+      pendingRegister: { kind: "named", slot: "a", append: false },
     });
 
     const pending = handleModalInput(targeted.state, snapshot, options, "y");
     expect(pending.state).toEqual({
       mode: "normal",
       pending: "y",
-      pendingRegister: { slot: "a", append: false },
+      pendingRegister: { kind: "named", slot: "a", append: false },
     });
 
     const yanked = handleModalInput(pending.state, snapshot, options, "y");
@@ -2938,7 +3024,11 @@ describe("modal engine", () => {
 
   test("normal named register prefix writes deletes and operator yanks", () => {
     const deletedLine = handleModalInput(
-      { mode: "normal", pending: "d", pendingRegister: { slot: "a", append: false } },
+      {
+        mode: "normal",
+        pending: "d",
+        pendingRegister: { kind: "named", slot: "a", append: false },
+      },
       { text: "one\ntwo", lines: ["one", "two"], cursor },
       options,
       "d",
@@ -2947,7 +3037,7 @@ describe("modal engine", () => {
     expect(deletedLine.state.register).toEqual({ type: "line", text: "one" });
 
     const deletedChar = handleModalInput(
-      { mode: "normal", pendingRegister: { slot: "b", append: false } },
+      { mode: "normal", pendingRegister: { kind: "named", slot: "b", append: false } },
       snapshot,
       options,
       "x",
@@ -2959,7 +3049,11 @@ describe("modal engine", () => {
     });
 
     const yankedWord = handleModalInput(
-      { mode: "normal", pending: "y", pendingRegister: { slot: "c", append: false } },
+      {
+        mode: "normal",
+        pending: "y",
+        pendingRegister: { kind: "named", slot: "c", append: false },
+      },
       { text: "abc def", lines: ["abc def"], cursor },
       options,
       "w",
@@ -2976,7 +3070,7 @@ describe("modal engine", () => {
     };
 
     const namedPaste = handleModalInput(
-      { ...state, pendingRegister: { slot: "a", append: false } },
+      { ...state, pendingRegister: { kind: "named", slot: "a", append: false } },
       { text: "xy", lines: ["xy"], cursor: { line: 0, col: 0 } },
       options,
       "p",
@@ -3004,7 +3098,7 @@ describe("modal engine", () => {
         mode: "normal",
         register: { type: "line", text: "unnamed" },
         namedRegisters: { a: { type: "line", text: "alpha\nbeta" } },
-        pendingRegister: { slot: "a", append: true },
+        pendingRegister: { kind: "named", slot: "a", append: true },
       },
       { text: "one\ntwo", lines: ["one", "two"], cursor: { line: 1, col: 0 } },
       options,
@@ -3020,7 +3114,7 @@ describe("modal engine", () => {
     });
 
     const missing = handleModalInput(
-      { mode: "normal", pendingRegister: { slot: "z", append: false } },
+      { mode: "normal", pendingRegister: { kind: "named", slot: "z", append: false } },
       snapshot,
       options,
       "p",
@@ -3044,7 +3138,7 @@ describe("modal engine", () => {
     const unsupported = handleModalInput(
       {
         mode: "normal",
-        pendingRegister: { slot: "a", append: false },
+        pendingRegister: { kind: "named", slot: "a", append: false },
         namedRegisters: { a: { type: "line", text: "keep" } },
       },
       snapshot,
@@ -3061,7 +3155,7 @@ describe("modal engine", () => {
         mode: "normal",
         pending: "y",
         namedRegisters: { a: { type: "line", text: "one" } },
-        pendingRegister: { slot: "a", append: true },
+        pendingRegister: { kind: "named", slot: "a", append: true },
       },
       { text: "two", lines: ["two"], cursor },
       options,
@@ -3375,7 +3469,7 @@ describe("modal engine", () => {
       {
         mode: "visualLine",
         visualAnchor: { line: 0, col: 0 },
-        pendingRegister: { slot: "a", append: false },
+        pendingRegister: { kind: "named", slot: "a", append: false },
       },
       { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: { line: 1, col: 0 } },
       options,
@@ -3388,7 +3482,7 @@ describe("modal engine", () => {
       {
         mode: "visualBlock",
         visualAnchor: { line: 0, col: 1 },
-        pendingRegister: { slot: "b", append: false },
+        pendingRegister: { kind: "named", slot: "b", append: false },
       },
       { text: "abcd\nefgh", lines: ["abcd", "efgh"], cursor: { line: 1, col: 2 } },
       options,
@@ -3406,7 +3500,7 @@ describe("modal engine", () => {
         visualAnchor: { line: 1, col: 0 },
         register: { type: "line", text: "unnamed" },
         namedRegisters: { a: { type: "line", text: "alpha\nbeta" } },
-        pendingRegister: { slot: "a", append: false },
+        pendingRegister: { kind: "named", slot: "a", append: false },
       },
       { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: { line: 1, col: 0 } },
       options,
@@ -3725,5 +3819,146 @@ describe("modal engine", () => {
     );
 
     expect(result.state).toEqual({ mode: "normal", register: { type: "char", text: "keep" } });
+  });
+});
+
+describe("special register modal behavior", () => {
+  test("normal explicit unnamed, black-hole, clipboard, and unsupported targets", () => {
+    const yanked = applyModalKeys({ mode: "normal" }, "one\ntwo", p(0, 0), ['"', '"', "y", "y"]);
+    expect(yanked.state.register).toEqual({ type: "line", text: "one" });
+    expect(yanked.state.namedRegisters).toBeUndefined();
+    expect(yanked.state.clipboardRegisters).toBeUndefined();
+
+    const deleted = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "one\ntwo",
+      p(0, 0),
+      ['"', "_", "d", "d"],
+    );
+    expect(deleted.text).toBe("two");
+    expect(deleted.state.register).toEqual({ type: "char", text: "keep" });
+
+    const copied = applyModalKeys({ mode: "normal" }, "one\ntwo", p(0, 0), ['"', "+", "y", "y"]);
+    expect(copied.state.register).toEqual({ type: "line", text: "one" });
+    expect(copied.state.clipboardRegisters?.["+"]).toEqual({ type: "line", text: "one" });
+
+    const invalid = applyModalKeys({ mode: "normal" }, "one", p(0, 0), ['"', "="]);
+    expect(invalid.text).toBe("one");
+    expect(invalid.cursor).toEqual(p(0, 0));
+    expect(invalid.state.pendingRegister).toBeUndefined();
+  });
+
+  test("normal clipboard paste requests host clipboard read with mirror fallback", () => {
+    const pasted = applyModalKeys(
+      {
+        mode: "normal",
+        clipboardRegisters: { "+": { type: "line", text: "clip" } },
+      },
+      "one\ntwo",
+      p(1, 0),
+      ['"', "+", "P"],
+    );
+    expect(pasted.text).toBe("one\ntwo");
+    expect(pasted.effects).toContainEqual({
+      type: "readClipboard",
+      register: "+",
+      placement: "before",
+      fallback: { type: "line", text: "clip" },
+    });
+
+    const missing = applyModalKeys({ mode: "normal" }, "one", p(0, 0), ['"', "+", "p"]);
+    expect(missing.text).toBe("one");
+    expect(missing.cursor).toEqual(p(0, 0));
+    expect(missing.effects).toContainEqual({
+      type: "readClipboard",
+      register: "+",
+      placement: "after",
+      fallback: undefined,
+    });
+  });
+
+  test("visual special registers write, discard, and paste through existing semantics", () => {
+    const yanked = applyModalKeys({ mode: "visual", visualAnchor: p(0, 0) }, "abc", p(0, 1), [
+      '"',
+      "+",
+      "y",
+    ]);
+    expect(yanked.state.mode).toBe("normal");
+    expect(yanked.state.clipboardRegisters?.["+"]).toEqual({ type: "char", text: "ab" });
+
+    const deleted = applyModalKeys(
+      {
+        mode: "visualLine",
+        visualAnchor: p(0, 0),
+        register: { type: "char", text: "keep" },
+      },
+      "one\ntwo",
+      p(1, 0),
+      ['"', "_", "d"],
+    );
+    expect(deleted.text).toBe("");
+    expect(deleted.state.register).toEqual({ type: "char", text: "keep" });
+
+    const pasted = applyModalKeys(
+      {
+        mode: "visualLine",
+        visualAnchor: p(0, 0),
+        register: { type: "line", text: "new" },
+      },
+      "one\ntwo",
+      p(1, 0),
+      ['"', '"', "p"],
+    );
+    expect(pasted.text).toBe("new");
+  });
+
+  test("Ex special register operands write, discard, put, and reject quoted forms", () => {
+    const yanked = applyModalKeys({ mode: "normal" }, "one\ntwo", p(0, 0), [
+      ":",
+      "%",
+      "y",
+      "a",
+      "n",
+      "k",
+      " ",
+      "+",
+      "\r",
+    ]);
+    expect(yanked.state.clipboardRegisters?.["+"]).toEqual({ type: "line", text: "one\ntwo" });
+    expect(yanked.state.exMessage).toEqual({ kind: "success", text: "2 lines yanked" });
+
+    const deleted = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "one\ntwo",
+      p(0, 0),
+      [":", "2", "d", "e", "l", "e", "t", "e", " ", "_", "\r"],
+    );
+    expect(deleted.text).toBe("one");
+    expect(deleted.state.register).toEqual({ type: "char", text: "keep" });
+
+    const put = applyModalKeys(
+      {
+        mode: "normal",
+        clipboardRegisters: { "*": { type: "line", text: "clip" } },
+      },
+      "one",
+      p(0, 0),
+      [":", "p", "u", "t", " ", "*", "\r"],
+    );
+    expect(put.text).toBe("one\nclip");
+
+    const rejected = applyModalKeys({ mode: "normal" }, "one", p(0, 0), [
+      ":",
+      "y",
+      "a",
+      "n",
+      "k",
+      " ",
+      '"',
+      "+",
+      "\r",
+    ]);
+    expect(rejected.text).toBe("one");
+    expect(rejected.state.exMessage?.kind).toBe("error");
   });
 });

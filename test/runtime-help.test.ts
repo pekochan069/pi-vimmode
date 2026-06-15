@@ -32,6 +32,11 @@ describe("runtime help registry", () => {
     expect(runtimeHelpMessage("search", context)).toContain("prompt search");
     expect(runtimeHelpMessage("search", context)).toContain("no cross-prompt history");
     expect(runtimeHelpMessage("ex", context)).toContain(":s");
+    expect(runtimeHelpMessage("registers", context)).toContain('"+');
+    expect(runtimeHelpMessage("registers", context)).toContain(
+      "clipboard reads depend on platform tools",
+    );
+    expect(runtimeHelpMessage("clipboard", context)).toContain("mirror fallback");
     expect(runtimeHelpMessage("actions", context)).toContain("metadata-only");
     expect(runtimeHelpMessage("diagnostics", context)).toContain("not bindable");
     expect(runtimeHelpMessage("vimscript", context)).toBe("help: no match for vimscript");

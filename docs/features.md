@@ -108,19 +108,25 @@ Enter        -> submit through Pi
 
 ## Normal mode motions
 
+<!-- runtime-help:motions -->
+
 | Key                   | Action                                  | Notes                                                            |
 | --------------------- | --------------------------------------- | ---------------------------------------------------------------- |
 | `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                       |
 | `0` / `$`             | line start / line end                   | Current prompt line.                                             |
 | `^` / `_`             | first non-blank on line                 | Both map to same action.                                         |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement.                                      |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.  |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.    |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.       |
 | `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                   |
 | `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line. |
 | `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                               |
 | `t{char}` / `T{char}` | move until before/after char            | Current line only.                                               |
 | `;` / `,`             | repeat char search                      | Same/opposite direction.                                         |
 
-Counts work for supported motions: `3w`, `2e`, `4j`, `2fx`.
+Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`.
+
+Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior; this change only adds explicit WORD actions and previous-end motions.
 
 Example:
 
@@ -129,6 +135,10 @@ one two three
 ^   cursor on o
 3w  moves to start of third word or as far as prompt allows
 %   jumps between matching brackets when cursor is on or before bracket on same line
+
+run --flag=value /tmp/a-b
+^ cursor on r
+W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves back to e
 ```
 
 ## Normal mode edits
@@ -189,7 +199,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`, `%`
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
@@ -199,6 +209,7 @@ Examples:
 
 ```text
 dw        delete to next word start
+dW        delete to next whitespace-delimited WORD start
 dl        delete one character to the right
 dj        delete current and next line
 dgg       delete through buffer start
@@ -206,12 +217,15 @@ yG        yank through buffer end
 d%        delete through matching pair
 y$        yank through line end
 c^        change back to first non-blank
+cE        change through the end of the current/next WORD
 3dw       delete three word motions
+2dge      delete through the second previous word end
 df)       delete from cursor through next ) on current line
 dt,       delete from cursor up to, but not including, next comma on current line
 d;        delete through repeated character-search target
 cf:       change from cursor through next : and enter insert
 yt]       yank from cursor up to, but not including, next ]
+ygE       yank back through previous WORD end
 d2f,      delete through the second next comma on current line
 d/foo⏎    delete from cursor through next literal foo match
 ```
@@ -627,16 +641,24 @@ Examples:
 
 Runtime messages are in-memory for the current editor, bounded to 20 retained entries, and shown by `:messages` in the read-only popup. Popup display, popup scroll/dismissal, and `:messages` output itself do not add retained history entries. There is no message pager, persistent log, `:messages clear`, or full Vim `:messages` parity.
 
+<!-- runtime-help:registers -->
+
 ## Registers
 
-pi-vimmode supports one unnamed register and named edit registers `a-z`, all in memory for the current editor session.
+pi-vimmode supports one unnamed register, named edit registers `a-z`, and a finite subset of special registers, all in memory for the current editor session.
 
 Behavior:
 
-- Yank/delete/change update unnamed register.
+- Yank/delete/change update unnamed register by default.
+- `""` explicitly targets the unnamed register for supported yank/delete/change/paste.
 - `"{a-z}` targets next supported yank/delete/change/paste with named register.
 - `"{A-Z}` appends yank/delete/change text to lowercase named register.
 - Uppercase paste reads lowercase register.
+- `"_` is a black-hole target: yank/delete/change discard captured text and preserve unnamed/named/clipboard registers; paste is a safe no-op.
+- `"+` and `"*` write captured yank/delete/change text to Pi's host clipboard helper and a prompt-local typed clipboard mirror.
+- `"+p`, `"+P`, `"*p`, and `"*P` read current host clipboard text for normal-mode paste, then fall back to the prompt-local typed clipboard mirror if host clipboard read fails.
+- Host clipboard paste uses charwise paste semantics because OS clipboard text does not carry Vim linewise/charwise metadata; fallback mirror paste preserves typed register metadata.
+- Ex line commands accept bare register operands: `:delete a`, `:yank +`, `:put *`, `:delete _`, `:delete "`. Quoted Ex operands such as `:yank "+` remain unsupported.
 - Linewise registers paste below with `p` and above with `P`.
 - Charwise registers paste after with `p` and before with `P`.
 - Empty or missing register paste is a no-op.
@@ -648,9 +670,15 @@ Examples:
 "ap    paste register a
 "Ayy   append current line to register a
 "bdw   delete word into register b
+"_dd   delete current line without clobbering unnamed register
+"+yy   yank current line to unnamed register, + mirror, and host clipboard
+"*dw   delete word to unnamed register, * mirror, and host clipboard
+""p    explicitly paste unnamed register
+:yank +
+:put *
 ```
 
-Limitations: no numbered registers, special registers, expression registers, black-hole register, or system clipboard register.
+Limitations: no full Vim/Neovim register parity; clipboard reads depend on platform clipboard tools (`pbpaste`, `win32yank.exe`/PowerShell on WSL/Windows, `wl-paste`, `xclip`, `xsel`, or Termux) and are only wired for normal-mode `"+p`/`"+P`/`"*p`/`"*P`; no numbered registers, yank register `"0`, small-delete register, expression register `"=`, or read-only filename/command/search registers such as `"%`, `":`, `".`, and `"/`.
 
 <!-- runtime-help:marks -->
 

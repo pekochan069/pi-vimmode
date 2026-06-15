@@ -35,7 +35,14 @@ import {
   shiftLinesFromCursor,
   substituteCharAt,
   toggleCaseAt,
+  wordBackwardPosition,
   wordEndPosition,
+  wordEndBigPosition,
+  wordForwardPosition,
+  wordForwardBigPosition,
+  wordBackwardBigPosition,
+  wordPreviousEndPosition,
+  wordPreviousEndBigPosition,
   yankByCharSearch,
   yankByMotion,
   yankLine,
@@ -49,6 +56,7 @@ import {
   clearCommandPending,
   clearPending,
   editState,
+  editStateAndEffects,
   editUpdate,
   invalidate,
   modeUpdate,
@@ -58,7 +66,7 @@ import {
   yankUpdate,
 } from "./core.ts";
 import { startExCommandUpdate } from "./ex-command-line.ts";
-import { clearRegisterTarget, registerToRead } from "./registers.ts";
+import { clearRegisterTarget, clipboardTargetToRead, registerToRead } from "./registers.ts";
 import { repeatSearch, startSearchUpdate } from "./search.ts";
 
 export function normalDispatchSummary(state: ModalState): string {
@@ -84,15 +92,55 @@ function moveEffectFor(
     right: "right",
     lineStart: "lineStart",
     lineEnd: "lineEnd",
-    wordForward: "wordRight",
-    wordBackward: "wordLeft",
   };
   const command = adapterCommands[motion];
   if (command) return { type: "adapterCommand", command };
+  if (motion === "wordForward") {
+    return {
+      type: "restoreCursor",
+      position: wordForwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordBackward") {
+    return {
+      type: "restoreCursor",
+      position: wordBackwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
   if (motion === "wordEnd") {
     return {
       type: "restoreCursor",
       position: wordEndPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordForwardBig") {
+    return {
+      type: "restoreCursor",
+      position: wordForwardBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordBackwardBig") {
+    return {
+      type: "restoreCursor",
+      position: wordBackwardBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordEndBig") {
+    return {
+      type: "restoreCursor",
+      position: wordEndBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordPreviousEnd") {
+    return {
+      type: "restoreCursor",
+      position: wordPreviousEndPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordPreviousEndBig") {
+    return {
+      type: "restoreCursor",
+      position: wordPreviousEndBigPosition(snapshot.text, snapshot.cursor, count),
     };
   }
   if (motion === "bufferStart") {
@@ -165,7 +213,8 @@ export function applyOperatorMotion(
   }
 
   const result = deleteByMotion(snapshot.text, snapshot.cursor, legacyMotion, count);
-  let edited = editState(baseState, result);
+  const written = editStateAndEffects(baseState, result);
+  let edited = written.state;
   if (recordRepeat) {
     edited = withRepeatableChange(
       edited,
@@ -173,7 +222,7 @@ export function applyOperatorMotion(
       result.changed,
     );
   }
-  const effects: ModalEffect[] = [{ type: "edit", result }];
+  const effects: ModalEffect[] = [{ type: "edit", result }, ...written.effects];
   if (operator === "change") return modeUpdate(edited, "insert", options, effects);
   return withEffects(edited, effects);
 }
@@ -206,25 +255,27 @@ export function applyLineCommand(
   }
   if (operator === "delete") {
     const result = deleteLine(snapshot.text, snapshot.cursor, count);
-    let edited = editState(nextState, result);
+    const written = editStateAndEffects(nextState, result);
+    let edited = written.state;
     if (recordRepeat)
       edited = withRepeatableChange(
         edited,
         { type: "lineCommand", operator, count },
         result.changed,
       );
-    return withEffects(edited, [{ type: "edit", result }]);
+    return withEffects(edited, [{ type: "edit", result }, ...written.effects]);
   }
   if (operator === "change") {
     const result = changeLine(snapshot.text, snapshot.cursor, count);
-    let edited = editState(nextState, result);
+    const written = editStateAndEffects(nextState, result);
+    let edited = written.state;
     if (recordRepeat)
       edited = withRepeatableChange(
         edited,
         { type: "lineCommand", operator, count },
         result.changed,
       );
-    return modeUpdate(edited, "insert", options, [{ type: "edit", result }]);
+    return modeUpdate(edited, "insert", options, [{ type: "edit", result }, ...written.effects]);
   }
   return yankUpdate(
     nextState,
@@ -292,24 +343,27 @@ export function applyCommand(
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualBlock", options);
     case "deleteChar": {
       const result = deleteCharAt(snapshot.text, snapshot.cursor, count);
-      let edited = editState(nextState, result);
+      const written = editStateAndEffects(nextState, result);
+      let edited = written.state;
       if (recordRepeat)
         edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
-      return withEffects(edited, [{ type: "edit", result }]);
+      return withEffects(edited, [{ type: "edit", result }, ...written.effects]);
     }
     case "deleteToLineEnd": {
       const result = deleteByMotion(snapshot.text, snapshot.cursor, "$", count);
-      let edited = editState(nextState, result);
+      const written = editStateAndEffects(nextState, result);
+      let edited = written.state;
       if (recordRepeat)
         edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
-      return withEffects(edited, [{ type: "edit", result }]);
+      return withEffects(edited, [{ type: "edit", result }, ...written.effects]);
     }
     case "changeToLineEnd": {
       const result = deleteByMotion(snapshot.text, snapshot.cursor, "$", count);
-      let edited = editState(nextState, result);
+      const written = editStateAndEffects(nextState, result);
+      let edited = written.state;
       if (recordRepeat)
         edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
-      return modeUpdate(edited, "insert", options, [{ type: "edit", result }]);
+      return modeUpdate(edited, "insert", options, [{ type: "edit", result }, ...written.effects]);
     }
     case "yankLine":
       return yankUpdate(
@@ -320,16 +374,40 @@ export function applyCommand(
       );
     case "joinLine":
       return editUpdate(nextState, joinLineWithNext(snapshot.text, snapshot.cursor));
-    case "pasteAfter":
+    case "pasteAfter": {
+      const clipboardTarget = clipboardTargetToRead(state);
+      if (clipboardTarget) {
+        return withEffects(clearRegisterTarget(nextState), [
+          {
+            type: "readClipboard",
+            register: clipboardTarget.slot,
+            placement: "after",
+            fallback: state.clipboardRegisters?.[clipboardTarget.slot],
+          },
+        ]);
+      }
       return editUpdate(
         clearRegisterTarget(nextState),
         pasteRegister(snapshot.text, snapshot.cursor, registerToRead(state)),
       );
-    case "pasteBefore":
+    }
+    case "pasteBefore": {
+      const clipboardTarget = clipboardTargetToRead(state);
+      if (clipboardTarget) {
+        return withEffects(clearRegisterTarget(nextState), [
+          {
+            type: "readClipboard",
+            register: clipboardTarget.slot,
+            placement: "before",
+            fallback: state.clipboardRegisters?.[clipboardTarget.slot],
+          },
+        ]);
+      }
       return editUpdate(
         clearRegisterTarget(nextState),
         pasteRegisterBefore(snapshot.text, snapshot.cursor, registerToRead(state)),
       );
+    }
     case "incrementNumber":
     case "decrementNumber": {
       const delta = (command === "incrementNumber" ? 1 : -1) * Math.max(1, count);
@@ -513,7 +591,11 @@ export function applyOperatorCharSearch(
   }
 
   const result = deleteByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
-  let edited = editState(result.changed ? { ...baseState, lastCharSearch } : baseState, result);
+  const written = editStateAndEffects(
+    result.changed ? { ...baseState, lastCharSearch } : baseState,
+    result,
+  );
+  let edited = written.state;
   if (recordRepeat) {
     edited = withRepeatableChange(
       edited,
@@ -522,8 +604,8 @@ export function applyOperatorCharSearch(
     );
   }
   const effects: ModalEffect[] = result.changed
-    ? [{ type: "edit", result }]
-    : [{ type: "invalidate" }];
+    ? [{ type: "edit", result }, ...written.effects]
+    : [{ type: "invalidate" }, ...written.effects];
   if (operator === "change" && result.changed)
     return modeUpdate(edited, "insert", options, effects);
   return withEffects(edited, effects);
@@ -546,7 +628,8 @@ export function applyOperatorTextObject(
       yankTextObject(snapshot.text, snapshot.cursor, textObject, promptStructures),
     );
   const result = deleteTextObject(snapshot.text, snapshot.cursor, textObject, promptStructures);
-  let edited = editState(baseState, result);
+  const written = editStateAndEffects(baseState, result);
+  let edited = written.state;
   if (recordRepeat) {
     edited = withRepeatableChange(
       edited,
@@ -554,7 +637,7 @@ export function applyOperatorTextObject(
       result.changed,
     );
   }
-  const effects: ModalEffect[] = [{ type: "edit", result }];
+  const effects: ModalEffect[] = [{ type: "edit", result }, ...written.effects];
   if (operator === "change") return modeUpdate(edited, "insert", options, effects);
   return withEffects(edited, effects);
 }

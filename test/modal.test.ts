@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
 import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
-import { handleModalInput } from "../src/modal/engine.ts";
+import { canFastDelegateInsertInput, handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
 
@@ -56,6 +56,63 @@ function applyModalKeys(
 }
 
 describe("modal contracts", () => {
+  test("canFastDelegateInsertInput allows only plain insert text with no side state", () => {
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a")).toBe(true);
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "é")).toBe(true);
+
+    const unsafeStates: ModalState[] = [
+      { mode: "normal" },
+      { mode: "insert", visualAnchor: cursor },
+      { mode: "insert", pending: "d" },
+      {
+        mode: "insert",
+        blockInsert: {
+          anchor: cursor,
+          active: cursor,
+          placement: "start",
+          previewLine: 0,
+          text: "",
+        },
+      },
+      { mode: "insert", recordingSlot: "a" },
+      { mode: "insert", pendingMacro: "record" },
+      { mode: "insert", pendingRegister: "awaitingSlot" },
+      { mode: "insert", pendingMark: { kind: "set" } },
+      {
+        mode: "insert",
+        pendingWorkbench: { kind: "search", prefix: "/", text: "", direction: "forward" },
+      },
+      { mode: "insert", pendingSearch: { query: "", direction: "forward" } },
+      { mode: "insert", pendingEx: { command: "", sourceMode: "normal" } },
+      { mode: "insert", exMessage: { kind: "info", text: "message" } },
+      {
+        mode: "insert",
+        helpPopup: {
+          title: ":help",
+          lines: ["help"],
+          source: "help",
+          docsAnchor: "runtime-help:runtime-help",
+          scrollOffset: 0,
+        },
+      },
+      { mode: "insert", searchHighlight: { query: "abc", current: cursor } },
+    ];
+
+    for (const state of unsafeStates) expect(canFastDelegateInsertInput(state, "a")).toBe(false);
+  });
+
+  test("canFastDelegateInsertInput rejects non-text and adapter-owned unsafe context", () => {
+    for (const input of ["\x1b", "\r", "\t", "\x7f", "ab", "\u001b[A", "\x03"]) {
+      expect(canFastDelegateInsertInput({ mode: "insert" }, input)).toBe(false);
+    }
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isAutocompleteOpen: true })).toBe(
+      false,
+    );
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isMacroReplaying: true })).toBe(
+      false,
+    );
+  });
+
   test("createModalState starts with configured mode and empty transient state", () => {
     expect(createModalState("normal")).toEqual({ mode: "normal" });
   });

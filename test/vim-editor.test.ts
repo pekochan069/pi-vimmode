@@ -1,6 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import type { ModalState } from "../src/modal/types.ts";
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
@@ -116,6 +117,85 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("ab");
     editor.handleInput("\x1b");
     expect(editor.getVimMode()).toBe("normal");
+  });
+
+  test("plain insert text uses fast path without full snapshot", () => {
+    const { editor } = createEditor();
+    (editor as unknown as { getLines: () => string[] }).getLines = () => {
+      throw new Error("snapshot should not be constructed for safe insert text");
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+  });
+
+  test("insert escape stays on modal path and exits insert mode", () => {
+    const { editor } = createEditor();
+    editor.handleInput("a");
+    editor.handleInput("\x1b");
+    expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("insert fast path stays disabled while recording and replaying macros", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    typeKeys(editor, ["q", "a", "i", "X", "\x1b", "q"]);
+    expect((editor as unknown as { modalState: ModalState }).modalState.macros?.a).toEqual([
+      "i",
+      "X",
+      "\x1b",
+    ]);
+
+    editor.setText("");
+    typeKeys(editor, ["@", "a"]);
+    expectEditorState(editor, { text: "X", mode: "normal" });
+  });
+
+  test("transient Ex message clears through modal path while insert text is preserved", () => {
+    const { editor } = createEditor();
+    (editor as unknown as { modalState: ModalState }).modalState = {
+      mode: "insert",
+      exMessage: { kind: "info", text: "done" },
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+    expect((editor as unknown as { modalState: ModalState }).modalState.exMessage).toBeUndefined();
+  });
+
+  test("fast-path insert text clears redo history after text changes", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "i"]);
+    expect(editor.getText()).toBe("abc");
+
+    editor.handleInput("z");
+    expect(editor.getText()).toBe("zabc");
+    typeKeys(editor, ["\x1b", "\x12"]);
+    expect(editor.getText()).toBe("zabc");
+  });
+
+  test("search highlight state uses modal fallback before insert delegation", () => {
+    const { editor } = createEditor();
+    const state = (editor as unknown as { modalState: ModalState }).modalState;
+    (editor as unknown as { modalState: ModalState }).modalState = {
+      ...state,
+      mode: "insert",
+      searchHighlight: { query: "a", current: { line: 0, col: 0 } },
+    };
+    let snapshotReads = 0;
+    const originalGetLines = editor.getLines.bind(editor);
+    (editor as unknown as { getLines: () => string[] }).getLines = () => {
+      snapshotReads += 1;
+      return originalGetLines();
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+    expect(snapshotReads).toBeGreaterThan(0);
+    expect((editor as unknown as { modalState: ModalState }).modalState.searchHighlight).toEqual({
+      query: "a",
+      current: { line: 0, col: 0 },
+    });
   });
 
   test("can start in configured normal mode", () => {

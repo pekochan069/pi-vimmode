@@ -35,7 +35,14 @@ import {
   shiftLinesFromCursor,
   substituteCharAt,
   toggleCaseAt,
+  wordBackwardPosition,
   wordEndPosition,
+  wordEndBigPosition,
+  wordForwardPosition,
+  wordForwardBigPosition,
+  wordBackwardBigPosition,
+  wordPreviousEndPosition,
+  wordPreviousEndBigPosition,
   yankByCharSearch,
   yankByMotion,
   yankLine,
@@ -85,15 +92,55 @@ function moveEffectFor(
     right: "right",
     lineStart: "lineStart",
     lineEnd: "lineEnd",
-    wordForward: "wordRight",
-    wordBackward: "wordLeft",
   };
   const command = adapterCommands[motion];
   if (command) return { type: "adapterCommand", command };
+  if (motion === "wordForward") {
+    return {
+      type: "restoreCursor",
+      position: wordForwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordBackward") {
+    return {
+      type: "restoreCursor",
+      position: wordBackwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
   if (motion === "wordEnd") {
     return {
       type: "restoreCursor",
       position: wordEndPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordForwardBig") {
+    return {
+      type: "restoreCursor",
+      position: wordForwardBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordBackwardBig") {
+    return {
+      type: "restoreCursor",
+      position: wordBackwardBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordEndBig") {
+    return {
+      type: "restoreCursor",
+      position: wordEndBigPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordPreviousEnd") {
+    return {
+      type: "restoreCursor",
+      position: wordPreviousEndPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "wordPreviousEndBig") {
+    return {
+      type: "restoreCursor",
+      position: wordPreviousEndBigPosition(snapshot.text, snapshot.cursor, count),
     };
   }
   if (motion === "bufferStart") {

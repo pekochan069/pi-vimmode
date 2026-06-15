@@ -97,6 +97,18 @@ const ENTRIES = [
     testAnchors: ["test/customization.test.ts", "test/modal.test.ts"],
   },
   {
+    id: "motions",
+    category: "motions",
+    topics: ["motions", "motion", "word", "WORD", "ge", "gE"],
+    summary:
+      "normal and visual modes support prompt-local motions including word/WORD movement, previous word end, line, buffer, pair, search, mark, and character-search targets",
+    examples: ["W", "gE", "dW", "cE", "dge"],
+    limits: ["prompt-local", "no subword/camelCase motions", "no display-line motions"],
+    docsAnchor: "runtime-help:motions",
+    specAnchor: "openspec/specs/extended-vim-keybindings/spec.md",
+    testAnchors: ["test/commands.test.ts", "test/buffer.test.ts", "test/modal.test.ts"],
+  },
+  {
     id: "transforms",
     category: "transforms",
     topics: ["transforms", "transform", "quote", "reflow", "fence", "bulletize"],

@@ -160,21 +160,26 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 
 ### Motions
 
-| Path                                     | Default      | Effect                                                                        |
-| ---------------------------------------- | ------------ | ----------------------------------------------------------------------------- |
-| `piVimMode.keymap.motions.left`          | `["h"]`      | Move left. Count repeats movement.                                            |
-| `piVimMode.keymap.motions.down`          | `["j"]`      | Move down. Count repeats movement.                                            |
-| `piVimMode.keymap.motions.up`            | `["k"]`      | Move up. Count repeats movement.                                              |
-| `piVimMode.keymap.motions.right`         | `["l"]`      | Move right. Count repeats movement.                                           |
-| `piVimMode.keymap.motions.wordForward`   | `["w"]`      | Move to next word.                                                            |
-| `piVimMode.keymap.motions.wordBackward`  | `["b"]`      | Move to previous word.                                                        |
-| `piVimMode.keymap.motions.wordEnd`       | `["e"]`      | Move to word end.                                                             |
-| `piVimMode.keymap.motions.lineStart`     | `["0"]`      | Move to start of current line.                                                |
-| `piVimMode.keymap.motions.lineEnd`       | `["$"]`      | Move to end of current line.                                                  |
-| `piVimMode.keymap.motions.firstNonBlank` | `["^", "_"]` | Move to first non-blank character on current line.                            |
-| `piVimMode.keymap.motions.bufferStart`   | `["gg"]`     | Move to prompt start.                                                         |
-| `piVimMode.keymap.motions.bufferEnd`     | `["G"]`      | Move to prompt end.                                                           |
-| `piVimMode.keymap.motions.matchingPair`  | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line. |
+| Path                                          | Default      | Effect                                                                        |
+| --------------------------------------------- | ------------ | ----------------------------------------------------------------------------- |
+| `piVimMode.keymap.motions.left`               | `["h"]`      | Move left. Count repeats movement.                                            |
+| `piVimMode.keymap.motions.down`               | `["j"]`      | Move down. Count repeats movement.                                            |
+| `piVimMode.keymap.motions.up`                 | `["k"]`      | Move up. Count repeats movement.                                              |
+| `piVimMode.keymap.motions.right`              | `["l"]`      | Move right. Count repeats movement.                                           |
+| `piVimMode.keymap.motions.wordForward`        | `["w"]`      | Move to next word.                                                            |
+| `piVimMode.keymap.motions.wordBackward`       | `["b"]`      | Move to previous word.                                                        |
+| `piVimMode.keymap.motions.wordEnd`            | `["e"]`      | Move to word end.                                                             |
+| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`      | Move to next whitespace-delimited WORD.                                       |
+| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`      | Move to previous whitespace-delimited WORD.                                   |
+| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`      | Move to end of current or next whitespace-delimited WORD.                     |
+| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`     | Move to previous word end.                                                    |
+| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`     | Move to previous whitespace-delimited WORD end.                               |
+| `piVimMode.keymap.motions.lineStart`          | `["0"]`      | Move to start of current line.                                                |
+| `piVimMode.keymap.motions.lineEnd`            | `["$"]`      | Move to end of current line.                                                  |
+| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]` | Move to first non-blank character on current line.                            |
+| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                         |
+| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                           |
+| `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line. |
 
 ### Commands
 
@@ -279,7 +284,7 @@ Example:
 These settings decide which semantic motions are valid after each operator. Accepted motion action names:
 
 ```text
-left, down, up, right, wordForward, wordBackward, wordEnd, lineStart, firstNonBlank, lineEnd, bufferStart, bufferEnd, matchingPair
+left, down, up, right, wordForward, wordBackward, wordEnd, wordForwardBig, wordBackwardBig, wordEndBig, wordPreviousEnd, wordPreviousEndBig, lineStart, firstNonBlank, lineEnd, bufferStart, bufferEnd, matchingPair
 ```
 
 | Path                                      | Default                                                      | Effect                                                                         |
@@ -288,7 +293,11 @@ left, down, up, right, wordForward, wordBackward, wordEnd, lineStart, firstNonBl
 | `piVimMode.keymap.operatorMotions.change` | all supported motion actions (`left` through `matchingPair`) | Motions allowed after change operator.                                         |
 | `piVimMode.keymap.operatorMotions.yank`   | all supported motion actions (`left` through `matchingPair`) | Motions allowed after yank operator.                                           |
 
+WORD and previous-end actions can be customized and used in `operatorMotions` like other finite motions. Example: `{ "piVimMode": { "keymap": { "motions": { "wordForwardBig": ["gw"], "wordPreviousEnd": ["g-"] }, "operatorMotions": { "delete": ["wordForwardBig", "wordPreviousEnd"] } } } }` makes `dgw` and `dg-` valid delete targets.
+
 Character-search commands are configured under `piVimMode.keymap.commands`, not `operatorMotions`; they are current-line operator targets for motion-capable `delete`, `change`, and `yank` when their `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, or `repeatCharSearchReverse` command bindings resolve. `operatorMotions` applies only to motion-capable `delete`, `change`, and `yank`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
+
+Motion configuration boundaries: no subword/camelCase navigation, display-line motions, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity are added by these settings.
 
 ### Action keybindings
 
@@ -652,6 +661,11 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "wordForward": ["w"],
         "wordBackward": ["b"],
         "wordEnd": ["e"],
+        "wordForwardBig": ["W"],
+        "wordBackwardBig": ["B"],
+        "wordEndBig": ["E"],
+        "wordPreviousEnd": ["ge"],
+        "wordPreviousEndBig": ["gE"],
         "lineStart": ["0"],
         "lineEnd": ["$"],
         "firstNonBlank": ["^", "_"],
@@ -715,6 +729,11 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
           "wordForward",
           "wordBackward",
           "wordEnd",
+          "wordForwardBig",
+          "wordBackwardBig",
+          "wordEndBig",
+          "wordPreviousEnd",
+          "wordPreviousEndBig",
           "lineStart",
           "firstNonBlank",
           "lineEnd",
@@ -730,6 +749,11 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
           "wordForward",
           "wordBackward",
           "wordEnd",
+          "wordForwardBig",
+          "wordBackwardBig",
+          "wordEndBig",
+          "wordPreviousEnd",
+          "wordPreviousEndBig",
           "lineStart",
           "firstNonBlank",
           "lineEnd",
@@ -745,6 +769,11 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
           "wordForward",
           "wordBackward",
           "wordEnd",
+          "wordForwardBig",
+          "wordBackwardBig",
+          "wordEndBig",
+          "wordPreviousEnd",
+          "wordPreviousEndBig",
           "lineStart",
           "firstNonBlank",
           "lineEnd",
@@ -896,14 +925,14 @@ Global settings can keep broad defaults. Project settings can override one field
   "piVimMode": {
     "keymap": {
       "commands": {
-        "visualBlock": ["B", "<A-v>"]
+        "visualBlock": ["<A-v>"]
       }
     }
   }
 }
 ```
 
-Built-in `Ctrl-v` still works.
+Built-in `Ctrl-v` still works. `B` is a default WORD motion, so it is not a safe visual-block example key.
 
 ### Remap operator and motion
 
@@ -915,14 +944,14 @@ Built-in `Ctrl-v` still works.
         "delete": ["z"]
       },
       "motions": {
-        "wordForward": ["W"]
+        "wordForward": ["gw"]
       }
     }
   }
 }
 ```
 
-With this config, `zz` deletes a line and `zW` deletes by the configured `wordForward` motion.
+With this config, `zz` deletes a line and `zgw` deletes by the configured `wordForward` motion.
 
 ### Disable one operator-motion combination
 

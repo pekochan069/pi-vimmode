@@ -67,6 +67,30 @@ describe("documentation drift guard", () => {
     );
   });
 
+  test("docs cover WORD and previous-end motion names without lowercase retune claims", () => {
+    for (const key of ["`W`", "`B`", "`E`", "`ge`", "`gE`", "dW", "cE", "ygE"]) {
+      expect(featuresDoc).toContain(key);
+    }
+    for (const action of [
+      "wordForwardBig",
+      "wordBackwardBig",
+      "wordEndBig",
+      "wordPreviousEnd",
+      "wordPreviousEndBig",
+    ]) {
+      expect(settingsDoc).toContain(action);
+    }
+    expect(settingsDoc).toContain('["W"]');
+    expect(settingsDoc).toContain('["B"]');
+    expect(settingsDoc).toContain('["E"]');
+    expect(settingsDoc).toContain('["ge"]');
+    expect(settingsDoc).toContain('["gE"]');
+    expect(featuresDoc).toContain("Lowercase `w`, `b`, and `e` keep their current");
+    expect(allUserDocs).not.toMatch(/lowercase[^\n.]{0,80}punctuation-aware/i);
+    expect(allUserDocs).toContain("no subword/camelCase navigation");
+    expect(allUserDocs).toContain("display-line motions");
+  });
+
   test("docs cannot regress :noh or :nohlsearch into unsupported claims", () => {
     const forbidden =
       /(?:unsupported|not supported|no support)[^\n.]{0,120}:(?:noh|nohlsearch)|:(?:noh|nohlsearch)[^\n.]{0,120}(?:unsupported|not supported|no support)/i;

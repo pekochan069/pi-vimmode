@@ -2302,6 +2302,85 @@ describe("modal engine", () => {
     expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
   });
 
+  test("normal mode supports WORD and previous-end motions", () => {
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 0), ["W"]).cursor,
+    ).toEqual(p(0, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 4), ["E"]).cursor,
+    ).toEqual(p(0, 12));
+    expect(
+      applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 14), ["B"]).cursor,
+    ).toEqual(p(0, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), ["g", "e"]).cursor,
+    ).toEqual(p(0, 15));
+    expect(
+      applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), ["2", "g", "E"])
+        .cursor,
+    ).toEqual(p(0, 4));
+  });
+
+  test("visual mode extends selection with WORD and previous-end motions", () => {
+    const word = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "run --foo=bar /tmp/a-b",
+      p(0, 0),
+      ["W"],
+    );
+    expect(word.cursor).toEqual(p(0, 4));
+    expect(word.state.visualAnchor).toEqual(p(0, 0));
+
+    const previous = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 17) },
+      "alpha beta.gamma /tmp/file",
+      p(0, 17),
+      ["g", "E"],
+    );
+    expect(previous.cursor).toEqual(p(0, 15));
+    expect(previous.state.visualAnchor).toEqual(p(0, 17));
+  });
+
+  test("normal operators support WORD and previous-end motions", () => {
+    const deletedWord = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 0), [
+      "d",
+      "W",
+    ]);
+    expect(deletedWord.text).toBe("--foo=bar /tmp/a-b");
+    expect(deletedWord.state.register).toEqual({ type: "char", text: "run " });
+
+    const changedEnd = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 4), [
+      "c",
+      "E",
+    ]);
+    expect(changedEnd.text).toBe("run  /tmp/a-b");
+    expect(changedEnd.state.mode).toBe("insert");
+    expect(changedEnd.state.register).toEqual({ type: "char", text: "--foo=bar" });
+
+    const yankedBack = applyModalKeys({ mode: "normal" }, "run --foo=bar /tmp/a-b", p(0, 14), [
+      "y",
+      "B",
+    ]);
+    expect(yankedBack.text).toBe("run --foo=bar /tmp/a-b");
+    expect(yankedBack.state.register).toEqual({ type: "char", text: "--foo=bar " });
+
+    const previousEnd = applyModalKeys({ mode: "normal" }, "alpha beta.gamma /tmp/file", p(0, 17), [
+      "d",
+      "g",
+      "e",
+    ]);
+    expect(previousEnd.text).toBe("alpha beta.gamm/tmp/file");
+    expect(previousEnd.state.register).toEqual({ type: "char", text: "a " });
+
+    const repeatedChange = applyModalKeys(changedEnd.state, "run next-token", p(0, 4), [
+      "\x1b",
+      ".",
+    ]);
+    expect(repeatedChange.text).toBe("run ");
+    expect(repeatedChange.state.mode).toBe("insert");
+    expect(repeatedChange.state.register).toEqual({ type: "char", text: "next-token" });
+  });
+
   test("normal operators support line, buffer, and matching-pair motions", () => {
     const deletedDown = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["d", "j"]);
     expect(deletedDown.text).toBe("three");

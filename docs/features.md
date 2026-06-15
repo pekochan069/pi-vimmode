@@ -108,19 +108,25 @@ Enter        -> submit through Pi
 
 ## Normal mode motions
 
+<!-- runtime-help:motions -->
+
 | Key                   | Action                                  | Notes                                                            |
 | --------------------- | --------------------------------------- | ---------------------------------------------------------------- |
 | `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                       |
 | `0` / `$`             | line start / line end                   | Current prompt line.                                             |
 | `^` / `_`             | first non-blank on line                 | Both map to same action.                                         |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement.                                      |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.  |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.    |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.       |
 | `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                   |
 | `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line. |
 | `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                               |
 | `t{char}` / `T{char}` | move until before/after char            | Current line only.                                               |
 | `;` / `,`             | repeat char search                      | Same/opposite direction.                                         |
 
-Counts work for supported motions: `3w`, `2e`, `4j`, `2fx`.
+Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`.
+
+Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior; this change only adds explicit WORD actions and previous-end motions.
 
 Example:
 
@@ -129,6 +135,10 @@ one two three
 ^   cursor on o
 3w  moves to start of third word or as far as prompt allows
 %   jumps between matching brackets when cursor is on or before bracket on same line
+
+run --flag=value /tmp/a-b
+^ cursor on r
+W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves back to e
 ```
 
 ## Normal mode edits
@@ -189,7 +199,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`, `%`
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
@@ -199,6 +209,7 @@ Examples:
 
 ```text
 dw        delete to next word start
+dW        delete to next whitespace-delimited WORD start
 dl        delete one character to the right
 dj        delete current and next line
 dgg       delete through buffer start
@@ -206,12 +217,15 @@ yG        yank through buffer end
 d%        delete through matching pair
 y$        yank through line end
 c^        change back to first non-blank
+cE        change through the end of the current/next WORD
 3dw       delete three word motions
+2dge      delete through the second previous word end
 df)       delete from cursor through next ) on current line
 dt,       delete from cursor up to, but not including, next comma on current line
 d;        delete through repeated character-search target
 cf:       change from cursor through next : and enter insert
 yt]       yank from cursor up to, but not including, next ]
+ygE       yank back through previous WORD end
 d2f,      delete through the second next comma on current line
 d/foo⏎    delete from cursor through next literal foo match
 ```

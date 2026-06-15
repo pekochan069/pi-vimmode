@@ -56,7 +56,14 @@ import {
   visualLineSelectionSummary,
   visualSelectionSummary,
   visualSelectionText,
+  wordBackwardPosition,
   wordEndPosition,
+  wordEndBigPosition,
+  wordForwardPosition,
+  wordForwardBigPosition,
+  wordBackwardBigPosition,
+  wordPreviousEndPosition,
+  wordPreviousEndBigPosition,
   yankByMotion,
   yankByCharSearch,
   yankExLineRange,
@@ -554,6 +561,60 @@ describe("operator-motion helpers", () => {
     expect(deleteByMotion("hello world", p(0, 0), "e")).toMatchObject({
       text: " world",
       register: { type: "char", text: "hello" },
+    });
+  });
+
+  test("supports explicit WORD navigation without retuning lowercase word behavior", () => {
+    const text = "run --foo=bar /tmp/a-b\nnext token";
+    expect(wordForwardBigPosition(text, p(0, 0))).toEqual(p(0, 4));
+    expect(wordEndBigPosition(text, p(0, 4))).toEqual(p(0, 12));
+    expect(wordBackwardBigPosition(text, p(0, 14))).toEqual(p(0, 4));
+    expect(wordForwardBigPosition(text, p(0, 0), 3)).toEqual(p(1, 0));
+    expect(wordEndBigPosition(text, p(0, 0), 2)).toEqual(p(0, 12));
+    expect(wordEndPosition(text, p(0, 4))).toEqual(p(0, 5));
+    expect(wordEndPosition(text, p(0, 4))).not.toEqual(wordEndBigPosition(text, p(0, 4)));
+  });
+
+  test("supports lowercase word navigation across keyword and punctuation runs", () => {
+    const text = "foo/bar baz qux";
+    expect(wordForwardPosition(text, p(0, 0))).toEqual(p(0, 3));
+    expect(wordForwardPosition(text, p(0, 3))).toEqual(p(0, 4));
+    expect(wordForwardPosition(text, p(0, 4))).toEqual(p(0, 8));
+    expect(wordForwardPosition(text, p(0, 8))).toEqual(p(0, 12));
+    expect(wordBackwardPosition(text, p(0, 12))).toEqual(p(0, 8));
+    expect(wordBackwardPosition(text, p(0, 8))).toEqual(p(0, 4));
+    expect(wordBackwardPosition(text, p(0, 4))).toEqual(p(0, 3));
+    expect(wordBackwardPosition(text, p(0, 3))).toEqual(p(0, 0));
+    expect(wordEndPosition(text, p(0, 0))).toEqual(p(0, 2));
+    expect(wordEndPosition(text, p(0, 3))).toEqual(p(0, 6));
+    expect(wordEndPosition(text, p(0, 4))).toEqual(p(0, 6));
+  });
+
+  test("supports previous word-end and previous WORD-end navigation", () => {
+    const text = "alpha beta.gamma /tmp/file\nnext";
+    expect(wordPreviousEndPosition(text, p(0, 17))).toEqual(p(0, 15));
+    expect(wordPreviousEndBigPosition(text, p(0, 17))).toEqual(p(0, 15));
+    expect(wordPreviousEndPosition(text, p(0, 10))).toEqual(p(0, 9));
+    expect(wordPreviousEndPosition(text, p(0, 17), 2)).toEqual(p(0, 10));
+    expect(wordPreviousEndPosition(text, p(0, 0))).toEqual(p(0, 0));
+  });
+
+  test("supports WORD and previous-end operator motion ranges", () => {
+    expect(deleteByMotion("run --foo=bar /tmp/a-b", p(0, 0), "W")).toMatchObject({
+      text: "--foo=bar /tmp/a-b",
+      register: { type: "char", text: "run " },
+    });
+    expect(deleteByMotion("run --foo=bar /tmp/a-b", p(0, 4), "E")).toMatchObject({
+      text: "run  /tmp/a-b",
+      register: { type: "char", text: "--foo=bar" },
+    });
+    expect(yankByMotion("alpha beta.gamma /tmp/file", p(0, 17), "ge")).toEqual({
+      type: "char",
+      text: "a ",
+    });
+    expect(deleteByMotion("alpha beta.gamma /tmp/file", p(0, 17), "gE", 2)).toMatchObject({
+      text: "alph/tmp/file",
+      register: { type: "char", text: "a beta.gamma " },
     });
   });
 

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
-import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
@@ -929,6 +929,34 @@ describe("vim editor integration", () => {
     expect(editor.render(80).join("\n")).not.toContain(SEARCH_START);
   });
 
+  test("VimEditor honors configured WORD and previous-end motion keymap", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { wordForwardBig: ["gw"], wordPreviousEnd: ["g-"] },
+          operatorMotions: { delete: ["wordForwardBig", "wordPreviousEnd"] },
+          commands: { redo: ["U"], showKeybindings: ["gk"] },
+          macros: { record: ["q"], play: ["@"] },
+          marks: { set: ["m"], jumpExact: ["`"], jumpLine: ["'"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("run --foo=bar /tmp/a-b");
+    typeKeys(editor, ["g", "g", "g", "w"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 4 });
+
+    editor.setText("alpha beta.gamma /tmp/file");
+    typeKeys(editor, ["g", "g", "g", "w", "g", "w", "g", "-"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 15 });
+
+    editor.setText("run --foo=bar /tmp/a-b");
+    typeKeys(editor, ["g", "g", "d", "g", "w"]);
+    expect(editor.getText()).toBe("--foo=bar /tmp/a-b");
+  });
+
   test("macro records and replays Ex substitutions and cancellation", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("old\nold");
@@ -1120,7 +1148,7 @@ describe("vim editor integration", () => {
         ...DEFAULT_VIM_OPTIONS.keymap!,
         operators: { ...DEFAULT_VIM_OPTIONS.keymap!.operators, delete: ["z"] },
         motions: { ...DEFAULT_VIM_OPTIONS.keymap!.motions, wordForward: ["e"] },
-        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["B"] },
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, visualBlock: ["ctrl+v"] },
       },
     });
     editor.setText("hello world");
@@ -1130,7 +1158,7 @@ describe("vim editor integration", () => {
     editor.handleInput("e");
     expect(editor.getText()).toBe("world");
     expect(editor.getRegister()).toEqual({ type: "char", text: "hello " });
-    editor.handleInput("B");
+    editor.handleInput("\x16");
     expect(editor.getVimMode()).toBe("visualBlock");
   });
 

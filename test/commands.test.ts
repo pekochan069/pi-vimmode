@@ -9,7 +9,25 @@ import {
 } from "../src/commands.ts";
 import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
 
-const operatorMotions = ["h", "j", "k", "l", "w", "b", "e", "0", "^", "$", "G", "%"] as const;
+const operatorMotions = [
+  "h",
+  "j",
+  "k",
+  "l",
+  "w",
+  "b",
+  "e",
+  "W",
+  "B",
+  "E",
+  "ge",
+  "gE",
+  "0",
+  "^",
+  "$",
+  "G",
+  "%",
+] as const;
 
 describe("normal command parser", () => {
   test("creates pending state for operators and g prefix", () => {
@@ -314,6 +332,14 @@ describe("normal command parser", () => {
       type: "motion",
       motion: "bufferStart",
     });
+    expect(resolveNormalCommand("e", "g", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "wordPreviousEnd",
+    });
+    expect(resolveNormalCommand("E", "g", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "wordPreviousEndBig",
+    });
     expect(resolveNormalCommand("x", "g", DEFAULT_VIM_KEYMAP)).toEqual({ type: "invalid" });
   });
 
@@ -394,6 +420,41 @@ describe("normal command parser", () => {
     expect(
       resolveNormalCommand("e", operatorPending.type === "pending" ? operatorPending.pending : ""),
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordEnd", count: 4 });
+
+    const countedWord = resolveNormalCommand("2", undefined);
+    expect(
+      resolveNormalCommand("W", countedWord.type === "pending" ? countedWord.pending : ""),
+    ).toEqual({ type: "motion", motion: "wordForwardBig", count: 2 });
+
+    const countedPreviousEnd = resolveNormalCommand("2", undefined);
+    const previousPrefix = resolveNormalCommand(
+      "g",
+      countedPreviousEnd.type === "pending" ? countedPreviousEnd.pending : "",
+    );
+    expect(
+      resolveNormalCommand("e", previousPrefix.type === "pending" ? previousPrefix.pending : ""),
+    ).toEqual({ type: "motion", motion: "wordPreviousEnd", count: 2 });
+
+    const countedOperatorPreviousEnd = resolveNormalCommand("2", undefined);
+    const operatorPreviousPending = resolveNormalCommand(
+      "d",
+      countedOperatorPreviousEnd.type === "pending" ? countedOperatorPreviousEnd.pending : "",
+    );
+    const operatorPreviousPrefix = resolveNormalCommand(
+      "g",
+      operatorPreviousPending.type === "pending" ? operatorPreviousPending.pending : "",
+    );
+    expect(
+      resolveNormalCommand(
+        "e",
+        operatorPreviousPrefix.type === "pending" ? operatorPreviousPrefix.pending : "",
+      ),
+    ).toEqual({
+      type: "operatorMotion",
+      operator: "delete",
+      motion: "wordPreviousEnd",
+      count: 2,
+    });
   });
 
   test("resolves prompt search commands and undo redo", () => {

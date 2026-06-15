@@ -426,7 +426,7 @@ function handleVisualInput(
   const result = resolveNormalCommand(key, state.pending, keymap);
   if (result.type === "motion") {
     if (state.pendingRegister) return invalidate(clearPending(state));
-    return moveUpdate(state, result.motion, snapshot);
+    return moveUpdate(state, result.motion, snapshot, result.count);
   }
   if (result.type === "charCommand") {
     if (state.pendingRegister || result.command !== "replaceChar")

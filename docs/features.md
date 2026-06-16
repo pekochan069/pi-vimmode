@@ -759,6 +759,7 @@ Rendering behavior:
 - Active macro recording shows `REC {slot}`.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
+- Insert-mode autocomplete rows remain Pi-owned and visible; Vim status feedback renders on a separate row while completion UI is open.
 - Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row by default.
 - `piVimMode.ui.workbench.reservedRows` can reserve 0-5 width-safe workbench rows; active feedback uses the first reserved row and blank reserved rows keep the prompt viewport height stable.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.

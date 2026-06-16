@@ -22,7 +22,7 @@ The extension SHALL register a `CustomEditor`-based Vim editor for Pi sessions w
 
 ### Requirement: Insert mode preserves default editing
 
-The Vim editor SHALL start in insert mode and MUST delegate ordinary text entry and Pi editor behavior to the default editor implementation.
+The Vim editor SHALL start in insert mode and MUST delegate ordinary text entry, autocomplete rendering, and Pi editor behavior to the default editor implementation.
 
 #### Scenario: User types in insert mode
 
@@ -38,6 +38,11 @@ The Vim editor SHALL start in insert mode and MUST delegate ordinary text entry 
 
 - **WHEN** the editor is in insert mode and Pi autocomplete or slash-command completion is active
 - **THEN** completion navigation, selection, and text insertion continue to use Pi's default editor behavior
+
+#### Scenario: Insert mode autocomplete rows remain visible with Vim status
+
+- **WHEN** the editor is in insert mode and Pi autocomplete or slash-command completion renders one or more visible completion rows
+- **THEN** pi-vimmode preserves the completion rows and does not replace them with Vim status feedback
 
 ### Requirement: Normal mode supports core Vim navigation
 
@@ -128,7 +133,7 @@ The Vim editor SHALL provide characterwise visual mode with an anchor, selectabl
 
 ### Requirement: Mode feedback is visible and width-safe
 
-The Vim editor SHALL render Vim status feedback according to the resolved UI configuration and MUST keep every rendered line within the terminal width. With no UI configuration, the current `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` feedback remains visible.
+The Vim editor SHALL render Vim status feedback according to the resolved UI configuration and MUST keep every rendered line within the terminal width. With no UI configuration, the current `INSERT`, `NORMAL`, `VISUAL`, and `V-LINE` feedback remains visible, including while Pi autocomplete or slash-command completion is active.
 
 #### Scenario: Mode label updates
 
@@ -159,6 +164,16 @@ The Vim editor SHALL render Vim status feedback according to the resolved UI con
 
 - **WHEN** the editor is in visual mode with a non-empty selection and `piVimMode.ui.selection.enabled` is set to `false`
 - **THEN** visual highlighting remains active but visual selection summary text is omitted from the status UI
+
+#### Scenario: Autocomplete popup does not hide mode feedback
+
+- **WHEN** the editor is in insert mode, Pi autocomplete or slash-command completion is active, and the resolved UI configuration shows the mode status item
+- **THEN** the rendered editor keeps the active mode feedback visible without hiding the completion UI
+
+#### Scenario: Single-row autocomplete keeps insert feedback visible
+
+- **WHEN** the editor is in insert mode and Pi autocomplete or slash-command completion has only one visible completion row
+- **THEN** the rendered editor still shows `INSERT` feedback where width permits
 
 ### Requirement: Pi application shortcuts remain compatible
 

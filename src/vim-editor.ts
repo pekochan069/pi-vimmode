@@ -269,7 +269,9 @@ export class VimEditor extends CustomEditor {
       recordingSlot: this.modalState.recordingSlot,
       ui: uiForOptions(this.options),
     });
-    lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    const statusLine = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    if (this.isShowingAutocomplete()) lines.push(statusLine);
+    else lines[last] = statusLine;
     lines.push(...workbenchRows);
     return lines;
   }
@@ -338,6 +340,10 @@ export class VimEditor extends CustomEditor {
           borderColor: this.borderColor,
         },
       });
+    }
+
+    if (this.isShowingAutocomplete()) {
+      return restyleCursorMarker(super.render(width), this.getCurrentCursorStyle());
     }
 
     if (

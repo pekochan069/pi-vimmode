@@ -1,6 +1,7 @@
 ---
 title: Preserve explicit pi-vimmode keymap precedence
 date: 2026-06-17
+last_updated: 2026-06-17
 category: docs/solutions/logic-errors
 module: pi-vimmode
 problem_type: logic_error
@@ -26,12 +27,11 @@ tags: [pi-vimmode, config, keymap, precedence, clone-helpers, typescript]
 
 Explicit user or project keymap bindings must beat lower-priority defaults. The resolver merged configured groups over default groups, but it did not remove the same key sequence from other top-level default groups first.
 
-That made prefix-sensitive overrides unsafe. For example, mapping `q` or a `q...` sequence for a prompt transform could still collide with the default macro-record binding on `q`.
+That made exact top-level overrides unsafe. For example, mapping `q` as a motion could still collide with the default macro-record binding on `q`.
 
 ## Symptoms
 
 - A configured key such as `q` could still be owned by `macros.record` in the resolved keymap.
-- Longer configured sequences such as `qte` could enter the wrong parser branch because the default `q` prefix remained active.
 - Duplicate binding warnings were not the right behavior for explicit user/project overrides: the configured binding should win over defaults.
 - Live editor option cloning had a second hand-written field list, so new nested option branches could drift between config resolution and `VimEditor` construction.
 
@@ -105,6 +105,53 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
 }
 ```
 
+A later refactor data-drove default keymaps from `src/keymap-descriptors.ts`, but exposed a second precedence edge case: applying global and project keymap layers sequentially made a lower-priority global conflict permanently delete a default binding before the higher-priority project layer could override it. Example:
+
+```ts
+resolveVimOptions(
+  { piVimMode: { keymap: { motions: { wordForward: ["q"] } } } },
+  { piVimMode: { keymap: { motions: { wordForward: ["e"] } } } },
+);
+```
+
+Expected final state:
+
+```ts
+motions.wordForward === ["e"];
+macros.record === ["q"];
+```
+
+The fix was to overlay configured keymap layers first, then replay the final effective overlay onto a fresh default keymap once:
+
+```ts
+function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymapOptions): void {
+  if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
+  if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
+  if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
+  if (partial.macros) target.macros = { ...target.macros, ...partial.macros };
+  if (partial.marks) target.marks = { ...target.marks, ...partial.marks };
+  // textObjects/operatorMotions/actions omitted here for brevity; keep them in source.
+}
+
+function resolveKeymapFromLayers(layers: PartialKeymapOptions[]): ResolvedVimKeymap {
+  const overlay: PartialKeymapOptions = {};
+  for (const layer of layers) mergeKeymapOverlay(overlay, layer);
+
+  const keymap = cloneKeymap();
+  mergeKeymap(keymap, overlay);
+  return keymap;
+}
+```
+
+The defaults and validation sets are now descriptor-derived from `src/keymap-descriptors.ts`, so command, motion, macro, mark, and text-object defaults have one descriptor module instead of duplicated literal arrays.
+
+Regression coverage now includes `test/config.test.ts` asserting that project override restores defaults removed by global-only conflicts:
+
+```ts
+expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
+expect(result.options.keymap?.macros.record).toEqual(["q"]);
+```
+
 The clone logic now lives in one exported helper:
 
 ```ts
@@ -149,19 +196,21 @@ Regression coverage was added at both resolver and runtime boundaries:
 
 The resolver now matches the intended priority model:
 
-1. Start with cloned defaults.
-2. Parse user and project config into partial keymap settings.
-3. For each explicit top-level sequence in the partial, remove that sequence from lower-priority resolved top-level groups.
-4. Merge the explicit partial into the target.
+1. Parse user and project config into partial keymap settings.
+2. Overlay partial settings by priority so higher-priority project settings replace lower-priority global settings before default conflict removal runs.
+3. Start with cloned defaults.
+4. For each explicit top-level sequence in the final effective overlay, remove that sequence from lower-priority default top-level groups.
+5. Merge the final effective overlay into the target.
 
-So a sequence cannot remain both a default macro and a configured motion or command. The parser sees one top-level owner for the sequence.
+So a sequence cannot remain both a default macro and a configured motion or command. A lower-priority conflict also cannot permanently remove a default that should be restored when a higher-priority layer moves away from that key. `q` correctly returns to macro recording when no final effective binding claims `q`.
 
 Centralizing cloning also means config resolution and live editor construction use the same nested-field semantics. New option branches only need to be added to `cloneResolvedVimOptions`, not to separate adapter-local clone lists.
 
 ## Prevention
 
-- When adding a new top-level keymap group, update both `configuredTopLevelKeymapSequences` and `removeTopLevelKeymapSequences`.
-- Add regression tests for any default single-key binding that can also be used as a configured prefix (`q`, `g`, `z`, `@`).
+- When adding a new top-level keymap group, update `mergeKeymapOverlay`, `configuredTopLevelKeymapSequences`, and `removeTopLevelKeymapSequences` together.
+- Prefer descriptor-derived defaults and validation sets over duplicated literal action arrays. Add descriptor tests when introducing a new keymap family.
+- Add regression tests for any default single-key binding that can also be used as a configured prefix (`q`, `g`, `z`, `@`). Include both “configured binding wins” and “higher-priority override restores default” cases.
 - Test both resolved config shape and runtime input parsing. Config shape proves precedence; runtime tests prove parser branches obey it.
 - Keep resolved option cloning centralized in `cloneResolvedVimOptions`; do not reintroduce adapter-local field-by-field clone lists.
 - Preserve special-case validation for `showKeybindings` separately from general precedence removal.

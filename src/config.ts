@@ -37,6 +37,19 @@ import {
 } from "./action-keybinding-recipes.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
+  deriveActionKeys,
+  deriveActionsWhere,
+  deriveDefaultKeyBindings,
+  deriveSet,
+  KEYMAP_COMMAND_DESCRIPTORS,
+  KEYMAP_MARK_DESCRIPTORS,
+  KEYMAP_MACRO_DESCRIPTORS,
+  KEYMAP_MOTION_DESCRIPTORS,
+  KEYMAP_OPERATOR_DESCRIPTORS,
+  KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
+  KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
+} from "./keymap-descriptors.ts";
+import {
   bindablePromptTransformActionIds,
   normalizePromptTransformActionArgs,
   promptTransformActionForId,
@@ -52,90 +65,31 @@ const VIM_MODES = [
 const START_MODES = new Set<StartupMode>(["insert", "normal"]);
 const CURSOR_STYLES = new Set<CursorStyle>(["block", "bar", "underline"]);
 
-export const VIM_MOTION_OPERATOR_ACTIONS = ["delete", "change", "yank"] as const;
-export const VIM_OPERATOR_ACTIONS = [...VIM_MOTION_OPERATOR_ACTIONS, "indent", "dedent"] as const;
-export const VIM_MOTION_ACTIONS = [
-  "left",
-  "down",
-  "up",
-  "right",
-  "wordForward",
-  "wordBackward",
-  "wordEnd",
-  "wordForwardBig",
-  "wordBackwardBig",
-  "wordEndBig",
-  "wordPreviousEnd",
-  "wordPreviousEndBig",
-  "lineStart",
-  "lineEnd",
-  "firstNonBlank",
-  "bufferStart",
-  "bufferEnd",
-  "matchingPair",
-] as const satisfies readonly VimMotionAction[];
-export const VIM_COMMAND_ACTIONS = [
-  "insertBefore",
-  "insertAfter",
-  "insertLineStart",
-  "insertLineEnd",
-  "openLineBelow",
-  "openLineAbove",
-  "visualChar",
-  "visualLine",
-  "visualBlock",
-  "deleteChar",
-  "deleteToLineEnd",
-  "changeToLineEnd",
-  "yankLine",
-  "joinLine",
-  "pasteAfter",
-  "pasteBefore",
-  "incrementNumber",
-  "decrementNumber",
-  "toggleCase",
-  "replaceChar",
-  "substituteChar",
-  "substituteLine",
-  "findCharForward",
-  "findCharBackward",
-  "tillCharForward",
-  "tillCharBackward",
-  "repeatCharSearch",
-  "repeatCharSearchReverse",
-  "startSearch",
-  "startSearchBackward",
-  "repeatSearch",
-  "repeatSearchReverse",
-  "startExCommand",
-  "repeatChange",
-  "undo",
-  "redo",
-  "showKeybindings",
-] as const satisfies readonly VimCommandAction[];
+export const VIM_MOTION_OPERATOR_ACTIONS = deriveActionsWhere(
+  KEYMAP_OPERATOR_DESCRIPTORS,
+  (descriptor) => "motionOperator" in descriptor && Boolean(descriptor.motionOperator),
+) as VimMotionOperatorAction[];
+export const VIM_OPERATOR_ACTIONS = deriveActionKeys(
+  KEYMAP_OPERATOR_DESCRIPTORS,
+) as VimOperatorAction[];
+export const VIM_MOTION_ACTIONS = deriveActionKeys(KEYMAP_MOTION_DESCRIPTORS) as VimMotionAction[];
+export const VIM_COMMAND_ACTIONS = deriveActionKeys(
+  KEYMAP_COMMAND_DESCRIPTORS,
+) as VimCommandAction[];
+const MACRO_ACTION_SET = deriveSet(KEYMAP_MACRO_DESCRIPTORS);
+const MARK_ACTION_SET = deriveSet(KEYMAP_MARK_DESCRIPTORS);
 export const VIM_STATUS_ITEMS = [
   "mode",
   "pendingOperator",
   "selection",
   "cursorPosition",
 ] as const satisfies readonly VimStatusItem[];
-export const VIM_TEXT_OBJECT_KINDS = [
-  "inner",
-  "around",
-] as const satisfies readonly VimTextObjectKind[];
-export const VIM_TEXT_OBJECT_TARGETS = [
-  "word",
-  "singleQuote",
-  "doubleQuote",
-  "paren",
-  "bracket",
-  "brace",
-  "codeFence",
-  "headingSection",
-  "listItem",
-  "tag",
-  "errorBlock",
-] as const satisfies readonly VimTextObjectTarget[];
+export const VIM_TEXT_OBJECT_KINDS = deriveActionKeys(
+  KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
+) as VimTextObjectKind[];
+export const VIM_TEXT_OBJECT_TARGETS = deriveActionKeys(
+  KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
+) as VimTextObjectTarget[];
 export const PROMPT_STRUCTURE_TARGETS = [
   "codeFence",
   "headingSection",
@@ -154,14 +108,14 @@ export const PROMPT_TRANSFORM_ACTIONS = [
 ] as const satisfies readonly PromptTransformAction[];
 
 const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
-const OPERATOR_ACTION_SET = new Set<string>(VIM_OPERATOR_ACTIONS);
-const MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
-const COMMAND_ACTION_SET = new Set<string>(VIM_COMMAND_ACTIONS);
+const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
+const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
+const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
 const STATUS_ITEM_SET = new Set<string>(VIM_STATUS_ITEMS);
-const TEXT_OBJECT_KIND_SET = new Set<string>(VIM_TEXT_OBJECT_KINDS);
-const TEXT_OBJECT_TARGET_SET = new Set<string>(VIM_TEXT_OBJECT_TARGETS);
+const TEXT_OBJECT_KIND_SET = deriveSet(KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS);
+const TEXT_OBJECT_TARGET_SET = deriveSet(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
 const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
 const BINDABLE_PROMPT_TRANSFORM_ACTION_SET = new Set<string>(bindablePromptTransformActionIds());
@@ -169,106 +123,29 @@ const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
 const NOOP_FEEDBACK_VALUES = new Set<VimFeedbackOptions["noop"]>(["off", "status"]);
 const WORKBENCH_RESERVED_ROWS_MAX = 5;
 
+function freezeArrayRecord<T extends Record<string, readonly string[]>>(
+  record: T,
+): { readonly [K in keyof T]: readonly string[] } {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(record).map(([key, values]) => [key, Object.freeze([...values])]),
+    ) as { [K in keyof T]: readonly string[] },
+  );
+}
+
 export const DEFAULT_VIM_KEYMAP = Object.freeze({
-  operators: Object.freeze({
-    delete: Object.freeze(["d"]),
-    change: Object.freeze(["c"]),
-    yank: Object.freeze(["y"]),
-    indent: Object.freeze([">"]),
-    dedent: Object.freeze(["<"]),
-  }),
-  motions: Object.freeze({
-    left: Object.freeze(["h"]),
-    down: Object.freeze(["j"]),
-    up: Object.freeze(["k"]),
-    right: Object.freeze(["l"]),
-    wordForward: Object.freeze(["w"]),
-    wordBackward: Object.freeze(["b"]),
-    wordEnd: Object.freeze(["e"]),
-    wordForwardBig: Object.freeze(["W"]),
-    wordBackwardBig: Object.freeze(["B"]),
-    wordEndBig: Object.freeze(["E"]),
-    wordPreviousEnd: Object.freeze(["ge"]),
-    wordPreviousEndBig: Object.freeze(["gE"]),
-    lineStart: Object.freeze(["0"]),
-    lineEnd: Object.freeze(["$"]),
-    firstNonBlank: Object.freeze(["^", "_"]),
-    bufferStart: Object.freeze(["gg"]),
-    bufferEnd: Object.freeze(["G"]),
-    matchingPair: Object.freeze(["%"]),
-  }),
-  macros: Object.freeze({
-    record: Object.freeze(["q"]),
-    play: Object.freeze(["@"]),
-  }),
-  marks: Object.freeze({
-    set: Object.freeze(["m"]),
-    jumpExact: Object.freeze(["`"]),
-    jumpLine: Object.freeze(["'"]),
-  }),
+  operators: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_OPERATOR_DESCRIPTORS)),
+  motions: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_MOTION_DESCRIPTORS)),
+  macros: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_MACRO_DESCRIPTORS)),
+  marks: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_MARK_DESCRIPTORS)),
   textObjects: Object.freeze({
-    kinds: Object.freeze({
-      inner: Object.freeze(["i"]),
-      around: Object.freeze(["a"]),
-    }),
-    targets: Object.freeze({
-      word: Object.freeze(["w"]),
-      singleQuote: Object.freeze(["'"]),
-      doubleQuote: Object.freeze(['"']),
-      paren: Object.freeze(["(", ")"]),
-      bracket: Object.freeze(["[", "]"]),
-      brace: Object.freeze(["{", "}"]),
-      codeFence: Object.freeze(["f"]),
-      headingSection: Object.freeze(["h"]),
-      listItem: Object.freeze(["l"]),
-      tag: Object.freeze(["t"]),
-      errorBlock: Object.freeze(["e"]),
-    }),
+    kinds: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS)),
+    targets: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS)),
   }),
-  commands: Object.freeze({
-    insertBefore: Object.freeze(["i"]),
-    insertAfter: Object.freeze(["a"]),
-    insertLineStart: Object.freeze(["I"]),
-    insertLineEnd: Object.freeze(["A"]),
-    openLineBelow: Object.freeze(["o"]),
-    openLineAbove: Object.freeze(["O"]),
-    visualChar: Object.freeze(["v"]),
-    visualLine: Object.freeze(["V"]),
-    visualBlock: Object.freeze([]),
-    deleteChar: Object.freeze(["x"]),
-    deleteToLineEnd: Object.freeze(["D"]),
-    changeToLineEnd: Object.freeze(["C"]),
-    yankLine: Object.freeze(["Y"]),
-    joinLine: Object.freeze(["J"]),
-    pasteAfter: Object.freeze(["p"]),
-    pasteBefore: Object.freeze(["P"]),
-    incrementNumber: Object.freeze(["ctrl+a"]),
-    decrementNumber: Object.freeze(["ctrl+x"]),
-    toggleCase: Object.freeze(["~"]),
-    replaceChar: Object.freeze(["r"]),
-    substituteChar: Object.freeze(["s"]),
-    substituteLine: Object.freeze(["S"]),
-    findCharForward: Object.freeze(["f"]),
-    findCharBackward: Object.freeze(["F"]),
-    tillCharForward: Object.freeze(["t"]),
-    tillCharBackward: Object.freeze(["T"]),
-    repeatCharSearch: Object.freeze([";"]),
-    repeatCharSearchReverse: Object.freeze([","]),
-    startSearch: Object.freeze(["/"]),
-    startSearchBackward: Object.freeze(["?"]),
-    repeatSearch: Object.freeze(["n"]),
-    repeatSearchReverse: Object.freeze(["N"]),
-    startExCommand: Object.freeze([":"]),
-    repeatChange: Object.freeze(["."]),
-    undo: Object.freeze(["u"]),
-    redo: Object.freeze(["ctrl+r"]),
-    showKeybindings: Object.freeze([]),
-  }),
-  operatorMotions: Object.freeze({
-    delete: Object.freeze([...VIM_MOTION_ACTIONS]),
-    change: Object.freeze([...VIM_MOTION_ACTIONS]),
-    yank: Object.freeze([...VIM_MOTION_ACTIONS]),
-  }),
+  commands: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS)),
+  operatorMotions: freezeArrayRecord(
+    Object.fromEntries(VIM_MOTION_OPERATOR_ACTIONS.map((action) => [action, VIM_MOTION_ACTIONS])),
+  ),
   actions: Object.freeze({
     accepted: Object.freeze([]),
   }),
@@ -844,14 +721,14 @@ function parseKeymap(
   );
   partial.macros = parseKeyBindings<keyof ResolvedVimKeymap["macros"]>(
     value.macros,
-    new Set(["record", "play"]),
+    MACRO_ACTION_SET,
     sourceLabel,
     "macros",
     warnings,
   );
   partial.marks = parseKeyBindings<keyof ResolvedVimKeymap["marks"]>(
     value.marks,
-    new Set(["set", "jumpExact", "jumpLine"]),
+    MARK_ACTION_SET,
     sourceLabel,
     "marks",
     warnings,
@@ -1450,6 +1327,35 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.actions) mergeActionBindings(target, partial.actions);
 }
 
+function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymapOptions): void {
+  if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
+  if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
+  if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
+  if (partial.macros) target.macros = { ...target.macros, ...partial.macros };
+  if (partial.marks) target.marks = { ...target.marks, ...partial.marks };
+  if (partial.textObjects) {
+    target.textObjects = {
+      kinds: { ...target.textObjects?.kinds, ...partial.textObjects.kinds },
+      targets: { ...target.textObjects?.targets, ...partial.textObjects.targets },
+    };
+  }
+  if (partial.operatorMotions) {
+    target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
+  }
+  if (partial.actions) {
+    target.actions = { ...target.actions, ...partial.actions };
+  }
+}
+
+function resolveKeymapFromLayers(layers: PartialKeymapOptions[]): ResolvedVimKeymap {
+  const overlay: PartialKeymapOptions = {};
+  for (const layer of layers) mergeKeymapOverlay(overlay, layer);
+
+  const keymap = cloneKeymap();
+  mergeKeymap(keymap, overlay);
+  return keymap;
+}
+
 function mergeMacros(target: ResolvedVimMacros, partial: PartialMacroOptions): void {
   if (partial.enabled !== undefined) target.enabled = partial.enabled;
   if (partial.slots) target.slots = [...partial.slots];
@@ -1787,18 +1693,29 @@ export function resolveVimOptions(
   const options = cloneDefaultOptions();
   const warnings: string[] = [];
 
+  const keymapLayers: PartialKeymapOptions[] = [];
+
   const globalPiVimMode = isRecord(globalSettings) ? globalSettings.piVimMode : undefined;
   const parsedGlobal = parsePiVimMode(globalPiVimMode, "global settings");
-  if (parsedGlobal.partial.preset)
-    mergePartialOptions(options, presetOptions(parsedGlobal.partial.preset));
+  if (parsedGlobal.partial.preset) {
+    const preset = presetOptions(parsedGlobal.partial.preset);
+    mergePartialOptions(options, preset);
+    if (preset.keymap) keymapLayers.push(preset.keymap);
+  }
   mergePartialOptions(options, parsedGlobal.partial);
+  if (parsedGlobal.partial.keymap) keymapLayers.push(parsedGlobal.partial.keymap);
   warnings.push(...parsedGlobal.warnings);
 
   const projectPiVimMode = isRecord(projectSettings) ? projectSettings.piVimMode : undefined;
   const parsedProject = parsePiVimMode(projectPiVimMode, "project settings");
-  if (parsedProject.partial.preset)
-    mergePartialOptions(options, presetOptions(parsedProject.partial.preset));
+  if (parsedProject.partial.preset) {
+    const preset = presetOptions(parsedProject.partial.preset);
+    mergePartialOptions(options, preset);
+    if (preset.keymap) keymapLayers.push(preset.keymap);
+  }
   mergePartialOptions(options, parsedProject.partial);
+  if (parsedProject.partial.keymap) keymapLayers.push(parsedProject.partial.keymap);
+  if (keymapLayers.length > 0) options.keymap = resolveKeymapFromLayers(keymapLayers);
   warnings.push(...parsedProject.warnings);
   warnings.push(...rejectShowKeybindingsConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
   const actionBindings = resolveActionBindings(

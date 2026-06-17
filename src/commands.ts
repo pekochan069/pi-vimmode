@@ -17,29 +17,22 @@ import type {
 } from "./types.ts";
 
 import { DEFAULT_VIM_KEYMAP } from "./config.ts";
+import {
+  deriveActionsWhere,
+  deriveLegacyActionToKey,
+  deriveLegacyKeyToAction,
+  KEYMAP_COMMAND_DESCRIPTORS,
+  KEYMAP_MOTION_DESCRIPTORS,
+  KEYMAP_OPERATOR_DESCRIPTORS,
+} from "./keymap-descriptors.ts";
 
-const LEGACY_VIM_OPERATORS = new Set<string>(["d", "c", "y"]);
+const LEGACY_VIM_OPERATORS = new Set<string>(
+  Object.keys(deriveLegacyKeyToAction(KEYMAP_OPERATOR_DESCRIPTORS)),
+);
 const LINE_ONLY_OPERATORS = new Set<VimOperatorAction>(["indent", "dedent"]);
-const LEGACY_OPERATOR_MOTIONS = new Set<string>([
-  "h",
-  "j",
-  "k",
-  "l",
-  "w",
-  "b",
-  "e",
-  "W",
-  "B",
-  "E",
-  "ge",
-  "gE",
-  "0",
-  "^",
-  "$",
-  "gg",
-  "G",
-  "%",
-]);
+const LEGACY_OPERATOR_MOTIONS = new Set<string>(
+  Object.keys(deriveLegacyKeyToAction(KEYMAP_MOTION_DESCRIPTORS)),
+);
 const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
 const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
 const OPERATOR_SEARCH_SEPARATOR = "\u0000search\u0000";
@@ -165,64 +158,46 @@ type EncodedOperatorCharSearchRepeatPending = {
   count?: number;
 };
 
-const LEGACY_OPERATOR_TO_ACTION: Record<VimOperator, VimOperatorAction> = {
-  d: "delete",
-  c: "change",
-  y: "yank",
-};
-const ACTION_TO_LEGACY_OPERATOR: Record<VimMotionOperatorAction, VimOperator> = {
-  delete: "d",
-  change: "c",
-  yank: "y",
-};
-const LEGACY_MOTION_TO_ACTION: Record<VimMotion, VimMotionAction> = {
-  h: "left",
-  j: "down",
-  k: "up",
-  l: "right",
-  w: "wordForward",
-  b: "wordBackward",
-  e: "wordEnd",
-  W: "wordForwardBig",
-  B: "wordBackwardBig",
-  E: "wordEndBig",
-  ge: "wordPreviousEnd",
-  gE: "wordPreviousEndBig",
-  "0": "lineStart",
-  "^": "firstNonBlank",
-  $: "lineEnd",
-  gg: "bufferStart",
-  G: "bufferEnd",
-  "%": "matchingPair",
-};
-const ACTION_TO_LEGACY_MOTION: Partial<Record<VimMotionAction, VimMotion>> = {
-  left: "h",
-  down: "j",
-  up: "k",
-  right: "l",
-  wordForward: "w",
-  wordBackward: "b",
-  wordEnd: "e",
-  wordForwardBig: "W",
-  wordBackwardBig: "B",
-  wordEndBig: "E",
-  wordPreviousEnd: "ge",
-  wordPreviousEndBig: "gE",
-  lineStart: "0",
-  firstNonBlank: "^",
-  lineEnd: "$",
-  bufferStart: "gg",
-  bufferEnd: "G",
-  matchingPair: "%",
-};
+const LEGACY_OPERATOR_TO_ACTION = deriveLegacyKeyToAction(KEYMAP_OPERATOR_DESCRIPTORS) as Record<
+  VimOperator,
+  VimOperatorAction
+>;
+const ACTION_TO_LEGACY_OPERATOR = deriveLegacyActionToKey(KEYMAP_OPERATOR_DESCRIPTORS) as Record<
+  VimMotionOperatorAction,
+  VimOperator
+>;
+const LEGACY_MOTION_TO_ACTION = deriveLegacyKeyToAction(KEYMAP_MOTION_DESCRIPTORS) as Record<
+  VimMotion,
+  VimMotionAction
+>;
+const ACTION_TO_LEGACY_MOTION = deriveLegacyActionToKey(KEYMAP_MOTION_DESCRIPTORS) as Partial<
+  Record<VimMotionAction, VimMotion>
+>;
 
-const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>([
-  "replaceChar",
-  "findCharForward",
-  "findCharBackward",
-  "tillCharForward",
-  "tillCharBackward",
-]);
+const CHAR_ARGUMENT_ACTIONS = deriveActionsWhere(
+  KEYMAP_COMMAND_DESCRIPTORS,
+  (descriptor) => "charArgument" in descriptor && Boolean(descriptor.charArgument),
+) as VimCommandAction[];
+const OPERATOR_CHAR_SEARCH_ACTIONS = deriveActionsWhere(
+  KEYMAP_COMMAND_DESCRIPTORS,
+  (descriptor) => "operatorCharSearch" in descriptor && Boolean(descriptor.operatorCharSearch),
+) as OperatorCharSearchCommand[];
+const REPEAT_CHAR_SEARCH_ACTIONS = deriveActionsWhere(
+  KEYMAP_COMMAND_DESCRIPTORS,
+  (descriptor) => "repeatCharSearch" in descriptor && Boolean(descriptor.repeatCharSearch),
+) as Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">[];
+const SEARCH_ENTRY_ACTIONS = deriveActionsWhere(
+  KEYMAP_COMMAND_DESCRIPTORS,
+  (descriptor) => "searchDirection" in descriptor && Boolean(descriptor.searchDirection),
+) as Extract<VimCommandAction, "startSearch" | "startSearchBackward">[];
+
+const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>(CHAR_ARGUMENT_ACTIONS);
+const OPERATOR_CHAR_SEARCH_COMMANDS = new Set<OperatorCharSearchCommand>(
+  OPERATOR_CHAR_SEARCH_ACTIONS,
+);
+const REPEAT_CHAR_SEARCH_COMMANDS = new Set<
+  Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">
+>(REPEAT_CHAR_SEARCH_ACTIONS);
 
 function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
@@ -309,19 +284,41 @@ function hasLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
   );
 }
 
+function commandSequencesFor(
+  keymap: ResolvedVimKeymap,
+  commands: readonly VimCommandAction[],
+): string[] {
+  return commands.flatMap((command) => keymap.commands[command]);
+}
+
+function isOperatorCharSearchCommand(
+  command: VimCommandAction,
+): command is OperatorCharSearchCommand {
+  return OPERATOR_CHAR_SEARCH_COMMANDS.has(command as OperatorCharSearchCommand);
+}
+
+function isRepeatCharSearchCommand(
+  command: VimCommandAction,
+): command is Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> {
+  return REPEAT_CHAR_SEARCH_COMMANDS.has(
+    command as Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">,
+  );
+}
+
 function searchDirectionForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): "forward" | "backward" | undefined {
   const binding = exactBinding(sequence, keymap);
   if (binding?.kind !== "command") return undefined;
-  if (binding.command === "startSearch") return "forward";
-  if (binding.command === "startSearchBackward") return "backward";
-  return undefined;
+  const descriptor = KEYMAP_COMMAND_DESCRIPTORS[binding.command] as {
+    searchDirection?: "forward" | "backward";
+  };
+  return descriptor.searchDirection;
 }
 
 function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return [...keymap.commands.startSearch, ...keymap.commands.startSearchBackward].some(
+  return commandSequencesFor(keymap, SEARCH_ENTRY_ACTIONS).some(
     (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
   );
 }
@@ -331,22 +328,16 @@ function charSearchCommandForBinding(
   keymap: ResolvedVimKeymap,
 ): OperatorCharSearchCommand | undefined {
   const binding = exactBinding(sequence, keymap);
-  if (binding?.kind !== "command") return undefined;
-  if (!CHAR_ARGUMENT_COMMANDS.has(binding.command) || binding.command === "replaceChar") {
+  if (binding?.kind !== "command" || !isOperatorCharSearchCommand(binding.command)) {
     return undefined;
   }
-  return binding.command as OperatorCharSearchCommand;
+  return binding.command;
 }
 
 function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return (
-    [
-      ...keymap.commands.findCharForward,
-      ...keymap.commands.findCharBackward,
-      ...keymap.commands.tillCharForward,
-      ...keymap.commands.tillCharBackward,
-    ] as readonly string[]
-  ).some((binding) => binding.startsWith(sequence) && binding.length > sequence.length);
+  return commandSequencesFor(keymap, OPERATOR_CHAR_SEARCH_ACTIONS).some(
+    (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
+  );
 }
 
 function repeatCharSearchCommandForBinding(
@@ -354,20 +345,16 @@ function repeatCharSearchCommandForBinding(
   keymap: ResolvedVimKeymap,
 ): Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> | undefined {
   const binding = exactBinding(sequence, keymap);
-  if (binding?.kind !== "command") return undefined;
-  if (binding.command === "repeatCharSearch" || binding.command === "repeatCharSearchReverse") {
-    return binding.command;
+  if (binding?.kind !== "command" || !isRepeatCharSearchCommand(binding.command)) {
+    return undefined;
   }
-  return undefined;
+  return binding.command;
 }
 
 function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return (
-    [
-      ...keymap.commands.repeatCharSearch,
-      ...keymap.commands.repeatCharSearchReverse,
-    ] as readonly string[]
-  ).some((binding) => binding.startsWith(sequence) && binding.length > sequence.length);
+  return commandSequencesFor(keymap, REPEAT_CHAR_SEARCH_ACTIONS).some(
+    (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
+  );
 }
 
 export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");

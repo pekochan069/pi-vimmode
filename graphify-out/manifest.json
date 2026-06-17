@@ -85,13 +85,13 @@
     "semantic_hash": ""
   },
   "src/commands.ts": {
-    "mtime": 1781487855.5057411,
-    "ast_hash": "ab90aa88f5164677c2e390ec70194009",
+    "mtime": 1781659224.4194136,
+    "ast_hash": "d6ef0d9fb1faa260df044212ff66e6d2",
     "semantic_hash": ""
   },
   "src/config.ts": {
-    "mtime": 1781657015.3526185,
-    "ast_hash": "4cd29b53e38c958e2e710b3281f4cc0d",
+    "mtime": 1781662613.5446553,
+    "ast_hash": "f6f7db597c526e00cb761fad3551ecf6",
     "semantic_hash": ""
   },
   "src/customization.ts": {
@@ -235,7 +235,7 @@
     "semantic_hash": ""
   },
   "src/vim-editor.ts": {
-    "mtime": 1781655860.823045,
+    "mtime": 1781658017.5170717,
     "ast_hash": "b594ec7610e3d3e5f4b336260573b502",
     "semantic_hash": ""
   },
@@ -245,13 +245,13 @@
     "semantic_hash": ""
   },
   "test/commands.test.ts": {
-    "mtime": 1781656973.079399,
+    "mtime": 1781658017.5170717,
     "ast_hash": "08a616c4de668c4b85713a0dac24a573",
     "semantic_hash": ""
   },
   "test/config.test.ts": {
-    "mtime": 1781656954.3730967,
-    "ast_hash": "92932b4703654c32484478e45619a488",
+    "mtime": 1781662628.6174552,
+    "ast_hash": "70f6a0a0b8e0ab325c318a3e284407ae",
     "semantic_hash": ""
   },
   "test/customization.test.ts": {
@@ -330,7 +330,7 @@
     "semantic_hash": ""
   },
   "test/vim-editor.test.ts": {
-    "mtime": 1781655981.9215827,
+    "mtime": 1781658017.5170717,
     "ast_hash": "59707b506e839598088864af24efa7b1",
     "semantic_hash": ""
   },
@@ -400,8 +400,8 @@
     "semantic_hash": "7da320a8a1e0e0f2a35e4d19308e4442"
   },
   "TODOS.md": {
-    "mtime": 1781656050.4188044,
-    "ast_hash": "b951387c4ddbffe0a9a69957a5392007",
+    "mtime": 1781658624.771997,
+    "ast_hash": "e65528f7f6c60d44f800d1e9ee48a575",
     "semantic_hash": ""
   },
   "docs/adr/0001-dedicated-ex-command-line-row.md": {
@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "openspec/specs/vim-editor-adapter-architecture/spec.md": {
-    "mtime": 1781502665.5907474,
-    "ast_hash": "3656d8c0a0007b0e0b1e9d01132d9fb0",
+    "mtime": 1781658017.5170717,
+    "ast_hash": "ab244154485e7f4300da0638345d1e51",
     "semantic_hash": ""
   },
   "openspec/specs/vim-ex-command-line/spec.md": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": "cd8a037c03f2d11acce622ff9f549634"
   },
   "openspec/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1781502665.5907474,
-    "ast_hash": "ffd5403deaae2a4d6b1d1e78de5e364d",
+    "mtime": 1781662752.7678454,
+    "ast_hash": "160e8052aab7aa08a9d3e365c8cec4cf",
     "semantic_hash": ""
   },
   "openspec/specs/vim-macro-recording/spec.md": {
@@ -2254,29 +2254,69 @@
     "ast_hash": "86c7e843059d514dfc0c53983f03b047",
     "semantic_hash": ""
   },
-  "openspec/changes/refactor-config-clone-helpers/.openspec.yaml": {
-    "mtime": 1781655236.733869,
+  "src/keymap-descriptors.ts": {
+    "mtime": 1781659224.3794115,
+    "ast_hash": "b054f207fc299a9c8fa1c2f244c9a3ae",
+    "semantic_hash": ""
+  },
+  "test/keymap-descriptors.test.ts": {
+    "mtime": 1781659147.7827358,
+    "ast_hash": "34f367d79d70a534ddf98307013eb85f",
+    "semantic_hash": ""
+  },
+  "docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md": {
+    "mtime": 1781662945.2649677,
+    "ast_hash": "a2bdcfcca19eb76bb4e07ca4d353a4fa",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/.openspec.yaml": {
+    "mtime": 1781658017.5122938,
     "ast_hash": "bbc27e4b9d9d82db2a61a43236c8d23e",
     "semantic_hash": ""
   },
-  "openspec/changes/refactor-config-clone-helpers/design.md": {
-    "mtime": 1781655344.1090212,
+  "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/design.md": {
+    "mtime": 1781658017.5168345,
     "ast_hash": "3ab153d60f68225559cc05368e254430",
     "semantic_hash": ""
   },
-  "openspec/changes/refactor-config-clone-helpers/proposal.md": {
-    "mtime": 1781655320.9246542,
+  "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/proposal.md": {
+    "mtime": 1781658017.5168345,
     "ast_hash": "b4b8c683689dc002b25cce22a58e4aca",
     "semantic_hash": ""
   },
-  "openspec/changes/refactor-config-clone-helpers/specs/vim-editor-adapter-architecture/spec.md": {
-    "mtime": 1781655986.1489959,
+  "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/specs/vim-editor-adapter-architecture/spec.md": {
+    "mtime": 1781658017.5170717,
     "ast_hash": "b5e27fa8bb1466b46972f05ee52e0e42",
     "semantic_hash": ""
   },
-  "openspec/changes/refactor-config-clone-helpers/tasks.md": {
-    "mtime": 1781656014.6660364,
+  "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/tasks.md": {
+    "mtime": 1781658017.5170717,
     "ast_hash": "0f70192e61bada4da8f1789a70f12111",
+    "semantic_hash": ""
+  },
+  ".pi/settings.json": {
+    "mtime": 1781662304.998681,
+    "ast_hash": "ef4c5e4b4677f37c225546af6e57ea2b",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/design.md": {
+    "mtime": 1781658518.442368,
+    "ast_hash": "bc65ce619eda41733b929bf38c3289c1",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/proposal.md": {
+    "mtime": 1781658575.1424494,
+    "ast_hash": "419cbef9be0462ad4b383a8067f63266",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/specs/vim-keymap-configuration/spec.md": {
+    "mtime": 1781658532.6486628,
+    "ast_hash": "732a0c3d9822a90c6167bebbbc56723b",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/tasks.md": {
+    "mtime": 1781659267.376509,
+    "ast_hash": "cc554c53d431da34f4d4484cc09c54a6",
     "semantic_hash": ""
   }
 }

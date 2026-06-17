@@ -139,6 +139,17 @@ describe("vim config parsing", () => {
     });
   });
 
+  test("project keymap overrides restore defaults removed by global conflicts", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { motions: { wordForward: ["q"] } } } },
+      { piVimMode: { keymap: { motions: { wordForward: ["e"] } } } },
+    );
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
+    expect(result.options.keymap?.macros.record).toEqual(["q"]);
+  });
+
   test("parses configured mode labels", () => {
     const result = resolveVimOptions({
       piVimMode: {
@@ -330,6 +341,12 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startSearchBackward).toEqual(["?"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.indent).toEqual([">"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.operators.dedent).toEqual(["<"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toEqual(
+      DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change,
+    );
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toEqual(
+      DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank,
+    );
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordForwardBig");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("wordPreviousEnd");

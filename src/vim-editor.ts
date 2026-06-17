@@ -27,6 +27,7 @@ import { normalizeBufferPosition, pasteRegister, pasteRegisterBefore } from "./b
 import { readClipboardText } from "./clipboard.ts";
 import { pendingDisplay } from "./commands.ts";
 import {
+  cloneResolvedVimOptions,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
   searchForOptions,
@@ -128,32 +129,7 @@ export function fitStatusBorder(
 }
 
 function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
-  return {
-    preset: options.preset,
-    startMode: options.startMode,
-    cursor: { ...options.cursor },
-    keymap: options.keymap,
-    ui: options.ui
-      ? {
-          ...options.ui,
-          status: { ...options.ui.status, items: [...options.ui.status.items] },
-          mode: {
-            ...options.ui.mode,
-            labels: { ...options.ui.mode.labels },
-            narrowLabels: { ...options.ui.mode.narrowLabels },
-          },
-          selection: { ...options.ui.selection },
-          cursorPosition: { ...options.ui.cursorPosition },
-          workbench: { ...options.ui.workbench },
-        }
-      : undefined,
-    macros: options.macros,
-    marks: options.marks,
-    search: options.search,
-    feedback: options.feedback,
-    promptStructures: options.promptStructures,
-    promptTransforms: options.promptTransforms,
-  };
+  return cloneResolvedVimOptions(options);
 }
 
 type RedoSnapshot = {

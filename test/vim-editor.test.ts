@@ -155,6 +155,20 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("normal");
   });
 
+  test("constructor clones caller-owned nested keymap options", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: ["K"] } } },
+    }).options;
+    const { editor } = createEditor(options);
+    (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, "Z");
+
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", "K"]);
+
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getVimMode()).toBe("insert");
+  });
+
   test("plain insert text uses fast path without full snapshot", () => {
     const { editor } = createEditor();
     (editor as unknown as { getLines: () => string[] }).getLines = () => {

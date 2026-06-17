@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "src/config.ts": {
-    "mtime": 1781487855.5057411,
-    "ast_hash": "b50d9738d4a13784390f70a43d04695a",
+    "mtime": 1781657015.3526185,
+    "ast_hash": "4cd29b53e38c958e2e710b3281f4cc0d",
     "semantic_hash": ""
   },
   "src/customization.ts": {
@@ -235,8 +235,8 @@
     "semantic_hash": ""
   },
   "src/vim-editor.ts": {
-    "mtime": 1781502925.214498,
-    "ast_hash": "62aa22c7e7093e295db2f6565c7d78d5",
+    "mtime": 1781655860.823045,
+    "ast_hash": "b594ec7610e3d3e5f4b336260573b502",
     "semantic_hash": ""
   },
   "test/buffer.test.ts": {
@@ -245,13 +245,13 @@
     "semantic_hash": ""
   },
   "test/commands.test.ts": {
-    "mtime": 1781487855.5057411,
-    "ast_hash": "c5ee40588c1330cba981c3bef40b2d10",
+    "mtime": 1781656973.079399,
+    "ast_hash": "08a616c4de668c4b85713a0dac24a573",
     "semantic_hash": ""
   },
   "test/config.test.ts": {
-    "mtime": 1781487855.5057411,
-    "ast_hash": "2cfce10e3fadae2b6e2187a6f8cd1516",
+    "mtime": 1781656954.3730967,
+    "ast_hash": "92932b4703654c32484478e45619a488",
     "semantic_hash": ""
   },
   "test/customization.test.ts": {
@@ -330,8 +330,8 @@
     "semantic_hash": ""
   },
   "test/vim-editor.test.ts": {
-    "mtime": 1781502990.0301995,
-    "ast_hash": "c64946e74da630da0bb42be19b38b488",
+    "mtime": 1781655981.9215827,
+    "ast_hash": "59707b506e839598088864af24efa7b1",
     "semantic_hash": ""
   },
   "test/workbench.test.ts": {
@@ -400,7 +400,7 @@
     "semantic_hash": "7da320a8a1e0e0f2a35e4d19308e4442"
   },
   "TODOS.md": {
-    "mtime": 1781502665.5701964,
+    "mtime": 1781656050.4188044,
     "ast_hash": "b951387c4ddbffe0a9a69957a5392007",
     "semantic_hash": ""
   },
@@ -425,7 +425,7 @@
     "semantic_hash": "3fa0d68704646e44258b4980bf260c7e"
   },
   "docs/features.md": {
-    "mtime": 1781502951.1900277,
+    "mtime": 1781654371.9050403,
     "ast_hash": "57b98895742864357e811c300e84f3d7",
     "semantic_hash": ""
   },
@@ -1820,8 +1820,8 @@
     "semantic_hash": "b57e5c9ea95088af3cac848f5448c18b"
   },
   "openspec/specs/vim-mode-editor/spec.md": {
-    "mtime": 1781504481.8168938,
-    "ast_hash": "a4561b1bdca73a71671b83e255c61a5f",
+    "mtime": 1781654371.9283917,
+    "ast_hash": "7d8083c60bf57b6f2c021aa9a3503c6a",
     "semantic_hash": ""
   },
   "openspec/specs/vim-mode-visual-configuration/spec.md": {
@@ -2195,7 +2195,7 @@
     "semantic_hash": ""
   },
   "lefthook.yml": {
-    "mtime": 1781503026.0431561,
+    "mtime": 1781654371.9250398,
     "ast_hash": "03850f5ca3b35e392621b5efb655b4f7",
     "semantic_hash": ""
   },
@@ -2225,33 +2225,58 @@
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-15-fix-insert-autocomplete-status-overlap/.openspec.yaml": {
-    "mtime": 1781502665.5903637,
+    "mtime": 1781654371.9250398,
     "ast_hash": "0ac7f81219e0206f87bbee5da5020dcc",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-15-fix-insert-autocomplete-status-overlap/design.md": {
-    "mtime": 1781502665.5905764,
+    "mtime": 1781654371.9281785,
     "ast_hash": "6d7a7d8367e56bdd8fb16337818baf35",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-15-fix-insert-autocomplete-status-overlap/proposal.md": {
-    "mtime": 1781502665.5905764,
+    "mtime": 1781654371.9281785,
     "ast_hash": "b3180602f606c78f87c02db47d62e57a",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-15-fix-insert-autocomplete-status-overlap/specs/vim-mode-editor/spec.md": {
-    "mtime": 1781502665.5907474,
+    "mtime": 1781654371.9283917,
     "ast_hash": "323b009ca06d392b5f636602f65ed75d",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-15-fix-insert-autocomplete-status-overlap/tasks.md": {
-    "mtime": 1781503044.8681982,
+    "mtime": 1781654371.9283917,
     "ast_hash": "2756fd4b1aace42e4296d96f2acca38e",
     "semantic_hash": ""
   },
   "docs/solutions/ui-bugs/pi-vimmode-autocomplete-status-row-overlap-2026-06-15.md": {
-    "mtime": 1781504743.1957517,
+    "mtime": 1781654371.9050403,
     "ast_hash": "86c7e843059d514dfc0c53983f03b047",
+    "semantic_hash": ""
+  },
+  "openspec/changes/refactor-config-clone-helpers/.openspec.yaml": {
+    "mtime": 1781655236.733869,
+    "ast_hash": "bbc27e4b9d9d82db2a61a43236c8d23e",
+    "semantic_hash": ""
+  },
+  "openspec/changes/refactor-config-clone-helpers/design.md": {
+    "mtime": 1781655344.1090212,
+    "ast_hash": "3ab153d60f68225559cc05368e254430",
+    "semantic_hash": ""
+  },
+  "openspec/changes/refactor-config-clone-helpers/proposal.md": {
+    "mtime": 1781655320.9246542,
+    "ast_hash": "b4b8c683689dc002b25cce22a58e4aca",
+    "semantic_hash": ""
+  },
+  "openspec/changes/refactor-config-clone-helpers/specs/vim-editor-adapter-architecture/spec.md": {
+    "mtime": 1781655986.1489959,
+    "ast_hash": "b5e27fa8bb1466b46972f05ee52e0e42",
+    "semantic_hash": ""
+  },
+  "openspec/changes/refactor-config-clone-helpers/tasks.md": {
+    "mtime": 1781656014.6660364,
+    "ast_hash": "0f70192e61bada4da8f1789a70f12111",
     "semantic_hash": ""
   }
 }

@@ -117,6 +117,17 @@ describe("normal command parser", () => {
     expect(isPendingOperatorKey("x")).toBe(false);
   });
 
+  test("explicit motion binding wins over default macro record binding", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { wordForward: ["q"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "wordForward",
+    });
+  });
+
   test("resolves macro prefixes and targets separately from operator state", () => {
     expect(isMacroSlot("a")).toBe(true);
     expect(isMacroSlot("z")).toBe(true);

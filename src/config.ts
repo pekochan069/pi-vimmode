@@ -451,107 +451,30 @@ export type VimConfigPaths = {
   projectSettingsPath?: string;
 };
 
+function cloneArrayRecord<T extends Record<string, readonly unknown[]>>(
+  record: T,
+): { [K in keyof T]: Array<T[K][number]> } {
+  return Object.fromEntries(Object.entries(record).map(([key, values]) => [key, [...values]])) as {
+    [K in keyof T]: Array<T[K][number]>;
+  };
+}
+
+function clonePlainRecord<T extends Record<string, unknown>>(record: T): T {
+  return { ...record };
+}
+
 function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVimKeymap {
   return {
-    operators: {
-      delete: [...keymap.operators.delete],
-      change: [...keymap.operators.change],
-      yank: [...keymap.operators.yank],
-      indent: [...keymap.operators.indent],
-      dedent: [...keymap.operators.dedent],
-    },
-    motions: {
-      left: [...keymap.motions.left],
-      down: [...keymap.motions.down],
-      up: [...keymap.motions.up],
-      right: [...keymap.motions.right],
-      wordForward: [...keymap.motions.wordForward],
-      wordBackward: [...keymap.motions.wordBackward],
-      wordEnd: [...keymap.motions.wordEnd],
-      wordForwardBig: [...keymap.motions.wordForwardBig],
-      wordBackwardBig: [...keymap.motions.wordBackwardBig],
-      wordEndBig: [...keymap.motions.wordEndBig],
-      wordPreviousEnd: [...keymap.motions.wordPreviousEnd],
-      wordPreviousEndBig: [...keymap.motions.wordPreviousEndBig],
-      lineStart: [...keymap.motions.lineStart],
-      lineEnd: [...keymap.motions.lineEnd],
-      firstNonBlank: [...keymap.motions.firstNonBlank],
-      bufferStart: [...keymap.motions.bufferStart],
-      bufferEnd: [...keymap.motions.bufferEnd],
-      matchingPair: [...keymap.motions.matchingPair],
-    },
-    macros: {
-      record: [...keymap.macros.record],
-      play: [...keymap.macros.play],
-    },
-    marks: {
-      set: [...keymap.marks.set],
-      jumpExact: [...keymap.marks.jumpExact],
-      jumpLine: [...keymap.marks.jumpLine],
-    },
+    operators: cloneArrayRecord(keymap.operators),
+    motions: cloneArrayRecord(keymap.motions),
+    macros: cloneArrayRecord(keymap.macros),
+    marks: cloneArrayRecord(keymap.marks),
     textObjects: {
-      kinds: {
-        inner: [...keymap.textObjects.kinds.inner],
-        around: [...keymap.textObjects.kinds.around],
-      },
-      targets: {
-        word: [...keymap.textObjects.targets.word],
-        singleQuote: [...keymap.textObjects.targets.singleQuote],
-        doubleQuote: [...keymap.textObjects.targets.doubleQuote],
-        paren: [...keymap.textObjects.targets.paren],
-        bracket: [...keymap.textObjects.targets.bracket],
-        brace: [...keymap.textObjects.targets.brace],
-        codeFence: [...keymap.textObjects.targets.codeFence],
-        headingSection: [...keymap.textObjects.targets.headingSection],
-        listItem: [...keymap.textObjects.targets.listItem],
-        tag: [...keymap.textObjects.targets.tag],
-        errorBlock: [...keymap.textObjects.targets.errorBlock],
-      },
+      kinds: cloneArrayRecord(keymap.textObjects.kinds),
+      targets: cloneArrayRecord(keymap.textObjects.targets),
     },
-    commands: {
-      insertBefore: [...keymap.commands.insertBefore],
-      insertAfter: [...keymap.commands.insertAfter],
-      insertLineStart: [...keymap.commands.insertLineStart],
-      insertLineEnd: [...keymap.commands.insertLineEnd],
-      openLineBelow: [...keymap.commands.openLineBelow],
-      openLineAbove: [...keymap.commands.openLineAbove],
-      visualChar: [...keymap.commands.visualChar],
-      visualLine: [...keymap.commands.visualLine],
-      visualBlock: [...keymap.commands.visualBlock],
-      deleteChar: [...keymap.commands.deleteChar],
-      deleteToLineEnd: [...keymap.commands.deleteToLineEnd],
-      changeToLineEnd: [...keymap.commands.changeToLineEnd],
-      yankLine: [...keymap.commands.yankLine],
-      joinLine: [...keymap.commands.joinLine],
-      pasteAfter: [...keymap.commands.pasteAfter],
-      pasteBefore: [...keymap.commands.pasteBefore],
-      incrementNumber: [...keymap.commands.incrementNumber],
-      decrementNumber: [...keymap.commands.decrementNumber],
-      toggleCase: [...keymap.commands.toggleCase],
-      replaceChar: [...keymap.commands.replaceChar],
-      substituteChar: [...keymap.commands.substituteChar],
-      substituteLine: [...keymap.commands.substituteLine],
-      findCharForward: [...keymap.commands.findCharForward],
-      findCharBackward: [...keymap.commands.findCharBackward],
-      tillCharForward: [...keymap.commands.tillCharForward],
-      tillCharBackward: [...keymap.commands.tillCharBackward],
-      repeatCharSearch: [...keymap.commands.repeatCharSearch],
-      repeatCharSearchReverse: [...keymap.commands.repeatCharSearchReverse],
-      startSearch: [...keymap.commands.startSearch],
-      startSearchBackward: [...keymap.commands.startSearchBackward],
-      repeatSearch: [...keymap.commands.repeatSearch],
-      repeatSearchReverse: [...keymap.commands.repeatSearchReverse],
-      startExCommand: [...keymap.commands.startExCommand],
-      repeatChange: [...keymap.commands.repeatChange],
-      undo: [...keymap.commands.undo],
-      redo: [...keymap.commands.redo],
-      showKeybindings: [...keymap.commands.showKeybindings],
-    },
-    operatorMotions: {
-      delete: [...keymap.operatorMotions.delete],
-      change: [...keymap.operatorMotions.change],
-      yank: [...keymap.operatorMotions.yank],
-    },
+    commands: cloneArrayRecord(keymap.commands),
+    operatorMotions: cloneArrayRecord(keymap.operatorMotions),
     actions: {
       accepted: keymap.actions.accepted.map((binding) => ({
         ...binding,
@@ -595,16 +518,8 @@ function clonePromptTransforms(
 ): ResolvedVimPromptTransforms {
   return {
     enabled: promptTransforms.enabled,
-    actions: { ...promptTransforms.actions },
-    commands: {
-      quote: [...promptTransforms.commands.quote],
-      unquote: [...promptTransforms.commands.unquote],
-      bulletize: [...promptTransforms.commands.bulletize],
-      fence: [...promptTransforms.commands.fence],
-      indent: [...promptTransforms.commands.indent],
-      dedent: [...promptTransforms.commands.dedent],
-      reflow: [...promptTransforms.commands.reflow],
-    },
+    actions: clonePlainRecord(promptTransforms.actions),
+    commands: cloneArrayRecord(promptTransforms.commands),
   };
 }
 
@@ -613,28 +528,39 @@ function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
     status: { enabled: ui.status.enabled, items: [...ui.status.items] },
     mode: {
       enabled: ui.mode.enabled,
-      labels: { ...ui.mode.labels },
-      narrowLabels: { ...ui.mode.narrowLabels },
+      labels: clonePlainRecord(ui.mode.labels),
+      narrowLabels: clonePlainRecord(ui.mode.narrowLabels),
     },
-    selection: { ...ui.selection },
-    cursorPosition: { ...ui.cursorPosition },
-    workbench: { ...ui.workbench },
+    selection: clonePlainRecord(ui.selection),
+    cursorPosition: clonePlainRecord(ui.cursorPosition),
+    workbench: clonePlainRecord(ui.workbench),
+  };
+}
+
+export function cloneResolvedVimOptions(
+  options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+): ResolvedVimEditorOptions {
+  return {
+    preset: options.preset,
+    startMode: options.startMode,
+    cursor: { ...options.cursor },
+    keymap: options.keymap ? cloneKeymap(options.keymap) : undefined,
+    ui: options.ui ? cloneUi(options.ui) : undefined,
+    macros: options.macros ? cloneMacros(options.macros) : undefined,
+    marks: options.marks ? cloneMarks(options.marks) : undefined,
+    search: options.search ? cloneSearch(options.search) : undefined,
+    feedback: options.feedback ? cloneFeedback(options.feedback) : undefined,
+    promptStructures: options.promptStructures
+      ? clonePromptStructures(options.promptStructures)
+      : undefined,
+    promptTransforms: options.promptTransforms
+      ? clonePromptTransforms(options.promptTransforms)
+      : undefined,
   };
 }
 
 function cloneDefaultOptions(): ResolvedVimEditorOptions {
-  return {
-    startMode: DEFAULT_VIM_OPTIONS.startMode,
-    cursor: { ...DEFAULT_VIM_OPTIONS.cursor },
-    keymap: cloneKeymap(),
-    ui: cloneUi(),
-    macros: cloneMacros(),
-    marks: cloneMarks(),
-    search: cloneSearch(),
-    feedback: cloneFeedback(),
-    promptStructures: clonePromptStructures(),
-    promptTransforms: clonePromptTransforms(),
-  };
+  return cloneResolvedVimOptions();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1474,7 +1400,39 @@ function parsePiVimMode(
   return { partial, warnings };
 }
 
+function configuredTopLevelKeymapSequences(partial: PartialKeymapOptions): Set<string> {
+  const sequences = new Set<string>();
+  for (const group of [partial.operators, partial.motions, partial.macros, partial.marks]) {
+    for (const bindings of Object.values(group ?? {})) {
+      for (const sequence of bindings ?? []) sequences.add(sequence);
+    }
+  }
+  for (const [command, bindings] of Object.entries(partial.commands ?? {})) {
+    if (command === "showKeybindings") continue;
+    for (const sequence of bindings ?? []) sequences.add(sequence);
+  }
+  return sequences;
+}
+
+function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set<string>): void {
+  if (sequences.size === 0) return;
+  const remove = <K extends string>(record: Record<K, readonly string[]>): Record<K, string[]> => {
+    const next = {} as Record<K, string[]>;
+    for (const action of Object.keys(record) as K[]) {
+      next[action] = record[action].filter((binding) => !sequences.has(binding));
+    }
+    return next;
+  };
+
+  target.operators = remove(target.operators);
+  target.motions = remove(target.motions);
+  target.commands = remove(target.commands);
+  target.macros = remove(target.macros);
+  target.marks = remove(target.marks);
+}
+
 function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
+  removeTopLevelKeymapSequences(target, configuredTopLevelKeymapSequences(partial));
   if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
   if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };

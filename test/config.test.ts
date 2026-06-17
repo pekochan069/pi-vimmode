@@ -53,6 +53,53 @@ describe("vim config parsing", () => {
     expect(resolveVimOptions(undefined).options).toEqual(DEFAULT_VIM_OPTIONS);
   });
 
+  test("resolved defaults do not share mutable nested config fields", () => {
+    const options = resolveVimOptions(undefined).options;
+
+    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
+    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
+    (options.ui!.status.items as unknown as string[]).push("mode");
+    if (options.ui) options.ui.mode.labels.normal = "COMMAND";
+
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForward).toEqual(["w"]);
+    expect(DEFAULT_VIM_OPTIONS.promptTransforms?.commands.quote).toEqual(["quote"]);
+    expect(DEFAULT_VIM_OPTIONS.ui?.status.items).toEqual([
+      "mode",
+      "pendingOperator",
+      "selection",
+      "cursorPosition",
+    ]);
+    expect(DEFAULT_VIM_OPTIONS.ui?.mode.labels.normal).toBe("NORMAL");
+  });
+
+  test("resolved configured options do not share mutable nested config fields", () => {
+    const settings = {
+      piVimMode: {
+        keymap: { motions: { wordForward: ["q"] }, commands: { openLineBelow: ["n"] } },
+        promptTransforms: { commands: { quote: ["qte"] } },
+        ui: {
+          status: { items: ["mode", "selection"] },
+          mode: { labels: { normal: "COMMAND" } },
+        },
+      },
+    };
+    const options = resolveVimOptions(settings).options;
+
+    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
+    (options.keymap!.commands.openLineBelow as unknown as string[]).push("custom-open");
+    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
+    (options.ui!.status.items as unknown as string[]).push("cursorPosition");
+    if (options.ui) options.ui.mode.labels.normal = "NORMAL-MUTATED";
+
+    expect(settings.piVimMode.keymap.motions.wordForward).toEqual(["q"]);
+    expect(settings.piVimMode.keymap.commands.openLineBelow).toEqual(["n"]);
+    expect(settings.piVimMode.promptTransforms.commands.quote).toEqual(["qte"]);
+    expect(settings.piVimMode.ui.status.items).toEqual(["mode", "selection"]);
+    expect(settings.piVimMode.ui.mode.labels.normal).toBe("COMMAND");
+    expect(options.keymap?.motions.left).toEqual(["h"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h"]);
+  });
+
   test("parses valid global settings", () => {
     const result = resolveVimOptions({
       piVimMode: {
@@ -184,6 +231,16 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.marks.jumpLine).toEqual(["'"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
+  });
+
+  test("explicit keymap bindings override lower-priority default top-level bindings", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { motions: { wordForward: ["q"] } } },
+    });
+
+    expect(result.options.keymap?.motions.wordForward).toEqual(["q"]);
+    expect(result.options.keymap?.macros.record).toEqual([]);
+    expect(result.warnings.some((warning) => warning.includes("binding q"))).toBe(false);
   });
 
   test("parses shift operator keymap and rejects motion matrices for line-only operators", () => {

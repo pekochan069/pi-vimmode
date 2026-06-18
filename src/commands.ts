@@ -113,6 +113,37 @@ type Binding =
       args: PromptTransform;
     };
 
+type CompiledKeymap = {
+  exactBindings: Map<string, Binding>;
+  longerPrefixes: Set<string>;
+  motions: {
+    exact: Map<string, VimMotionAction>;
+    longerPrefixes: Set<string>;
+  };
+  operators: Map<
+    VimOperatorAction,
+    {
+      exact: Set<string>;
+      longerPrefixes: Set<string>;
+    }
+  >;
+  textObjects: {
+    kinds: Map<string, VimTextObjectKind>;
+    targets: Map<string, VimTextObjectTarget>;
+  };
+  commands: {
+    searchDirections: Map<string, "forward" | "backward">;
+    searchLongerPrefixes: Set<string>;
+    charSearch: Map<string, OperatorCharSearchCommand>;
+    charSearchLongerPrefixes: Set<string>;
+    repeatCharSearch: Map<
+      string,
+      Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">
+    >;
+    repeatCharSearchLongerPrefixes: Set<string>;
+  };
+};
+
 type EncodedCountPending = { type: "count"; count: string; inner: string };
 type EncodedCharCommandPending = { type: "charCommand"; command: VimCommandAction; count?: number };
 type EncodedTextObjectPending = {
@@ -192,13 +223,6 @@ const SEARCH_ENTRY_ACTIONS = deriveActionsWhere(
 ) as Extract<VimCommandAction, "startSearch" | "startSearchBackward">[];
 
 const CHAR_ARGUMENT_COMMANDS = new Set<VimCommandAction>(CHAR_ARGUMENT_ACTIONS);
-const OPERATOR_CHAR_SEARCH_COMMANDS = new Set<OperatorCharSearchCommand>(
-  OPERATOR_CHAR_SEARCH_ACTIONS,
-);
-const REPEAT_CHAR_SEARCH_COMMANDS = new Set<
-  Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">
->(REPEAT_CHAR_SEARCH_ACTIONS);
-
 function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
 }
@@ -207,26 +231,14 @@ function textObjectKindForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectKind | undefined {
-  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds) as [
-    VimTextObjectKind,
-    readonly string[],
-  ][]) {
-    if (sequences.includes(key)) return kind;
-  }
-  return undefined;
+  return compiledKeymapFor(keymap).textObjects.kinds.get(key);
 }
 
 function textObjectTargetForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectTarget | undefined {
-  for (const [target, sequences] of Object.entries(keymap.textObjects.targets) as [
-    VimTextObjectTarget,
-    readonly string[],
-  ][]) {
-    if (sequences.includes(key)) return target;
-  }
-  return undefined;
+  return compiledKeymapFor(keymap).textObjects.targets.get(key);
 }
 
 function isLegacyVimOperator(key: string): key is VimOperator {
@@ -243,118 +255,213 @@ function lineCommandFor(operator: VimOperator): NormalCommand {
   return "yy";
 }
 
-function bindingsFor(keymap: ResolvedVimKeymap): Binding[] {
-  const bindings: Binding[] = [];
+function addLongerPrefixes(prefixes: Set<string>, sequence: string): void {
+  for (let index = 1; index < sequence.length; index += 1) prefixes.add(sequence.slice(0, index));
+}
+
+function setFirstBinding(bindings: Map<string, Binding>, binding: Binding): void {
+  if (!bindings.has(binding.sequence)) bindings.set(binding.sequence, binding);
+}
+
+function setFirstValue<K, V>(map: Map<K, V>, key: K, value: V): void {
+  if (!map.has(key)) map.set(key, value);
+}
+
+function compileCommandFamily(
+  keymap: ResolvedVimKeymap,
+  commands: readonly VimCommandAction[],
+  setExact: (sequence: string, command: VimCommandAction) => void,
+  prefixes: Set<string>,
+): void {
+  for (const command of commands) {
+    for (const sequence of keymap.commands[command]) {
+      setExact(sequence, command);
+      addLongerPrefixes(prefixes, sequence);
+    }
+  }
+}
+
+const COMPILED_KEYMAPS = new WeakMap<ResolvedVimKeymap, CompiledKeymap>();
+
+function compiledKeymapFor(keymap: ResolvedVimKeymap): CompiledKeymap {
+  const cached = COMPILED_KEYMAPS.get(keymap);
+  if (cached) return cached;
+  const compiled = compileKeymap(keymap);
+  COMPILED_KEYMAPS.set(keymap, compiled);
+  return compiled;
+}
+
+function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
+  const exactBindings = new Map<string, Binding>();
+  const longerPrefixes = new Set<string>();
+  const motionExact = new Map<string, VimMotionAction>();
+  const motionLongerPrefixes = new Set<string>();
+  const operators = new Map<
+    VimOperatorAction,
+    { exact: Set<string>; longerPrefixes: Set<string> }
+  >();
+  const textObjectKinds = new Map<string, VimTextObjectKind>();
+  const textObjectTargets = new Map<string, VimTextObjectTarget>();
+  const searchDirections = new Map<string, "forward" | "backward">();
+  const searchLongerPrefixes = new Set<string>();
+  const charSearch = new Map<string, OperatorCharSearchCommand>();
+  const charSearchLongerPrefixes = new Set<string>();
+  const repeatCharSearch = new Map<
+    string,
+    Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">
+  >();
+  const repeatCharSearchLongerPrefixes = new Set<string>();
+
   for (const [operator, sequences] of Object.entries(keymap.operators) as [
     VimOperatorAction,
     readonly string[],
   ][]) {
-    for (const sequence of sequences) bindings.push({ sequence, kind: "operator", operator });
+    const operatorLookup = { exact: new Set<string>(), longerPrefixes: new Set<string>() };
+    for (const sequence of sequences) {
+      setFirstBinding(exactBindings, { sequence, kind: "operator", operator });
+      addLongerPrefixes(longerPrefixes, sequence);
+      operatorLookup.exact.add(sequence);
+      addLongerPrefixes(operatorLookup.longerPrefixes, sequence);
+    }
+    operators.set(operator, operatorLookup);
   }
+
   for (const [motion, sequences] of Object.entries(keymap.motions) as [
     VimMotionAction,
     readonly string[],
   ][]) {
-    for (const sequence of sequences) bindings.push({ sequence, kind: "motion", motion });
+    for (const sequence of sequences) {
+      setFirstBinding(exactBindings, { sequence, kind: "motion", motion });
+      addLongerPrefixes(longerPrefixes, sequence);
+      addLongerPrefixes(motionLongerPrefixes, sequence);
+    }
   }
+
   for (const [command, sequences] of Object.entries(keymap.commands) as [
     VimCommandAction,
     readonly string[],
   ][]) {
-    for (const sequence of sequences) bindings.push({ sequence, kind: "command", command });
+    for (const sequence of sequences) {
+      setFirstBinding(exactBindings, { sequence, kind: "command", command });
+      addLongerPrefixes(longerPrefixes, sequence);
+    }
   }
+
   for (const binding of keymap.actions.accepted) {
-    bindings.push({
+    setFirstBinding(exactBindings, {
       sequence: binding.key,
       kind: "action",
       actionId: binding.actionId,
       args: binding.args,
     });
+    addLongerPrefixes(longerPrefixes, binding.key);
   }
-  return bindings;
+
+  for (const [sequence, binding] of exactBindings) {
+    if (binding.kind === "motion") motionExact.set(sequence, binding.motion);
+  }
+
+  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds) as [
+    VimTextObjectKind,
+    readonly string[],
+  ][]) {
+    for (const sequence of sequences) setFirstValue(textObjectKinds, sequence, kind);
+  }
+  for (const [target, sequences] of Object.entries(keymap.textObjects.targets) as [
+    VimTextObjectTarget,
+    readonly string[],
+  ][]) {
+    for (const sequence of sequences) setFirstValue(textObjectTargets, sequence, target);
+  }
+
+  compileCommandFamily(
+    keymap,
+    SEARCH_ENTRY_ACTIONS,
+    (sequence, command) => {
+      const descriptor = KEYMAP_COMMAND_DESCRIPTORS[command] as {
+        searchDirection?: "forward" | "backward";
+      };
+      if (descriptor.searchDirection)
+        setFirstValue(searchDirections, sequence, descriptor.searchDirection);
+    },
+    searchLongerPrefixes,
+  );
+  compileCommandFamily(
+    keymap,
+    OPERATOR_CHAR_SEARCH_ACTIONS,
+    (sequence, command) =>
+      setFirstValue(charSearch, sequence, command as OperatorCharSearchCommand),
+    charSearchLongerPrefixes,
+  );
+  compileCommandFamily(
+    keymap,
+    REPEAT_CHAR_SEARCH_ACTIONS,
+    (sequence, command) => {
+      setFirstValue(
+        repeatCharSearch,
+        sequence,
+        command as Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">,
+      );
+    },
+    repeatCharSearchLongerPrefixes,
+  );
+
+  return {
+    exactBindings,
+    longerPrefixes,
+    motions: { exact: motionExact, longerPrefixes: motionLongerPrefixes },
+    operators,
+    textObjects: { kinds: textObjectKinds, targets: textObjectTargets },
+    commands: {
+      searchDirections,
+      searchLongerPrefixes,
+      charSearch,
+      charSearchLongerPrefixes,
+      repeatCharSearch,
+      repeatCharSearchLongerPrefixes,
+    },
+  };
 }
 
 function exactBinding(sequence: string, keymap: ResolvedVimKeymap): Binding | undefined {
-  return bindingsFor(keymap).find((binding) => binding.sequence === sequence);
+  return compiledKeymapFor(keymap).exactBindings.get(sequence);
 }
 
 function hasLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return bindingsFor(keymap).some(
-    (binding) => binding.sequence.startsWith(sequence) && binding.sequence.length > sequence.length,
-  );
-}
-
-function commandSequencesFor(
-  keymap: ResolvedVimKeymap,
-  commands: readonly VimCommandAction[],
-): string[] {
-  return commands.flatMap((command) => keymap.commands[command]);
-}
-
-function isOperatorCharSearchCommand(
-  command: VimCommandAction,
-): command is OperatorCharSearchCommand {
-  return OPERATOR_CHAR_SEARCH_COMMANDS.has(command as OperatorCharSearchCommand);
-}
-
-function isRepeatCharSearchCommand(
-  command: VimCommandAction,
-): command is Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> {
-  return REPEAT_CHAR_SEARCH_COMMANDS.has(
-    command as Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse">,
-  );
+  return compiledKeymapFor(keymap).longerPrefixes.has(sequence);
 }
 
 function searchDirectionForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): "forward" | "backward" | undefined {
-  const binding = exactBinding(sequence, keymap);
-  if (binding?.kind !== "command") return undefined;
-  const descriptor = KEYMAP_COMMAND_DESCRIPTORS[binding.command] as {
-    searchDirection?: "forward" | "backward";
-  };
-  return descriptor.searchDirection;
+  return compiledKeymapFor(keymap).commands.searchDirections.get(sequence);
 }
 
 function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return commandSequencesFor(keymap, SEARCH_ENTRY_ACTIONS).some(
-    (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
-  );
+  return compiledKeymapFor(keymap).commands.searchLongerPrefixes.has(sequence);
 }
 
 function charSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): OperatorCharSearchCommand | undefined {
-  const binding = exactBinding(sequence, keymap);
-  if (binding?.kind !== "command" || !isOperatorCharSearchCommand(binding.command)) {
-    return undefined;
-  }
-  return binding.command;
+  return compiledKeymapFor(keymap).commands.charSearch.get(sequence);
 }
 
 function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return commandSequencesFor(keymap, OPERATOR_CHAR_SEARCH_ACTIONS).some(
-    (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
-  );
+  return compiledKeymapFor(keymap).commands.charSearchLongerPrefixes.has(sequence);
 }
 
 function repeatCharSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> | undefined {
-  const binding = exactBinding(sequence, keymap);
-  if (binding?.kind !== "command" || !isRepeatCharSearchCommand(binding.command)) {
-    return undefined;
-  }
-  return binding.command;
+  return compiledKeymapFor(keymap).commands.repeatCharSearch.get(sequence);
 }
 
 function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return commandSequencesFor(keymap, REPEAT_CHAR_SEARCH_ACTIONS).some(
-    (binding) => binding.startsWith(sequence) && binding.length > sequence.length,
-  );
+  return compiledKeymapFor(keymap).commands.repeatCharSearchLongerPrefixes.has(sequence);
 }
 
 export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -616,17 +723,15 @@ function motionForSequence(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): VimMotionAction | undefined {
-  const binding = exactBinding(sequence, keymap);
-  return binding?.kind === "motion" ? binding.motion : undefined;
+  return compiledKeymapFor(keymap).motions.exact.get(sequence);
 }
 
 function hasMotionPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return Object.values(keymap.motions).some((sequences) =>
-    sequences.some(
-      (motionSequence) =>
-        motionSequence.startsWith(sequence) && motionSequence.length > sequence.length,
-    ),
-  );
+  return compiledKeymapFor(keymap).motions.longerPrefixes.has(sequence);
+}
+
+function operatorLookupFor(keymap: ResolvedVimKeymap, operator: VimOperatorAction) {
+  return compiledKeymapFor(keymap).operators.get(operator);
 }
 
 function hasOperatorPrefix(
@@ -634,10 +739,7 @@ function hasOperatorPrefix(
   keymap: ResolvedVimKeymap,
   operator: VimOperatorAction,
 ): boolean {
-  return keymap.operators[operator].some(
-    (operatorSequence) =>
-      operatorSequence.startsWith(sequence) && operatorSequence.length > sequence.length,
-  );
+  return operatorLookupFor(keymap, operator)?.longerPrefixes.has(sequence) ?? false;
 }
 
 function operatorSequenceMatches(
@@ -645,7 +747,7 @@ function operatorSequenceMatches(
   keymap: ResolvedVimKeymap,
   operator: VimOperatorAction,
 ): boolean {
-  return keymap.operators[operator].includes(sequence);
+  return operatorLookupFor(keymap, operator)?.exact.has(sequence) ?? false;
 }
 
 function withCount<T extends SemanticCommandResult>(

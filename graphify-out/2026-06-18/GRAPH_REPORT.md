@@ -1,16 +1,16 @@
 # Graph Report - pi-vimmode  (2026-06-18)
 
 ## Corpus Check
-- 424 files · ~365,930 words
+- 429 files · ~369,905 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7846 nodes · 10574 edges · 613 communities (599 shown, 14 thin omitted)
+- 7904 nodes · 10650 edges · 613 communities (598 shown, 15 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 155 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2bab14c8`
+- Built from commit: `b2640498`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -633,12 +633,12 @@
 10. `handleNormalInput()` - 37 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `applyModalKeys()` --calls--> `handleModalInput()`  [EXTRACTED]
-  test/modal.test.ts → src/modal/engine.ts
+- `runScenario()` --calls--> `resolveNormalCommand()`  [EXTRACTED]
+  scripts/measure-command-resolver.ts → src/commands.ts
 - `createLifecycleHarness()` --calls--> `registerVimLifecycle()`  [EXTRACTED]
   test/lifecycle.test.ts → src/lifecycle.ts
-- `runGolden()` --calls--> `handleModalInput()`  [EXTRACTED]
-  test/modal-effects.test.ts → src/modal/engine.ts
+- `applyModalKeys()` --calls--> `handleModalInput()`  [EXTRACTED]
+  test/modal.test.ts → src/modal/engine.ts
 - `parsedRange()` --calls--> `parseExLineRange()`  [EXTRACTED]
   test/range.test.ts → src/range.ts
 - `rangeError()` --calls--> `parseExLineRange()`  [EXTRACTED]
@@ -681,7 +681,7 @@
 - **2026 06 09 Typed Action Registry Keybindings Change Artifacts** — 2026_06_09_typed_action_registry_keybindings_tasks_document, pi_vimmode_documentation_spec_document, prompt_native_structure_editing_spec_document, prompt_transform_action_keybindings_spec_document, runtime_help_drift_guard_spec_document, vim_customization_diagnostics_spec_document, vim_ex_command_line_spec_document, vim_keymap_configuration_spec_document [INFERRED 0.85]
 - **2026 06 10 Show Readonly Ex Output Popups Change Artifacts** — 2026_06_10_show_readonly_ex_output_popups_openspec_document, 2026_06_10_show_readonly_ex_output_popups_design_document, 2026_06_10_show_readonly_ex_output_popups_proposal_document, 2026_06_10_show_readonly_ex_output_popups_tasks_document, pi_vimmode_documentation_spec_document, runtime_help_drift_guard_spec_document, vim_ex_command_line_spec_document, vim_runtime_inspectability_spec_document [INFERRED 0.85]
 
-## Communities (613 total, 14 thin omitted)
+## Communities (613 total, 15 thin omitted)
 
 ### Community 0 - "Ex Command Line"
 Cohesion: 0.02
@@ -689,7 +689,7 @@ Nodes (82): ADDED Requirements, MODIFIED Requirements, Vim Ex Command Line Spec,
 
 ### Community 1 - "Keymap Macros"
 Cohesion: 0.06
-Nodes (30): ACTION_TO_LEGACY_MOTION, ACTION_TO_LEGACY_OPERATOR, Binding, CHAR_ARGUMENT_ACTIONS, CHAR_ARGUMENT_COMMANDS, DEFAULT_MACRO_SLOTS, EncodedCharCommandPending, EncodedCountPending (+22 more)
+Nodes (38): ACTION_TO_LEGACY_MOTION, ACTION_TO_LEGACY_OPERATOR, addLongerPrefixes(), Binding, CHAR_ARGUMENT_ACTIONS, CHAR_ARGUMENT_COMMANDS, compileCommandFamily(), COMPILED_KEYMAPS (+30 more)
 
 ### Community 2 - "Ex Command Line"
 Cohesion: 0.03
@@ -705,11 +705,11 @@ Nodes (58): ADDED Requirements, Runtime Help Drift Guard Spec, Requirement: Drif
 
 ### Community 5 - "Keymap Prompt Transform"
 Cohesion: 0.04
-Nodes (81): actionKeybindingPresetActions(), isActionKeybindingPreset(), ActionBindingConflict, BINDABLE_PROMPT_TRANSFORM_ACTION_SET, COMMAND_ACTION_SET, configuredTopLevelKeymapSequences(), CURSOR_STYLES, DEFAULT_VIM_FEEDBACK (+73 more)
+Nodes (79): ActionBindingConflict, BINDABLE_PROMPT_TRANSFORM_ACTION_SET, cloneArrayRecord(), cloneDefaultOptions(), cloneFeedback(), cloneKeymap(), cloneMacros(), cloneMarks() (+71 more)
 
 ### Community 6 - "Visual Modes Search"
-Cohesion: 0.06
-Nodes (51): BlockRange, bracketAtOrAfterCursorOnLine(), bracketRangeAtOffset(), BufferNavigationTarget, CharSearchKind, charSearchMatchColumn(), charSearchOperatorOffsetRange(), CLOSE_TO_OPEN (+43 more)
+Cohesion: 0.05
+Nodes (121): adjustNumberAtOrAfterCursor(), applyPromptTransform(), BlockRange, blockSelectionText(), bracketAtOrAfterCursorOnLine(), bufferEndPosition(), BufferNavigationTarget, bufferStartPosition() (+113 more)
 
 ### Community 7 - "Ex Command Line"
 Cohesion: 0.04
@@ -720,12 +720,12 @@ Cohesion: 0.04
 Nodes (52): ADDED Requirements, Vim Customization Diagnostics Spec, Requirement: Action search is discoverable and finite, Requirement: Customization commands preserve prompt editing state, Requirement: Customization metadata supports runtime feature discovery, Requirement: Diagnostic action metadata preserves diagnostic command boundaries, Requirement: Diagnostic command registry remains finite, Requirement: Diagnostic help actions have metadata-only registry entries (+44 more)
 
 ### Community 9 - "Macros Search"
-Cohesion: 0.14
-Nodes (25): bindingsFor(), commandSequencesFor(), encodeOperatorCharSearchRepeatPending(), encodeOperatorLinePending(), encodeOperatorMotionPending(), encodeOperatorSearchPending(), encodeTextObjectPending(), exactBinding() (+17 more)
+Cohesion: 0.16
+Nodes (28): charSearchCommandForBinding(), compiledKeymapFor(), effectiveOperatorCharSearchCount(), encodeOperatorCharSearchPending(), encodeOperatorCharSearchRepeatPending(), encodeOperatorMotionPending(), encodeOperatorSearchPending(), encodeTextObjectPending() (+20 more)
 
 ### Community 10 - "Keymap Runtime Help"
 Cohesion: 0.11
-Nodes (42): keymapForOptions(), macrosForOptions(), marksForOptions(), promptTransformsForOptions(), actionEntriesForKeymap(), actionsMessage(), doctorMessage(), isKeyLikeQuery() (+34 more)
+Nodes (28): ActionKeybindingRecipe, keymapForOptions(), macrosForOptions(), marksForOptions(), promptTransformsForOptions(), diagnosticPopup(), isKeybindingDiscoveryPopupQuery(), keybindingsPopup() (+20 more)
 
 ### Community 11 - "Visual Block"
 Cohesion: 0.05
@@ -748,8 +748,8 @@ Cohesion: 0.07
 Nodes (42): Context, Decision: Add popup state with panel-local scroll offset, not a retained message, Decision: Build popup content from existing metadata helpers, Decision: Dismiss through existing reset/cancel paths and preserve read-only invariants, Decision: Drift-guard popup docs and output anchors, Decision: Popup-local scroll keys are handled before normal Vim input, Decision: Render a dedicated bounded overlay popup with actionable scroll indicators, Decision: Route only selected discovery commands to popup in M1 (+34 more)
 
 ### Community 16 - "Package Earendil Works Url"
-Cohesion: 0.05
-Nodes (43): author, bugs, url, contributors, description, devDependencies, bun-types, @earendil-works/pi-coding-agent (+35 more)
+Cohesion: 0.04
+Nodes (44): author, bugs, url, contributors, description, devDependencies, bun-types, @earendil-works/pi-coding-agent (+36 more)
 
 ### Community 17 - "Lifecycle Settings"
 Cohesion: 0.07
@@ -768,16 +768,16 @@ Cohesion: 0.08
 Nodes (37): 1. Add a pure runtime help/feature registry seam, 2. Keep `:help`, `:features`, and `:messages` finite Ex diagnostics, 3. Implement `:messages` as capped message introspection, not a pager, 4. Make docs drift guard structural and narrow, 5. Preserve existing customization diagnostics contracts, Context, Decisions, Goals / Non-Goals (+29 more)
 
 ### Community 21 - "Keymap Macros"
-Cohesion: 0.06
-Nodes (19): modalPendingDisplay(), exDisplay(), pendingMarkDisplay(), pendingSearchDisplay(), createModalState(), AdapterCommand, uiForOptions(), canShowReadOnlyPopup() (+11 more)
+Cohesion: 0.18
+Nodes (3): AdapterCommand, sameRedoSnapshot(), VimEditor
 
 ### Community 22 - "Visual Modes Search"
-Cohesion: 0.16
-Nodes (39): clearCommandPending(), clearPending(), clearSearchHighlight(), editState(), editStateAndEffects(), editUpdate(), invalidate(), withEffects() (+31 more)
+Cohesion: 0.12
+Nodes (19): CommandDescriptor, deriveActionKeys(), deriveActionsWhere(), deriveDefaultKeyBindings(), deriveLegacyActionToKey(), deriveLegacyKeyToAction(), deriveSet(), KeymapDescriptor (+11 more)
 
 ### Community 23 - "Buffer Commands"
-Cohesion: 0.08
-Nodes (36): Context, Decisions, Generalize parser around `parseExCommand`, Goals / Non-Goals, Implement line commands in prompt-buffer helpers, Keep ranges shared, add destination parsing only for copy/move, Migration Plan, Open Questions (+28 more)
+Cohesion: 0.21
+Nodes (15): Context, Decisions, Generalize parser around `parseExCommand`, Goals / Non-Goals, Implement line commands in prompt-buffer helpers, Keep ranges shared, add destination parsing only for copy/move, Migration Plan, Open Questions (+7 more)
 
 ### Community 24 - "Runtime Help Settings"
 Cohesion: 0.08
@@ -801,11 +801,11 @@ Nodes (33): Apply cursor style in the rendered editor and terminal cursor, Conte
 
 ### Community 29 - "Visual Modes Buffer"
 Cohesion: 0.19
-Nodes (17): commandSequenceFor(), countForPendingSequence(), decodeCharCommandPending(), decodeCountPending(), decodeOperatorCharSearchPending(), decodeOperatorCharSearchRepeatPending(), decodeOperatorLinePending(), decodeOperatorMotionPending() (+9 more)
+Nodes (16): commandSequenceFor(), decodeCharCommandPending(), decodeCountPending(), decodeOperatorCharSearchPending(), decodeOperatorCharSearchRepeatPending(), decodeOperatorLinePending(), decodeOperatorMotionPending(), decodeOperatorSearchPending() (+8 more)
 
 ### Community 30 - "Macros Redo"
-Cohesion: 0.18
-Nodes (14): comparePositions(), deleteCharAt(), deleteMarkRange(), deleteRange(), deleteResolvedCharacterRange(), deleteSearchMatchRange(), deleteSearchRange(), isVisualCellSelected() (+6 more)
+Cohesion: 0.13
+Nodes (14): ADDED Requirements, Requirement: Cached keymap lookups preserve semantic command resolution, Requirement: Compiled keymap cache is scoped to resolved keymap identity, Requirement: Resolver performance work is validated without user-visible behavior changes, Scenario: Automated semantic validation runs, Scenario: Configured keymap resolution remains equivalent, Scenario: Default and custom keymaps can be interleaved, Scenario: Default keymap resolution remains equivalent (+6 more)
 
 ### Community 31 - "Visual Modes Buffer"
 Cohesion: 0.07
@@ -837,7 +837,7 @@ Nodes (41): ADDED Requirements, MODIFIED Requirements, Requirement: Ex command-l
 
 ### Community 38 - "Substitution Concepts"
 Cohesion: 0.05
-Nodes (56): ActiveRegisterTarget, commandType(), ExParseContext, ExParseResult, isValidDelimiter(), parseCommand(), ParsedCommand, ParsedCommandName (+48 more)
+Nodes (57): ActiveRegisterTarget, commandType(), ExParseContext, ExParseResult, isValidDelimiter(), parseCommand(), ParsedCommand, ParsedCommandName (+49 more)
 
 ### Community 39 - "Ranges Concepts"
 Cohesion: 0.05
@@ -857,23 +857,23 @@ Nodes (38): first_seen_at, kind, last_seen_at, last_turn_id, leader_thread_id, s
 
 ### Community 43 - "Ex Command Line"
 Cohesion: 0.10
-Nodes (32): ActiveVisualRenderInput, chunkHasCursor(), createPromptRenderView(), createSearchRanges(), createVisualRenderView(), cursorShapeEscape(), escapeRegExp(), isCellInRange() (+24 more)
+Nodes (30): ActiveVisualRenderInput, chunkHasCursor(), createPromptRenderView(), createSearchRanges(), createVisualRenderView(), escapeRegExp(), isCellInRange(), isLineSelected() (+22 more)
 
 ### Community 44 - "Runtime Help Settings"
 Cohesion: 0.10
-Nodes (21): VimConfigLoadResult, VimConfigPaths, piVimMode(), CreateEditor, EditorComponentFactory, registerVimLifecycle(), Schedule, TrackedEditor (+13 more)
+Nodes (20): VimConfigLoadResult, VimConfigPaths, piVimMode(), CreateEditor, EditorComponentFactory, registerVimLifecycle(), Schedule, TrackedEditor (+12 more)
 
 ### Community 45 - "Visual Modes Buffer"
-Cohesion: 0.09
-Nodes (22): ADDED Requirements, extended-vim-keybindings Specification, Purpose, Extended Vim Keybindings Spec, Requirement: Normal mode supports additional navigation bindings, Requirement: Normal mode supports line opening bindings, Requirement: Normal mode supports line shift operators, Requirement: Visual modes support selected line shifts (+14 more)
+Cohesion: 0.11
+Nodes (20): ADDED Requirements, Extended Vim Keybindings Spec, Requirement: Normal mode supports additional navigation bindings, Requirement: Normal mode supports line opening bindings, Requirement: Normal mode supports line shift operators, Requirement: Visual modes support selected line shifts, Scenario: Counted dedent shifts available lines, Scenario: Counted indent shifts consecutive lines (+12 more)
 
 ### Community 46 - "Lifecycle Concepts"
 Cohesion: 0.12
 Nodes (15): MODIFIED Requirements, Requirement: Insert mode preserves default editing, Requirement: Mode feedback is visible and width-safe, Scenario: Autocomplete popup does not hide mode feedback, Scenario: Configured mode label updates, Scenario: Insert mode autocomplete remains usable, Scenario: Insert mode autocomplete rows remain visible with Vim status, Scenario: Mode label updates (+7 more)
 
 ### Community 47 - "Ex Command Line"
-Cohesion: 0.32
-Nodes (6): EditorSnapshot, GoldenResult, normalizeEffect(), normalizeState(), options, runGolden()
+Cohesion: 0.16
+Nodes (23): actionKeybindingPresetActions(), isActionKeybindingPreset(), isRecord(), mergeParsedActionBindings(), normalizeVimKeySequence(), parseActionBindingEntry(), parseActionBindings(), parseActionPresets() (+15 more)
 
 ### Community 48 - "Visual Block"
 Cohesion: 0.09
@@ -912,8 +912,8 @@ Cohesion: 0.10
 Nodes (20): ADDED Requirements, Purpose, Vim Extension Lifecycle Spec, Requirement: Agent cursor lifecycle is validated, Requirement: Agent lifecycle coordinates editor hardware cursor visibility, Requirement: Editor factory identity is stable per extension registration, Requirement: Lifecycle hooks install the Vim editor component, Scenario: Agent end reinstalls editor immediately (+12 more)
 
 ### Community 57 - "Macros Search"
-Cohesion: 0.11
-Nodes (24): appendMessageHistory(), diagnosticsSummary(), exSummary(), InspectInput, InspectRenderSummary, macrosSummary(), marksSummary(), optionsSummary() (+16 more)
+Cohesion: 0.16
+Nodes (19): appendMessageHistory(), diagnosticsSummary(), exSummary(), InspectInput, InspectRenderSummary, macrosSummary(), marksSummary(), optionsSummary() (+11 more)
 
 ### Community 58 - "Ex Command Line"
 Cohesion: 0.11
@@ -940,8 +940,8 @@ Cohesion: 0.17
 Nodes (15): SearchDirection, appendWorkbenchText(), backspaceWorkbenchText(), clearNavigation(), clearWorkbenchPreview(), ExWorkbench, navigateWorkbenchHistory(), PendingWorkbench (+7 more)
 
 ### Community 64 - "Prompt Range Algebra Buffer"
-Cohesion: 0.18
-Nodes (17): Context, Decision: Add a pure `src/range.ts` seam instead of expanding `src/ex.ts` or `src/buffer.ts`, Decision: Define semicolon as explicit base reset, not broader Vim expression support, Decision: Migrate incrementally behind compatibility tests, Decision: Model range parsing as finite AST plus resolver context, Decision: Preserve existing side-effect boundaries; resolver returns values only, Decisions, Goals / Non-Goals (+9 more)
+Cohesion: 0.08
+Nodes (37): Context, Decision: Add a pure `src/range.ts` seam instead of expanding `src/ex.ts` or `src/buffer.ts`, Decision: Define semicolon as explicit base reset, not broader Vim expression support, Decision: Migrate incrementally behind compatibility tests, Decision: Model range parsing as finite AST plus resolver context, Decision: Preserve existing side-effect boundaries; resolver returns values only, Decisions, Goals / Non-Goals (+29 more)
 
 ### Community 65 - "Visual Modes Buffer"
 Cohesion: 0.18
@@ -973,7 +973,7 @@ Nodes (14): 10. Validation, 1. OpenSpec Contract, 2. Registry and Shared Validat
 
 ### Community 72 - "Visual Modes Buffer"
 Cohesion: 0.10
-Nodes (24): 1. Parse finite grammar through explicit command types, 2. Put text semantics in pure `src/buffer.ts` helpers, 3. Keep operator motions separate from visual selection, 4. Let `VimEditor` dispatch, not compute, 5. Document smaller-than-Vim semantics, 6. Evolve heavy editor dispatch into a pure modal engine, 7. Treat adapter fast paths as narrow exceptions, Adapter effect interpreter (+16 more)
+Nodes (25): 1. Parse finite grammar through explicit command types, 2. Put text semantics in pure `src/buffer.ts` helpers, 3. Keep operator motions separate from visual selection, 4. Let `VimEditor` dispatch, not compute, 5. Document smaller-than-Vim semantics, 6. Evolve heavy editor dispatch into a pure modal engine, 7. Treat adapter fast paths as narrow exceptions, Adapter effect interpreter (+17 more)
 
 ### Community 73 - "Runtime Help"
 Cohesion: 0.15
@@ -1016,8 +1016,8 @@ Cohesion: 0.08
 Nodes (28): Context & Research, Deferred to Follow-Up Work, Deferred to Implementation, Documentation / Operational Notes, External References, feat: Add Vim toggle-case command, Implementation Units, Institutional Learnings (+20 more)
 
 ### Community 83 - "Overlay Keybinding Discovery Popup"
-Cohesion: 0.17
-Nodes (19): clearPendingEx(), addExHistory(), cancelExCommand(), clearExPreview(), commandWordKind(), editPendingEx(), exCursor(), exLineRange() (+11 more)
+Cohesion: 0.16
+Nodes (22): clearPendingEx(), addExHistory(), cancelExCommand(), clearExPreview(), commandWordKind(), editPendingEx(), exCursor(), executeExCommand() (+14 more)
 
 ### Community 84 - "Search Buffer"
 Cohesion: 0.15
@@ -1028,8 +1028,8 @@ Cohesion: 0.09
 Nodes (31): Context, Decisions, Define append behavior with explicit type rules, Goals / Non-Goals, Keep macros and edit registers separate, Migration Plan, Open Questions, Read named registers only for prefixed paste (+23 more)
 
 ### Community 86 - "Buffer OpenSpec"
-Cohesion: 0.10
-Nodes (30): Context, Decisions, Goals / Non-Goals, Keep low-level helpers private unless cross-module need is proven, Migration Plan, Open Questions, Operation API replaces helper composition at call sites, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Design (+22 more)
+Cohesion: 0.24
+Nodes (13): Context, Decisions, Goals / Non-Goals, Keep low-level helpers private unless cross-module need is proven, Migration Plan, Open Questions, Operation API replaces helper composition at call sites, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Design (+5 more)
 
 ### Community 87 - "Ex Command Line"
 Cohesion: 0.13
@@ -1128,8 +1128,8 @@ Cohesion: 0.04
 Nodes (46): Requirement: Actual editor honors mark configuration, Requirement: Local marks can be set, Requirement: Mark scope and validation are documented, Requirement: Normal mode jumps to local marks, Requirement: Operators accept mark motions, Requirement: Visual modes jump to local marks, Scenario: Automated validation runs, Scenario: Change to exact mark enters insert mode (+38 more)
 
 ### Community 111 - "Macros Commands"
-Cohesion: 0.09
-Nodes (23): Requirement: No-op feedback is configurable, Requirement: Runtime informational messages are width-safe, Requirement: Transient messages support info feedback, Requirement: Visual selection status is configurable, Requirement: Workbench UI behavior is documented and validated, Scenario: Compact feedback still shrinks prompt viewport, Scenario: Compact long message is fitted, Scenario: Diagnostic output opens popup (+15 more)
+Cohesion: 0.08
+Nodes (25): Requirement: Runtime message history is bounded and width-safe, Requirement: Status UI items are configurable, Requirement: Transient messages support info feedback, Requirement: UI configuration is width-safe, documented, and validated, Requirement: Visual selection status is configurable, Scenario: Automated validation runs, Scenario: Default status UI preserved, Scenario: Existing Ex success and error messages remain supported (+17 more)
 
 ### Community 112 - "Buffer Commands"
 Cohesion: 0.12
@@ -1180,8 +1180,8 @@ Cohesion: 0.17
 Nodes (11): MODIFIED Requirements, Requirement: Documentation explains action keybindings and non-goals, Requirement: Documentation preserves prompt transform alias transition, Scenario: Docs explain existing prompt transform settings remain separate, Scenario: Docs list first milestone non-goals, Scenario: Docs require canonical action IDs only, Scenario: Feature docs include prompt transform action examples, Scenario: README remains an index (+3 more)
 
 ### Community 124 - "Visual Modes Renderer"
-Cohesion: 0.12
-Nodes (46): executeExCommand(), lineMessage(), substitutionMessage(), substitutionSource(), adjustNumberAtOrAfterCursor(), blockSelectionText(), changeLine(), clampLineRange() (+38 more)
+Cohesion: 0.26
+Nodes (11): Capabilities, Impact, Modified Capabilities, New Capabilities, 2026 06 01 Add More Ex Commands Proposal, 2026 06 01 Add More Ex Commands Proposal, 2026 06 01 Add More Ex Commands Proposal, 2026 06 01 Add More Ex Commands Proposal (+3 more)
 
 ### Community 125 - "Lifecycle Settings"
 Cohesion: 0.20
@@ -1272,8 +1272,8 @@ Cohesion: 0.18
 Nodes (10): 1. Add a typed keymap descriptor module, 2. Keep runtime behavior field-by-field and finite, 3. Prefer derived records over shared mutable objects, 4. Use tests as migration guardrails, Context, Decisions, Goals / Non-Goals, Migration Plan (+2 more)
 
 ### Community 147 - "Keymap Search"
-Cohesion: 0.33
-Nodes (6): Fixed ANSI Styles, Search Highlight Configuration, Semantic Actions Through Keymap, Roadmap Keybindings Participate In Semantic Keymap Configuration, Roadmap Keymap Configuration Is Documented And Validated, Search Highlight Behavior Is Configurable
+Cohesion: 0.29
+Nodes (7): Fixed ANSI Styles, Search Highlight Configuration, Semantic Actions Through Keymap, Normal Mode Supports Word End Motion And Small Substitutions, Roadmap Keybindings Participate In Semantic Keymap Configuration, Roadmap Keymap Configuration Is Documented And Validated, Search Highlight Behavior Is Configurable
 
 ### Community 148 - "Keymap Search"
 Cohesion: 0.25
@@ -1300,8 +1300,8 @@ Cohesion: 0.18
 Nodes (10): ADDED Requirements, Requirement: Built-in keymap metadata remains single-source consistent, Requirement: Descriptor-derived keymap tables are validated by equivalence tests, Scenario: Automated equivalence validation runs, Scenario: Command resolver maps match default semantic bindings, Scenario: Config validation uses the same semantic actions, Scenario: Default keymap remains equivalent, Scenario: Descriptor-derived tables do not add user-visible behavior (+2 more)
 
 ### Community 154 - "Search OpenSpec"
-Cohesion: 0.20
-Nodes (10): Search Highlight State In Modal State, Dot Repeat As Completed Changes, Pure Buffer Transformations And Explicit Modal State, Phase 2 Search And Repeat, Dot Repeat Contract, Normal Mode Repeats Completed Changes, Hardened Dot Repeat Completed Changes, Normal Mode Supports Line Local Character Search (+2 more)
+Cohesion: 0.33
+Nodes (6): Dot Repeat As Completed Changes, Phase 2 Search And Repeat, Dot Repeat Contract, Normal Mode Repeats Completed Changes, Hardened Dot Repeat Completed Changes, Normal Mode Supports Line Local Character Search
 
 ### Community 155 - "Ex Command Line"
 Cohesion: 0.43
@@ -1336,8 +1336,8 @@ Cohesion: 0.40
 Nodes (4): last_agent_output, last_progress_at, last_turn_at, turn_count
 
 ### Community 163 - "OpenSpec Concepts"
-Cohesion: 0.22
-Nodes (9): Counts As Parser State, Stage Text Objects After Count And Repeat Foundations, Spec Driven Schema, Vim Keybinding Roadmap, Phase 1 Editing Commands, Phase 3 Text Objects, Normal Mode Supports Counted Commands, Operators Support Prompt Text Objects (+1 more)
+Cohesion: 0.40
+Nodes (5): Stage Text Objects After Count And Repeat Foundations, Spec Driven Schema, Vim Keybinding Roadmap, Phase 3 Text Objects, Operators Support Prompt Text Objects
 
 ### Community 164 - "Prompt Transform Customization"
 Cohesion: 0.40
@@ -1392,12 +1392,12 @@ Cohesion: 0.07
 Nodes (26): ADDED Requirements, Requirement: Visual block mode is documented and validated, Requirement: Visual block mode selects rectangular text regions, Requirement: Visual block mode supports blockwise operations, Requirement: Visual block selections are highlighted inline, Requirement: Visual modes can switch to block selection, Scenario: Append after visual block selection, Scenario: Automated validation runs (+18 more)
 
 ### Community 186 - "Community 186"
-Cohesion: 0.17
-Nodes (12): Requirement: Documentation drift guard protects feature docs, Requirement: Documentation records source-of-truth policy, Requirement: Feature guide covers pi-vimmode behavior, Requirement: README remains a quickstart and docs index, Scenario: Feature docs contradict supported Ex command, Scenario: Feature docs list unsupported runtime command as supported, Scenario: Feature docs miss runtime help anchor, Scenario: Maintainer updates docs later (+4 more)
+Cohesion: 0.06
+Nodes (33): Requirement: Documentation keeps one-line and popup discovery distinct, Requirement: Documentation records source-of-truth policy, Requirement: Documentation work stays focused, Requirement: Feature guide covers pi-vimmode behavior, Requirement: Feature guide documents runtime help and feature discovery, Requirement: Feature guide quickref classifies diagnostic and help surfaces, Requirement: README remains a quickstart and docs index, Requirement: Settings reference covers every piVimMode option (+25 more)
 
 ### Community 187 - "Community 187"
-Cohesion: 0.12
-Nodes (24): applyActionToRange(), applyPromptTransformAction(), applyVisualPromptTransformAction(), normalActionRange(), PromptTransformActionResult, visualActionRange(), PROTECTED_PI_DELEGATE_KEYS, withNoopFeedback() (+16 more)
+Cohesion: 0.23
+Nodes (3): cursorShapeEscape(), CursorStyle, ResolvedVimEditorOptions
 
 ### Community 188 - "Community 188"
 Cohesion: 0.08
@@ -1424,8 +1424,8 @@ Cohesion: 0.15
 Nodes (13): Requirement: Action keymap configuration binds finite prompt transform actions, Scenario: Disabled prompt transform rejects action keybindings, Scenario: Disabled prompt transform suite rejects all action keybindings, Scenario: Empty action binding list unbinds scoped action, Scenario: Invalid action args are ignored per binding, Scenario: No action keybindings by default, Scenario: Object action binding with args is accepted, Scenario: Object action binding without args is accepted (+5 more)
 
 ### Community 194 - "Community 194"
-Cohesion: 0.07
-Nodes (27): Requirement: Prompt buffer exposes operation-level navigation, Requirement: Prompt buffer operation behavior is covered by focused tests, Requirement: Prompt buffer owns linewise operations, Requirement: Prompt buffer owns operator-motion operations, Requirement: Prompt buffer owns operator ranges for WORD and previous-end motions, Requirement: Prompt buffer owns visual operation mechanics, Requirement: Prompt buffer range behavior is covered by focused tests, Requirement: Prompt buffer range operations preserve existing side effects (+19 more)
+Cohesion: 0.09
+Nodes (23): Requirement: Prompt buffer exposes operation-level navigation, Requirement: Prompt buffer operation behavior is covered by focused tests, Requirement: Prompt buffer owns linewise operations, Requirement: Prompt buffer owns operator-motion operations, Requirement: Prompt buffer owns operator ranges for WORD and previous-end motions, Requirement: Prompt buffer owns visual operation mechanics, Requirement: Prompt buffer range behavior is covered by focused tests, Scenario: Buffer operation tests run (+15 more)
 
 ### Community 195 - "Community 195"
 Cohesion: 0.09
@@ -1436,8 +1436,8 @@ Cohesion: 0.10
 Nodes (20): ADDED Requirements, Requirement: Action search is discoverable and finite, Requirement: Customization commands preserve prompt editing state, Requirement: Map checking explains keys and conflicts, Requirement: Optional no-op feedback is scoped and quiet by default, Requirement: Runtime customization diagnostics are available, Scenario: Actions command lists supported categories, Scenario: Actions command rejects unsupported parity claims (+12 more)
 
 ### Community 197 - "Community 197"
-Cohesion: 0.21
-Nodes (19): modeUpdate(), shiftActionForOperator(), activeTarget(), appendRegister(), applyRegisterWrite(), clipboardTargetToRead(), registerToRead(), writeNamedRegister() (+11 more)
+Cohesion: 0.08
+Nodes (99): applyActionToRange(), applyPromptTransformAction(), applyVisualPromptTransformAction(), normalActionRange(), PromptTransformActionResult, visualActionRange(), clearCommandPending(), clearExMessage() (+91 more)
 
 ### Community 198 - "Community 198"
 Cohesion: 0.10
@@ -1572,12 +1572,12 @@ Cohesion: 0.15
 Nodes (12): Context, Decisions, Goals / Non-Goals, Keep missing and invalid marks safe, Migration Plan, Normalize marks through buffer helpers, Open Questions, Parse mark prefixes outside the static keymap resolver (+4 more)
 
 ### Community 231 - "Community 231"
-Cohesion: 0.18
-Nodes (21): cloneArrayRecord(), cloneDefaultOptions(), cloneFeedback(), cloneKeymap(), cloneMacros(), cloneMarks(), clonePlainRecord(), clonePromptStructures() (+13 more)
+Cohesion: 0.27
+Nodes (10): 1. Ex Parser, 2. Prompt Buffer Operations, 3. Modal Engine Integration, 4. Integration Tests and Documentation, 5. Validation, 2026 06 01 Add More Ex Commands Tasks, 2026 06 01 Add More Ex Commands Tasks, 2026 06 01 Add More Ex Commands Tasks (+2 more)
 
 ### Community 232 - "Community 232"
-Cohesion: 0.12
-Nodes (24): actionIdDisplay(), COMMAND_DESCRIPTIONS, detailEntryLine(), featureWhichKeyCategoryLines(), gridHeader(), KeybindingCatalogContext, keybindingCatalogLines(), keyDisplay() (+16 more)
+Cohesion: 0.09
+Nodes (42): actionEntriesForKeymap(), actionIdDisplay(), actionsMessage(), COMMAND_DESCRIPTIONS, detailEntryLine(), doctorMessage(), featureWhichKeyCategoryLines(), gridHeader() (+34 more)
 
 ### Community 233 - "Community 233"
 Cohesion: 0.14
@@ -1625,7 +1625,7 @@ Nodes (7): Requirement: Normal and visual modes start backward prompt search, Sc
 
 ### Community 244 - "Community 244"
 Cohesion: 0.29
-Nodes (7): isDefaultOperatorKey(), isLegacyVimOperator(), isMacroSlot(), isPendingOperatorKey(), resolveMacroCommand(), DEFAULT_VIM_KEYMAP, operatorMotions
+Nodes (7): isMacroSlot(), lineCommandFor(), parseNormalCommand(), resolveMacroCommand(), semanticOperatorToLegacy(), DEFAULT_VIM_KEYMAP, operatorMotions
 
 ### Community 245 - "Community 245"
 Cohesion: 0.17
@@ -2060,8 +2060,8 @@ Cohesion: 0.33
 Nodes (6): Requirement: Normal mode supports additional navigation bindings, Scenario: Jump to buffer end, Scenario: Jump to buffer start, Scenario: Jump to matching pair, Scenario: Matching pair not found, Scenario: Move to first non-blank character
 
 ### Community 353 - "Community 353"
-Cohesion: 0.40
-Nodes (5): Requirement: Runtime messages are inspectable, Scenario: Messages command handles empty history, Scenario: Messages command reports recent message state, Scenario: Messages history is bounded, Scenario: Messages introspection does not pollute history
+Cohesion: 0.10
+Nodes (20): Requirement: Docs drift guard validates runtime help contracts, Requirement: Drift guard validates read-only Ex popup command coverage, Requirement: Runtime help classifies diagnostic action metadata, Requirement: Runtime help commands preserve prompt editing state, Requirement: Runtime help is finite and source-backed, Scenario: Features query finds diagnostic metadata, Scenario: General features separates diagnostics and runtime help, Scenario: General help lists entry points (+12 more)
 
 ### Community 354 - "Community 354"
 Cohesion: 0.33
@@ -2080,8 +2080,8 @@ Cohesion: 0.33
 Nodes (6): Requirement: Visual modes support selected line shifts, Scenario: Counted visual shift changes depth, Scenario: Visual block selection shifts touched lines, Scenario: Visual character selection indents touched lines, Scenario: Visual line selection dedents selected lines, Scenario: Visual shift does not write registers
 
 ### Community 358 - "Community 358"
-Cohesion: 0.21
-Nodes (12): ClipboardCommandRunner, ClipboardRuntime, ClipboardTextReader, createClipboardRuntime(), isWsl(), readClipboardText(), readClipboardTextSync(), readProcVersion() (+4 more)
+Cohesion: 0.23
+Nodes (11): ClipboardCommandRunner, ClipboardRuntime, ClipboardTextReader, createClipboardRuntime(), isWsl(), readClipboardText(), readClipboardTextSync(), readProcVersion() (+3 more)
 
 ### Community 359 - "Community 359"
 Cohesion: 0.17
@@ -2260,8 +2260,8 @@ Cohesion: 0.40
 Nodes (5): Requirement: Runtime help discovers action keybinding recipes, Scenario: Features output includes concrete recipe snippets, Scenario: Features output keeps recipes opt-in, Scenario: Features query finds keybinding recipes, Scenario: Unknown recipe query remains finite
 
 ### Community 403 - "Community 403"
-Cohesion: 0.11
-Nodes (18): Requirement: Drift guard validates prompt transform action registry claims, Requirement: Runtime discovery includes dedicated keybindings command, Requirement: Runtime help commands preserve prompt editing state, Requirement: Runtime help is finite and source-backed, Scenario: Documented action ID missing from registry fails validation, Scenario: Example keymap actions config parses successfully, Scenario: Existing features keybindings remains supported, Scenario: General help lists entry points (+10 more)
+Cohesion: 0.40
+Nodes (5): Requirement: Runtime help discovers action keybinding presets, Scenario: Features output includes concrete preset bindings, Scenario: Features output keeps presets opt-in, Scenario: Features query finds action presets, Scenario: Unknown preset query remains finite
 
 ### Community 404 - "Community 404"
 Cohesion: 0.40
@@ -2285,7 +2285,7 @@ Nodes (5): Requirement: Ex command-line supports finite non-substitution command
 
 ### Community 409 - "Community 409"
 Cohesion: 0.12
-Nodes (17): Requirement: Ex put inserts unnamed register text as lines, Requirement: Ex range algebra behavior is documented and validated, Requirement: Inspectability diagnostics compose with Ex source-mode restoration, Requirement: Keybindings popup command is read-only, Scenario: Automated range validation runs, Scenario: Empty register put is rejected, Scenario: Feature guide describes finite Ex ranges, Scenario: Inspectability diagnostics do not enter Ex history as edits (+9 more)
+Nodes (17): Requirement: Diagnostic Ex command parsing stays finite, Requirement: Ex nohlsearch clears visible prompt search highlights, Requirement: Ex range algebra behavior is documented and validated, Requirement: Inspectability diagnostics compose with Ex source-mode restoration, Scenario: Automated range validation runs, Scenario: Clear visible search highlights, Scenario: Diagnostic command arguments are bounded, Scenario: Feature guide describes finite Ex ranges (+9 more)
 
 ### Community 410 - "Community 410"
 Cohesion: 0.18
@@ -2305,7 +2305,7 @@ Nodes (11): ADDED Requirements, Requirement: Guarded insert-mode fast path prese
 
 ### Community 414 - "Community 414"
 Cohesion: 0.16
-Nodes (34): clearExMessage(), clearHelpPopup(), delegate(), isDelegatedResetKey(), isProtectedPiDelegateKey(), keyMatches(), keySequence(), resetAndDelegate() (+26 more)
+Nodes (15): handlePendingMarkTarget(), jumpToMarkUpdate(), markJumpTarget(), modalPendingDisplay(), exDisplay(), clearMarkTarget(), localMarkPosition(), markSlotForKey() (+7 more)
 
 ### Community 415 - "Community 415"
 Cohesion: 0.40
@@ -2384,12 +2384,12 @@ Cohesion: 0.25
 Nodes (8): Requirement: Prompt buffer owns operator character-search operations, Scenario: Change by character search preserves edit semantics, Scenario: Character-search operations remain line-local, Scenario: Delete by find-forward character search, Scenario: Delete by till-forward character search, Scenario: Empty till range is safe, Scenario: Missing character target is safe, Scenario: Yank by backward character search
 
 ### Community 434 - "Community 434"
-Cohesion: 0.07
-Nodes (35): handlePendingMarkTarget(), jumpToMarkUpdate(), markJumpTarget(), clearMarkTarget(), localMarkPosition(), markSlotForKey(), setLocalMark(), BlockInsertState (+27 more)
+Cohesion: 0.04
+Nodes (73): canFastDelegateInsertInput(), handleModalInput(), isPlainFastInsertText(), appendRecordedInput(), clearHighlightsForMode(), createModalState(), resetTransientState(), transitionMode() (+65 more)
 
 ### Community 435 - "Community 435"
-Cohesion: 0.21
-Nodes (16): AnchoredVisualStatusInput, blockVisualStatus(), characterVisualStatus(), cursorPositionStatus(), lineVisualStatus(), modalModeLabel(), modalStatus, ModalStatusInput (+8 more)
+Cohesion: 0.25
+Nodes (8): iterations, measure(), runScenario(), Scenario, scenarios, Step, warmupIterations, ResolvedVimKeymap
 
 ### Community 436 - "Community 436"
 Cohesion: 0.25
@@ -2424,8 +2424,8 @@ Cohesion: 0.33
 Nodes (5): 1. Parser and Types, 2. Prompt Buffer Operations, 3. Modal Integration, 4. Configuration and Documentation, 5. Validation
 
 ### Community 444 - "Community 444"
-Cohesion: 0.14
-Nodes (14): Requirements, Requirement: Normal mode supports counted commands, Requirement: Normal mode supports line opening bindings, Requirement: Normal mode supports numeric adjustment, Scenario: Count before unsupported command is safe, Scenario: Counted line command repeats line operation, Scenario: Counted motion repeats movement, Scenario: Decrement number by count (+6 more)
+Cohesion: 0.15
+Nodes (12): extended-vim-keybindings Specification, Purpose, Requirements, Requirement: Normal mode supports counted commands, Requirement: Normal mode supports line opening bindings, Scenario: Count before unsupported command is safe, Scenario: Counted line command repeats line operation, Scenario: Counted motion repeats movement (+4 more)
 
 ### Community 445 - "Community 445"
 Cohesion: 0.33
@@ -2435,13 +2435,9 @@ Nodes (9): Capabilities, Impact, Modified Capabilities, New Capabilities, 2026 0
 Cohesion: 0.12
 Nodes (15): ADDED Requirements, MODIFIED Requirements, Requirement: Normal and visual modes support WORD and previous-end word motions, Requirement: Operators support range-safe normal motions, Scenario: Characterwise horizontal operator motions, Scenario: Count after operator applies to supported motions, Scenario: Counted WORD and previous-end motions repeat targets, Scenario: Linewise vertical and buffer operator motions (+7 more)
 
-### Community 447 - "Community 447"
-Cohesion: 0.33
-Nodes (6): charSearchCommandForBinding(), effectiveOperatorCharSearchCount(), encodeOperatorCharSearchPending(), isOperatorCharSearchCommand(), isPrintableCharArgument(), resolveOperatorCharSearchPending()
-
 ### Community 448 - "Community 448"
-Cohesion: 0.25
-Nodes (8): isLineOnlyOperator(), isMotionOperator(), lineCommandFor(), parseNormalCommand(), resolveTextObjectPending(), semanticMotionToLegacy(), semanticOperatorToLegacy(), textObjectTargetForKey()
+Cohesion: 0.29
+Nodes (6): Context, Decisions, Goals / Non-Goals, Migration Plan, Open Questions, Risks / Trade-offs
 
 ### Community 449 - "Community 449"
 Cohesion: 0.29
@@ -2508,8 +2504,8 @@ Cohesion: 0.40
 Nodes (5): Requirement: Ex command-line supports keybindings popup command, Scenario: Keybindings command opens catalog popup, Scenario: Keybindings command preserves visual source state, Scenario: Keybindings command rejects unsupported abbreviations, Scenario: Keybindings query opens detail popup
 
 ### Community 465 - "Community 465"
-Cohesion: 0.40
-Nodes (5): Requirement: Status UI items are configurable, Scenario: Default status UI preserved, Scenario: Invalid status item falls back, Scenario: Status item order configured, Scenario: Status UI disabled
+Cohesion: 0.33
+Nodes (9): Capabilities, Impact, Modified Capabilities, New Capabilities, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Proposal, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Proposal, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Proposal, What Changes (+1 more)
 
 ### Community 466 - "Community 466"
 Cohesion: 0.40
@@ -2524,8 +2520,8 @@ Cohesion: 0.50
 Nodes (4): Requirement: Explicit control-key ownership includes normal-mode redo, Scenario: Insert mode remains Pi-owned for redo control, Scenario: Normal mode redo control is handled by Vim mode, Scenario: Other protected shortcuts remain protected
 
 ### Community 469 - "Community 469"
-Cohesion: 0.15
-Nodes (12): borderedRow(), fit(), OverlayStyle, OverlayTheme, ReadOnlyPopupOverlayComponent, styleForTheme(), HelpPopup, popupFromMessage() (+4 more)
+Cohesion: 0.11
+Nodes (21): borderedRow(), fit(), OverlayStyle, OverlayTheme, ReadOnlyPopupOverlayComponent, styleForTheme(), acceptedBindingLines(), compactRecipeLines() (+13 more)
 
 ### Community 470 - "Community 470"
 Cohesion: 0.40
@@ -2544,16 +2540,16 @@ Cohesion: 0.50
 Nodes (4): Requirement: Operator-motion matrix is configurable, Scenario: Configured operator-motion combination executes, Scenario: Configured operator-motion combination is disabled, Scenario: Default operator-motion matrix preserved
 
 ### Community 474 - "Community 474"
-Cohesion: 0.40
-Nodes (5): Requirement: Prompt buffer operations accept typed resolved ranges, Scenario: Characterwise operation consumes character range, Scenario: Destination operation consumes destination target, Scenario: Linewise operation consumes line range, Scenario: Visual block operation consumes block range
+Cohesion: 0.29
+Nodes (6): Capabilities, Impact, Modified Capabilities, New Capabilities, What Changes, Why
 
 ### Community 475 - "Community 475"
 Cohesion: 0.52
 Nodes (6): 1. Renderer Seam Inventory, 2. Renderer API and View Model, 3. Pi Adapter Integration, 4. Render Test Coverage, 5. Validation and Cleanup, 2026 05 27 Deepen Visual Renderer Seam Tasks
 
 ### Community 476 - "Community 476"
-Cohesion: 0.11
-Nodes (30): moveEffectFor(), bufferEndPosition(), bufferStartPosition(), copyResolvedLineRange(), countedWordPosition(), deleteLineMarkRange(), deleteResolvedLineRange(), exactMarkPosition() (+22 more)
+Cohesion: 0.12
+Nodes (30): CharSearchCommand, moveEffectFor(), operatorMotionKey(), bracketRangeAtOffset(), countedWordPosition(), deleteTextObject(), findLiteralSearchMatch(), findRegexSearchMatch() (+22 more)
 
 ### Community 477 - "Community 477"
 Cohesion: 0.40
@@ -2580,8 +2576,8 @@ Cohesion: 0.20
 Nodes (10): Requirement: Normal mode supports selected special register prefixes, Scenario: Black-hole delete preserves unnamed register, Scenario: Black-hole paste is a safe no-op, Scenario: Clipboard delete updates host clipboard and unnamed register, Scenario: Clipboard paste falls back to prompt-local mirror, Scenario: Clipboard paste reads host clipboard text, Scenario: Clipboard yank writes host clipboard and mirror, Scenario: Explicit unnamed register pastes through default paste semantics (+2 more)
 
 ### Community 483 - "Community 483"
-Cohesion: 0.27
-Nodes (11): Capabilities, Impact, Modified Capabilities, New Capabilities, Non-goals, 2026 06 05 Prompt Range Algebra Kernel Proposal, 2026 06 05 Prompt Range Algebra Kernel Proposal, 2026 06 05 Prompt Range Algebra Kernel Proposal (+3 more)
+Cohesion: 0.36
+Nodes (8): 1. Inventory and API Shape, 2. Prompt Buffer Operations, 3. Call-Site Migration, 4. Tests and Validation, 5. Documentation and Cleanup, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Tasks, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Tasks, 2026 05 27 Deepen Buffer Ts Prompt Buffer Module Tasks
 
 ### Community 484 - "Community 484"
 Cohesion: 0.18
@@ -2624,8 +2620,8 @@ Cohesion: 0.25
 Nodes (7): Context, Examples, Guidance, Pi vimmode actionable keybinding catalog, Related, When to Apply, Why This Matters
 
 ### Community 503 - "Community 503"
-Cohesion: 0.04
-Nodes (56): ACTION_KEYBINDING_PRESET_IDS, ActionKeybindingRecipeBinding, actionKeybindingRecipeMessage(), isRecipeQuery(), CommandDescriptor, deriveActionKeys(), deriveActionsWhere(), deriveDefaultKeyBindings() (+48 more)
+Cohesion: 0.06
+Nodes (36): ACTION_KEYBINDING_PRESET_IDS, ACTION_KEYBINDING_PRESETS, ActionKeybindingRecipeBinding, actionKeybindingRecipeMessage(), isRecipeQuery(), CommandResult, CursorStyles, NormalCommand (+28 more)
 
 ### Community 504 - "Community 504"
 Cohesion: 0.17
@@ -2753,11 +2749,11 @@ Nodes (5): Requirement: Mode labels are configurable, Scenario: Invalid mode lab
 
 ### Community 536 - "Community 536"
 Cohesion: 0.29
-Nodes (6): Context, Decisions, Goals / Non-Goals, Migration Plan, Open Questions, Risks / Trade-offs
+Nodes (7): Search Highlight State In Modal State, Counts As Parser State, Pure Buffer Transformations And Explicit Modal State, Phase 1 Editing Commands, Normal Mode Supports Counted Commands, Normal Mode Supports Numeric Adjustment, Explicit Control Key Ownership Is Limited
 
 ### Community 538 - "Community 538"
-Cohesion: 0.11
-Nodes (16): ACTION_KEYBINDING_PRESETS, ActionKeybindingRecipe, DEFAULT_VIM_OPTIONS, DiagnosticActionCategory, diagnosticActionEntries(), DiagnosticActionEntry, RuntimeHelpEntry, VimEditorOptions (+8 more)
+Cohesion: 0.29
+Nodes (6): Context, Decisions, Goals / Non-Goals, Migration Plan, Open Questions, Risks / Trade-offs
 
 ### Community 539 - "Community 539"
 Cohesion: 0.40
@@ -2784,8 +2780,8 @@ Cohesion: 0.29
 Nodes (7): Requirement: WORD and previous-end motions participate in semantic keymap configuration, Scenario: Configured operator-motion matrix accepts new motions, Scenario: Configured previous-end motion is used, Scenario: Configured WORD motion is used, Scenario: Default keymap binds WORD and previous-end motions, Scenario: New motion configuration survives live editor construction, Scenario: Omitted new motion remains disabled for that operator
 
 ### Community 545 - "Community 545"
-Cohesion: 0.40
-Nodes (5): Requirement: Ex command-line mode renders in a dedicated row, Scenario: Active Ex command row is visible, Scenario: Ex error message is transient, Scenario: Ex row shrinks prompt viewport, Scenario: Ex success message includes counts
+Cohesion: 0.33
+Nodes (5): 1. Word and WORD Regression Tests, 2. Word Helper Refactor, 3. Substitution Regression Tests, 4. Substitution Helper Refactor, 5. Scope Check and Validation
 
 ### Community 546 - "Community 546"
 Cohesion: 0.29
@@ -2813,7 +2809,7 @@ Nodes (5): Requirement: Prompt buffer exposes WORD and previous-end navigation, 
 
 ### Community 552 - "Community 552"
 Cohesion: 0.40
-Nodes (5): Requirement: Cursor position display is configurable, Scenario: Cursor position base configured, Scenario: Cursor position enabled, Scenario: Cursor position format configured, Scenario: Invalid cursor position config falls back
+Nodes (5): Requirement: Ex command-line mode renders in a dedicated row, Scenario: Active Ex command row is visible, Scenario: Ex error message is transient, Scenario: Ex row shrinks prompt viewport, Scenario: Ex success message includes counts
 
 ### Community 553 - "Community 553"
 Cohesion: 0.50
@@ -2829,11 +2825,11 @@ Nodes (16): boundaryKind(), isKeywordWordChar(), isSameBoundaryKind(), isWhitesp
 
 ### Community 556 - "Community 556"
 Cohesion: 0.33
-Nodes (5): 1. Word and WORD Regression Tests, 2. Word Helper Refactor, 3. Substitution Regression Tests, 4. Substitution Helper Refactor, 5. Scope Check and Validation
+Nodes (6): Requirement: Drift guard validates prompt transform action registry claims, Scenario: Documented action ID missing from registry fails validation, Scenario: Example keymap actions config parses successfully, Scenario: Public action ID missing from docs fails validation, Scenario: Registry docs anchor missing fails validation, Scenario: Stale legacy alias claims fail validation
 
 ### Community 557 - "Community 557"
-Cohesion: 0.50
-Nodes (4): Requirement: Normal mode supports paste before, Scenario: Paste before with empty register, Scenario: Paste character register before cursor, Scenario: Paste line register before current line
+Cohesion: 0.29
+Nodes (3): uiForOptions(), canShowReadOnlyPopup(), fitStatusBorder()
 
 ### Community 559 - "Community 559"
 Cohesion: 0.33
@@ -2841,7 +2837,7 @@ Nodes (5): ADDED Requirements, Requirement: Resolved editor options preserve clo
 
 ### Community 560 - "Community 560"
 Cohesion: 0.33
-Nodes (9): 1. Range Kernel Tests, 2. Pure Range Kernel, 3. Ex Parser and Command Integration, 4. Prompt Buffer and Modal Integration, 5. Documentation and Source of Truth, 6. Validation, 2026 06 05 Prompt Range Algebra Kernel Tasks, 2026 06 05 Prompt Range Algebra Kernel Tasks (+1 more)
+Nodes (5): 1. Baseline and Characterization, 2. Compiled Keymap Cache, 3. Resolver Integration, 4. Cleanup and Performance Check, 5. Validation
 
 ### Community 561 - "Community 561"
 Cohesion: 0.33
@@ -2884,16 +2880,16 @@ Cohesion: 0.33
 Nodes (6): Requirement: Drift guard validates action keybinding presets, Scenario: Preset action IDs stay registry-backed, Scenario: Preset and recipe metadata stay aligned, Scenario: Preset config stops parsing fails validation, Scenario: Preset docs anchor missing fails validation, Scenario: Preset runtime output is tested
 
 ### Community 573 - "Community 573"
-Cohesion: 0.50
-Nodes (4): Requirement: Search workbench behavior is documented and validated, Scenario: Feature guide describes safe search workbench, Scenario: Automated validation runs, Scenario: Typecheck runs
+Cohesion: 0.40
+Nodes (5): Requirement: Prompt buffer operations accept typed resolved ranges, Scenario: Characterwise operation consumes character range, Scenario: Destination operation consumes destination target, Scenario: Linewise operation consumes line range, Scenario: Visual block operation consumes block range
 
 ### Community 574 - "Community 574"
 Cohesion: 0.33
 Nodes (6): Requirement: Normal mode supports line-local character search, Scenario: Find next character on current line, Scenario: Missing character search target is safe, Scenario: Repeat last character search, Scenario: Reverse repeat last character search, Scenario: Till next character stops before match
 
 ### Community 575 - "Community 575"
-Cohesion: 0.50
-Nodes (4): Requirement: Key sequence matching is finite and deterministic, Scenario: Conflicting mapping is deterministic, Scenario: Multi-key sequence resolves, Scenario: Pending sequence invalidates safely
+Cohesion: 0.40
+Nodes (5): Requirement: Prompt buffer substitution helpers preserve line-range semantics, Scenario: Literal line-range substitution preserves counts ranges and cursor, Scenario: Missing and identical substitution matches preserve no-op behavior, Scenario: Regex line-range substitution preserves success shape and literal replacement, Scenario: Regex substitution errors remain hard failures
 
 ### Community 576 - "Community 576"
 Cohesion: 0.33
@@ -2908,8 +2904,8 @@ Cohesion: 0.50
 Nodes (4): Requirement: Ex workbench behavior is documented and validated, Scenario: Automated validation runs, Scenario: Feature guide describes Ex workbench, Scenario: Typecheck runs
 
 ### Community 579 - "Community 579"
-Cohesion: 0.33
-Nodes (6): Requirement: Runtime message history is bounded and width-safe, Scenario: Message history cap discards oldest entries, Scenario: Message row remains bounded, Scenario: Messages output is not retained as history, Scenario: Messages popup is width-safe, Scenario: Prompt viewport stays bounded with message row
+Cohesion: 0.40
+Nodes (5): Requirement: Prompt buffer word helpers preserve small-word and WORD semantics, Scenario: Counted previous-end navigation preserves boundaries, Scenario: Operator ranges use the same word boundary model as navigation, Scenario: Small-word navigation preserves punctuation boundaries, Scenario: WORD navigation preserves whitespace boundaries
 
 ### Community 580 - "Community 580"
 Cohesion: 0.40
@@ -2921,23 +2917,23 @@ Nodes (4): Requirement: Visual block selections are highlighted inline, Scenario
 
 ### Community 582 - "Community 582"
 Cohesion: 0.40
-Nodes (5): Requirement: Runtime help discovers action keybinding presets, Scenario: Features output includes concrete preset bindings, Scenario: Features output keeps presets opt-in, Scenario: Features query finds action presets, Scenario: Unknown preset query remains finite
+Nodes (5): Requirement: Ex put inserts unnamed register text as lines, Scenario: Empty register put is rejected, Scenario: Put after addressed range end, Scenario: Put characterwise register as lines, Scenario: Put linewise register after current line
 
 ### Community 583 - "Community 583"
 Cohesion: 0.50
 Nodes (4): Requirement: VimEditor acts as the Pi adapter, Scenario: Adapter owns Pi runtime calls, Scenario: Modal module has no Pi runtime dependency, Scenario: Pi constructs the editor
 
 ### Community 584 - "Community 584"
-Cohesion: 0.50
-Nodes (4): Requirement: Settings reference covers presets and feedback, Scenario: User reads no-op feedback settings, Scenario: User reads preset settings, Scenario: User reads protected shortcut settings
+Cohesion: 0.40
+Nodes (5): Requirement: Runtime messages are inspectable, Scenario: Messages command handles empty history, Scenario: Messages command reports recent message state, Scenario: Messages history is bounded, Scenario: Messages introspection does not pollute history
 
 ### Community 585 - "Community 585"
 Cohesion: 0.40
-Nodes (5): Requirement: Ex nohlsearch clears visible prompt search highlights, Scenario: Clear visible search highlights, Scenario: Nohlsearch alias executes, Scenario: Nohlsearch without highlights is harmless, Scenario: Repeat search remains available after nohlsearch
+Nodes (5): Requirement: Runtime help Ex commands are read-only, Scenario: Runtime help command does not update dot repeat, Scenario: Runtime help command preserves normal-mode state, Scenario: Runtime help command preserves visual Ex state, Scenario: Runtime help popup does not pollute retained messages
 
 ### Community 586 - "Community 586"
-Cohesion: 0.50
-Nodes (4): Requirement: Read-only popup contract stays behind a shared seam, Scenario: Feature content builders do not own popup mechanics, Scenario: Modal types import generic popup state from the shared seam, Scenario: Popup extraction avoids feature-content import cycles
+Cohesion: 0.40
+Nodes (5): Requirement: Cursor position display is configurable, Scenario: Cursor position base configured, Scenario: Cursor position enabled, Scenario: Cursor position format configured, Scenario: Invalid cursor position config falls back
 
 ### Community 587 - "Community 587"
 Cohesion: 0.50
@@ -2960,20 +2956,20 @@ Cohesion: 0.50
 Nodes (3): 1. Config Clone Tests, 2. Config Clone Helper Refactor, 3. Validation
 
 ### Community 592 - "Community 592"
-Cohesion: 0.50
-Nodes (4): Requirement: Feature guide quickref classifies diagnostic and help surfaces, Scenario: Quickref documents unsupported parity boundaries, Scenario: Quickref identifies metadata-only diagnostic actions, Scenario: Quickref separates supported surface categories
+Cohesion: 0.40
+Nodes (5): Requirement: Runtime informational messages are width-safe, Scenario: Compact feedback still shrinks prompt viewport, Scenario: Compact long message is fitted, Scenario: Diagnostic output opens popup, Scenario: Long popup diagnostic message is fitted
 
 ### Community 593 - "Community 593"
-Cohesion: 0.40
-Nodes (5): applyPromptTransform(), reflowLines(), shiftLineRange(), shiftLinesFromCursor(), startsInsideFence()
+Cohesion: 0.50
+Nodes (5): encodeOperatorLinePending(), hasOperatorPrefix(), operatorLookupFor(), operatorSequenceMatches(), resolveOperatorLinePending()
 
 ### Community 594 - "Community 594"
 Cohesion: 0.50
 Nodes (4): Requirement: Feature guide covers customization diagnostics, Scenario: User checks non-goals, Scenario: User reads diagnostic command documentation, Scenario: User troubleshoots vim warning status
 
 ### Community 595 - "Community 595"
-Cohesion: 0.40
-Nodes (5): Requirement: Runtime help Ex commands are read-only, Scenario: Runtime help command does not update dot repeat, Scenario: Runtime help command preserves normal-mode state, Scenario: Runtime help command preserves visual Ex state, Scenario: Runtime help popup does not pollute retained messages
+Cohesion: 0.50
+Nodes (4): Requirement: Prompt buffer range operations preserve existing side effects, Scenario: Cursor placement remains operation-specific, Scenario: Invalid typed range is safe, Scenario: Registers remain command-specific
 
 ### Community 596 - "Community 596"
 Cohesion: 0.50
@@ -2989,19 +2985,19 @@ Nodes (4): Requirement: Roadmap keymap configuration is documented and validated
 
 ### Community 599 - "Community 599"
 Cohesion: 0.50
-Nodes (4): Requirement: Prompt buffer owns paste operations, Scenario: Character register paste executes, Scenario: Empty register paste is safe, Scenario: Line register paste executes
+Nodes (4): Requirement: Normal mode supports paste before, Scenario: Paste before with empty register, Scenario: Paste character register before cursor, Scenario: Paste line register before current line
 
 ### Community 600 - "Community 600"
 Cohesion: 0.50
-Nodes (4): Requirement: Docs drift guard validates runtime help contracts, Scenario: Missing spec or test anchor fails validation, Scenario: Stale unsupported claim fails validation, Scenario: Supported command missing from docs fails validation
+Nodes (4): Requirement: Runtime discovery includes dedicated keybindings command, Scenario: Existing features keybindings remains supported, Scenario: General help lists keybindings entry point, Scenario: Unsupported mapping queries remain finite
 
 ### Community 601 - "Community 601"
 Cohesion: 0.50
-Nodes (4): Requirement: Drift guard validates read-only Ex popup command coverage, Scenario: Popup command missing from docs fails validation, Scenario: Popup command missing from finite parser fails validation, Scenario: Stale compact-output claim fails validation
+Nodes (4): Requirement: Documentation drift guard protects feature docs, Scenario: Feature docs contradict supported Ex command, Scenario: Feature docs list unsupported runtime command as supported, Scenario: Feature docs miss runtime help anchor
 
 ### Community 602 - "Community 602"
 Cohesion: 0.50
-Nodes (4): Requirement: Runtime help classifies diagnostic action metadata, Scenario: Features query finds diagnostic metadata, Scenario: General features separates diagnostics and runtime help, Scenario: Help topic explains diagnostic action limits
+Nodes (4): Requirement: Prompt buffer owns paste operations, Scenario: Character register paste executes, Scenario: Empty register paste is safe, Scenario: Line register paste executes
 
 ### Community 603 - "Community 603"
 Cohesion: 0.50
@@ -3009,19 +3005,19 @@ Nodes (4): Requirement: Resolved editor options preserve clone isolation, Scenar
 
 ### Community 604 - "Community 604"
 Cohesion: 0.50
-Nodes (4): Requirement: Feature guide documents runtime help and feature discovery, Scenario: User reads feature discovery examples, Scenario: User reads message introspection limitations, Scenario: User reads runtime help documentation
+Nodes (4): Requirement: Explicit control-key ownership is limited, Scenario: Insert mode remains Pi-owned for control shortcuts, Scenario: Numeric adjustment controls are handled by Vim mode, Scenario: Other protected shortcuts remain protected
 
 ### Community 605 - "Community 605"
 Cohesion: 0.50
-Nodes (4): Requirement: Explicit control-key ownership is limited, Scenario: Insert mode remains Pi-owned for control shortcuts, Scenario: Numeric adjustment controls are handled by Vim mode, Scenario: Other protected shortcuts remain protected
+Nodes (4): Requirement: Read-only popup contract stays behind a shared seam, Scenario: Feature content builders do not own popup mechanics, Scenario: Modal types import generic popup state from the shared seam, Scenario: Popup extraction avoids feature-content import cycles
 
 ### Community 606 - "Community 606"
 Cohesion: 0.50
-Nodes (4): Requirement: Settings reference remains aligned with config source, Scenario: Runtime help references setting docs, Scenario: Settings docs default contradicts source metadata, Scenario: Settings docs key is missing from source metadata
+Nodes (4): Requirement: Key sequence matching is finite and deterministic, Scenario: Conflicting mapping is deterministic, Scenario: Multi-key sequence resolves, Scenario: Pending sequence invalidates safely
 
 ### Community 607 - "Community 607"
 Cohesion: 0.50
-Nodes (4): Requirement: Diagnostic Ex command parsing stays finite, Scenario: Diagnostic command arguments are bounded, Scenario: Supported diagnostic command names parse, Scenario: Unsupported diagnostic abbreviation is rejected
+Nodes (4): Requirement: Normal mode supports numeric adjustment, Scenario: Decrement number by count, Scenario: Increment number under cursor, Scenario: No number is safe
 
 ### Community 608 - "Community 608"
 Cohesion: 0.50
@@ -3029,40 +3025,40 @@ Nodes (4): Requirement: Search highlights are width-safe and compose with other 
 
 ### Community 609 - "Community 609"
 Cohesion: 0.50
-Nodes (4): Requirement: UI configuration is width-safe, documented, and validated, Scenario: Automated validation runs, Scenario: Width safety preserved, Scenario: Settings reference documents UI config
+Nodes (4): Requirement: Keybindings popup command is read-only, Scenario: Keybindings catalog leaves editing state unchanged, Scenario: Keybindings command does not become repeat change, Scenario: Keybindings detail leaves message history unpolluted
 
 ### Community 610 - "Community 610"
-Cohesion: 0.67
-Nodes (3): Requirement: Documentation keeps one-line and popup discovery distinct, Scenario: Docs keep settings reference separate, Scenario: Docs preserve compact edit feedback expectations
+Cohesion: 0.50
+Nodes (4): Requirement: Search workbench behavior is documented and validated, Scenario: Feature guide describes safe search workbench, Scenario: Automated validation runs, Scenario: Typecheck runs
 
 ### Community 611 - "Community 611"
-Cohesion: 0.67
-Nodes (3): Requirement: Documentation work stays focused, Scenario: Initial documentation implementation completes, Scenario: Review finds behavior or durable-requirement drift
+Cohesion: 0.50
+Nodes (4): Requirement: No-op feedback is configurable, Scenario: Feedback disabled preserves quiet no-ops, Scenario: Feedback enabled shows bounded explanation, Scenario: Invalid feedback setting falls back safely
 
 ### Community 612 - "Community 612"
-Cohesion: 0.67
-Nodes (3): Requirement: Settings reference covers every piVimMode option, Scenario: User checks a setting, Scenario: User configures pi-vimmode
+Cohesion: 0.50
+Nodes (4): Requirement: Workbench UI behavior is documented and validated, Scenario: Render validation runs, Scenario: Typecheck runs, Scenario: User docs describe workbench row
 
 ## Ambiguous Edges - Review These
 - `Visual Block Mode` → `Visual Block Insert Sessions`  [AMBIGUOUS]
   openspec/changes/archive/2026-05-27-visual-block-mode/tasks.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **4755 isolated node(s):** `total_turns`, `session_turns`, `last_activity`, `session_input_tokens`, `session_output_tokens` (+4750 more)
+- **4796 isolated node(s):** `total_turns`, `session_turns`, `last_activity`, `session_input_tokens`, `session_output_tokens` (+4791 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Visual Block Mode` and `Visual Block Insert Sessions`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Vim Ex Command Line Spec` connect `Ex Command Line` to `Ex Command Line`, `Keymap Runtime Help`, `Ex Command Line`, `Keymap Runtime Help`, `Visual Modes Commands`, `Community 490`, `Community 409`, `Ex Command Line`, `Visual Modes Commands`, `Keymap Search`, `Ex Command Line`, `Buffer Commands`, `Prompt Range Algebra Commands`, `Visual Modes Buffer`?**
-  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **Why does `Vim Ex Command Line Spec` connect `Ex Command Line` to `Ex Command Line`, `Keymap Runtime Help`, `Community 231`, `Keymap Runtime Help`, `Visual Modes Commands`, `Community 490`, `Community 409`, `Ex Command Line`, `Ex Command Line`, `Visual Modes Commands`, `Keymap Search`, `Ex Command Line`, `Prompt Range Algebra Commands`, `Visual Modes Buffer`?**
+  _High betweenness centrality (0.049) - this node is a cross-community bridge._
 - **Why does `Vim Keymap Configuration Spec` connect `Ex Command Line` to `Ex Command Line`, `Community 193`, `Keymap Runtime Help`, `Ex Command Line`, `Community 491`, `Visual Modes Buffer`, `Settings Commands`, `Ex Command Line`, `Community 251`, `Visual Modes Search`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
-- **Why does `Pi Vimmode Documentation Spec` connect `Keymap Runtime Help` to `Ex Command Line`, `Keymap Prompt Transform`, `Keymap Runtime Help`, `Community 262`, `Ex Command Line`, `Keymap Runtime Help`, `Ex Command Line`, `Community 269`, `Ex Command Line`, `Visual Block`, `Lifecycle Settings`, `Community 273`, `Runtime Help Settings`, `Runtime Help Settings`, `Runtime Help Prompt Transform`, `Community 186`, `Community 571`?**
   _High betweenness centrality (0.039) - this node is a cross-community bridge._
+- **Why does `Runtime Help Drift Guard Spec` connect `Keymap Runtime Help` to `Ex Command Line`, `Community 353`, `Ex Command Line`, `Keymap Runtime Help`, `Community 296`, `Keymap Runtime Help`, `Community 524`, `Keymap Prompt Transform`?**
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **Are the 12 inferred relationships involving `Vim Ex Command Line Spec` (e.g. with `2026 05 29 Add Ex Command Line Substitution Tasks` and `2026 06 01 Add More Ex Commands Tasks`) actually correct?**
   _`Vim Ex Command Line Spec` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 12 inferred relationships involving `Pi Vimmode Documentation Spec` (e.g. with `2026 05 29 Document Pi Vimmode Features Settings Tasks` and `2026 06 04 Self Explaining Customization Suite Tasks`) actually correct?**

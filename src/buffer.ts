@@ -419,6 +419,13 @@ export function normalizeBufferPosition(text: string, cursor: Position): Positio
   return clampPosition(splitText(text), cursor);
 }
 
+export function moveByPromptLines(text: string, cursor: Position, lineDelta: number): Position {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = Math.max(0, Math.min(pos.line + lineDelta, lines.length - 1));
+  return { line, col: Math.max(0, Math.min(pos.col, lines[line]?.length ?? 0)) };
+}
+
 export type SubstituteLineRangeOptions = {
   range: LineRange;
   pattern: string;

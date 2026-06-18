@@ -29,13 +29,17 @@ function tempSettings() {
 describe("vim config parsing", () => {
   test("VimEditorOptions accepts partial consumer config shapes", () => {
     const options = {
-      keymap: { commands: { replaceChar: ["R"], toggleCase: ["~"] } },
+      keymap: {
+        motions: { halfPageDown: ["<C-d>"] },
+        commands: { replaceChar: ["R"], toggleCase: ["~"] },
+      },
       promptStructures: { targets: { codeFence: false } },
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     const redoOptions = {
       keymap: { commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
+    expect(options.keymap?.motions?.halfPageDown).toEqual(["<C-d>"]);
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
@@ -244,6 +248,28 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
 
+  test("scroll control keys are only allowed for scroll motions", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          motions: { halfPageDown: ["<C-d>"], halfPageUp: ["<C-u>"], left: ["<C-d>"] },
+          commands: { openLineBelow: ["<C-u>"] },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
+    expect(result.options.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h"]);
+    expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("motions.left contains protected key ctrl+d"),
+        expect.stringContaining("commands.openLineBelow contains protected key ctrl+u"),
+      ]),
+    );
+  });
+
   test("explicit keymap bindings override lower-priority default top-level bindings", () => {
     const result = resolveVimOptions({
       piVimMode: { keymap: { motions: { wordForward: ["q"] } } },
@@ -338,6 +364,8 @@ describe("vim config parsing", () => {
 
   test("default keymap includes roadmap actions and configurable word-end", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForwardBig).toEqual(["W"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordBackwardBig).toEqual(["B"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEndBig).toEqual(["E"]);
@@ -360,6 +388,8 @@ describe("vim config parsing", () => {
       DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank,
     );
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordEnd");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).not.toContain("halfPageDown");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).not.toContain("halfPageUp");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordForwardBig");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("wordPreviousEnd");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank).toContain("wordPreviousEndBig");
@@ -367,19 +397,32 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          motions: { wordEnd: ["E"], wordForwardBig: ["gw"], wordPreviousEnd: ["g-"] },
+          motions: {
+            wordEnd: ["E"],
+            wordForwardBig: ["gw"],
+            wordPreviousEnd: ["g-"],
+            halfPageDown: ["<C-d>"],
+            halfPageUp: ["<C-u>"],
+          },
           commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"], redo: ["U"] },
-          operatorMotions: { change: ["wordEnd", "wordPreviousEnd"] },
+          operatorMotions: { change: ["wordEnd", "wordPreviousEnd", "halfPageDown"] },
         },
       },
     });
     expect(result.options.keymap?.motions.wordEnd).toEqual(["E"]);
     expect(result.options.keymap?.motions.wordForwardBig).toEqual(["gw"]);
     expect(result.options.keymap?.motions.wordPreviousEnd).toEqual(["g-"]);
+    expect(result.options.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
+    expect(result.options.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
     expect(result.options.keymap?.commands.redo).toEqual(["U"]);
     expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd", "wordPreviousEnd"]);
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes("operatorMotions.change contains unsupported operator motion"),
+      ),
+    ).toBe(true);
   });
 
   test("parses macro behavior options", () => {

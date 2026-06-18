@@ -258,6 +258,7 @@ export class VimEditor extends CustomEditor {
       lines: this.getLines(),
       cursor: this.getCursor(),
       isAutocompleteOpen: this.isShowingAutocomplete(),
+      terminalRows: this.terminalRows(),
       isMacroReplaying: this.isMacroReplaying,
       isRedoAvailable: this.redoStack.length > 0,
     };

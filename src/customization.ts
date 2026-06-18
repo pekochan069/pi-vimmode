@@ -133,6 +133,8 @@ const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {
   bufferStart: "move to prompt start",
   bufferEnd: "move to prompt end",
   matchingPair: "move to matching bracket or quote",
+  halfPageDown: "move down by half a prompt page",
+  halfPageUp: "move up by half a prompt page",
 };
 
 const SEARCH_COMMANDS = new Set<VimCommandAction>([
@@ -199,9 +201,18 @@ export const PROTECTED_SHORTCUTS = [
   {
     key: "ctrl+d",
     aliases: [],
-    owner: "pi",
-    reason: "EOF/delete application shortcut",
-    behavior: "delegates to Pi",
+    owner: "pi-vimmode",
+    reason: "normal/visual half-page scroll down; insert-mode EOF/delete remains Pi-owned",
+    behavior: "handled by Vim mode in normal/visual modes and delegated to Pi in insert mode",
+    normalModeOwned: true,
+  },
+  {
+    key: "ctrl+u",
+    aliases: [],
+    owner: "pi-vimmode",
+    reason: "normal/visual half-page scroll up; insert mode remains Pi-owned",
+    behavior: "handled by Vim mode in normal/visual modes and delegated to Pi in insert mode",
+    normalModeOwned: true,
   },
   {
     key: "ctrl+g",
@@ -556,7 +567,9 @@ function detailEntryLine(entry: VimActionEntry): string {
 function keyOwnershipLine(context: KeybindingCatalogContext, query: string): string | undefined {
   const normalized = normalizeShortcutKey(query);
   const protectedShortcut = protectedShortcutForKey(normalized);
-  if (protectedShortcut) return mapcheckMessage(context.keymap, normalized, context.warnings ?? []);
+  if (protectedShortcut && !protectedShortcut.normalModeOwned) {
+    return mapcheckMessage(context.keymap, normalized, context.warnings ?? []);
+  }
   const binding = context.keymap.actions.accepted.find((entry) => entry.key === normalized);
   if (binding) return `${normalized} -> ${binding.actionId}`;
   const conflict = (context.warnings ?? []).find((warning) => warning.includes(normalized));
@@ -582,7 +595,7 @@ export function mapcheckMessage(
 ): string {
   const key = normalizeShortcutKey(query);
   const protectedShortcut = protectedShortcutForKey(key);
-  if (protectedShortcut)
+  if (protectedShortcut && !protectedShortcut.normalModeOwned)
     return `mapcheck: ${key} protected for ${protectedShortcut.reason}; ${protectedShortcut.behavior}`;
   const actionBinding = keymap.actions.accepted.find((binding) => binding.key === key);
   if (actionBinding) return `mapcheck: ${key} -> ${actionBinding.actionId}`;

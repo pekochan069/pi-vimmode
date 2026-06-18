@@ -27,6 +27,7 @@ export type EditorSnapshot = {
   isAutocompleteOpen?: boolean;
   isMacroReplaying?: boolean;
   isRedoAvailable?: boolean;
+  terminalRows?: number;
 };
 
 export type MacroSlot = string;

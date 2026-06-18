@@ -51,6 +51,8 @@ export const KEYMAP_MOTION_DESCRIPTORS = {
   bufferStart: { defaults: ["gg"], legacy: "gg" },
   bufferEnd: { defaults: ["G"], legacy: "G" },
   matchingPair: { defaults: ["%"], legacy: "%" },
+  halfPageDown: { defaults: ["ctrl+d"] },
+  halfPageUp: { defaults: ["ctrl+u"] },
 } as const satisfies Record<VimMotionAction, KeymapDescriptor>;
 
 export const KEYMAP_MACRO_DESCRIPTORS = {

@@ -290,7 +290,7 @@ describe("normal command parser", () => {
     const keymap = {
       ...DEFAULT_VIM_KEYMAP,
       operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
-      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
+      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"], halfPageDown: ["zz"] },
       commands: {
         ...DEFAULT_VIM_KEYMAP.commands,
         openLineBelow: ["n"],
@@ -325,6 +325,10 @@ describe("normal command parser", () => {
       type: "command",
       command: "redo",
     });
+    expect(resolveNormalCommand("zz", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+    });
   });
 
   test("resolves configured shift operator bindings as line-only", () => {
@@ -343,6 +347,22 @@ describe("normal command parser", () => {
       operator: "dedent",
     });
     expect(resolveNormalCommand("w", "]", keymap)).toEqual({ type: "invalid" });
+  });
+
+  test("resolves default scroll motions and counts", () => {
+    expect(resolveNormalCommand("ctrl+d", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+    });
+    expect(resolveNormalCommand("ctrl+u", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageUp",
+    });
+    expect(resolveNormalCommand("ctrl+d", "2\u0000count\u0000", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+      count: 2,
+    });
   });
 
   test("resolves finite multi-key sequences and invalid pending prefixes", () => {

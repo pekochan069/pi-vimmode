@@ -114,7 +114,10 @@ const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
 const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
 const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
-const OPERATOR_MOTION_ACTION_SET = new Set<string>(VIM_MOTION_ACTIONS);
+const OPERATOR_MOTION_ACTIONS = VIM_MOTION_ACTIONS.filter(
+  (action) => action !== "halfPageDown" && action !== "halfPageUp",
+);
+const OPERATOR_MOTION_ACTION_SET = new Set<string>(OPERATOR_MOTION_ACTIONS);
 const STATUS_ITEM_SET = new Set<string>(VIM_STATUS_ITEMS);
 const TEXT_OBJECT_KIND_SET = deriveSet(KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS);
 const TEXT_OBJECT_TARGET_SET = deriveSet(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
@@ -146,7 +149,9 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
   }),
   commands: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS)),
   operatorMotions: freezeArrayRecord(
-    Object.fromEntries(VIM_MOTION_OPERATOR_ACTIONS.map((action) => [action, VIM_MOTION_ACTIONS])),
+    Object.fromEntries(
+      VIM_MOTION_OPERATOR_ACTIONS.map((action) => [action, OPERATOR_MOTION_ACTIONS]),
+    ),
   ),
   actions: Object.freeze({
     accepted: Object.freeze([]),
@@ -477,7 +482,7 @@ function parseStringArray(
   value: unknown,
   label: string,
   warnings: string[],
-  options: { singleKeyOnly?: boolean } = {},
+  options: { singleKeyOnly?: boolean; allowProtectedKey?: (key: string) => boolean } = {},
 ): string[] | undefined {
   if (!Array.isArray(value)) {
     warnings.push(`${label} must be an array of key strings`);
@@ -492,7 +497,7 @@ function parseStringArray(
       continue;
     }
     const protectedShortcut = protectedShortcutForKey(sequence);
-    if (protectedShortcut) {
+    if (protectedShortcut && !options.allowProtectedKey?.(sequence)) {
       warnings.push(`${label} contains protected key ${sequence} (${protectedShortcut.reason})`);
       continue;
     }
@@ -551,7 +556,13 @@ function parseKeyBindings<T extends string>(
       bindings,
       `${sourceLabel}: piVimMode.keymap.${group}.${action}`,
       warnings,
-      options,
+      {
+        ...options,
+        allowProtectedKey: (key) =>
+          group === "motions" &&
+          ((action === "halfPageDown" && key === "ctrl+d") ||
+            (action === "halfPageUp" && key === "ctrl+u")),
+      },
     );
     if (!keys) continue;
     parsed[action as T] = keys;

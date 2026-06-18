@@ -254,6 +254,18 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("binding q"))).toBe(false);
   });
 
+  test("explicit keymap bindings override lower-priority default prefix bindings", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { motions: { left: ["g"] } } },
+    });
+
+    expect(result.options.keymap?.motions.left).toEqual(["g"]);
+    expect(result.options.keymap?.motions.bufferStart).toEqual([]);
+    expect(result.options.keymap?.motions.wordPreviousEnd).toEqual([]);
+    expect(result.options.keymap?.motions.wordPreviousEndBig).toEqual([]);
+    expect(result.warnings.some((warning) => warning.includes("binding g"))).toBe(false);
+  });
+
   test("parses shift operator keymap and rejects motion matrices for line-only operators", () => {
     const result = resolveVimOptions({
       piVimMode: {

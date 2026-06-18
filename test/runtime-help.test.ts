@@ -96,7 +96,6 @@ describe("runtime help registry", () => {
 
     expect(popup.source).toBe("features");
     expect(popup.query).toBe("keybindings");
-    expect(popup.docsAnchor).toBe("runtime-help:keybinding-discovery-popup");
     expect(text).toContain("Keybinding discovery");
     expect(text).toContain("paragraph-editing");
     expect(text).toContain("markdown-wrapping");
@@ -217,11 +216,16 @@ describe("runtime help registry", () => {
     expect(runtimeFeaturesMessage("quote", { ...context, options: transforms })).toContain(":qte");
   });
 
-  test("registry entries carry docs, spec, and test anchors", () => {
+  test("registry entries keep only runtime help fields", () => {
     for (const entry of runtimeHelpEntries(context)) {
-      expect(entry.docsAnchor).toStartWith("runtime-help:");
-      expect(entry.specAnchor).toContain("openspec/specs/");
-      expect(entry.testAnchors.length).toBeGreaterThan(0);
+      expect(entry.id.length).toBeGreaterThan(0);
+      expect(entry.topics.length).toBeGreaterThan(0);
+      expect(entry.summary.length).toBeGreaterThan(0);
+      expect(entry.examples.length).toBeGreaterThan(0);
+      expect(entry.limits.length).toBeGreaterThan(0);
+      expect("docsAnchor" in entry).toBe(false);
+      expect("specAnchor" in entry).toBe(false);
+      expect("testAnchors" in entry).toBe(false);
     }
   });
 });

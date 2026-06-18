@@ -9,7 +9,6 @@ function popup(lines: readonly string[], scrollOffset = 0): ReadOnlyPopup {
   return {
     title: "Read-only output",
     source: "help",
-    docsAnchor: "runtime-help:runtime-help",
     scrollOffset,
     lines,
   };

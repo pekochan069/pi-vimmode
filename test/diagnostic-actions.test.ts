@@ -30,9 +30,9 @@ describe("diagnostic/help action metadata", () => {
       expect(entry.topics.length).toBeGreaterThan(0);
       expect(entry.description.length).toBeGreaterThan(0);
       expect(entry.examples.length).toBeGreaterThan(0);
-      expect(entry.docsAnchor).toStartWith("diagnostic-actions:");
-      expect(entry.specAnchor).toContain("openspec/specs/");
-      expect(entry.testAnchors.length).toBeGreaterThan(0);
+      expect("docsAnchor" in entry).toBe(false);
+      expect("specAnchor" in entry).toBe(false);
+      expect("testAnchors" in entry).toBe(false);
       expect("dispatch" in entry).toBe(false);
     }
   });

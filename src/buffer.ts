@@ -136,46 +136,55 @@ function wordKind(char: string | undefined): "keyword" | "punctuation" | "whites
   return isKeywordWordChar(char) ? "keyword" : "punctuation";
 }
 
-function isSameSmallWordKind(left: string | undefined, right: string | undefined): boolean {
-  const leftKind = wordKind(left);
-  return leftKind !== "whitespace" && leftKind === wordKind(right);
+type WordBoundaryModel = "small" | "big";
+
+type WordBoundaryKind = "keyword" | "punctuation" | "word" | "whitespace";
+
+function boundaryKind(model: WordBoundaryModel, char: string | undefined): WordBoundaryKind {
+  if (model === "small") return wordKind(char);
+  return isWhitespace(char) ? "whitespace" : "word";
+}
+
+function isSameBoundaryKind(
+  model: WordBoundaryModel,
+  left: string | undefined,
+  right: string | undefined,
+): boolean {
+  const leftKind = boundaryKind(model, left);
+  return leftKind !== "whitespace" && leftKind === boundaryKind(model, right);
+}
+
+function nextWordStartOffsetFor(model: WordBoundaryModel, text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (index >= text.length) return index;
+
+  const kind = boundaryKind(model, text[index]);
+  if (kind !== "whitespace") {
+    while (index < text.length && boundaryKind(model, text[index]) === kind) index++;
+  }
+
+  while (index < text.length && isWhitespace(text[index])) index++;
+  return index;
 }
 
 function nextWordStartOffset(text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (index >= text.length) return index;
-
-  if (!isWhitespace(text[index])) {
-    const kind = wordKind(text[index]);
-    while (index < text.length && wordKind(text[index]) === kind) index++;
-  }
-
-  while (index < text.length && isWhitespace(text[index])) index++;
-  return index;
+  return nextWordStartOffsetFor("small", text, offset);
 }
 
 function nextWORDStartOffset(text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (index >= text.length) return index;
-
-  if (!isWhitespace(text[index])) {
-    while (index < text.length && !isWhitespace(text[index])) index++;
-  }
-
-  while (index < text.length && isWhitespace(text[index])) index++;
-  return index;
+  return nextWordStartOffsetFor("big", text, offset);
 }
 
-function wordEndOffset(text: string, offset: number): number {
+function wordEndOffsetFor(model: WordBoundaryModel, text: string, offset: number): number {
   let index = Math.max(0, Math.min(offset, text.length));
   if (text.length === 0) return 0;
   if (index >= text.length) return text.length;
 
   if (isWhitespace(text[index])) {
     while (index < text.length && isWhitespace(text[index])) index++;
-  } else if (index + 1 < text.length && isSameSmallWordKind(text[index], text[index + 1])) {
-    const kind = wordKind(text[index]);
-    while (index + 1 < text.length && wordKind(text[index + 1]) === kind) index++;
+  } else if (index + 1 < text.length && isSameBoundaryKind(model, text[index], text[index + 1])) {
+    const kind = boundaryKind(model, text[index]);
+    while (index + 1 < text.length && boundaryKind(model, text[index + 1]) === kind) index++;
     return index;
   } else {
     index++;
@@ -183,72 +192,61 @@ function wordEndOffset(text: string, offset: number): number {
 
   while (index < text.length && isWhitespace(text[index])) index++;
   if (index >= text.length) return text.length;
-  const kind = wordKind(text[index]);
-  while (index + 1 < text.length && wordKind(text[index + 1]) === kind) index++;
+  const kind = boundaryKind(model, text[index]);
+  while (index + 1 < text.length && boundaryKind(model, text[index + 1]) === kind) index++;
   return index;
+}
+
+function wordEndOffset(text: string, offset: number): number {
+  return wordEndOffsetFor("small", text, offset);
 }
 
 function wordEndWORDOffset(text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (text.length === 0) return 0;
-  if (index >= text.length) return text.length;
+  return wordEndOffsetFor("big", text, offset);
+}
 
-  if (!isWhitespace(text[index]) && index + 1 < text.length && !isWhitespace(text[index + 1])) {
-    while (index + 1 < text.length && !isWhitespace(text[index + 1])) index++;
-    return index;
+function previousWordEndOffsetFor(model: WordBoundaryModel, text: string, offset: number): number {
+  const current = Math.max(0, Math.min(offset, text.length));
+  if (current === 0 || text.length === 0) return 0;
+
+  let index = current - 1;
+  if (current < text.length && isSameBoundaryKind(model, text[index], text[current])) {
+    const kind = boundaryKind(model, text[current]);
+    while (index >= 0 && boundaryKind(model, text[index]) === kind) index--;
   }
-
-  if (!isWhitespace(text[index])) index++;
-  while (index < text.length && isWhitespace(text[index])) index++;
-  if (index >= text.length) return text.length;
-  while (index + 1 < text.length && !isWhitespace(text[index + 1])) index++;
-  return index;
+  while (index >= 0 && isWhitespace(text[index])) index--;
+  return Math.max(0, index);
 }
 
 function previousWordEndOffset(text: string, offset: number): number {
-  const current = Math.max(0, Math.min(offset, text.length));
-  if (current === 0 || text.length === 0) return 0;
-
-  let index = current - 1;
-  if (current < text.length && isSameSmallWordKind(text[index], text[current])) {
-    const kind = wordKind(text[current]);
-    while (index >= 0 && wordKind(text[index]) === kind) index--;
-  }
-  while (index >= 0 && isWhitespace(text[index])) index--;
-  return Math.max(0, index);
+  return previousWordEndOffsetFor("small", text, offset);
 }
 
 function previousWordEndWORDOffset(text: string, offset: number): number {
-  const current = Math.max(0, Math.min(offset, text.length));
-  if (current === 0 || text.length === 0) return 0;
+  return previousWordEndOffsetFor("big", text, offset);
+}
 
-  let index = current - 1;
-  if (!isWhitespace(text[index]) && !isWhitespace(text[current])) {
-    while (index >= 0 && !isWhitespace(text[index])) index--;
-  }
-  while (index >= 0 && isWhitespace(text[index])) index--;
-  return Math.max(0, index);
+function previousWordStartOffsetFor(
+  model: WordBoundaryModel,
+  text: string,
+  offset: number,
+): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (index === 0) return 0;
+
+  index--;
+  while (index > 0 && isWhitespace(text[index])) index--;
+  const kind = boundaryKind(model, text[index]);
+  while (index > 0 && boundaryKind(model, text[index - 1]) === kind) index--;
+  return index;
 }
 
 function previousWordStartOffset(text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (index === 0) return 0;
-
-  index--;
-  while (index > 0 && isWhitespace(text[index])) index--;
-  const kind = wordKind(text[index]);
-  while (index > 0 && wordKind(text[index - 1]) === kind) index--;
-  return index;
+  return previousWordStartOffsetFor("small", text, offset);
 }
 
 function previousWORDStartOffset(text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (index === 0) return 0;
-
-  index--;
-  while (index > 0 && isWhitespace(text[index])) index--;
-  while (index > 0 && !isWhitespace(text[index - 1])) index--;
-  return index;
+  return previousWordStartOffsetFor("big", text, offset);
 }
 
 function orderedOffsetRange(
@@ -472,10 +470,20 @@ function substituteLineLiteral(
   return { line: nextLine + line.slice(cursor), matches, ranges };
 }
 
-export function substituteLineRangeLiteral(
+type LineSubstitutionSuccess = {
+  ok: true;
+  line: string;
+  matches: number;
+  ranges: Array<{ start: number; end: number }>;
+};
+
+type LineSubstitutionResult = LineSubstitutionSuccess | { ok: false; message: string };
+
+function substituteLineRange(
   text: string,
   options: SubstituteLineRangeOptions,
-): SubstituteLineRangeResult {
+  substituteLine: (line: string) => LineSubstitutionResult,
+): SubstituteLineRangeResult | { ok: false; message: string } {
   const lines = splitText(text);
   const startLine = Math.max(0, Math.min(options.range.startLine, lines.length - 1));
   const endLine = Math.max(0, Math.min(options.range.endLine, lines.length - 1));
@@ -484,13 +492,8 @@ export function substituteLineRangeLiteral(
   const ranges: TextRange[] = [];
 
   for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
-    const result = substituteLineLiteral(
-      nextLines[lineIndex] ?? "",
-      options.pattern,
-      options.replacement,
-      options.global,
-      options.ignoreCase,
-    );
+    const result = substituteLine(nextLines[lineIndex] ?? "");
+    if (!result.ok) return result;
     nextLines[lineIndex] = result.line;
     matches += result.matches;
     for (const range of result.ranges) {
@@ -513,6 +516,24 @@ export function substituteLineRangeLiteral(
   };
 }
 
+export function substituteLineRangeLiteral(
+  text: string,
+  options: SubstituteLineRangeOptions,
+): SubstituteLineRangeResult {
+  const result = substituteLineRange(text, options, (line) => ({
+    ok: true,
+    ...substituteLineLiteral(
+      line,
+      options.pattern,
+      options.replacement,
+      options.global,
+      options.ignoreCase,
+    ),
+  }));
+  if ("ok" in result) throw new Error(result.message);
+  return result;
+}
+
 export type SubstituteLineRangeRegexResult =
   | ({ ok: true } & SubstituteLineRangeResult)
   | { ok: false; message: string };
@@ -522,9 +543,7 @@ function substituteLineRegex(
   regex: RegExp,
   replacement: string,
   global: boolean,
-):
-  | { ok: true; line: string; matches: number; ranges: Array<{ start: number; end: number }> }
-  | { ok: false; message: string } {
+): LineSubstitutionSuccess | { ok: false; message: string } {
   let nextLine = "";
   let cursor = 0;
   let matches = 0;
@@ -567,44 +586,13 @@ export function substituteLineRangeRegex(
     return { ok: false, message: "Invalid regex pattern" };
   }
 
-  const lines = splitText(text);
-  const startLine = Math.max(0, Math.min(options.range.startLine, lines.length - 1));
-  const endLine = Math.max(0, Math.min(options.range.endLine, lines.length - 1));
-  const nextLines = [...lines];
-  let matches = 0;
-  const ranges: TextRange[] = [];
-
-  for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
-    const result = substituteLineRegex(
-      nextLines[lineIndex] ?? "",
-      regex,
-      options.replacement,
-      options.global,
-    );
-    if (!result.ok) return result;
-    nextLines[lineIndex] = result.line;
-    matches += result.matches;
-    for (const range of result.ranges) {
-      ranges.push({
-        start: { line: lineIndex, col: range.start },
-        end: { line: lineIndex, col: range.end },
-      });
-    }
-    if (matches > REGEX_SEARCH_MATCH_MAX_COUNT)
-      return { ok: false, message: "Regex match count exceeded" };
-  }
-
-  const nextText = joinLines(nextLines);
-  return {
-    ok: true,
-    matches,
-    ranges,
-    edit: {
-      text: nextText,
-      cursor: clampPosition(nextLines, options.originalCursor),
-      changed: nextText !== text,
-    },
-  };
+  const result = substituteLineRange(text, options, (line) =>
+    substituteLineRegex(line, regex, options.replacement, options.global),
+  );
+  if ("ok" in result) return result;
+  if (result.matches > REGEX_SEARCH_MATCH_MAX_COUNT)
+    return { ok: false, message: "Regex match count exceeded" };
+  return { ok: true, ...result };
 }
 
 export type ExLineEditResult =

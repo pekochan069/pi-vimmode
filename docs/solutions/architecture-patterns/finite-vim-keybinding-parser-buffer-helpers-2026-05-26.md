@@ -1,7 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
-last_updated: 2026-06-15
+last_updated: 2026-06-18
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -14,6 +14,7 @@ applies_when:
   - "Extracting modal editor state into a pure engine behind a Pi CustomEditor adapter"
   - "Adding configurable semantic keymaps without accepting unsupported Vim grammar"
   - "Adding adapter-side fast paths that bypass modal snapshot construction"
+  - "Deduplicating behavior-heavy buffer helpers after characterization tests"
 tags:
   - vim-mode
   - keybindings
@@ -125,6 +126,10 @@ Keep the editor out of string surgery. Add pure helpers for each behavior family
 - operator motions: `deleteByMotion`, `yankByMotion`.
 
 This makes edge cases testable without depending on terminal input, Pi cursor behavior, or render state.
+
+When refactoring duplicated helper internals, characterize behavior before deduplicating. The `dedupe-buffer-word-substitute-helpers` change first locked `w/W/e/E/b/B/ge/gE` behavior across punctuation-heavy fixtures, counted motions, prompt boundaries, and operator-motion register effects. Only after that did `src/buffer.ts` share traversal mechanics while keeping the small-word classifier distinct from whitespace-delimited WORD behavior.
+
+The same rule applies to Ex substitution helpers: share mechanics only after tests pin matching semantics, range mapping, error/no-op shape, and cursor/result contracts.
 
 ### 3. Keep operator motions separate from visual selection
 
@@ -252,7 +257,7 @@ Finite prompt-editor Vim support fails when parser, buffer model, and editor dis
 - edge cases require brittle integration tests instead of cheap unit tests,
 - undocumented Vim differences create churn around unsupported behavior.
 
-The parser → buffer helpers → modal engine → adapter split keeps behavior explicit and makes future bindings easier to add safely.
+The parser → buffer helpers → modal engine → adapter split keeps behavior explicit and makes future bindings easier to add safely. Characterization-before-dedup keeps refactors from flattening important semantic differences such as Vim small-word punctuation runs versus uppercase WORD whitespace spans.
 
 The modal engine extraction adds another payoff: a failing command can be isolated to pure modal state, buffer math, adapter effect application, rendering, cursor restoration, or terminal hints instead of one large `CustomEditor` subclass.
 
@@ -264,6 +269,7 @@ The modal engine extraction adds another payoff: a failing command can be isolat
 - Adding prompt text transforms that update the unnamed register.
 - Implementing Vim-like behavior with intentionally limited scope.
 - Testing modal editor behavior where most cases can be proven below the TUI integration layer.
+- Deduplicating similar buffer traversals whose user-visible semantics differ by classifier, direction, count, or range shape.
 - Refactoring a `CustomEditor` subclass that mixes product semantics with Pi runtime integration.
 - Adding hot-path adapter delegation without changing modal semantics.
 
@@ -327,6 +333,20 @@ Manual checks must respect Vim range semantics. `2d2f,` on `a,b,c,d` should no-o
 
 Avoid exploding editor integration tests for every parser combination when parser, buffer, and modal tests already cover the matrix.
 
+### Characterization before helper deduplication
+
+Before extracting shared traversal helpers, write side-by-side tests that prove the duplicate branches are similar mechanically but distinct semantically. For word motions, lowercase and uppercase motions should use the same fixture with different expected stops:
+
+```ts
+const text = "foo/bar baz qux";
+expect(wordForwardPosition(text, p(0, 0))).toEqual(p(0, 3)); // w stops at slash
+expect(wordForwardBigPosition(text, p(0, 0))).toEqual(p(0, 8)); // W skips to baz
+```
+
+Then cover operator ranges, register text, cursor placement, and no-op behavior so `deleteByMotion`, `change`, and `yankByMotion` continue to observe the same targets after the private helper shape changes.
+
+For substitution internals, keep tests at the operation contract: bounded multi-line ranges, global and non-global matching, match counts, preview ranges, cursor clamping, regex error handling, no-match behavior, identical replacements, and `changed` flags. This allows private helpers to change while preserving the Ex command surface.
+
 ### Adapter fast-path tests
 
 For insert-mode performance shortcuts, add both predicate and live adapter tests:
@@ -382,6 +402,8 @@ Validation for the modal-engine extraction and configurable keymap work:
 - `git diff --check`
 
 Validation for the insert fast-path update used the standard test, type, lint, format, and OpenSpec checks. Local performance evidence lives in `scripts/measure-insert-fast-path.ts`; treat it as before/after evidence only, not a CI timing threshold.
+
+Validation for the buffer helper deduplication used `bun test`, `bun test test/buffer.test.ts`, `bun run check-types`, `bun run lint`, `bun run format:check`, `openspec validate --specs --strict`, `openspec validate dedupe-buffer-word-substitute-helpers --type change --strict`, and `graphify update .`.
 
 ## Related
 

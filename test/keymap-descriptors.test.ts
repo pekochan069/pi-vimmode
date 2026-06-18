@@ -38,6 +38,8 @@ const expectedMotions = [
   "bufferStart",
   "bufferEnd",
   "matchingPair",
+  "halfPageDown",
+  "halfPageUp",
 ];
 const expectedCommands = [
   "insertBefore",
@@ -120,6 +122,8 @@ describe("keymap descriptors", () => {
     expect(motions.wordForward).toEqual(["w"]);
     expect(motions.firstNonBlank).toEqual(["^", "_"]);
     expect(motions.bufferStart).toEqual(["gg"]);
+    expect(motions.halfPageDown).toEqual(["ctrl+d"]);
+    expect(motions.halfPageUp).toEqual(["ctrl+u"]);
 
     motions.wordForward.push("custom");
     expect(KEYMAP_MOTION_DESCRIPTORS.wordForward.defaults).toEqual(["w"]);

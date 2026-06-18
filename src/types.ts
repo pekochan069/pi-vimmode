@@ -41,7 +41,9 @@ export type VimMotionAction =
   | "firstNonBlank"
   | "bufferStart"
   | "bufferEnd"
-  | "matchingPair";
+  | "matchingPair"
+  | "halfPageDown"
+  | "halfPageUp";
 
 export type VimCommandAction =
   | "insertBefore"

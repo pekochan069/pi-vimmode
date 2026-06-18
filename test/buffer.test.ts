@@ -39,6 +39,7 @@ import {
   joinLineWithNext,
   matchingPairPosition,
   lineMarkPosition,
+  moveByPromptLines,
   navigateBuffer,
   normalizeBufferPosition,
   openLineAbove,
@@ -92,6 +93,16 @@ describe("prompt buffer operation API", () => {
 
   test("normalizes cursor positions for adapter restoration", () => {
     expect(normalizeBufferPosition("one\ntwo", p(9, 9))).toEqual(p(1, 3));
+  });
+
+  test("moves by prompt lines with cursor clamping", () => {
+    const text = "zero\none\ntwo\nshrt\nfour";
+    expect(moveByPromptLines(text, p(1, 2), 2)).toEqual(p(3, 2));
+    expect(moveByPromptLines(text, p(1, 2), -1)).toEqual(p(0, 2));
+    expect(moveByPromptLines(text, p(1, 2), 4)).toEqual(p(4, 2));
+    expect(moveByPromptLines(text, p(0, 99), 3)).toEqual(p(3, 4));
+    expect(moveByPromptLines(text, p(0, 0), -5)).toEqual(p(0, 0));
+    expect(moveByPromptLines("", p(9, 9), 3)).toEqual(p(0, 0));
   });
 
   test("substitutes literal text across a line range and reports counts", () => {

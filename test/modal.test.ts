@@ -27,6 +27,7 @@ function applyModalKeys(
   initialCursor: { line: number; col: number },
   keys: readonly string[],
   modalOptions: ModalOptions = options,
+  terminalRows?: number,
 ) {
   let state = initialState;
   let text = initialText;
@@ -37,7 +38,7 @@ function applyModalKeys(
   for (const key of keys) {
     const update = handleModalInput(
       state,
-      { text, lines: text.split("\n"), cursor },
+      { text, lines: text.split("\n"), cursor, terminalRows },
       modalOptions,
       key,
     );
@@ -114,6 +115,39 @@ describe("modal contracts", () => {
 
   test("createModalState starts with configured mode and empty transient state", () => {
     expect(createModalState("normal")).toEqual({ mode: "normal" });
+  });
+
+  test("normal mode scroll motions move by half visible prompt page", () => {
+    const text = Array.from({ length: 10 }, (_, index) => `line-${index}`).join("\n");
+    expect(applyModalKeys({ mode: "normal" }, text, p(1, 4), ["\x04"], options, 20).cursor).toEqual(
+      p(4, 4),
+    );
+    expect(applyModalKeys({ mode: "normal" }, text, p(4, 4), ["\x15"], options, 20).cursor).toEqual(
+      p(1, 4),
+    );
+    expect(
+      applyModalKeys({ mode: "normal" }, text, p(1, 4), ["2", "\x04"], options, 20).cursor,
+    ).toEqual(p(7, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "abcdef\nx", p(0, 5), ["\x04"], options, 20).cursor,
+    ).toEqual(p(1, 1));
+  });
+
+  test("visual scroll motions preserve anchor and insert mode delegates", () => {
+    const text = "zero\none\ntwo\nthree\nfour";
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      text,
+      p(0, 1),
+      ["\x04"],
+      options,
+      20,
+    );
+    expect(visual.state.visualAnchor).toEqual(p(0, 1));
+    expect(visual.cursor).toEqual(p(3, 1));
+
+    const insert = applyModalKeys({ mode: "insert" }, text, p(0, 0), ["\x04"], options, 20);
+    expect(insert.effects).toContainEqual({ type: "delegate", input: "\x04" });
   });
 
   test("resetTransientState clears visual and pending state without dropping registers", () => {
@@ -3237,9 +3271,9 @@ describe("modal engine", () => {
   });
 
   test("protected Pi shortcuts delegate from normal and visual modes", () => {
-    const normal = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x04");
+    const normal = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x0c");
     expect(normal.state).toEqual({ mode: "normal" });
-    expect(normal.effects).toContainEqual({ type: "delegate", input: "\x04" });
+    expect(normal.effects).toContainEqual({ type: "delegate", input: "\x0c" });
 
     const ctrlShiftP = handleModalInput(
       { mode: "normal", pending: "d" },
@@ -3743,9 +3777,9 @@ describe("modal engine", () => {
     expect(reset.state).toEqual({ mode: "insert" });
     expect(reset.effects).toContainEqual({ type: "delegate", input: "\x03" });
 
-    const protectedShortcut = handleModalInput(blockInsertState, snapshot, options, "\x04");
+    const protectedShortcut = handleModalInput(blockInsertState, snapshot, options, "\x0c");
     expect(protectedShortcut.state).toEqual(blockInsertState);
-    expect(protectedShortcut.effects).toContainEqual({ type: "delegate", input: "\x04" });
+    expect(protectedShortcut.effects).toContainEqual({ type: "delegate", input: "\x0c" });
   });
 
   test("macro recording starts, captures handled inputs, and stops in normal mode", () => {

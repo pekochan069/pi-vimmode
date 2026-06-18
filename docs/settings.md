@@ -81,19 +81,20 @@ Rules:
 
 Protected Pi shortcuts cannot be mapped:
 
-| Key                                      | Preserved behavior                         |
-| ---------------------------------------- | ------------------------------------------ |
-| `enter`, `return`                        | Submit prompt / execute pending workbench. |
-| `escape`, `esc`                          | Cancel or mode transition.                 |
-| `tab`, `shift+tab`                       | Autocomplete navigation.                   |
-| `shift+enter`                            | Pi newline/submit variant.                 |
-| `ctrl+c`, `ctrl+g`                       | Interrupt/cancel and reset Vim state.      |
-| `ctrl+d`                                 | Pi EOF/delete shortcut.                    |
-| `ctrl+l`                                 | Pi terminal clear/redraw shortcut.         |
-| `ctrl+p`, `shift+ctrl+p`, `ctrl+shift+p` | Pi command/model palette shortcuts.        |
-| `ctrl+t`                                 | Pi external editor/tool shortcut.          |
+| Key                                      | Preserved behavior                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `enter`, `return`                        | Submit prompt / execute pending workbench.                                          |
+| `escape`, `esc`                          | Cancel or mode transition.                                                          |
+| `tab`, `shift+tab`                       | Autocomplete navigation.                                                            |
+| `shift+enter`                            | Pi newline/submit variant.                                                          |
+| `ctrl+c`, `ctrl+g`                       | Interrupt/cancel and reset Vim state.                                               |
+| `ctrl+d`                                 | Vim half-page down in normal/visual modes; Pi EOF/delete remains insert-mode owned. |
+| `ctrl+u`                                 | Vim half-page up in normal/visual modes; insert mode remains Pi-owned.              |
+| `ctrl+l`                                 | Pi terminal clear/redraw shortcut.                                                  |
+| `ctrl+p`, `shift+ctrl+p`, `ctrl+shift+p` | Pi command/model palette shortcuts.                                                 |
+| `ctrl+t`                                 | Pi external editor/tool shortcut.                                                   |
 
-Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, and prompt search; insert mode still delegates them to Pi.
+Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `ctrl+d`, `ctrl+u`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, half-page scroll, and prompt search; insert mode still delegates them to Pi.
 
 ## Top-level settings
 
@@ -180,6 +181,8 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                         |
 | `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                           |
 | `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line. |
+| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]` | Move down by half the visible prompt page; count multiplies the distance.     |
+| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]` | Move up by half the visible prompt page; count multiplies the distance.       |
 
 ### Commands
 
@@ -222,6 +225,8 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                  |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                         |
 | `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                 |
+
+`halfPageDown` and `halfPageUp` are prompt-local cursor motions in normal and visual modes. Their default `ctrl+d` / `ctrl+u` keys are only allowed for these motion actions; mapping those protected control keys to unrelated actions is rejected with a warning. They are not supported operator motions, so adding them to `piVimMode.keymap.operatorMotions` is ignored with a warning.
 
 `findCharForward`, `findCharBackward`, `tillCharForward`, and `tillCharBackward` are character-argument commands. Their configured semantic key sequences work as normal-mode motions and after motion-capable `delete`, `change`, and `yank` operators. For example, mapping `findCharForward` to `["gf"]` makes `dgf,` delete through the next comma on the current line. Counts after the operator target later/earlier matches (`d2gf,`), and counts before and after the operator multiply for this finite character-search grammar. These command bindings do not make shift operators (`>`/`<`) accept character-search targets.
 

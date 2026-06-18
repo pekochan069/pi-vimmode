@@ -26,6 +26,7 @@ import {
   deleteTextObject,
   findCharOnLine,
   joinLineWithNext,
+  moveByPromptLines,
   navigateBuffer,
   openLineAbove,
   openLineBelow,
@@ -78,6 +79,11 @@ export function normalDispatchSummary(state: ModalState): string {
 
 export function isNormalDispatchState(state: ModalState): boolean {
   return state.mode === "normal" && !state.pendingEx && !state.pendingSearch;
+}
+
+function halfPageLineCount(terminalRows: number | undefined): number {
+  const visibleRows = Math.max(5, Math.floor((terminalRows ?? 24) * 0.3));
+  return Math.max(1, Math.floor(visibleRows / 2));
 }
 
 function moveEffectFor(
@@ -164,6 +170,17 @@ function moveEffectFor(
   if (motion === "matchingPair") {
     const target = navigateBuffer(snapshot.text, snapshot.cursor, "matchingPair");
     return target ? { type: "restoreCursor", position: target } : undefined;
+  }
+  if (motion === "halfPageDown" || motion === "halfPageUp") {
+    const direction = motion === "halfPageDown" ? 1 : -1;
+    return {
+      type: "restoreCursor",
+      position: moveByPromptLines(
+        snapshot.text,
+        snapshot.cursor,
+        direction * halfPageLineCount(snapshot.terminalRows) * count,
+      ),
+    };
   }
 }
 

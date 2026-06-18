@@ -42,6 +42,7 @@
     "test": "bun test",
     "check-types": "tsgo --noEmit",
     "measure:insert": "bun scripts/measure-insert-fast-path.ts",
+    "measure:commands": "bun scripts/measure-command-resolver.ts",
     "prepare": "lefthook install"
   },
   "devDependencies": {

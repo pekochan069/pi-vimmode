@@ -6,7 +6,7 @@
 - [x] Derive keymap/action tables from shared descriptors instead of repeating motion/command/action names across config and command resolver metadata. Context: potential bundle-size and drift-reduction follow-up; measure and protect resolver behavior with equivalence tests.
 - [x] Move docs/test-only metadata out of runtime help/action modules where possible. Context: reduce published runtime bytes while preserving docs drift guards for anchors, parser examples, and public help coverage.
 - [x] Deduplicate `src/buffer.ts` word-motion and substitution range helper logic with TDD. Context: cleanup has cursor/substitution regression risk, so keep it separate from package and input-latency work.
-- [ ] Explore compiled keymap lookup cache for normal-mode command resolution after profiling. Context: `commands.ts` currently rebuilds binding lists during lookups; follow-up should prove hotspot and cover cache invalidation/equivalence.
+- [x] Explore compiled keymap lookup cache for normal-mode command resolution after profiling. Context: `commands.ts` currently rebuilds binding lists during lookups; follow-up should prove hotspot and cover cache invalidation/equivalence.
 
 1. Generic cloneKeymap
    src/config.ts has huge hand-written clone:

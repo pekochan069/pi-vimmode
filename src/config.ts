@@ -68,14 +68,16 @@ const CURSOR_STYLES = new Set<CursorStyle>(["block", "bar", "underline"]);
 export const VIM_MOTION_OPERATOR_ACTIONS = deriveActionsWhere(
   KEYMAP_OPERATOR_DESCRIPTORS,
   (descriptor) => "motionOperator" in descriptor && Boolean(descriptor.motionOperator),
-) as VimMotionOperatorAction[];
+) as readonly VimMotionOperatorAction[];
 export const VIM_OPERATOR_ACTIONS = deriveActionKeys(
   KEYMAP_OPERATOR_DESCRIPTORS,
-) as VimOperatorAction[];
-export const VIM_MOTION_ACTIONS = deriveActionKeys(KEYMAP_MOTION_DESCRIPTORS) as VimMotionAction[];
+) as readonly VimOperatorAction[];
+export const VIM_MOTION_ACTIONS = deriveActionKeys(
+  KEYMAP_MOTION_DESCRIPTORS,
+) as readonly VimMotionAction[];
 export const VIM_COMMAND_ACTIONS = deriveActionKeys(
   KEYMAP_COMMAND_DESCRIPTORS,
-) as VimCommandAction[];
+) as readonly VimCommandAction[];
 const MACRO_ACTION_SET = deriveSet(KEYMAP_MACRO_DESCRIPTORS);
 const MARK_ACTION_SET = deriveSet(KEYMAP_MARK_DESCRIPTORS);
 export const VIM_STATUS_ITEMS = [
@@ -1296,7 +1298,14 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
   const remove = <K extends string>(record: Record<K, readonly string[]>): Record<K, string[]> => {
     const next = {} as Record<K, string[]>;
     for (const action of Object.keys(record) as K[]) {
-      next[action] = record[action].filter((binding) => !sequences.has(binding));
+      next[action] = record[action].filter(
+        (binding) =>
+          ![...sequences].some((sequence) => {
+            if (binding === sequence) return true;
+            if (binding.includes("+") || sequence.includes("+")) return false;
+            return binding.startsWith(sequence) || sequence.startsWith(binding);
+          }),
+      );
     }
     return next;
   };

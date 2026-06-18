@@ -7,9 +7,6 @@ export type DiagnosticActionEntry = {
   topics: readonly string[];
   description: string;
   examples: readonly string[];
-  docsAnchor: string;
-  specAnchor: string;
-  testAnchors: readonly string[];
   bindable: false;
 };
 
@@ -28,9 +25,6 @@ function entry(
     topics,
     description,
     examples,
-    docsAnchor: `diagnostic-actions:${id}`,
-    specAnchor: "openspec/specs/vim-customization-diagnostics/spec.md",
-    testAnchors: ["test/diagnostic-actions.test.ts"],
     bindable: false,
   };
 }

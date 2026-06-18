@@ -3,8 +3,8 @@
 ## Deferred
 
 - [x] Refactor `src/config.ts` clone helpers to reduce hand-written keymap/prompt-transform/UI field repetition. Context: /plan-eng-review on package-size work deferred this DRY cleanup so package artifact verification and the insert-mode fast path stay right-sized.
-- [ ] Derive keymap/action tables from shared descriptors instead of repeating motion/command/action names across config and command resolver metadata. Context: potential bundle-size and drift-reduction follow-up; measure and protect resolver behavior with equivalence tests.
-- [ ] Move docs/test-only metadata out of runtime help/action modules where possible. Context: reduce published runtime bytes while preserving docs drift guards for anchors, parser examples, and public help coverage.
+- [x] Derive keymap/action tables from shared descriptors instead of repeating motion/command/action names across config and command resolver metadata. Context: potential bundle-size and drift-reduction follow-up; measure and protect resolver behavior with equivalence tests.
+- [x] Move docs/test-only metadata out of runtime help/action modules where possible. Context: reduce published runtime bytes while preserving docs drift guards for anchors, parser examples, and public help coverage.
 - [ ] Deduplicate `src/buffer.ts` word-motion and substitution range helper logic with TDD. Context: cleanup has cursor/substitution regression risk, so keep it separate from package and input-latency work.
 - [ ] Explore compiled keymap lookup cache for normal-mode command resolution after profiling. Context: `commands.ts` currently rebuilds binding lists during lookups; follow-up should prove hotspot and cover cache invalidation/equivalence.
 

@@ -128,6 +128,17 @@ describe("normal command parser", () => {
     });
   });
 
+  test("explicit single-key binding wins over default longer prefix bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { left: ["g"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("g", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+  });
+
   test("resolves macro prefixes and targets separately from operator state", () => {
     expect(isMacroSlot("a")).toBe(true);
     expect(isMacroSlot("z")).toBe(true);

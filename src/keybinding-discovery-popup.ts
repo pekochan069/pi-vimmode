@@ -48,79 +48,6 @@ export type InspectPopupInput = {
   diagnostics?: VimDiagnostics;
 };
 
-export const READ_ONLY_POPUP_COMMANDS = [
-  {
-    command: ":help",
-    parserExample: "help",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":help <topic>",
-    parserExample: "help search",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":features",
-    parserExample: "features",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":features <query>",
-    parserExample: "features redo",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":keybindings",
-    parserExample: "keybindings",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":keybindings <query>",
-    parserExample: "keybindings redo",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":actions",
-    parserExample: "actions",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":actions <query>",
-    parserExample: "actions redo",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":keymap",
-    parserExample: "keymap",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":keymap <action>",
-    parserExample: "keymap redo",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":mapcheck <key>",
-    parserExample: "mapcheck ctrl+p",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":messages",
-    parserExample: "messages",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":vimmode inspect",
-    parserExample: "vimmode inspect",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-  {
-    command: ":vimdoctor",
-    parserExample: "vimdoctor",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
-  },
-] as const;
-
 export function isKeybindingDiscoveryPopupQuery(command: string, query?: string): boolean {
   return command === "features" && query?.trim().toLowerCase() === "keybindings";
 }
@@ -130,7 +57,6 @@ export function keybindingDiscoveryPopup(options: ResolvedVimEditorOptions): Rea
     title: "Keybinding discovery",
     source: "features",
     query: "keybindings",
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
     scrollOffset: 0,
     lines: [
       "Source-backed prompt transform keybinding recipes and presets.",
@@ -163,7 +89,6 @@ export function keybindingsPopup(
     title: trimmedQuery ? `:keybindings ${trimmedQuery}` : ":keybindings",
     source: "keybindings",
     query: trimmedQuery || undefined,
-    docsAnchor: "runtime-help:keybinding-discovery-popup",
     scrollOffset: 0,
     lines: trimmedQuery
       ? keybindingDetailLines(context, trimmedQuery)
@@ -191,7 +116,6 @@ export function runtimeHelpPopup(
     title: command.query ? `:${command.command} ${command.query}` : `:${command.command}`,
     source: command.command,
     query: command.query,
-    docsAnchor: runtimeHelpDocsAnchor(command.command),
     message,
   });
 }
@@ -217,7 +141,6 @@ export function diagnosticPopup(
     title: command.query ? `:${command.command} ${command.query}` : `:${command.command}`,
     source: command.command,
     query: command.query,
-    docsAnchor: "runtime-help:customization-diagnostics",
     message,
   });
 }
@@ -226,13 +149,8 @@ export function inspectPopup(input: InspectPopupInput): ReadOnlyPopup {
   return popupFromMessage({
     title: ":vimmode inspect",
     source: "inspect",
-    docsAnchor: "runtime-help:runtime-help",
     message: vimmodeInspectMessage(input),
   });
-}
-
-function runtimeHelpDocsAnchor(command: RuntimeHelpPopupCommand["command"]): string {
-  return command === "messages" ? "runtime-help:runtime-help" : "runtime-help:runtime-help";
 }
 
 function compactRecipeLines(): string[] {

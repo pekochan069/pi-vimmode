@@ -15,8 +15,6 @@ export type ActionKeybindingRecipeBinding = {
 export type ActionKeybindingRecipe = {
   id: VimActionKeybindingPreset;
   title: string;
-  docsAnchor: string;
-  presetDocsAnchor: string;
   summary: string;
   actions: VimActionKeymapOptions;
   expected: readonly ResolvedVimActionBinding[];
@@ -26,8 +24,6 @@ export const ACTION_KEYBINDING_RECIPES = [
   {
     id: "paragraph-editing",
     title: "paragraph editing",
-    docsAnchor: "action-keybinding-recipe:paragraph-editing",
-    presetDocsAnchor: "action-keybinding-preset:paragraph-editing",
     summary: "reflow with gq, quote with g>, and unquote with g<",
     actions: {
       "prompt.transform.reflow": ["gq"],
@@ -43,8 +39,6 @@ export const ACTION_KEYBINDING_RECIPES = [
   {
     id: "markdown-wrapping",
     title: "markdown wrapping",
-    docsAnchor: "action-keybinding-recipe:markdown-wrapping",
-    presetDocsAnchor: "action-keybinding-preset:markdown-wrapping",
     summary: "wrap prompt lines with quote/unquote and code fences",
     actions: {
       "prompt.transform.fence": ["gT"],

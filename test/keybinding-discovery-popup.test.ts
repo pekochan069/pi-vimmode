@@ -19,7 +19,6 @@ describe("keybinding discovery popups", () => {
     expect(popup).toMatchObject({
       title: ":keybindings",
       source: "keybindings",
-      docsAnchor: "runtime-help:keybinding-discovery-popup",
       scrollOffset: 0,
     });
     expect(text).not.toContain("Effective pi-vimmode keybindings");

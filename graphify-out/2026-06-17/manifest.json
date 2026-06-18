@@ -85,12 +85,12 @@
     "semantic_hash": ""
   },
   "src/commands.ts": {
-    "mtime": 1781659224.4194136,
+    "mtime": 1781663657.8401694,
     "ast_hash": "d6ef0d9fb1faa260df044212ff66e6d2",
     "semantic_hash": ""
   },
   "src/config.ts": {
-    "mtime": 1781662613.5446553,
+    "mtime": 1781663657.8401694,
     "ast_hash": "f6f7db597c526e00cb761fad3551ecf6",
     "semantic_hash": ""
   },
@@ -250,7 +250,7 @@
     "semantic_hash": ""
   },
   "test/config.test.ts": {
-    "mtime": 1781662628.6174552,
+    "mtime": 1781663657.8401694,
     "ast_hash": "70f6a0a0b8e0ab325c318a3e284407ae",
     "semantic_hash": ""
   },
@@ -1805,8 +1805,8 @@
     "semantic_hash": "cd8a037c03f2d11acce622ff9f549634"
   },
   "openspec/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1781662752.7678454,
-    "ast_hash": "160e8052aab7aa08a9d3e365c8cec4cf",
+    "mtime": 1781663657.8401694,
+    "ast_hash": "177ddd7e5d07cc5f960df2bda4617e16",
     "semantic_hash": ""
   },
   "openspec/specs/vim-macro-recording/spec.md": {
@@ -2255,18 +2255,18 @@
     "semantic_hash": ""
   },
   "src/keymap-descriptors.ts": {
-    "mtime": 1781659224.3794115,
+    "mtime": 1781663657.8401694,
     "ast_hash": "b054f207fc299a9c8fa1c2f244c9a3ae",
     "semantic_hash": ""
   },
   "test/keymap-descriptors.test.ts": {
-    "mtime": 1781659147.7827358,
+    "mtime": 1781663657.8401694,
     "ast_hash": "34f367d79d70a534ddf98307013eb85f",
     "semantic_hash": ""
   },
   "docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md": {
-    "mtime": 1781658305.6314888,
-    "ast_hash": "5192959b910380a43b2fbc0b7781b101",
+    "mtime": 1781663657.8133876,
+    "ast_hash": "a2bdcfcca19eb76bb4e07ca4d353a4fa",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-17-refactor-config-clone-helpers/.openspec.yaml": {
@@ -2294,28 +2294,23 @@
     "ast_hash": "0f70192e61bada4da8f1789a70f12111",
     "semantic_hash": ""
   },
-  ".pi/settings.json": {
-    "mtime": 1781662304.998681,
-    "ast_hash": "ef4c5e4b4677f37c225546af6e57ea2b",
-    "semantic_hash": ""
-  },
   "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/design.md": {
-    "mtime": 1781658518.442368,
+    "mtime": 1781663657.837389,
     "ast_hash": "bc65ce619eda41733b929bf38c3289c1",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/proposal.md": {
-    "mtime": 1781658575.1424494,
+    "mtime": 1781663657.839636,
     "ast_hash": "419cbef9be0462ad4b383a8067f63266",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1781658532.6486628,
+    "mtime": 1781663657.8401694,
     "ast_hash": "732a0c3d9822a90c6167bebbbc56723b",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-17-data-drive-keymap-action-tables/tasks.md": {
-    "mtime": 1781659267.376509,
+    "mtime": 1781663657.8401694,
     "ast_hash": "cc554c53d431da34f4d4484cc09c54a6",
     "semantic_hash": ""
   }

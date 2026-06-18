@@ -12,7 +12,6 @@ function popup(lineCount: number, scrollOffset = 0): ReadOnlyPopup {
   return {
     title: "Read-only output",
     source: "help",
-    docsAnchor: "runtime-help:runtime-help",
     scrollOffset,
     lines: Array.from({ length: lineCount }, (_, index) => `row ${index + 1}`),
   };
@@ -33,7 +32,6 @@ describe("read-only popup helpers", () => {
       popupFromMessage({
         title: ":messages",
         source: "messages",
-        docsAnchor: "runtime-help:runtime-help",
         message: "",
       }).lines,
     ).toEqual(["(no output)"]);
@@ -45,14 +43,12 @@ describe("read-only popup helpers", () => {
         title: ":help search",
         source: "help",
         query: "search",
-        docsAnchor: "runtime-help:runtime-help",
         message: "search help",
       }),
     ).toMatchObject({
       title: ":help search",
       source: "help",
       query: "search",
-      docsAnchor: "runtime-help:runtime-help",
       scrollOffset: 0,
       lines: ["search help"],
     });

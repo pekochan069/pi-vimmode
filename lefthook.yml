@@ -3,6 +3,7 @@ pre-commit:
   jobs:
     - name: format
       glob: "*.{js,ts,md,yml,json,jsonc}"
+      stage_fixed: true
       run: bun run format {staged_files}
 
     - name: lint

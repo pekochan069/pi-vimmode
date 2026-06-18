@@ -1,7 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
-last_updated: 2026-06-11
+last_updated: 2026-06-18
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -13,6 +13,8 @@ applies_when:
   - "Separating parser behavior from text-buffer transformations"
   - "Extracting modal editor state into a pure engine behind a Pi CustomEditor adapter"
   - "Adding configurable semantic keymaps without accepting unsupported Vim grammar"
+  - "Adding adapter-side fast paths that bypass modal snapshot construction"
+  - "Deduplicating behavior-heavy buffer helpers after characterization tests"
 tags:
   - vim-mode
   - keybindings
@@ -21,8 +23,8 @@ tags:
   - modal-engine
   - adapter-boundary
   - configurable-keymap
+  - fast-path
   - typescript
-  - bun
 ---
 
 # Finite Vim keybinding parser with pure buffer helpers
@@ -125,6 +127,10 @@ Keep the editor out of string surgery. Add pure helpers for each behavior family
 
 This makes edge cases testable without depending on terminal input, Pi cursor behavior, or render state.
 
+When refactoring duplicated helper internals, characterize behavior before deduplicating. The `dedupe-buffer-word-substitute-helpers` change first locked `w/W/e/E/b/B/ge/gE` behavior across punctuation-heavy fixtures, counted motions, prompt boundaries, and operator-motion register effects. Only after that did `src/buffer.ts` share traversal mechanics while keeping the small-word classifier distinct from whitespace-delimited WORD behavior.
+
+The same rule applies to Ex substitution helpers: share mechanics only after tests pin matching semantics, range mapping, error/no-op shape, and cursor/result contracts.
+
 ### 3. Keep operator motions separate from visual selection
 
 Visual selection helpers are inclusive because they model highlighted text. Operator motions need offset ranges. Reusing visual helpers for `dw`, `d$`, `cw`, or `y^` risks off-by-one deletes and wrong register contents.
@@ -196,6 +202,51 @@ export type ModalEffect =
 
 This keeps pure tests focused on decisions and adapter tests focused on integration smoke.
 
+### 7. Treat adapter fast paths as narrow exceptions
+
+The modal-engine boundary does not mean every insert-mode key must build a full `EditorSnapshot`. Plain text insertion is a hot path where Pi already owns the correct behavior, so `VimEditor` can delegate before snapshot construction when the adapter can prove the modal engine has nothing to do.
+
+Use a positive allowlist, not a blacklist. Keep the exact field inventory in `canFastDelegateInsertInput`; documentation should describe the contract:
+
+```ts
+function canFastDelegateInsertInput(
+  state: ModalState,
+  data: string,
+  context: FastInsertDelegateContext,
+): boolean {
+  return (
+    state.mode === "insert" &&
+    isPlainFastInsertText(data) &&
+    noModalOrUiWorkIsPending(state, context)
+  );
+}
+```
+
+The caller must provide complete adapter-owned UI context. If autocomplete, macro replay, or any modal/transient state is unknown, fall back to the modal path.
+
+Call the guard before `snapshot()` and preserve adapter-owned redo behavior inside the shared delegation helper:
+
+```ts
+if (canFastDelegateInsertInput(this.modalState, data, context)) {
+  this.delegateDefaultInput(data);
+  return;
+}
+
+const update = handleModalInput(this.modalState, this.snapshot(), options, data);
+```
+
+```ts
+private delegateDefaultInput(input: string): void {
+  const before = this.redoSnapshot();
+  super.handleInput(input);
+  this.clearRedoAfterTextChange(before);
+}
+```
+
+The fast path should only accept a single printable character when no modal, UI, macro, Ex/search/help, block-insert, redo-sensitive, or transient state needs modal handling. Everything else keeps using the existing modal path.
+
+Tests should prove both sides of the boundary: safe insert text avoids snapshot construction, while unsafe cases still preserve existing modal semantics for `Esc`, macros, transient Ex messages, redo branch clearing, and search highlight state.
+
 ## Why This Matters
 
 Finite prompt-editor Vim support fails when parser, buffer model, and editor dispatch merge into one switch statement:
@@ -206,7 +257,7 @@ Finite prompt-editor Vim support fails when parser, buffer model, and editor dis
 - edge cases require brittle integration tests instead of cheap unit tests,
 - undocumented Vim differences create churn around unsupported behavior.
 
-The parser → buffer helpers → modal engine → adapter split keeps behavior explicit and makes future bindings easier to add safely.
+The parser → buffer helpers → modal engine → adapter split keeps behavior explicit and makes future bindings easier to add safely. Characterization-before-dedup keeps refactors from flattening important semantic differences such as Vim small-word punctuation runs versus uppercase WORD whitespace spans.
 
 The modal engine extraction adds another payoff: a failing command can be isolated to pure modal state, buffer math, adapter effect application, rendering, cursor restoration, or terminal hints instead of one large `CustomEditor` subclass.
 
@@ -218,7 +269,9 @@ The modal engine extraction adds another payoff: a failing command can be isolat
 - Adding prompt text transforms that update the unnamed register.
 - Implementing Vim-like behavior with intentionally limited scope.
 - Testing modal editor behavior where most cases can be proven below the TUI integration layer.
+- Deduplicating similar buffer traversals whose user-visible semantics differ by classifier, direction, count, or range shape.
 - Refactoring a `CustomEditor` subclass that mixes product semantics with Pi runtime integration.
+- Adding hot-path adapter delegation without changing modal semantics.
 
 ## Examples
 
@@ -280,6 +333,35 @@ Manual checks must respect Vim range semantics. `2d2f,` on `a,b,c,d` should no-o
 
 Avoid exploding editor integration tests for every parser combination when parser, buffer, and modal tests already cover the matrix.
 
+### Characterization before helper deduplication
+
+Before extracting shared traversal helpers, write side-by-side tests that prove the duplicate branches are similar mechanically but distinct semantically. For word motions, lowercase and uppercase motions should use the same fixture with different expected stops:
+
+```ts
+const text = "foo/bar baz qux";
+expect(wordForwardPosition(text, p(0, 0))).toEqual(p(0, 3)); // w stops at slash
+expect(wordForwardBigPosition(text, p(0, 0))).toEqual(p(0, 8)); // W skips to baz
+```
+
+Then cover operator ranges, register text, cursor placement, and no-op behavior so `deleteByMotion`, `change`, and `yankByMotion` continue to observe the same targets after the private helper shape changes.
+
+For substitution internals, keep tests at the operation contract: bounded multi-line ranges, global and non-global matching, match counts, preview ranges, cursor clamping, regex error handling, no-match behavior, identical replacements, and `changed` flags. This allows private helpers to change while preserving the Ex command surface.
+
+### Adapter fast-path tests
+
+For insert-mode performance shortcuts, add both predicate and live adapter tests:
+
+```ts
+expect(canFastDelegateInsertInput({ mode: "insert" }, "a")).toBe(true);
+expect(canFastDelegateInsertInput({ mode: "insert" }, "\x1b")).toBe(false);
+expect(canFastDelegateInsertInput({ mode: "insert" }, "ab")).toBe(false);
+expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isAutocompleteOpen: true })).toBe(
+  false,
+);
+```
+
+Live `VimEditor` coverage should make snapshot avoidance observable at the adapter seam, then mirror that with fallback tests for `Esc`, macro record/replay, transient Ex messages, redo clearing, and `searchHighlight` so a future broadening of the allowlist fails loudly.
+
 ### Adapter effect interpreter
 
 Keep `VimEditor` as an interpreter over modal effects:
@@ -288,10 +370,10 @@ Keep `VimEditor` as an interpreter over modal effects:
 private applyEffect(effect: ModalEffect): void {
   switch (effect.type) {
     case "delegate":
-      super.handleInput(effect.input);
+      this.delegateDefaultInput(effect.input);
       return;
     case "adapterCommand":
-      super.handleInput(KEY[effect.command]);
+      this.applyAdapterCommand(effect.command);
       return;
     case "edit":
       this.applyEdit(effect.result);
@@ -311,13 +393,17 @@ private applyEffect(effect: ModalEffect): void {
 
 The exact effect union can grow, but each new effect should name one adapter responsibility instead of smuggling Pi calls into the modal module.
 
-Validation for the working implementation:
+Validation for the modal-engine extraction and configurable keymap work:
 
 - `bun test` — 98 passing tests after configurable keymap/UI work
 - `bun run check-types`
 - `bun run lint`
 - `bun run format:check`
 - `git diff --check`
+
+Validation for the insert fast-path update used the standard test, type, lint, format, and OpenSpec checks. Local performance evidence lives in `scripts/measure-insert-fast-path.ts`; treat it as before/after evidence only, not a CI timing threshold.
+
+Validation for the buffer helper deduplication used `bun test`, `bun test test/buffer.test.ts`, `bun run check-types`, `bun run lint`, `bun run format:check`, `openspec validate --specs --strict`, `openspec validate dedupe-buffer-word-substitute-helpers --type change --strict`, and `graphify update .`.
 
 ## Related
 
@@ -326,9 +412,10 @@ Validation for the working implementation:
 - `src/buffer.ts` — pure text/register helpers
 - `src/modal/engine.ts` — modal input engine for insert, normal, visual, and visual-line modes
 - `src/modal/state.ts` — modal state initialization, transient cleanup, and transition effects
-- `src/modal/types.ts` — snapshot, state, update, and effect contracts between modal code and adapter
+- `src/modal/types.ts` — snapshot, state, update, effect, and fast-path context contracts between modal code and adapter
 - `src/modal/view.ts` — TUI-free mode/status derivation
 - `src/vim-editor.ts` — Pi `CustomEditor` adapter and effect interpreter
 - `test/commands.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts` — layered test coverage
+- `scripts/measure-insert-fast-path.ts` — local insert-path measurement for snapshot and delegation cost
 - `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — concrete bug where line-command repeat state and live option cloning drifted from this architecture
 - `docs/solutions/developer-experience/pi-vimmode-auto-activation-2026-05-26.md` — same editor component, focused on lifecycle/activation reliability rather than keybinding behavior

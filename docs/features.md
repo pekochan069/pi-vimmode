@@ -95,6 +95,7 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
 - In insert mode, non-`Esc` keys delegate to Pi.
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
+- `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 
 Example:
 
@@ -110,23 +111,24 @@ Enter        -> submit through Pi
 
 <!-- runtime-help:motions -->
 
-| Key                   | Action                                  | Notes                                                            |
-| --------------------- | --------------------------------------- | ---------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                       |
-| `0` / `$`             | line start / line end                   | Current prompt line.                                             |
-| `^` / `_`             | first non-blank on line                 | Both map to same action.                                         |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.  |
-| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.    |
-| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.       |
-| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                   |
-| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line. |
-| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                               |
-| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                               |
-| `;` / `,`             | repeat char search                      | Same/opposite direction.                                         |
+| Key                   | Action                                  | Notes                                                             |
+| --------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                        |
+| `0` / `$`             | line start / line end                   | Current prompt line.                                              |
+| `^` / `_`             | first non-blank on line                 | Both map to same action.                                          |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.   |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.     |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.        |
+| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                    |
+| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount. |
+| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.  |
+| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                |
+| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                |
+| `;` / `,`             | repeat char search                      | Same/opposite direction.                                          |
 
-Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`.
+Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
 
-Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior; this change only adds explicit WORD actions and previous-end motions.
+Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, full-page scroll keys such as `<C-f>`/`<C-b>`, viewport recentering such as `zz`/`zt`/`zb`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior.
 
 Example:
 
@@ -232,7 +234,7 @@ d/foo⏎    delete from cursor through next literal foo match
 
 Successful `d`/`c` motion and character-search targets record dot-repeat. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
 
-Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
+Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. `Ctrl-D` and `Ctrl-U` are motions, not operator targets; `d<C-d>` and `y<C-u>` are unsupported safe no-ops. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
 
 ## Text objects
 
@@ -759,6 +761,7 @@ Rendering behavior:
 - Active macro recording shows `REC {slot}`.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
+- Insert-mode autocomplete rows remain Pi-owned and visible; Vim status feedback renders on a separate row while completion UI is open.
 - Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row by default.
 - `piVimMode.ui.workbench.reservedRows` can reserve 0-5 width-safe workbench rows; active feedback uses the first reserved row and blank reserved rows keep the prompt viewport height stable.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.

@@ -39,7 +39,6 @@ export function isDelegatedResetKey(data: string): boolean {
 const PROTECTED_PI_DELEGATE_KEYS = [
   "tab",
   "shift+enter",
-  "ctrl+d",
   "ctrl+l",
   "ctrl+p",
   "shift+ctrl+p",

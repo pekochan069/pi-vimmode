@@ -16,7 +16,6 @@ export type ReadOnlyPopup = {
   lines: readonly string[];
   source: ReadOnlyPopupSource;
   query?: string;
-  docsAnchor: string;
   scrollOffset: number;
 };
 
@@ -32,14 +31,12 @@ export function popupFromMessage(input: {
   title: string;
   source: ReadOnlyPopupSource;
   query?: string;
-  docsAnchor: string;
   message: string;
 }): ReadOnlyPopup {
   return {
     title: input.title,
     source: input.source,
     query: input.query,
-    docsAnchor: input.docsAnchor,
     scrollOffset: 0,
     lines: splitPopupMessage(input.message),
   };

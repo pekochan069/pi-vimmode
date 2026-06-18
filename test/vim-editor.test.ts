@@ -1,6 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import type { ModalState } from "../src/modal/types.ts";
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
@@ -53,7 +54,15 @@ function createEditor(
       hardwareCursorChanges.push(visible);
     },
   } as any;
-  const theme = { borderColor: (text: string) => text, selectList: {} } as any;
+  const theme = {
+    borderColor: (text: string) => text,
+    selectList: {
+      selectedText: (text: string) => text,
+      description: (text: string) => text,
+      noMatch: (text: string) => text,
+      scrollInfo: (text: string) => text,
+    },
+  } as any;
   const keybindings = {
     matches() {
       return false;
@@ -79,6 +88,34 @@ function createEditor(
 
 function expectRenderedWidth(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+}
+
+async function flushAutocomplete() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function installAutocomplete(editor: VimEditor, values: readonly string[], maxVisible?: number) {
+  editor.setAutocompleteProvider({
+    async getSuggestions(lines: string[], cursorLine: number, cursorCol: number) {
+      const line = lines[cursorLine] ?? "";
+      return {
+        prefix: line.slice(0, cursorCol),
+        items: values.map((value) => ({ value, label: value })),
+      };
+    },
+    applyCompletion(
+      lines: string[],
+      cursorLine: number,
+      cursorCol: number,
+      item: { value: string },
+    ) {
+      const next = [...lines];
+      next[cursorLine] = item.value;
+      return { lines: next, cursorLine, cursorCol: item.value.length };
+    },
+  });
+  if (maxVisible !== undefined) editor.setAutocompleteMaxVisible(maxVisible);
 }
 
 function typeKeys(editor: Pick<VimEditor, "handleInput">, keys: readonly string[]) {
@@ -118,11 +155,187 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("normal");
   });
 
+  test("constructor clones caller-owned nested keymap options", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: ["K"] } } },
+    }).options;
+    const { editor } = createEditor(options);
+    (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, "Z");
+
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", "K"]);
+
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getVimMode()).toBe("insert");
+  });
+
+  test("plain insert text uses fast path without full snapshot", () => {
+    const { editor } = createEditor();
+    (editor as unknown as { getLines: () => string[] }).getLines = () => {
+      throw new Error("snapshot should not be constructed for safe insert text");
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+  });
+
+  test("insert escape stays on modal path and exits insert mode", () => {
+    const { editor } = createEditor();
+    editor.handleInput("a");
+    editor.handleInput("\x1b");
+    expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("insert fast path stays disabled while recording and replaying macros", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    typeKeys(editor, ["q", "a", "i", "X", "\x1b", "q"]);
+    expect((editor as unknown as { modalState: ModalState }).modalState.macros?.a).toEqual([
+      "i",
+      "X",
+      "\x1b",
+    ]);
+
+    editor.setText("");
+    typeKeys(editor, ["@", "a"]);
+    expectEditorState(editor, { text: "X", mode: "normal" });
+  });
+
+  test("transient Ex message clears through modal path while insert text is preserved", () => {
+    const { editor } = createEditor();
+    (editor as unknown as { modalState: ModalState }).modalState = {
+      mode: "insert",
+      exMessage: { kind: "info", text: "done" },
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+    expect((editor as unknown as { modalState: ModalState }).modalState.exMessage).toBeUndefined();
+  });
+
+  test("fast-path insert text clears redo history after text changes", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("abc");
+    typeKeys(editor, ["g", "g", "x", "u", "i"]);
+    expect(editor.getText()).toBe("abc");
+
+    editor.handleInput("z");
+    expect(editor.getText()).toBe("zabc");
+    typeKeys(editor, ["\x1b", "\x12"]);
+    expect(editor.getText()).toBe("zabc");
+  });
+
+  test("search highlight state uses modal fallback before insert delegation", () => {
+    const { editor } = createEditor();
+    const state = (editor as unknown as { modalState: ModalState }).modalState;
+    (editor as unknown as { modalState: ModalState }).modalState = {
+      ...state,
+      mode: "insert",
+      searchHighlight: { query: "a", current: { line: 0, col: 0 } },
+    };
+    let snapshotReads = 0;
+    const originalGetLines = editor.getLines.bind(editor);
+    (editor as unknown as { getLines: () => string[] }).getLines = () => {
+      snapshotReads += 1;
+      return originalGetLines();
+    };
+
+    editor.handleInput("a");
+    expect(editor.getText()).toBe("a");
+    expect(snapshotReads).toBeGreaterThan(0);
+    expect((editor as unknown as { modalState: ModalState }).modalState.searchHighlight).toEqual({
+      query: "a",
+      current: { line: 0, col: 0 },
+    });
+  });
+
   test("can start in configured normal mode", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     expect(editor.getVimMode()).toBe("normal");
     editor.handleInput("q");
     expect(editor.getText()).toBe("");
+  });
+
+  test("insert autocomplete with one visible row keeps completion and INSERT status visible", async () => {
+    const { editor } = createEditor();
+    installAutocomplete(editor, ["/one"], 1);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    const lines = editor.render(40);
+    const rendered = lines.join("\n");
+
+    expect(editor.isShowingAutocomplete()).toBe(true);
+    expect(rendered).toContain("/one");
+    expect(rendered).toContain("INSERT");
+    expect(lines.at(-2)).toContain("/one");
+    expect(lines.at(-1)).toContain("INSERT");
+  });
+
+  test("insert autocomplete with multiple visible rows keeps every completion row", async () => {
+    const { editor } = createEditor();
+    installAutocomplete(editor, ["/alpha", "/bravo", "/charlie"], 3);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    const lines = editor.render(48);
+    const rendered = lines.join("\n");
+
+    expect(rendered).toContain("/alpha");
+    expect(rendered).toContain("/bravo");
+    expect(rendered).toContain("/charlie");
+    expect(rendered).toContain("INSERT");
+  });
+
+  test("insert autocomplete render stays width-safe at narrow terminal width", async () => {
+    const { editor } = createEditor();
+    installAutocomplete(editor, ["/very-long-completion-value"], 1);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    expectRenderedWidth(editor.render(12), 12);
+  });
+
+  test("disabled mode feedback does not hide autocomplete rows", async () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      ui: {
+        ...DEFAULT_VIM_OPTIONS.ui!,
+        mode: { ...DEFAULT_VIM_OPTIONS.ui!.mode, enabled: false },
+      },
+    });
+    installAutocomplete(editor, ["/hidden-mode"], 1);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    const rendered = editor.render(40).join("\n");
+
+    expect(rendered).toContain("/hidden-mode");
+    expect(rendered).not.toContain("INSERT");
+  });
+
+  test("autocomplete-open render keeps workbench rows for search and Ex states", async () => {
+    const cases: Array<{ state: Partial<ModalState>; expected: string }> = [
+      { state: { pendingSearch: { direction: "forward", query: "abc" } }, expected: "/abc" },
+      { state: { pendingSearch: { direction: "backward", query: "abc" } }, expected: "?abc" },
+      { state: { pendingEx: { command: "set", sourceMode: "normal" } }, expected: ":set" },
+      { state: { exMessage: { kind: "info", text: "done" } }, expected: "done" },
+    ];
+
+    for (const item of cases) {
+      const { editor } = createEditor();
+      installAutocomplete(editor, ["/workbench-row"], 1);
+      editor.handleInput("/");
+      await flushAutocomplete();
+      const state = (editor as unknown as { modalState: ModalState }).modalState;
+      (editor as unknown as { modalState: ModalState }).modalState = { ...state, ...item.state };
+
+      const lines = editor.render(44);
+      const rendered = lines.join("\n");
+      expect(rendered).toContain("/workbench-row");
+      expect(rendered).toContain("INSERT");
+      expect(lines.at(-1)).toContain(item.expected);
+      expectRenderedWidth(lines, 44);
+    }
   });
 
   test("renders active and transient Ex rows width-safely below prompt", () => {

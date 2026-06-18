@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change make-vimmode-configurable. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
 The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
@@ -135,16 +137,21 @@ The Vim editor SHALL expose newly supported roadmap keybindings through the sema
 
 ### Requirement: Explicit control-key ownership is limited
 
-The Vim keymap configuration SHALL continue protecting Pi-owned shortcuts while allowing the extension to explicitly own `Ctrl+A` and `Ctrl+X` for normal-mode numeric adjustment.
+The Vim keymap configuration SHALL continue protecting Pi-owned shortcuts while allowing the extension to explicitly own `Ctrl+A` and `Ctrl+X` for normal-mode numeric adjustment and `Ctrl+D` and `Ctrl+U` for normal/visual-mode scroll motions.
 
 #### Scenario: Numeric adjustment controls are handled by Vim mode
 
 - **WHEN** the editor is in normal mode and the user presses `Ctrl+A` or `Ctrl+X` with default keymap settings
 - **THEN** the Vim editor treats the input as numeric adjustment rather than delegating it to Pi
 
+#### Scenario: Scroll controls are handled by Vim mode
+
+- **WHEN** the editor is in normal or visual mode and the user presses `Ctrl+D` or `Ctrl+U` with default keymap settings
+- **THEN** the Vim editor treats the input as prompt-local half-page scroll motion rather than delegating it to Pi
+
 #### Scenario: Insert mode remains Pi-owned for control shortcuts
 
-- **WHEN** the editor is in insert mode and the user presses `Ctrl+A`, `Ctrl+X`, or another Pi control shortcut
+- **WHEN** the editor is in insert mode and the user presses `Ctrl+A`, `Ctrl+X`, `Ctrl+D`, `Ctrl+U`, or another Pi control shortcut
 - **THEN** input delegates to Pi default editor behavior unless that insert-mode shortcut is explicitly supported by pi-vimmode
 
 #### Scenario: Other protected shortcuts remain protected
@@ -742,3 +749,136 @@ The Vim keymap configuration SHALL expose WORD and previous-end word motions as 
 - **WHEN** a live `VimEditor` is constructed with resolved keymap options that include configured WORD or previous-end motion bindings
 - **THEN** the editor uses those bindings without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
 
+### Requirement: Built-in keymap metadata remains single-source consistent
+
+The Vim keymap configuration SHALL keep built-in semantic action names, default key sequences, validation allow-lists, command resolver mappings, and diagnostics-facing labels consistent from one typed built-in metadata source while preserving existing `piVimMode.keymap` behavior.
+
+#### Scenario: Default keymap remains equivalent
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting
+- **THEN** the resolved keymap exposes the same default operator, motion, command, macro, mark, text-object, operator-motion, and action bindings as before this change
+
+#### Scenario: Config validation uses the same semantic actions
+
+- **WHEN** `piVimMode.keymap` configures any supported semantic operator, motion, command, macro, mark, text-object, or operator-motion action
+- **THEN** settings resolution accepts that action according to the existing field-specific validation rules and preserves valid sibling fields
+
+#### Scenario: Unsupported action still falls back safely
+
+- **WHEN** `piVimMode.keymap` contains an unsupported action name, unsupported key shape, protected shortcut, duplicate binding, or conflicting binding
+- **THEN** settings resolution ignores or rejects only the invalid field, records a warning, preserves valid sibling fields, and keeps session startup working
+
+#### Scenario: Command resolver maps match default semantic bindings
+
+- **WHEN** the editor resolves default normal-mode operators, motions, line commands, character-search commands, search commands, macro prefixes, mark prefixes, and text-object prefixes
+- **THEN** command parsing returns the same finite semantic results as before this change, including pending-prefix and invalid-key behavior
+
+#### Scenario: Descriptor-derived tables do not add user-visible behavior
+
+- **WHEN** users keep existing global or project settings
+- **THEN** no new keybindings, recursive mappings, timeout behavior, Vimscript behavior, or Neovim-specific behavior becomes available as a side effect of the table refactor
+
+### Requirement: Descriptor-derived keymap tables are validated by equivalence tests
+
+The change SHALL include automated tests that prove descriptor-derived keymap data remains equivalent to the existing public keymap contract.
+
+#### Scenario: Automated equivalence validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover descriptor/default keymap equivalence, supported-action validation, unsupported-action fallback, legacy operator and motion map equivalence, command classification equivalence, protected shortcut handling, and conflict diagnostics
+
+#### Scenario: Typecheck validates descriptor coverage
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** TypeScript verifies descriptor records cover the public semantic action unions without unsupported action keys
+
+### Requirement: Cached keymap lookups preserve semantic command resolution
+
+The Vim keymap configuration SHALL allow normal-mode command resolution to use cached or compiled lookup data while preserving the existing finite semantic parser contract for resolved keymaps.
+
+#### Scenario: Default keymap resolution remains equivalent
+
+- **WHEN** the editor resolves default normal-mode operators, motions, commands, command prefixes, counts, search commands, character-search commands, text objects, and prompt-transform action bindings
+- **THEN** command resolution returns the same semantic results and pending-state behavior as the uncached resolver contract
+
+#### Scenario: Configured keymap resolution remains equivalent
+
+- **WHEN** `piVimMode.keymap` configures supported operators, motions, commands, text-object keys, operator-motion matrices, or prompt-transform action bindings
+- **THEN** command resolution uses the active resolved keymap and preserves explicit override precedence, finite multi-key prefixes, invalid-key handling, and accepted action args
+
+#### Scenario: Operator-pending grammar remains scoped
+
+- **WHEN** an operator is pending and the next key could also be part of an unrelated longer top-level key sequence
+- **THEN** the resolver interprets the key through operator-pending grammar before generic top-level prefix matching
+
+#### Scenario: Duplicate sequences remain deterministic
+
+- **WHEN** a directly supplied resolved keymap contains the same sequence in multiple resolver groups
+- **THEN** command resolution keeps the same deterministic first-match behavior as before this change and does not fail session startup
+
+### Requirement: Compiled keymap cache is scoped to resolved keymap identity
+
+The Vim keymap resolver SHALL scope cached lookup data to each `ResolvedVimKeymap` object identity so different active keymaps do not share stale command bindings.
+
+#### Scenario: Distinct keymaps resolve same sequence differently
+
+- **WHEN** two different resolved keymap objects bind the same key sequence to different supported semantic actions
+- **THEN** resolving that sequence against each keymap returns the action for that specific keymap object
+
+#### Scenario: Settings refresh uses new keymap data
+
+- **WHEN** a later settings resolution produces a new resolved keymap object after an earlier keymap has already been used for command resolution
+- **THEN** subsequent command resolution uses the later keymap data instead of stale lookup data from the earlier keymap
+
+#### Scenario: Default and custom keymaps can be interleaved
+
+- **WHEN** command resolution alternates between the default keymap and one or more custom resolved keymaps
+- **THEN** each call resolves against the keymap provided for that call without cross-keymap contamination
+
+### Requirement: Resolver performance work is validated without user-visible behavior changes
+
+The change SHALL validate resolver performance work with tests and profiling evidence while keeping public keymap behavior unchanged.
+
+#### Scenario: Automated semantic validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover cached resolver equivalence for default commands, configured bindings, prefix precedence, operator motions, operator text objects, operator search, character search, counts, prompt-transform action bindings, invalid pending input, and distinct keymap identities
+
+#### Scenario: Typecheck validates cached lookup types
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** TypeScript validates the compiled lookup structures without exposing unsupported public keymap API
+
+#### Scenario: No documentation update is required
+
+- **WHEN** users read `docs/features.md` or `docs/settings.md`
+- **THEN** no new keybinding, setting, command syntax, or Vim parity claim is introduced by the cache refactor
+
+### Requirement: Scroll motions participate in semantic keymap configuration
+
+The Vim editor SHALL expose prompt-local half-page scroll motions through the semantic keymap model while preserving finite deterministic key resolution.
+
+#### Scenario: Default scroll keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal or visual mode
+- **THEN** the resolved keymap binds `halfPageDown` to `<C-d>` and `halfPageUp` to `<C-u>`
+
+#### Scenario: Configured scroll motion key is used
+
+- **WHEN** `piVimMode.keymap.motions.halfPageDown` or `piVimMode.keymap.motions.halfPageUp` is set to a valid key sequence
+- **THEN** that key sequence performs the matching scroll motion in normal and visual contexts where motions are supported
+
+#### Scenario: Scroll motions are not default operator motions
+
+- **WHEN** no `piVimMode.keymap.operatorMotions` setting is configured
+- **THEN** `delete`, `change`, and `yank` do not treat `<C-d>` or `<C-u>` as supported operator-motion targets
+
+#### Scenario: Scroll operator-motion config is safe
+
+- **WHEN** `piVimMode.keymap.operatorMotions` attempts to include `halfPageDown` or `halfPageUp` for `delete`, `change`, or `yank`
+- **THEN** the unsupported operator-motion entry is ignored or rejected with a warning and does not corrupt prompt text or registers
+
+#### Scenario: Settings docs document scroll motion configuration
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents the `halfPageDown` and `halfPageUp` motion action names, defaults, and operator-motion limitation

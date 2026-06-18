@@ -3,6 +3,7 @@ import { matchesKey, parseKey } from "@earendil-works/pi-tui";
 import type { VimDiagnostics, VimOperatorAction } from "../types.ts";
 import type {
   EditorSnapshot,
+  FastInsertDelegateContext,
   ModalEffect,
   ModalOptions,
   ModalState,
@@ -106,6 +107,39 @@ function delegateProtectedShortcut(
   const cleared = clearPending(state);
   const next = withNoopFeedback(cleared, options, protectedShortcutMessage(input));
   return withEffects(next, [{ type: "delegate", input }, { type: "invalidate" }]);
+}
+
+function isPlainFastInsertText(data: string): boolean {
+  const chars = Array.from(data);
+  if (chars.length !== 1) return false;
+  const codePoint = chars[0]?.codePointAt(0) ?? 0;
+  return codePoint >= 32 && codePoint !== 127;
+}
+
+export function canFastDelegateInsertInput(
+  state: ModalState,
+  data: string,
+  context: FastInsertDelegateContext = {},
+): boolean {
+  return (
+    state.mode === "insert" &&
+    isPlainFastInsertText(data) &&
+    !context.isAutocompleteOpen &&
+    !context.isMacroReplaying &&
+    !state.visualAnchor &&
+    !state.pending &&
+    !state.blockInsert &&
+    !state.recordingSlot &&
+    !state.pendingMacro &&
+    !state.pendingRegister &&
+    !state.pendingMark &&
+    !state.pendingWorkbench &&
+    !state.pendingSearch &&
+    !state.pendingEx &&
+    !state.exMessage &&
+    !state.helpPopup &&
+    !state.searchHighlight
+  );
 }
 
 function handleInsertInput(

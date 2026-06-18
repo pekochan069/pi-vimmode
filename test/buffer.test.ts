@@ -39,6 +39,7 @@ import {
   joinLineWithNext,
   matchingPairPosition,
   lineMarkPosition,
+  moveByPromptLines,
   navigateBuffer,
   normalizeBufferPosition,
   openLineAbove,
@@ -94,6 +95,16 @@ describe("prompt buffer operation API", () => {
     expect(normalizeBufferPosition("one\ntwo", p(9, 9))).toEqual(p(1, 3));
   });
 
+  test("moves by prompt lines with cursor clamping", () => {
+    const text = "zero\none\ntwo\nshrt\nfour";
+    expect(moveByPromptLines(text, p(1, 2), 2)).toEqual(p(3, 2));
+    expect(moveByPromptLines(text, p(1, 2), -1)).toEqual(p(0, 2));
+    expect(moveByPromptLines(text, p(1, 2), 4)).toEqual(p(4, 2));
+    expect(moveByPromptLines(text, p(0, 99), 3)).toEqual(p(3, 4));
+    expect(moveByPromptLines(text, p(0, 0), -5)).toEqual(p(0, 0));
+    expect(moveByPromptLines("", p(9, 9), 3)).toEqual(p(0, 0));
+  });
+
   test("substitutes literal text across a line range and reports counts", () => {
     const result = substituteLineRangeLiteral("foo foo\nfoo\nbar", {
       range: { startLine: 0, endLine: 1 },
@@ -104,12 +115,39 @@ describe("prompt buffer operation API", () => {
       originalCursor: p(0, 7),
     });
     expect(result.matches).toBe(2);
+    expect(result.ranges).toEqual([
+      { start: p(0, 0), end: p(0, 2) },
+      { start: p(1, 0), end: p(1, 2) },
+    ]);
     expect(result.edit).toMatchObject({
       text: "qux foo\nqux\nbar",
       cursor: p(0, 7),
       changed: true,
     });
     expect(result.edit.register).toBeUndefined();
+  });
+
+  test("substitutes literal text over clamped ranges and clamps cursor after length changes", () => {
+    const result = substituteLineRangeLiteral("keep\nfoo foo\nfoo tail", {
+      range: { startLine: -10, endLine: 99 },
+      pattern: "foo",
+      replacement: "x",
+      global: true,
+      ignoreCase: false,
+      originalCursor: p(2, 99),
+    });
+
+    expect(result.matches).toBe(3);
+    expect(result.ranges).toEqual([
+      { start: p(1, 0), end: p(1, 2) },
+      { start: p(1, 4), end: p(1, 6) },
+      { start: p(2, 0), end: p(2, 2) },
+    ]);
+    expect(result.edit).toMatchObject({
+      text: "keep\nx x\nx tail",
+      cursor: p(2, 6),
+      changed: true,
+    });
   });
 
   test("supports global, case-insensitive, empty replacement, and non-overlapping matches", () => {
@@ -171,6 +209,27 @@ describe("prompt buffer operation API", () => {
     ).toMatchObject({ ok: true, matches: 1, edit: { text: "&-$1-\\1", changed: true } });
   });
 
+  test("substitutes bounded regex patterns across lines with ranges and cursor clamp", () => {
+    expect(
+      substituteLineRangeRegex("one 1\ntwo 22\nthree 333", {
+        range: { startLine: 1, endLine: 2 },
+        pattern: "\\d+",
+        replacement: "#",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(2, 99),
+      }),
+    ).toMatchObject({
+      ok: true,
+      matches: 2,
+      ranges: [
+        { start: p(1, 4), end: p(1, 5) },
+        { start: p(2, 6), end: p(2, 8) },
+      ],
+      edit: { text: "one 1\ntwo #\nthree #", cursor: p(2, 7), changed: true },
+    });
+  });
+
   test("rejects invalid bounded regex substitutions without edit effects", () => {
     expect(
       substituteLineRangeRegex("foo", {
@@ -193,6 +252,39 @@ describe("prompt buffer operation API", () => {
         originalCursor: p(0, 0),
       }),
     ).toEqual({ ok: false, message: "Regex pattern cannot be empty" });
+
+    expect(
+      substituteLineRangeRegex("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: ".*?",
+        replacement: "bar",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toEqual({ ok: false, message: "Regex pattern cannot match empty text" });
+
+    expect(
+      substituteLineRangeRegex("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "a".repeat(257),
+        replacement: "bar",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toEqual({ ok: false, message: "Regex pattern too long" });
+
+    expect(
+      substituteLineRangeRegex("a".repeat(10_001), {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "a",
+        replacement: "b",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 0),
+      }),
+    ).toEqual({ ok: false, message: "Regex match count exceeded" });
   });
 
   test("reports identical replacements and pattern-not-found without edit effects", () => {
@@ -217,6 +309,21 @@ describe("prompt buffer operation API", () => {
         originalCursor: p(0, 2),
       }),
     ).toMatchObject({ matches: 0, edit: { text: "foo", cursor: p(0, 2), changed: false } });
+
+    expect(
+      substituteLineRangeRegex("foo", {
+        range: { startLine: 0, endLine: 0 },
+        pattern: "foo",
+        replacement: "foo",
+        global: true,
+        ignoreCase: false,
+        originalCursor: p(0, 2),
+      }),
+    ).toMatchObject({
+      ok: true,
+      matches: 1,
+      edit: { text: "foo", cursor: p(0, 2), changed: false },
+    });
   });
 
   test("resolves local mark positions safely", () => {
@@ -588,6 +695,32 @@ describe("operator-motion helpers", () => {
     expect(wordEndPosition(text, p(0, 0))).toEqual(p(0, 2));
     expect(wordEndPosition(text, p(0, 3))).toEqual(p(0, 6));
     expect(wordEndPosition(text, p(0, 4))).toEqual(p(0, 6));
+
+    expect(wordForwardPosition("--flag value", p(0, 0))).toEqual(p(0, 2));
+    expect(wordEndPosition("--flag value", p(0, 0))).toEqual(p(0, 1));
+    expect(wordBackwardPosition("--flag value", p(0, 8))).toEqual(p(0, 7));
+    expect(wordPreviousEndPosition("--flag value", p(0, 8))).toEqual(p(0, 5));
+
+    expect(wordForwardPosition("/tmp/a-b next", p(0, 0))).toEqual(p(0, 1));
+    expect(wordForwardPosition("/tmp/a-b next", p(0, 1))).toEqual(p(0, 4));
+    expect(wordForwardPosition("/tmp/a-b next", p(0, 4))).toEqual(p(0, 5));
+    expect(wordForwardPosition("/tmp/a-b next", p(0, 5))).toEqual(p(0, 6));
+    expect(wordForwardPosition("/tmp/a-b next", p(0, 6))).toEqual(p(0, 7));
+  });
+
+  test("keeps WORD navigation whitespace-delimited on punctuation-heavy text", () => {
+    expect(wordForwardBigPosition("foo/bar baz qux", p(0, 0))).toEqual(p(0, 8));
+    expect(wordEndBigPosition("foo/bar baz qux", p(0, 0))).toEqual(p(0, 6));
+    expect(wordBackwardBigPosition("foo/bar baz qux", p(0, 12))).toEqual(p(0, 8));
+    expect(wordPreviousEndBigPosition("foo/bar baz qux", p(0, 12))).toEqual(p(0, 10));
+
+    expect(wordForwardBigPosition("--flag value", p(0, 0))).toEqual(p(0, 7));
+    expect(wordEndBigPosition("--flag value", p(0, 0))).toEqual(p(0, 5));
+    expect(wordBackwardBigPosition("--flag value", p(0, 8))).toEqual(p(0, 7));
+
+    expect(wordForwardBigPosition("/tmp/a-b next", p(0, 0))).toEqual(p(0, 9));
+    expect(wordEndBigPosition("/tmp/a-b next", p(0, 0))).toEqual(p(0, 7));
+    expect(wordPreviousEndBigPosition("/tmp/a-b next", p(0, 9))).toEqual(p(0, 7));
   });
 
   test("supports previous word-end and previous WORD-end navigation", () => {
@@ -596,19 +729,37 @@ describe("operator-motion helpers", () => {
     expect(wordPreviousEndBigPosition(text, p(0, 17))).toEqual(p(0, 15));
     expect(wordPreviousEndPosition(text, p(0, 10))).toEqual(p(0, 9));
     expect(wordPreviousEndPosition(text, p(0, 17), 2)).toEqual(p(0, 10));
+    expect(wordPreviousEndBigPosition(text, p(0, 17), 2)).toEqual(p(0, 4));
     expect(wordPreviousEndPosition(text, p(0, 0))).toEqual(p(0, 0));
+    expect(wordPreviousEndBigPosition(text, p(0, 0))).toEqual(p(0, 0));
+    expect(wordForwardPosition(text, p(0, 0), 99)).toEqual(p(1, 4));
+    expect(wordForwardBigPosition(text, p(0, 0), 99)).toEqual(p(1, 4));
   });
 
   test("supports WORD and previous-end operator motion ranges", () => {
     expect(deleteByMotion("run --foo=bar /tmp/a-b", p(0, 0), "W")).toMatchObject({
       text: "--foo=bar /tmp/a-b",
+      cursor: p(0, 0),
       register: { type: "char", text: "run " },
+      changed: true,
     });
     expect(deleteByMotion("run --foo=bar /tmp/a-b", p(0, 4), "E")).toMatchObject({
       text: "run  /tmp/a-b",
+      cursor: p(0, 4),
       register: { type: "char", text: "--foo=bar" },
+      changed: true,
+    });
+    expect(deleteByMotion("run --foo=bar", p(0, 4), "e")).toMatchObject({
+      text: "run foo=bar",
+      cursor: p(0, 4),
+      register: { type: "char", text: "--" },
+      changed: true,
     });
     expect(yankByMotion("alpha beta.gamma /tmp/file", p(0, 17), "ge")).toEqual({
+      type: "char",
+      text: "a ",
+    });
+    expect(yankByMotion("alpha beta.gamma /tmp/file", p(0, 17), "gE")).toEqual({
       type: "char",
       text: "a ",
     });

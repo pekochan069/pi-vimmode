@@ -27,6 +27,7 @@ export type EditorSnapshot = {
   isAutocompleteOpen?: boolean;
   isMacroReplaying?: boolean;
   isRedoAvailable?: boolean;
+  terminalRows?: number;
 };
 
 export type MacroSlot = string;
@@ -182,6 +183,11 @@ export type ModalState = {
   searchHistory?: SearchHistoryEntry[];
   searchHighlight?: SearchHighlightState;
   lastRepeatableChange?: RepeatableChange;
+};
+
+export type FastInsertDelegateContext = {
+  isAutocompleteOpen?: boolean;
+  isMacroReplaying?: boolean;
 };
 
 export type AdapterCommand =

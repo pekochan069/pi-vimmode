@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
 import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
-import { handleModalInput } from "../src/modal/engine.ts";
+import { canFastDelegateInsertInput, handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
 
@@ -27,6 +27,7 @@ function applyModalKeys(
   initialCursor: { line: number; col: number },
   keys: readonly string[],
   modalOptions: ModalOptions = options,
+  terminalRows?: number,
 ) {
   let state = initialState;
   let text = initialText;
@@ -37,7 +38,7 @@ function applyModalKeys(
   for (const key of keys) {
     const update = handleModalInput(
       state,
-      { text, lines: text.split("\n"), cursor },
+      { text, lines: text.split("\n"), cursor, terminalRows },
       modalOptions,
       key,
     );
@@ -56,8 +57,97 @@ function applyModalKeys(
 }
 
 describe("modal contracts", () => {
+  test("canFastDelegateInsertInput allows only plain insert text with no side state", () => {
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a")).toBe(true);
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "é")).toBe(true);
+
+    const unsafeStates: ModalState[] = [
+      { mode: "normal" },
+      { mode: "insert", visualAnchor: cursor },
+      { mode: "insert", pending: "d" },
+      {
+        mode: "insert",
+        blockInsert: {
+          anchor: cursor,
+          active: cursor,
+          placement: "start",
+          previewLine: 0,
+          text: "",
+        },
+      },
+      { mode: "insert", recordingSlot: "a" },
+      { mode: "insert", pendingMacro: "record" },
+      { mode: "insert", pendingRegister: "awaitingSlot" },
+      { mode: "insert", pendingMark: { kind: "set" } },
+      {
+        mode: "insert",
+        pendingWorkbench: { kind: "search", prefix: "/", text: "", direction: "forward" },
+      },
+      { mode: "insert", pendingSearch: { query: "", direction: "forward" } },
+      { mode: "insert", pendingEx: { command: "", sourceMode: "normal" } },
+      { mode: "insert", exMessage: { kind: "info", text: "message" } },
+      {
+        mode: "insert",
+        helpPopup: {
+          title: ":help",
+          lines: ["help"],
+          source: "help",
+          scrollOffset: 0,
+        },
+      },
+      { mode: "insert", searchHighlight: { query: "abc", current: cursor } },
+    ];
+
+    for (const state of unsafeStates) expect(canFastDelegateInsertInput(state, "a")).toBe(false);
+  });
+
+  test("canFastDelegateInsertInput rejects non-text and adapter-owned unsafe context", () => {
+    for (const input of ["\x1b", "\r", "\t", "\x7f", "ab", "\u001b[A", "\x03"]) {
+      expect(canFastDelegateInsertInput({ mode: "insert" }, input)).toBe(false);
+    }
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isAutocompleteOpen: true })).toBe(
+      false,
+    );
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isMacroReplaying: true })).toBe(
+      false,
+    );
+  });
+
   test("createModalState starts with configured mode and empty transient state", () => {
     expect(createModalState("normal")).toEqual({ mode: "normal" });
+  });
+
+  test("normal mode scroll motions move by half visible prompt page", () => {
+    const text = Array.from({ length: 10 }, (_, index) => `line-${index}`).join("\n");
+    expect(applyModalKeys({ mode: "normal" }, text, p(1, 4), ["\x04"], options, 20).cursor).toEqual(
+      p(4, 4),
+    );
+    expect(applyModalKeys({ mode: "normal" }, text, p(4, 4), ["\x15"], options, 20).cursor).toEqual(
+      p(1, 4),
+    );
+    expect(
+      applyModalKeys({ mode: "normal" }, text, p(1, 4), ["2", "\x04"], options, 20).cursor,
+    ).toEqual(p(7, 4));
+    expect(
+      applyModalKeys({ mode: "normal" }, "abcdef\nx", p(0, 5), ["\x04"], options, 20).cursor,
+    ).toEqual(p(1, 1));
+  });
+
+  test("visual scroll motions preserve anchor and insert mode delegates", () => {
+    const text = "zero\none\ntwo\nthree\nfour";
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      text,
+      p(0, 1),
+      ["\x04"],
+      options,
+      20,
+    );
+    expect(visual.state.visualAnchor).toEqual(p(0, 1));
+    expect(visual.cursor).toEqual(p(3, 1));
+
+    const insert = applyModalKeys({ mode: "insert" }, text, p(0, 0), ["\x04"], options, 20);
+    expect(insert.effects).toContainEqual({ type: "delegate", input: "\x04" });
   });
 
   test("resetTransientState clears visual and pending state without dropping registers", () => {
@@ -116,7 +206,6 @@ describe("modal contracts", () => {
           title: ":help",
           lines: ["help"],
           source: "help",
-          docsAnchor: "runtime-help:runtime-help",
           scrollOffset: 0,
         },
       },
@@ -503,7 +592,6 @@ describe("Ex command-line modal behavior", () => {
         lines: ["prompt.transform.reflow -> gq"],
         source: "features",
         query: "keybindings",
-        docsAnchor: "runtime-help:keybinding-discovery-popup",
         scrollOffset: 0,
       },
       register: { type: "char", text: "saved" },
@@ -548,7 +636,6 @@ describe("Ex command-line modal behavior", () => {
         ],
         source: "features",
         query: "keybindings",
-        docsAnchor: "runtime-help:keybinding-discovery-popup",
         scrollOffset: 0,
       },
       register: { type: "char", text: "saved" },
@@ -614,7 +701,6 @@ describe("Ex command-line modal behavior", () => {
         ],
         source: "features",
         query: "keybindings",
-        docsAnchor: "runtime-help:keybinding-discovery-popup",
         scrollOffset: 0,
       },
     };
@@ -3185,9 +3271,9 @@ describe("modal engine", () => {
   });
 
   test("protected Pi shortcuts delegate from normal and visual modes", () => {
-    const normal = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x04");
+    const normal = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x0c");
     expect(normal.state).toEqual({ mode: "normal" });
-    expect(normal.effects).toContainEqual({ type: "delegate", input: "\x04" });
+    expect(normal.effects).toContainEqual({ type: "delegate", input: "\x0c" });
 
     const ctrlShiftP = handleModalInput(
       { mode: "normal", pending: "d" },
@@ -3691,9 +3777,9 @@ describe("modal engine", () => {
     expect(reset.state).toEqual({ mode: "insert" });
     expect(reset.effects).toContainEqual({ type: "delegate", input: "\x03" });
 
-    const protectedShortcut = handleModalInput(blockInsertState, snapshot, options, "\x04");
+    const protectedShortcut = handleModalInput(blockInsertState, snapshot, options, "\x0c");
     expect(protectedShortcut.state).toEqual(blockInsertState);
-    expect(protectedShortcut.effects).toContainEqual({ type: "delegate", input: "\x04" });
+    expect(protectedShortcut.effects).toContainEqual({ type: "delegate", input: "\x0c" });
   });
 
   test("macro recording starts, captures handled inputs, and stops in normal mode", () => {

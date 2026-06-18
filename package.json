@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -40,7 +40,10 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "bun test",
-    "check-types": "tsgo --noEmit"
+    "check-types": "tsgo --noEmit",
+    "measure:insert": "bun scripts/measure-insert-fast-path.ts",
+    "measure:commands": "bun scripts/measure-command-resolver.ts",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",

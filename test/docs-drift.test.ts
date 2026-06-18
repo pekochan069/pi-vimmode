@@ -8,32 +8,54 @@ import {
 import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
-import {
-  keybindingDiscoveryPopup,
-  keybindingsPopup,
-  READ_ONLY_POPUP_COMMANDS,
-} from "../src/keybinding-discovery-popup.ts";
+import { keybindingDiscoveryPopup, keybindingsPopup } from "../src/keybinding-discovery-popup.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
 } from "../src/prompt-transform-actions.ts";
 import { runtimeHelpEntries } from "../src/runtime-help.ts";
+import {
+  ACTION_RECIPE_DOCS_METADATA,
+  DIAGNOSTIC_ACTION_DOCS_METADATA,
+  POPUP_COMMAND_DOCS_METADATA,
+  RUNTIME_HELP_DOCS_METADATA,
+} from "./support/runtime-docs-metadata.ts";
 
 const featuresDoc = readFileSync("docs/features.md", "utf8");
 const settingsDoc = readFileSync("docs/settings.md", "utf8");
 const allUserDocs = `${featuresDoc}\n${settingsDoc}`;
 
+function expectSameIds(actual: readonly string[], expected: readonly string[]) {
+  expect([...actual].sort()).toEqual([...expected].sort());
+  expect(new Set(actual).size).toBe(actual.length);
+  expect(new Set(expected).size).toBe(expected.length);
+}
+
 describe("documentation drift guard", () => {
+  test("runtime help registry metadata covers every runtime entry both directions", () => {
+    const runtimeIds = runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS }).map(
+      (entry) => entry.id,
+    );
+    const metadataIds = RUNTIME_HELP_DOCS_METADATA.map((entry) => entry.id);
+    expectSameIds(runtimeIds, metadataIds);
+  });
+
   test("runtime help registry anchors exist in feature docs, specs, and tests", () => {
-    for (const entry of runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS })) {
+    for (const entry of RUNTIME_HELP_DOCS_METADATA) {
       expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
       expect(existsSync(entry.specAnchor)).toBe(true);
       for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);
     }
   });
 
+  test("diagnostic action metadata covers every runtime entry both directions", () => {
+    const runtimeIds = DIAGNOSTIC_ACTIONS.map((entry) => entry.id);
+    const metadataIds = DIAGNOSTIC_ACTION_DOCS_METADATA.map((entry) => entry.id);
+    expectSameIds(runtimeIds, metadataIds);
+  });
+
   test("diagnostic action metadata anchors exist in feature docs, specs, and tests", () => {
-    for (const entry of DIAGNOSTIC_ACTIONS) {
+    for (const entry of DIAGNOSTIC_ACTION_DOCS_METADATA) {
       expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
       expect(existsSync(entry.specAnchor)).toBe(true);
       for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);
@@ -54,7 +76,7 @@ describe("documentation drift guard", () => {
   });
 
   test("feature docs describe every popup-backed read-only Ex command", () => {
-    for (const entry of READ_ONLY_POPUP_COMMANDS) {
+    for (const entry of POPUP_COMMAND_DOCS_METADATA) {
       expect(featuresDoc).toContain(entry.command);
       expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
       expect(parseExCommand(entry.parserExample, { lineCount: 5, cursorLine: 1 }).type).not.toBe(
@@ -65,6 +87,14 @@ describe("documentation drift guard", () => {
     expect(featuresDoc).not.toContain(
       "Diagnostic and runtime help commands show transient info text",
     );
+  });
+
+  test("action recipe metadata covers every recipe and preset both directions", () => {
+    const recipeIds = ACTION_KEYBINDING_RECIPES.map((recipe) => recipe.id);
+    const presetIds = ACTION_KEYBINDING_PRESETS.map((preset) => preset.id);
+    const metadataIds = ACTION_RECIPE_DOCS_METADATA.map((entry) => entry.id);
+    expectSameIds(recipeIds, metadataIds);
+    expectSameIds(presetIds, metadataIds);
   });
 
   test("docs cover WORD and previous-end motion names without lowercase retune claims", () => {
@@ -162,7 +192,7 @@ describe("documentation drift guard", () => {
     ].join("\n");
     const popupIds = new Set(popupText.match(/prompt\.transform\.[a-z]+/g) ?? []);
 
-    expect(featuresDoc).toContain(`<!-- ${popup.docsAnchor} -->`);
+    expect(featuresDoc).toContain(`<!-- ${POPUP_COMMAND_DOCS_METADATA[0]!.docsAnchor} -->`);
     expect(featuresDoc).toContain(":features keybindings");
     expect(featuresDoc).toContain(":keybindings");
     expect(featuresDoc).toContain(":keybindings <query>");
@@ -195,7 +225,8 @@ describe("documentation drift guard", () => {
 
   test("action keybinding recipe docs anchors and configs stay aligned", () => {
     for (const recipe of ACTION_KEYBINDING_RECIPES) {
-      expect(allUserDocs).toContain(`<!-- ${recipe.docsAnchor} -->`);
+      const docs = ACTION_RECIPE_DOCS_METADATA.find((entry) => entry.id === recipe.id)!;
+      expect(allUserDocs).toContain(`<!-- ${docs.docsAnchor} -->`);
       const result = resolveVimOptions({ piVimMode: { keymap: { actions: recipe.actions } } });
       expect(result.warnings).toEqual([]);
       for (const binding of recipe.expected) {
@@ -209,7 +240,8 @@ describe("documentation drift guard", () => {
   test("action keybinding preset docs anchors and configs stay aligned", () => {
     expect(allUserDocs).toContain("piVimMode.keymap.actionPresets");
     for (const preset of ACTION_KEYBINDING_PRESETS) {
-      expect(allUserDocs).toContain(`<!-- ${preset.presetDocsAnchor} -->`);
+      const docs = ACTION_RECIPE_DOCS_METADATA.find((entry) => entry.id === preset.id)!;
+      expect(allUserDocs).toContain(`<!-- ${docs.presetDocsAnchor} -->`);
       expect(allUserDocs).toContain(preset.id);
       expect(allUserDocs).toContain("no default");
       expect(allUserDocs).toContain("no plugin API");

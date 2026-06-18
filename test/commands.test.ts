@@ -117,6 +117,28 @@ describe("normal command parser", () => {
     expect(isPendingOperatorKey("x")).toBe(false);
   });
 
+  test("explicit motion binding wins over default macro record binding", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { wordForward: ["q"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "wordForward",
+    });
+  });
+
+  test("explicit single-key binding wins over default longer prefix bindings", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { left: ["g"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("g", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+  });
+
   test("resolves macro prefixes and targets separately from operator state", () => {
     expect(isMacroSlot("a")).toBe(true);
     expect(isMacroSlot("z")).toBe(true);
@@ -268,7 +290,7 @@ describe("normal command parser", () => {
     const keymap = {
       ...DEFAULT_VIM_KEYMAP,
       operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
-      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"] },
+      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"], halfPageDown: ["zz"] },
       commands: {
         ...DEFAULT_VIM_KEYMAP.commands,
         openLineBelow: ["n"],
@@ -303,6 +325,10 @@ describe("normal command parser", () => {
       type: "command",
       command: "redo",
     });
+    expect(resolveNormalCommand("zz", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+    });
   });
 
   test("resolves configured shift operator bindings as line-only", () => {
@@ -321,6 +347,22 @@ describe("normal command parser", () => {
       operator: "dedent",
     });
     expect(resolveNormalCommand("w", "]", keymap)).toEqual({ type: "invalid" });
+  });
+
+  test("resolves default scroll motions and counts", () => {
+    expect(resolveNormalCommand("ctrl+d", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+    });
+    expect(resolveNormalCommand("ctrl+u", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageUp",
+    });
+    expect(resolveNormalCommand("ctrl+d", "2\u0000count\u0000", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "halfPageDown",
+      count: 2,
+    });
   });
 
   test("resolves finite multi-key sequences and invalid pending prefixes", () => {
@@ -733,5 +775,78 @@ describe("normal command parser", () => {
     expect(
       resolveNormalCommand("w", deletePending.type === "pending" ? deletePending.pending : ""),
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordForward" });
+  });
+
+  test("keeps duplicate sequence resolution first-match deterministic", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
+      motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["q"] },
+      commands: { ...DEFAULT_VIM_KEYMAP.commands, undo: ["q"] },
+    };
+
+    expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
+      type: "pending",
+      pending: "q",
+    });
+  });
+
+  test("resolves operator grammar before unrelated top-level prefixes", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["ct"] } } },
+    }).options.keymap;
+
+    const tillPending = resolveNormalCommand("t", "c", keymap);
+    expect(tillPending.type).toBe("pending");
+    expect(
+      resolveNormalCommand(",", tillPending.type === "pending" ? tillPending.pending : "", keymap),
+    ).toEqual({
+      type: "operatorCharSearch",
+      operator: "change",
+      command: "tillCharForward",
+      char: ",",
+    });
+  });
+
+  test("resolves distinct keymap identities without stale command cache", () => {
+    const leftKeymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { left: ["q"] } } },
+    }).options.keymap;
+    const undoKeymap = resolveVimOptions({
+      piVimMode: { keymap: { commands: { undo: ["q"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("q", undefined, leftKeymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+    expect(resolveNormalCommand("q", undefined, undoKeymap)).toEqual({
+      type: "command",
+      command: "undo",
+    });
+    expect(resolveNormalCommand("q", undefined, leftKeymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+  });
+
+  test("interleaves default and custom keymap resolution without contamination", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { motions: { left: ["q"], wordForward: ["z"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("q", undefined, DEFAULT_VIM_KEYMAP)).toEqual({ type: "none" });
+    expect(resolveNormalCommand("q", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+    expect(resolveNormalCommand("w", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "wordForward",
+    });
+    expect(resolveNormalCommand("z", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "wordForward",
+    });
   });
 });

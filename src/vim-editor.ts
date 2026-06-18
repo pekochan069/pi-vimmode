@@ -27,6 +27,7 @@ import { normalizeBufferPosition, pasteRegister, pasteRegisterBefore } from "./b
 import { readClipboardText } from "./clipboard.ts";
 import { pendingDisplay } from "./commands.ts";
 import {
+  cloneResolvedVimOptions,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
   searchForOptions,
@@ -37,7 +38,11 @@ import {
   READ_ONLY_POPUP_MIN_WIDTH,
   ReadOnlyPopupOverlayComponent,
 } from "./keybinding-discovery-overlay.ts";
-import { handleModalInput, modalPendingDisplay } from "./modal/engine.ts";
+import {
+  canFastDelegateInsertInput,
+  handleModalInput,
+  modalPendingDisplay,
+} from "./modal/engine.ts";
 import { appendMessageHistory } from "./modal/inspect.ts";
 import { createModalState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
@@ -124,32 +129,7 @@ export function fitStatusBorder(
 }
 
 function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
-  return {
-    preset: options.preset,
-    startMode: options.startMode,
-    cursor: { ...options.cursor },
-    keymap: options.keymap,
-    ui: options.ui
-      ? {
-          ...options.ui,
-          status: { ...options.ui.status, items: [...options.ui.status.items] },
-          mode: {
-            ...options.ui.mode,
-            labels: { ...options.ui.mode.labels },
-            narrowLabels: { ...options.ui.mode.narrowLabels },
-          },
-          selection: { ...options.ui.selection },
-          cursorPosition: { ...options.ui.cursorPosition },
-          workbench: { ...options.ui.workbench },
-        }
-      : undefined,
-    macros: options.macros,
-    marks: options.marks,
-    search: options.search,
-    feedback: options.feedback,
-    promptStructures: options.promptStructures,
-    promptTransforms: options.promptTransforms,
-  };
+  return cloneResolvedVimOptions(options);
 }
 
 type RedoSnapshot = {
@@ -224,6 +204,16 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
+    if (
+      canFastDelegateInsertInput(this.modalState, data, {
+        isAutocompleteOpen: this.isShowingAutocomplete(),
+        isMacroReplaying: this.isMacroReplaying,
+      })
+    ) {
+      this.delegateDefaultInput(data);
+      return;
+    }
+
     const update = handleModalInput(
       this.modalState,
       this.snapshot(),
@@ -255,7 +245,9 @@ export class VimEditor extends CustomEditor {
       recordingSlot: this.modalState.recordingSlot,
       ui: uiForOptions(this.options),
     });
-    lines[last] = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    const statusLine = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    if (this.isShowingAutocomplete()) lines.push(statusLine);
+    else lines[last] = statusLine;
     lines.push(...workbenchRows);
     return lines;
   }
@@ -266,6 +258,7 @@ export class VimEditor extends CustomEditor {
       lines: this.getLines(),
       cursor: this.getCursor(),
       isAutocompleteOpen: this.isShowingAutocomplete(),
+      terminalRows: this.terminalRows(),
       isMacroReplaying: this.isMacroReplaying,
       isRedoAvailable: this.redoStack.length > 0,
     };
@@ -326,6 +319,10 @@ export class VimEditor extends CustomEditor {
       });
     }
 
+    if (this.isShowingAutocomplete()) {
+      return restyleCursorMarker(super.render(width), this.getCurrentCursorStyle());
+    }
+
     if (
       this.searchRenderInput() ||
       this.modalState.pendingSearch ||
@@ -359,14 +356,17 @@ export class VimEditor extends CustomEditor {
     for (const effect of effects) this.applyEffect(effect);
   }
 
+  private delegateDefaultInput(input: string): void {
+    const before = this.redoSnapshot();
+    super.handleInput(input);
+    this.clearRedoAfterTextChange(before);
+  }
+
   private applyEffect(effect: ModalEffect): void {
     switch (effect.type) {
-      case "delegate": {
-        const before = this.redoSnapshot();
-        super.handleInput(effect.input);
-        this.clearRedoAfterTextChange(before);
+      case "delegate":
+        this.delegateDefaultInput(effect.input);
         return;
-      }
       case "adapterCommand":
         this.applyAdapterCommand(effect.command);
         return;

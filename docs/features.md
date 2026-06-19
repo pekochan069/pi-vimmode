@@ -191,6 +191,9 @@ Supported operators:
 - `d` delete
 - `c` change, then enter insert
 - `y` yank
+- `gu` lowercase
+- `gU` uppercase
+- `g~` toggle case
 - `>` indent line-only shift
 - `<` dedent line-only shift
 
@@ -220,6 +223,10 @@ dl        delete one character to the right
 dj        delete current and next line
 dgg       delete through buffer start
 yG        yank through buffer end
+guw       lowercase to next word start
+gUiw      uppercase inner word
+g~g~      toggle current line case
+2guw      lowercase two word motions
 d%        delete through matching pair
 d}        delete through next paragraph start, including trailing blank separator
 c{        change back through paragraph start
@@ -239,9 +246,9 @@ d2f,      delete through the second next comma on current line
 d/foo⏎    delete from cursor through next literal foo match
 ```
 
-Successful `d`/`c` motion and character-search targets record dot-repeat. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
+Successful `d`/`c` motion and character-search targets record dot-repeat. Successful normal `gu`/`gU`/`g~` motion, text-object, and doubled line targets also record dot-repeat. Case operators edit text only: they do not write unnamed or named registers and do not enter insert mode. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
 
-Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. `Ctrl-D` and `Ctrl-U` are motions, not operator targets; `d<C-d>` and `y<C-u>` are unsupported safe no-ops. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
+Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. Case operators support finite motions, text objects, and doubled line forms only; mark, prompt-search, and character-search case targets are unsupported safe no-ops. `Ctrl-D` and `Ctrl-U` are motions, not operator targets; `d<C-d>` and `y<C-u>` are unsupported safe no-ops. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
 
 ## Text objects
 
@@ -368,7 +375,7 @@ Supported actions:
 - `d` / `x` deletes selection and returns normal.
 - `c` deletes selection and enters insert.
 - `r{char}` replaces selected characters and returns normal.
-- `~` toggles selected character case and returns normal.
+- `u` lowercases, `U` uppercases, and `~` toggles selected character case; each returns normal without writing registers.
 - `>` / `<` indents or dedents every touched line and returns normal.
 - `:` opens Ex command-line with `'<,'>` prefilled.
 - `"{a-z}` / `"{A-Z}` targets next yank/delete/change with named register.
@@ -389,7 +396,7 @@ Supported actions:
 - Motions extend selected line range.
 - `v` switches to visual char mode without resetting anchor.
 - `Ctrl-v` switches to visual block mode without resetting anchor.
-- `y`, `d`, `x`, `c`, `r{char}`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
+- `y`, `d`, `x`, `c`, `r{char}`, `u`, `U`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
 - Linewise `p` in visual line mode replaces selected lines with the register content.
 
 Example:
@@ -412,7 +419,7 @@ Supported actions:
 - `d` / `x` delete selected slices.
 - `c` deletes selected slices and enters insert.
 - `r{char}` replaces selected cells.
-- `~` toggles selected cell case.
+- `u` lowercases, `U` uppercases, and `~` toggles selected cell case without writing registers.
 - `>` / `<` indents or dedents every line touched by the block, regardless of selected columns.
 - `I` starts block insert before block on each selected line; typed text is applied when `Esc` is pressed.
 - `A` starts block append after block on each selected line; typed text is applied when `Esc` is pressed.

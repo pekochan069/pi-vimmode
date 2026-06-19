@@ -56,6 +56,7 @@ import {
   substituteLineRangeRegex,
   toggleCaseAt,
   toggleCaseVisualRange,
+  transformCaseVisualRange,
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
@@ -504,14 +505,18 @@ describe("charwise edits", () => {
     });
   });
 
-  test("toggles visual case by selection kind", () => {
-    expect(toggleCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "char")).toMatchObject({
-      text: "aBc\ndEF",
+  test("transforms visual case by selection kind", () => {
+    expect(
+      transformCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "char", "lowercase"),
+    ).toMatchObject({
+      text: "abc\ndeF",
       cursor: p(0, 1),
       changed: true,
     });
-    expect(toggleCaseVisualRange("abC\nDeF", p(0, 0), p(1, 0), "line")).toMatchObject({
-      text: "ABc\ndEf",
+    expect(
+      transformCaseVisualRange("abC\nDeF", p(0, 0), p(1, 0), "line", "uppercase"),
+    ).toMatchObject({
+      text: "ABC\nDEF",
       cursor: p(0, 0),
       changed: true,
     });
@@ -519,6 +524,24 @@ describe("charwise edits", () => {
       text: "aBC\nDEF",
       cursor: p(0, 1),
       changed: true,
+    });
+  });
+
+  test("case transform leaves non-letters, empty ranges, and expanding mappings safe", () => {
+    expect(transformCaseVisualRange("123", p(0, 0), p(0, 2), "char", "uppercase")).toMatchObject({
+      text: "123",
+      cursor: p(0, 0),
+      changed: false,
+    });
+    expect(transformCaseVisualRange("abc", p(0, 3), p(0, 3), "char", "uppercase")).toMatchObject({
+      text: "abc",
+      cursor: p(0, 3),
+      changed: false,
+    });
+    expect(transformCaseVisualRange("ßİ", p(0, 0), p(0, 1), "char", "uppercase")).toMatchObject({
+      text: "ßİ",
+      cursor: p(0, 0),
+      changed: false,
     });
   });
 });

@@ -169,6 +169,20 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("insert");
   });
 
+  test("live editor honors configured case operator keymap", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { operators: { lowercase: ["zu"] } } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("AbC Def");
+    typeKeys(editor, ["g", "g", "z", "u", "w"]);
+
+    expect(editor.getText()).toBe("abc Def");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    expect(editor.getVimMode()).toBe("normal");
+  });
+
   test("plain insert text uses fast path without full snapshot", () => {
     const { editor } = createEditor();
     (editor as unknown as { getLines: () => string[] }).getLines = () => {

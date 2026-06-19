@@ -1,3 +1,4 @@
+import type { CaseTransformAction } from "../buffer.ts";
 import type { VimMode, VimOperatorAction } from "../types.ts";
 import type { EditorSnapshot, ModalOptions, ModalState, ModalUpdate } from "./types.ts";
 
@@ -9,7 +10,7 @@ import {
   replaceLineRangeWithRegister,
   replaceVisualRangeChars,
   shiftLineRange,
-  toggleCaseVisualRange,
+  transformCaseVisualRange,
   yankVisualSelection,
 } from "../buffer.ts";
 import {
@@ -118,15 +119,31 @@ export function deleteVisualSelection(
   ]);
 }
 
+export function transformVisualSelection(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  kind: VisualKind,
+  action: CaseTransformAction,
+): ModalUpdate {
+  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
+  const result = transformCaseVisualRange(
+    snapshot.text,
+    state.visualAnchor,
+    snapshot.cursor,
+    kind,
+    action,
+  );
+  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+}
+
 export function toggleVisualSelection(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   kind: VisualKind,
 ): ModalUpdate {
-  if (!state.visualAnchor) return modeUpdate(state, "normal", options);
-  const result = toggleCaseVisualRange(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
-  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+  return transformVisualSelection(state, snapshot, options, kind, "toggleCase");
 }
 
 export function replaceVisualSelection(

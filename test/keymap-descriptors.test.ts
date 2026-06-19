@@ -17,8 +17,24 @@ import {
 
 const actionNames = (values: readonly unknown[]): string[] => values.map(String);
 
-const expectedOperators = ["delete", "change", "yank", "indent", "dedent"];
-const expectedMotionOperators = ["delete", "change", "yank"];
+const expectedOperators = [
+  "delete",
+  "change",
+  "yank",
+  "lowercase",
+  "uppercase",
+  "toggleCase",
+  "indent",
+  "dedent",
+];
+const expectedMotionOperators = [
+  "delete",
+  "change",
+  "yank",
+  "lowercase",
+  "uppercase",
+  "toggleCase",
+];
 const expectedMotions = [
   "left",
   "down",

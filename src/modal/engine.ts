@@ -88,6 +88,7 @@ import {
   replaceVisualSelection,
   startBlockInsert,
   toggleVisualSelection,
+  transformVisualSelection,
   visualKindForMode,
 } from "./visual.ts";
 
@@ -448,6 +449,24 @@ function handleVisualInput(
   if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   if (!state.pending && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+  if (!state.pending && !state.pendingRegister && key === "u") {
+    return transformVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      "lowercase",
+    );
+  }
+  if (!state.pending && !state.pendingRegister && key === "U") {
+    return transformVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      "uppercase",
+    );
   }
   if (!state.pending && !state.pendingRegister) {
     const markTarget = markPendingForKey(key, options);

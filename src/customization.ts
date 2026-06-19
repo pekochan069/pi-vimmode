@@ -165,6 +165,9 @@ const OPERATOR_DESCRIPTIONS: Record<VimOperatorAction, string> = {
   delete: "delete by motion or text object",
   change: "change by motion or text object",
   yank: "yank by motion or text object",
+  lowercase: "lowercase by motion or text object",
+  uppercase: "uppercase by motion or text object",
+  toggleCase: "toggle case by motion or text object",
   indent: "indent selected/current lines",
   dedent: "dedent selected/current lines",
 };

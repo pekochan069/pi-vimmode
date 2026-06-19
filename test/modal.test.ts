@@ -2310,6 +2310,54 @@ describe("modal engine", () => {
     expect(countedRepeat.text).toBe("  one\n    two\n  three");
   });
 
+  test("normal case operators transform motions, text objects, and lines without registers", () => {
+    const lowered = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "AbC Def",
+      p(0, 0),
+      ["g", "u", "w"],
+    );
+    expect(lowered.text).toBe("abc Def");
+    expect(lowered.cursor).toEqual(p(0, 0));
+    expect(lowered.state.mode).toBe("normal");
+    expect(lowered.state.register).toEqual({ type: "char", text: "keep" });
+
+    const uppered = applyModalKeys({ mode: "normal" }, "foo bar", p(0, 5), ["g", "U", "i", "w"]);
+    expect(uppered.text).toBe("foo BAR");
+    expect(uppered.cursor).toEqual(p(0, 4));
+
+    const toggledLine = applyModalKeys(
+      { mode: "normal", register: { type: "line", text: "old" } },
+      "AbC\nDeF",
+      p(0, 1),
+      ["g", "~", "g", "~"],
+    );
+    expect(toggledLine.text).toBe("aBc\nDeF");
+    expect(toggledLine.cursor).toEqual(p(0, 0));
+    expect(toggledLine.state.register).toEqual({ type: "line", text: "old" });
+  });
+
+  test("normal case operators no-op safely and dot-repeat successful changes", () => {
+    const changed = applyModalKeys({ mode: "normal" }, "AbC DeF", p(0, 0), ["g", "u", "w"]);
+    const repeated = applyModalKeys(changed.state, changed.text, p(0, 4), ["."]);
+    expect(repeated.text).toBe("abc def");
+
+    const missing = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "abc",
+      p(0, 3),
+      ["g", "u", "w"],
+    );
+    expect(missing.text).toBe("abc");
+    expect(missing.cursor).toEqual(p(0, 3));
+    expect(missing.state.register).toEqual({ type: "char", text: "keep" });
+    expect(missing.state.pending).toBeUndefined();
+
+    const unsupported = applyModalKeys({ mode: "normal" }, "a:b", p(0, 0), ["g", "u", "f"]);
+    expect(unsupported.text).toBe("a:b");
+    expect(unsupported.state.pending).toBeUndefined();
+  });
+
   test("normal dot repeat applies line change commands and keeps no-ops from replacing repeat", () => {
     const changed = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", cursor, [
       "c",
@@ -3594,22 +3642,42 @@ describe("modal engine", () => {
     expect(noAnchor.state.mode).toBe("normal");
   });
 
-  test("visual toggle case changes selected text and returns normal", () => {
-    const result = handleModalInput(
-      { mode: "visual", visualAnchor: { line: 0, col: 1 } },
+  test("visual case changes selected text and returns normal without registers", () => {
+    const lowered = handleModalInput(
+      {
+        mode: "visual",
+        visualAnchor: { line: 0, col: 1 },
+        register: { type: "char", text: "old" },
+      },
       { text: "aBc", lines: ["aBc"], cursor: { line: 0, col: 2 } },
       options,
-      "~",
+      "u",
     );
-    expect(result.state.mode).toBe("normal");
-    expect(result.effects[0]).toEqual({
+    expect(lowered.state.mode).toBe("normal");
+    expect(lowered.state.register).toEqual({ type: "char", text: "old" });
+    expect(lowered.effects[0]).toMatchObject({
       type: "edit",
-      result: {
-        text: "abC",
-        cursor: { line: 0, col: 1 },
-        changed: true,
-      },
+      result: { text: "abc", cursor: { line: 0, col: 1 }, changed: true },
     });
+
+    const uppered = applyModalKeys(
+      { mode: "visualLine", visualAnchor: p(0, 0), register: { type: "line", text: "old" } },
+      "aBc\nDeF",
+      p(1, 0),
+      ["U"],
+    );
+    expect(uppered.text).toBe("ABC\nDEF");
+    expect(uppered.state.mode).toBe("normal");
+    expect(uppered.state.register).toEqual({ type: "line", text: "old" });
+
+    const toggledBlock = applyModalKeys(
+      { mode: "visualBlock", visualAnchor: p(0, 1) },
+      "aBcD\neFgH",
+      p(1, 2),
+      ["~"],
+    );
+    expect(toggledBlock.text).toBe("abCD\nefGH");
+    expect(toggledBlock.state.mode).toBe("normal");
   });
 
   test("visual replace changes selected text with a typed character", () => {

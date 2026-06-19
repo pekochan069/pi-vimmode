@@ -363,6 +363,25 @@ function deleteOffsetRange(text: string, start: number, end: number): EditResult
   };
 }
 
+function transformCaseOffsetRange(
+  text: string,
+  start: number,
+  end: number,
+  action: CaseTransformAction,
+): EditResult {
+  const range = orderedOffsetRange(start, end);
+  if (!range) return { text, cursor: offsetToPosition(text, start), changed: false };
+  const nextText =
+    text.slice(0, range.start) +
+    transformCaseText(text.slice(range.start, range.end), action) +
+    text.slice(range.end);
+  return {
+    text: nextText,
+    cursor: offsetToPosition(nextText, range.start),
+    changed: nextText !== text,
+  };
+}
+
 export function bufferStartPosition(): Position {
   return { line: 0, col: 0 };
 }
@@ -1414,7 +1433,23 @@ function toggleCaseChar(char: string): string {
   const lower = char.toLowerCase();
   const toggled =
     char === lower && char !== upper ? upper : char === upper && char !== lower ? lower : char;
-  return Array.from(toggled).length === 1 ? toggled : char;
+  return oneCodePointOrOriginal(char, toggled);
+}
+
+function oneCodePointOrOriginal(original: string, transformed: string): string {
+  return Array.from(transformed).length === 1 ? transformed : original;
+}
+
+export type CaseTransformAction = "lowercase" | "uppercase" | "toggleCase";
+
+function transformCaseChar(char: string, action: CaseTransformAction): string {
+  if (action === "lowercase") return oneCodePointOrOriginal(char, char.toLowerCase());
+  if (action === "uppercase") return oneCodePointOrOriginal(char, char.toUpperCase());
+  return toggleCaseChar(char);
+}
+
+function transformCaseText(text: string, action: CaseTransformAction): string {
+  return [...text].map((char) => transformCaseChar(char, action)).join("");
 }
 
 function codePointSpans(line: string): Array<{ start: number; end: number }> {
@@ -1441,7 +1476,7 @@ export function toggleCaseAt(text: string, cursor: Position, count = 1): EditRes
   const end = selected.at(-1)?.end ?? spans[startIndex]?.end ?? pos.col;
   const start = spans[startIndex]?.start ?? pos.col;
   const target = line.slice(start, end);
-  const toggled = toggleCaseText(target);
+  const toggled = transformCaseText(target, "toggleCase");
   const nextLine = line.slice(0, start) + toggled + line.slice(end);
   const nextLines = [...lines];
   nextLines[pos.line] = nextLine;
@@ -1454,15 +1489,12 @@ export function toggleCaseAt(text: string, cursor: Position, count = 1): EditRes
   };
 }
 
-function toggleCaseText(text: string): string {
-  return [...text].map(toggleCaseChar).join("");
-}
-
-export function toggleCaseVisualRange(
+export function transformCaseVisualRange(
   text: string,
   anchor: Position,
   active: Position,
   kind: "char" | "line" | "block",
+  action: CaseTransformAction,
 ): EditResult {
   const lines = splitText(text);
 
@@ -1470,7 +1502,7 @@ export function toggleCaseVisualRange(
     const range = normalizeLineRange(lines, anchor, active);
     const nextLines = [...lines];
     for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-      nextLines[lineIndex] = toggleCaseText(nextLines[lineIndex] ?? "");
+      nextLines[lineIndex] = transformCaseText(nextLines[lineIndex] ?? "", action);
     }
     const nextText = joinLines(nextLines);
     return {
@@ -1488,7 +1520,7 @@ export function toggleCaseVisualRange(
       const start = Math.min(range.startCol, line.length);
       const end = Math.min(range.endCol + 1, line.length);
       nextLines[lineIndex] =
-        line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+        line.slice(0, start) + transformCaseText(line.slice(start, end), action) + line.slice(end);
     }
     const nextText = joinLines(nextLines);
     return {
@@ -1506,7 +1538,7 @@ export function toggleCaseVisualRange(
     const end =
       lineIndex === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
     nextLines[lineIndex] =
-      line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+      line.slice(0, start) + transformCaseText(line.slice(start, end), action) + line.slice(end);
   }
   const nextText = joinLines(nextLines);
   return {
@@ -1514,6 +1546,55 @@ export function toggleCaseVisualRange(
     cursor: clampPosition(nextLines, range.start),
     changed: nextText !== text,
   };
+}
+
+export function toggleCaseVisualRange(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: "char" | "line" | "block",
+): EditResult {
+  return transformCaseVisualRange(text, anchor, active, kind, "toggleCase");
+}
+
+export function transformCaseLineCount(
+  text: string,
+  cursor: Position,
+  count: number,
+  action: CaseTransformAction,
+): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  return transformCaseVisualRange(
+    text,
+    { line: pos.line, col: 0 },
+    { line: endLine, col: 0 },
+    "line",
+    action,
+  );
+}
+
+export function transformCaseByMotion(
+  text: string,
+  cursor: Position,
+  motion: VimMotion,
+  count: number,
+  action: CaseTransformAction,
+): EditResult {
+  const lineRange = motionLineRange(text, cursor, motion, count);
+  if (lineRange) {
+    return transformCaseVisualRange(
+      text,
+      { line: lineRange.startLine, col: 0 },
+      { line: lineRange.endLine, col: 0 },
+      "line",
+      action,
+    );
+  }
+  const range = motionOffsetRange(text, cursor, motion, count);
+  if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
+  return transformCaseOffsetRange(text, range.start, range.end, action);
 }
 
 export function adjustNumberAtOrAfterCursor(
@@ -2508,6 +2589,33 @@ export function deleteTextObject(
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
   return deleteRange(text, range.start, range.end);
+}
+
+export function transformCaseTextObject(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+  action: CaseTransformAction,
+  promptStructures?: ResolvedVimPromptStructures,
+): EditResult {
+  const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
+  if (structureRange) {
+    return transformCaseOffsetRange(
+      text,
+      structureRange.start,
+      structureRange.endExclusive,
+      action,
+    );
+  }
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end)
+      return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+    return transformCaseOffsetRange(text, offsets.start, offsets.end, action);
+  }
+  const range = textObjectRange(text, cursor, textObject, promptStructures);
+  if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+  return transformCaseVisualRange(text, range.start, range.end, "char", action);
 }
 
 export function visualBlockSelectionSummary(

@@ -1377,6 +1377,14 @@ export function deleteCharAt(text: string, cursor: Position, count = 1): EditRes
   return deleteRange(text, pos, { line: pos.line, col: endCol });
 }
 
+export function deleteCharBefore(text: string, cursor: Position, count = 1): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  if (pos.col <= 0) return { text, cursor: pos, changed: false };
+  const startCol = Math.max(0, pos.col - Math.max(1, count));
+  return deleteRange(text, { line: pos.line, col: startCol }, { line: pos.line, col: pos.col - 1 });
+}
+
 export function replaceCharAt(text: string, cursor: Position, char: string, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);

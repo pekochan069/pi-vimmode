@@ -27,6 +27,7 @@ import {
   moveExLineRange,
   moveResolvedLineRange,
   deleteCharAt,
+  deleteCharBefore,
   deleteLine,
   deleteLineMarkRange,
   deleteLineRange,
@@ -412,6 +413,37 @@ describe("charwise edits", () => {
     const result = deleteCharAt("abc", p(0, 3));
     expect(result.text).toBe("abc");
     expect(result.changed).toBe(false);
+  });
+
+  test("deletes characters before cursor within current line", () => {
+    expect(deleteCharBefore("abcd", p(0, 2))).toMatchObject({
+      text: "acd",
+      cursor: p(0, 1),
+      register: { type: "char", text: "b" },
+      changed: true,
+    });
+
+    expect(deleteCharBefore("abcdef", p(0, 5), 3)).toMatchObject({
+      text: "abf",
+      cursor: p(0, 2),
+      register: { type: "char", text: "cde" },
+      changed: true,
+    });
+  });
+
+  test("delete before cursor is safe at line start and clamps count to current line", () => {
+    expect(deleteCharBefore("abc", p(0, 0))).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      changed: false,
+    });
+
+    expect(deleteCharBefore("one\ntwo", p(1, 1), 3)).toMatchObject({
+      text: "one\nwo",
+      cursor: p(1, 0),
+      register: { type: "char", text: "t" },
+      changed: true,
+    });
   });
 
   test("toggles character case within the current line", () => {

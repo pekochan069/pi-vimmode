@@ -154,7 +154,7 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 | `a`                 | move right, then insert                                                 |
 | `I` / `A`           | move to line start/end, then insert                                     |
 | `o` / `O`           | open blank line below/above, then insert                                |
-| `x`                 | delete character under cursor                                           |
+| `x` / `X`           | delete character under/before cursor                                    |
 | `dd` / `cc` / `yy`  | delete/change/yank current line                                         |
 | `D` / `C`           | delete/change from cursor through line end                              |
 | `Y`                 | yank current line                                                       |
@@ -171,7 +171,8 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 Counts work for supported edits:
 
 ```text
-3x    delete 3 characters
+3x    delete 3 characters under/after cursor
+3X    delete 3 characters before cursor
 2dd   delete 2 lines
 3>>   indent 3 lines from cursor line
 2<<   dedent 2 lines from cursor line

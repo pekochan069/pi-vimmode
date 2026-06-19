@@ -85,6 +85,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   visualLine: "enter linewise visual mode",
   visualBlock: "enter blockwise visual mode",
   deleteChar: "delete character under cursor",
+  deleteCharBefore: "delete character before cursor",
   deleteToLineEnd: "delete to line end",
   changeToLineEnd: "change to line end",
   yankLine: "yank current line",

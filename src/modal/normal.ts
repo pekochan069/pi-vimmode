@@ -22,6 +22,7 @@ import {
   deleteByCharSearch,
   deleteByMotion,
   deleteCharAt,
+  deleteCharBefore,
   deleteLine,
   deleteTextObject,
   findCharOnLine,
@@ -328,6 +329,7 @@ export function applyCommand(
   const nextState = clearCommandPending(state);
   const registerAware = [
     "deleteChar",
+    "deleteCharBefore",
     "deleteToLineEnd",
     "changeToLineEnd",
     "yankLine",
@@ -374,6 +376,14 @@ export function applyCommand(
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualBlock", options);
     case "deleteChar": {
       const result = deleteCharAt(snapshot.text, snapshot.cursor, count);
+      const written = editStateAndEffects(nextState, result);
+      let edited = written.state;
+      if (recordRepeat)
+        edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
+      return withEffects(edited, [{ type: "edit", result }, ...written.effects]);
+    }
+    case "deleteCharBefore": {
+      const result = deleteCharBefore(snapshot.text, snapshot.cursor, count);
       const written = editStateAndEffects(nextState, result);
       let edited = written.state;
       if (recordRepeat)

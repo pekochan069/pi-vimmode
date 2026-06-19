@@ -58,6 +58,7 @@ export type VimCommandAction =
   | "visualLine"
   | "visualBlock"
   | "deleteChar"
+  | "deleteCharBefore"
   | "deleteToLineEnd"
   | "changeToLineEnd"
   | "yankLine"

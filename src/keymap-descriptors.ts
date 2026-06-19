@@ -53,6 +53,8 @@ export const KEYMAP_MOTION_DESCRIPTORS = {
   matchingPair: { defaults: ["%"], legacy: "%" },
   halfPageDown: { defaults: ["ctrl+d"] },
   halfPageUp: { defaults: ["ctrl+u"] },
+  paragraphBackward: { defaults: ["{"], legacy: "{" },
+  paragraphForward: { defaults: ["}"], legacy: "}" },
 } as const satisfies Record<VimMotionAction, KeymapDescriptor>;
 
 export const KEYMAP_MACRO_DESCRIPTORS = {
@@ -78,6 +80,7 @@ export const KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS = {
   paren: { defaults: ["(", ")"] },
   bracket: { defaults: ["[", "]"] },
   brace: { defaults: ["{", "}"] },
+  paragraph: { defaults: ["p"] },
   codeFence: { defaults: ["f"] },
   headingSection: { defaults: ["h"] },
   listItem: { defaults: ["l"] },

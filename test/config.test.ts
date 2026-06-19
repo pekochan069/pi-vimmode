@@ -366,6 +366,13 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.paragraphBackward).toEqual(["{"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.paragraphForward).toEqual(["}"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.textObjects.targets.paragraph).toEqual(["p"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("paragraphForward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("paragraphBackward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("paragraphForward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank).toContain("paragraphBackward");
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForwardBig).toEqual(["W"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordBackwardBig).toEqual(["B"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEndBig).toEqual(["E"]);

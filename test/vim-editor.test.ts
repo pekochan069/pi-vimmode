@@ -1170,6 +1170,59 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("--foo=bar /tmp/a-b");
   });
 
+  test("VimEditor honors default paragraph motions and text objects", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("alpha\nbeta\n\ngamma\n\ndelta\nepsilon");
+    typeKeys(editor, ["g", "g", "}"]);
+    expect(editor.getCursor()).toEqual({ line: 3, col: 0 });
+    typeKeys(editor, ["{"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    typeKeys(editor, ["d", "}"]);
+    expect(editor.getText()).toBe("gamma\n\ndelta\nepsilon");
+    typeKeys(editor, ["g", "g", "d", "a", "p"]);
+    expect(editor.getText()).toBe("delta\nepsilon");
+  });
+
+  test("VimEditor honors configured paragraph motion and text object keys", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { paragraphForward: ["P"], paragraphBackward: ["N"] },
+          textObjects: { targets: { paragraph: ["g"] } },
+          operatorMotions: { delete: ["paragraphForward"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+    editor.setText("alpha\n\ngamma");
+    typeKeys(editor, ["g", "g", "P"]);
+    expect(editor.getCursor()).toEqual({ line: 2, col: 0 });
+    typeKeys(editor, ["d", "i", "g"]);
+    expect(editor.getText()).toBe("alpha\n\n");
+  });
+
+  test("VimEditor propagates configured paragraph options without dropping siblings", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { paragraphForward: ["]"] },
+          commands: { redo: ["U"] },
+          macros: { record: ["q"], play: ["@"] },
+          marks: { set: ["m"], jumpExact: ["`"], jumpLine: ["'"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+    expect(options.keymap?.motions.paragraphForward).toEqual(["]"]);
+    expect(options.keymap?.commands.redo).toEqual(["U"]);
+    editor.setText("one\n\ntwo");
+    typeKeys(editor, ["g", "g", "]"]);
+    expect(editor.getCursor()).toEqual({ line: 2, col: 0 });
+    typeKeys(editor, ["U"]);
+  });
+
   test("macro records and replays Ex substitutions and cancellation", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("old\nold");

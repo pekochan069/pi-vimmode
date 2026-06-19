@@ -121,6 +121,21 @@ describe("documentation drift guard", () => {
     expect(allUserDocs).toContain("display-line motions");
   });
 
+  test("docs cover paragraph motion and text object names and defaults", () => {
+    for (const key of ["`{`", "`}`", "`ip`", "`ap`", "d}", "c{", "dap"]) {
+      expect(featuresDoc).toContain(key);
+    }
+    for (const action of ["paragraphForward", "paragraphBackward"]) {
+      expect(settingsDoc).toContain(action);
+    }
+    expect(settingsDoc).toContain("textObjects.targets.paragraph");
+    expect(settingsDoc).toContain('["{"]');
+    expect(settingsDoc).toContain('["}"]');
+    expect(settingsDoc).toContain('["p"]');
+    expect(featuresDoc).toContain("blank-line");
+    expect(featuresDoc).toContain("paragraph");
+  });
+
   test("docs cannot regress :noh or :nohlsearch into unsupported claims", () => {
     const forbidden =
       /(?:unsupported|not supported|no support)[^\n.]{0,120}:(?:noh|nohlsearch)|:(?:noh|nohlsearch)[^\n.]{0,120}(?:unsupported|not supported|no support)/i;

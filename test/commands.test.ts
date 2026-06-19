@@ -27,6 +27,8 @@ const operatorMotions = [
   "$",
   "G",
   "%",
+  "{",
+  "}",
 ] as const;
 
 describe("normal command parser", () => {
@@ -775,6 +777,99 @@ describe("normal command parser", () => {
     expect(
       resolveNormalCommand("w", deletePending.type === "pending" ? deletePending.pending : ""),
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordForward" });
+  });
+
+  test("resolves paragraph motions and paragraph text objects", () => {
+    expect(resolveNormalCommand("{", undefined)).toEqual({
+      type: "motion",
+      motion: "paragraphBackward",
+    });
+    expect(resolveNormalCommand("}", undefined)).toEqual({
+      type: "motion",
+      motion: "paragraphForward",
+    });
+    expect(parseNormalCommand("}", "d")).toEqual({
+      type: "operatorMotion",
+      operator: "d",
+      motion: "}",
+    });
+    expect(parseNormalCommand("{", "y")).toEqual({
+      type: "operatorMotion",
+      operator: "y",
+      motion: "{",
+    });
+
+    const change = resolveNormalCommand("c", undefined);
+    const inner = resolveNormalCommand("i", change.type === "pending" ? change.pending : "");
+    expect(resolveNormalCommand("p", inner.type === "pending" ? inner.pending : "")).toEqual({
+      type: "operatorTextObject",
+      operator: "change",
+      textObject: { kind: "inner", target: "paragraph" },
+    });
+    const deletePending = resolveNormalCommand("d", undefined);
+    const around = resolveNormalCommand(
+      "a",
+      deletePending.type === "pending" ? deletePending.pending : "",
+    );
+    expect(resolveNormalCommand("p", around.type === "pending" ? around.pending : "")).toEqual({
+      type: "operatorTextObject",
+      operator: "delete",
+      textObject: { kind: "around", target: "paragraph" },
+    });
+  });
+
+  test("uses configured paragraph motion and text object keys", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      motions: {
+        ...DEFAULT_VIM_KEYMAP.motions,
+        paragraphForward: ["P"],
+        paragraphBackward: ["N"],
+      },
+      textObjects: {
+        ...DEFAULT_VIM_KEYMAP.textObjects,
+        targets: { ...DEFAULT_VIM_KEYMAP.textObjects.targets, paragraph: ["g"] },
+      },
+    };
+    expect(resolveNormalCommand("P", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "paragraphForward",
+    });
+    expect(resolveNormalCommand("N", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "paragraphBackward",
+    });
+    const deletePending = resolveNormalCommand("d", undefined, keymap);
+    const inner = resolveNormalCommand(
+      "i",
+      deletePending.type === "pending" ? deletePending.pending : "",
+      keymap,
+    );
+    expect(
+      resolveNormalCommand("g", inner.type === "pending" ? inner.pending : "", keymap),
+    ).toEqual({
+      type: "operatorTextObject",
+      operator: "delete",
+      textObject: { kind: "inner", target: "paragraph" },
+    });
+  });
+
+  test("omitted paragraph operator motion clears pending state", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operatorMotions: {
+        ...DEFAULT_VIM_KEYMAP.operatorMotions,
+        delete: ["wordForward"] as const,
+      },
+    };
+    const deletePending = resolveNormalCommand("d", undefined, keymap);
+    expect(
+      resolveNormalCommand(
+        "}",
+        deletePending.type === "pending" ? deletePending.pending : "",
+        keymap,
+      ),
+    ).toEqual({ type: "invalid" });
   });
 
   test("keeps duplicate sequence resolution first-match deterministic", () => {

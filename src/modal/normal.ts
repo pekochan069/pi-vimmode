@@ -30,6 +30,8 @@ import {
   navigateBuffer,
   openLineAbove,
   openLineBelow,
+  paragraphBackwardPosition,
+  paragraphForwardPosition,
   pasteRegister,
   pasteRegisterBefore,
   replaceCharAt,
@@ -170,6 +172,18 @@ function moveEffectFor(
   if (motion === "matchingPair") {
     const target = navigateBuffer(snapshot.text, snapshot.cursor, "matchingPair");
     return target ? { type: "restoreCursor", position: target } : undefined;
+  }
+  if (motion === "paragraphForward") {
+    return {
+      type: "restoreCursor",
+      position: paragraphForwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "paragraphBackward") {
+    return {
+      type: "restoreCursor",
+      position: paragraphBackwardPosition(snapshot.text, snapshot.cursor, count),
+    };
   }
   if (motion === "halfPageDown" || motion === "halfPageUp") {
     const direction = motion === "halfPageDown" ? 1 : -1;

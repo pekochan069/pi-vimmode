@@ -2,9 +2,18 @@
 
 ## Next Version
 
+- [x] Add `{` / `}` paragraph motions and `ip` / `ap` paragraph text objects.
+- [ ] Add `*` / `#` search word under cursor forward/backward, reusing prompt search repeat state.
+- [ ] Add `X` delete character before cursor.
+- [ ] Add `gu` / `gU` / `g~` case operators, including text-object and visual support.
+- [ ] Add `gv` reselect last visual range.
 - [ ] ex command autocomplete
 
 ## Deferred
+
+- [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.
+- [ ] Consider `zz` / `zt` / `zb` viewport recentering if prompt viewport state needs explicit cursor positioning.
+- [ ] Consider window/file keybindings only if pi-vimmode expands beyond prompt-local editing.
 
 ## Ideas
 

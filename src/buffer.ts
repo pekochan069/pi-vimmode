@@ -16,6 +16,7 @@ import type {
   VimMotion,
   VimRegister,
   VimTextObject,
+  VimTextObjectKind,
 } from "./types.ts";
 
 import { isErrorBlockLine, resolvePromptStructureRange } from "./prompt-structures.ts";
@@ -291,6 +292,20 @@ function motionOffsetRange(
       Math.min(current, targetOffset),
       Math.min(text.length, Math.max(current, targetOffset) + 1),
     );
+  }
+  if (motion === "}" || motion === "{") {
+    const lines = splitText(text);
+    let pos = clampPosition(lines, cursor);
+    const step = motion === "}" ? paragraphForwardStep : paragraphBackwardStep;
+    const repetitions = Math.max(1, count);
+    for (let index = 0; index < repetitions; index++) {
+      const next = step(lines, pos);
+      if (comparePositions(next, pos) === 0) break;
+      pos = next;
+    }
+    const targetOffset = positionToOffset(text, pos);
+    if (targetOffset === current) return undefined;
+    return orderedOffsetRange(current, targetOffset);
   }
   let target = current;
   const repetitions = Math.max(1, count);
@@ -1849,6 +1864,78 @@ export function wordPreviousEndBigPosition(text: string, cursor: Position, count
   return countedWordPosition(text, cursor, count, previousWordEndWORDOffset);
 }
 
+function isBlankLine(line: string): boolean {
+  return line.trim().length === 0;
+}
+
+function paragraphRunStart(lines: string[], line: number): number {
+  let start = line;
+  while (start > 0 && !isBlankLine(lines[start - 1]!)) start--;
+  return start;
+}
+
+function paragraphRunEnd(lines: string[], line: number): number {
+  let end = line;
+  while (end < lines.length - 1 && !isBlankLine(lines[end + 1]!)) end++;
+  return end;
+}
+
+function promptEndPosition(lines: string[]): Position {
+  const line = Math.max(0, lines.length - 1);
+  return { line, col: lines[line]?.length ?? 0 };
+}
+
+function paragraphForwardStep(lines: string[], pos: Position): Position {
+  const lastLine = lines.length - 1;
+  let index = pos.line;
+  if (!isBlankLine(lines[index]!)) {
+    index = paragraphRunEnd(lines, index) + 1;
+  }
+  while (index <= lastLine && isBlankLine(lines[index]!)) index++;
+  if (index > lastLine) return promptEndPosition(lines);
+  return { line: index, col: 0 };
+}
+
+function paragraphBackwardStep(lines: string[], pos: Position): Position {
+  if (!isBlankLine(lines[pos.line]!)) {
+    const runStart = paragraphRunStart(lines, pos.line);
+    if (pos.line > runStart || pos.col > 0) return { line: runStart, col: 0 };
+    let index = runStart - 1;
+    while (index >= 0 && isBlankLine(lines[index]!)) index--;
+    if (index < 0) return { line: 0, col: 0 };
+    return { line: paragraphRunStart(lines, index), col: 0 };
+  }
+  let index = pos.line - 1;
+  while (index >= 0 && isBlankLine(lines[index]!)) index--;
+  if (index < 0) return { line: 0, col: 0 };
+  return { line: paragraphRunStart(lines, index), col: 0 };
+}
+
+function countedParagraphPosition(
+  text: string,
+  cursor: Position,
+  count: number,
+  step: (lines: string[], pos: Position) => Position,
+): Position {
+  const lines = splitText(text);
+  let pos = clampPosition(lines, cursor);
+  const repetitions = Math.max(1, count);
+  for (let index = 0; index < repetitions; index++) {
+    const next = step(lines, pos);
+    if (comparePositions(next, pos) === 0) break;
+    pos = next;
+  }
+  return pos;
+}
+
+export function paragraphForwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedParagraphPosition(text, cursor, count, paragraphForwardStep);
+}
+
+export function paragraphBackwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedParagraphPosition(text, cursor, count, paragraphBackwardStep);
+}
+
 export function deleteByMotion(
   text: string,
   cursor: Position,
@@ -2256,6 +2343,8 @@ export function textObjectRange(
   else if (textObject.target === "paren") range = bracketRangeAtOffset(text, cursor, "(", ")");
   else if (textObject.target === "bracket") range = bracketRangeAtOffset(text, cursor, "[", "]");
   else if (textObject.target === "brace") range = bracketRangeAtOffset(text, cursor, "{", "}");
+  else if (textObject.target === "paragraph")
+    range = paragraphTextObjectOffsets(text, cursor, textObject.kind);
   else if (
     isPromptStructureTarget(textObject.target) &&
     (promptStructures?.enabled ?? true) &&
@@ -2280,7 +2369,37 @@ export function textObjectRange(
 }
 
 function isPromptStructureTarget(target: VimTextObject["target"]): target is PromptStructureTarget {
-  return !["word", "singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(target);
+  return !["word", "singleQuote", "doubleQuote", "paren", "bracket", "brace", "paragraph"].includes(
+    target,
+  );
+}
+
+function paragraphTextObjectOffsets(
+  text: string,
+  cursor: Position,
+  kind: VimTextObjectKind,
+): { start: number; end: number } | undefined {
+  const lines = splitText(text);
+  if (lines.length === 0) return undefined;
+  const pos = clampPosition(lines, cursor);
+  if (isBlankLine(lines[pos.line]!)) return undefined;
+  const starts = lineStartOffsets(lines);
+  const runStart = paragraphRunStart(lines, pos.line);
+  const runEnd = paragraphRunEnd(lines, pos.line);
+  const afterBody = runEnd + 1 < lines.length ? starts[runEnd + 1]! : text.length;
+  if (kind === "inner") return { start: starts[runStart]!, end: afterBody };
+  if (runEnd + 1 < lines.length && isBlankLine(lines[runEnd + 1]!)) {
+    let sepEnd = runEnd + 1;
+    while (sepEnd + 1 < lines.length && isBlankLine(lines[sepEnd + 1]!)) sepEnd++;
+    const end = sepEnd + 1 < lines.length ? starts[sepEnd + 1]! : text.length;
+    return { start: starts[runStart]!, end };
+  }
+  if (runStart - 1 >= 0 && isBlankLine(lines[runStart - 1]!)) {
+    let sepStart = runStart - 1;
+    while (sepStart - 1 >= 0 && isBlankLine(lines[sepStart - 1]!)) sepStart--;
+    return { start: starts[sepStart]!, end: afterBody };
+  }
+  return { start: starts[runStart]!, end: afterBody };
 }
 
 function promptStructureTextObjectRange(
@@ -2311,6 +2430,11 @@ export function yankTextObject(
   const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
   if (structureRange)
     return { type: "char", text: text.slice(structureRange.start, structureRange.endExclusive) };
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end) return undefined;
+    return { type: "char", text: text.slice(offsets.start, offsets.end) };
+  }
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return undefined;
   return yankVisualSelection(text, range.start, range.end, "char");
@@ -2347,6 +2471,12 @@ export function deleteTextObject(
       },
       changed: nextText !== text,
     };
+  }
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end)
+      return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+    return deleteOffsetRange(text, offsets.start, offsets.end);
   }
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };

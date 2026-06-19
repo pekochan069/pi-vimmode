@@ -135,6 +135,8 @@ const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {
   matchingPair: "move to matching bracket or quote",
   halfPageDown: "move down by half a prompt page",
   halfPageUp: "move up by half a prompt page",
+  paragraphBackward: "move to previous paragraph",
+  paragraphForward: "move to next paragraph",
 };
 
 const SEARCH_COMMANDS = new Set<VimCommandAction>([

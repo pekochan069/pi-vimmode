@@ -46,6 +46,8 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  paragraphForwardPosition,
+  paragraphBackwardPosition,
   putExRegisterAfterRange,
   putRegisterAfterResolvedLineRange,
   replaceVisualRangeChars,
@@ -1213,5 +1215,129 @@ describe("Ex line operations", () => {
     );
 
     expect(result).toMatchObject({ ok: true, edit: { text, changed: false } });
+  });
+});
+
+describe("paragraph motions", () => {
+  const three = "alpha\nbeta\n\ngamma\n\ndelta\nepsilon";
+
+  test("forward motion moves to next paragraph first column", () => {
+    expect(paragraphForwardPosition(three, p(0, 2))).toEqual(p(3, 0));
+    expect(paragraphForwardPosition(three, p(1, 1))).toEqual(p(3, 0));
+    expect(paragraphForwardPosition(three, p(3, 0))).toEqual(p(5, 0));
+  });
+
+  test("forward motion reaches prompt end at last paragraph", () => {
+    expect(paragraphForwardPosition(three, p(5, 2))).toEqual(p(6, 7));
+    expect(paragraphForwardPosition(three, p(6, 7))).toEqual(p(6, 7));
+  });
+
+  test("backward motion moves to current paragraph start", () => {
+    expect(paragraphBackwardPosition(three, p(1, 1))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(6, 3))).toEqual(p(5, 0));
+  });
+
+  test("backward motion jumps to previous paragraph when already at start", () => {
+    expect(paragraphBackwardPosition(three, p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(3, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(5, 0))).toEqual(p(3, 0));
+  });
+
+  test("counted motions repeat and clamp at boundaries", () => {
+    expect(paragraphForwardPosition(three, p(0, 0), 2)).toEqual(p(5, 0));
+    expect(paragraphForwardPosition(three, p(0, 0), 9)).toEqual(p(6, 7));
+    expect(paragraphBackwardPosition(three, p(6, 0), 2)).toEqual(p(3, 0));
+    expect(paragraphBackwardPosition(three, p(6, 0), 9)).toEqual(p(0, 0));
+  });
+
+  test("separator-only and empty prompts are safe no-ops", () => {
+    expect(paragraphForwardPosition("", p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition("", p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphForwardPosition("\n\n  \n", p(1, 0))).toEqual(p(3, 0));
+    expect(paragraphBackwardPosition("\n\n  \n", p(1, 0))).toEqual(p(0, 0));
+  });
+
+  test("delete by forward paragraph removes through separator boundary", () => {
+    const text = "alpha\nbeta\n\ngamma\n\ndelta";
+    const result = deleteByMotion(text, p(0, 0), "}");
+    expect(result.text).toBe("gamma\n\ndelta");
+    expect(result.cursor).toEqual(p(0, 0));
+    expect(result.register).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(result.changed).toBe(true);
+  });
+
+  test("delete by forward paragraph reaches prompt end at last paragraph", () => {
+    const result = deleteByMotion("alpha\n\nbeta", p(2, 0), "}");
+    expect(result.text).toBe("alpha\n\n");
+    expect(result.register).toEqual({ type: "char", text: "beta" });
+  });
+
+  test("delete by backward paragraph resolves toward paragraph start", () => {
+    const text = "alpha\n\ngamma\nline";
+    const result = deleteByMotion(text, p(3, 2), "{");
+    expect(result.text).toBe("alpha\n\nne");
+    expect(result.cursor).toEqual(p(2, 0));
+    expect(result.register).toEqual({ type: "char", text: "gamma\nli" });
+  });
+
+  test("yank by paragraph motion preserves prompt text", () => {
+    const text = "alpha\nbeta\n\ngamma";
+    expect(yankByMotion(text, p(0, 0), "}")).toEqual({
+      type: "char",
+      text: "alpha\nbeta\n\n",
+    });
+    expect(yankByMotion(text, p(3, 0), "{")).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(yankByMotion(text, p(0, 0), "}")).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(yankByMotion("alpha", p(0, 5), "}")).toBeUndefined();
+  });
+
+  test("inner paragraph text object deletes body without separators", () => {
+    const text = "para1\n\npara2\n\npara3";
+    expect(deleteTextObject(text, p(0, 2), { kind: "inner", target: "paragraph" })).toMatchObject({
+      text: "\npara2\n\npara3",
+      cursor: p(0, 0),
+      register: { type: "char", text: "para1\n" },
+      changed: true,
+    });
+    expect(deleteTextObject(text, p(2, 0), { kind: "inner", target: "paragraph" })).toMatchObject({
+      register: { type: "char", text: "para2\n" },
+    });
+  });
+
+  test("around paragraph text object includes one adjacent separator group", () => {
+    const text = "para1\n\npara2\n\npara3";
+    expect(deleteTextObject(text, p(0, 2), { kind: "around", target: "paragraph" })).toMatchObject({
+      text: "para2\n\npara3",
+      cursor: p(0, 0),
+      register: { type: "char", text: "para1\n\n" },
+      changed: true,
+    });
+    expect(deleteTextObject(text, p(4, 0), { kind: "around", target: "paragraph" })).toMatchObject({
+      text: "para1\n\npara2\n",
+      register: { type: "char", text: "\npara3" },
+    });
+  });
+
+  test("yank paragraph text object preserves prompt text", () => {
+    const text = "para1\n\npara2";
+    expect(yankTextObject(text, p(0, 0), { kind: "inner", target: "paragraph" })).toEqual({
+      type: "char",
+      text: "para1\n",
+    });
+    expect(yankTextObject(text, p(2, 0), { kind: "around", target: "paragraph" })).toEqual({
+      type: "char",
+      text: "\npara2",
+    });
+  });
+
+  test("missing paragraph text object is a safe no-op", () => {
+    expect(deleteTextObject("", p(0, 0), { kind: "inner", target: "paragraph" })).toMatchObject({
+      text: "",
+      changed: false,
+    });
+    expect(
+      deleteTextObject("\n  \n\n", p(1, 0), { kind: "around", target: "paragraph" }),
+    ).toMatchObject({ changed: false });
+    expect(yankTextObject("\n\n", p(0, 0), { kind: "inner", target: "paragraph" })).toBeUndefined();
   });
 });

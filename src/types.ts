@@ -43,7 +43,9 @@ export type VimMotionAction =
   | "bufferEnd"
   | "matchingPair"
   | "halfPageDown"
-  | "halfPageUp";
+  | "halfPageUp"
+  | "paragraphBackward"
+  | "paragraphForward";
 
 export type VimCommandAction =
   | "insertBefore"
@@ -100,6 +102,7 @@ export type VimTextObjectTarget =
   | "paren"
   | "bracket"
   | "brace"
+  | "paragraph"
   | PromptStructureTarget;
 
 export type VimTextObject = {
@@ -344,7 +347,9 @@ export type VimMotion =
   | "$"
   | "gg"
   | "G"
-  | "%";
+  | "%"
+  | "{"
+  | "}";
 
 export type PendingOperator = string;
 

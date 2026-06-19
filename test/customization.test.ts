@@ -27,7 +27,7 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 80 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 83 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "halfPageDown")).toContain("motion.halfPageDown ctrl+d");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
@@ -64,6 +64,8 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(keymap, "ctrl+r")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-r>")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-d>")).toBe("mapcheck: ctrl+d -> motion.halfPageDown");
+    expect(mapcheckMessage(keymap, "{")).toBe("mapcheck: { -> motion.paragraphBackward");
+    expect(mapcheckMessage(keymap, "}")).toBe("mapcheck: } -> motion.paragraphForward");
     expect(mapcheckMessage(keymap, "zz")).toBe("mapcheck: zz is unmapped");
   });
 

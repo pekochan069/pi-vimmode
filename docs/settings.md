@@ -161,28 +161,30 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 
 ### Motions
 
-| Path                                          | Default      | Effect                                                                        |
-| --------------------------------------------- | ------------ | ----------------------------------------------------------------------------- |
-| `piVimMode.keymap.motions.left`               | `["h"]`      | Move left. Count repeats movement.                                            |
-| `piVimMode.keymap.motions.down`               | `["j"]`      | Move down. Count repeats movement.                                            |
-| `piVimMode.keymap.motions.up`                 | `["k"]`      | Move up. Count repeats movement.                                              |
-| `piVimMode.keymap.motions.right`              | `["l"]`      | Move right. Count repeats movement.                                           |
-| `piVimMode.keymap.motions.wordForward`        | `["w"]`      | Move to next word.                                                            |
-| `piVimMode.keymap.motions.wordBackward`       | `["b"]`      | Move to previous word.                                                        |
-| `piVimMode.keymap.motions.wordEnd`            | `["e"]`      | Move to word end.                                                             |
-| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`      | Move to next whitespace-delimited WORD.                                       |
-| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`      | Move to previous whitespace-delimited WORD.                                   |
-| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`      | Move to end of current or next whitespace-delimited WORD.                     |
-| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`     | Move to previous word end.                                                    |
-| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`     | Move to previous whitespace-delimited WORD end.                               |
-| `piVimMode.keymap.motions.lineStart`          | `["0"]`      | Move to start of current line.                                                |
-| `piVimMode.keymap.motions.lineEnd`            | `["$"]`      | Move to end of current line.                                                  |
-| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]` | Move to first non-blank character on current line.                            |
-| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                         |
-| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                           |
-| `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line. |
-| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]` | Move down by half the visible prompt page; count multiplies the distance.     |
-| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]` | Move up by half the visible prompt page; count multiplies the distance.       |
+| Path                                          | Default      | Effect                                                                                                      |
+| --------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.motions.left`               | `["h"]`      | Move left. Count repeats movement.                                                                          |
+| `piVimMode.keymap.motions.down`               | `["j"]`      | Move down. Count repeats movement.                                                                          |
+| `piVimMode.keymap.motions.up`                 | `["k"]`      | Move up. Count repeats movement.                                                                            |
+| `piVimMode.keymap.motions.right`              | `["l"]`      | Move right. Count repeats movement.                                                                         |
+| `piVimMode.keymap.motions.wordForward`        | `["w"]`      | Move to next word.                                                                                          |
+| `piVimMode.keymap.motions.wordBackward`       | `["b"]`      | Move to previous word.                                                                                      |
+| `piVimMode.keymap.motions.wordEnd`            | `["e"]`      | Move to word end.                                                                                           |
+| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`      | Move to next whitespace-delimited WORD.                                                                     |
+| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`      | Move to previous whitespace-delimited WORD.                                                                 |
+| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`      | Move to end of current or next whitespace-delimited WORD.                                                   |
+| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`     | Move to previous word end.                                                                                  |
+| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`     | Move to previous whitespace-delimited WORD end.                                                             |
+| `piVimMode.keymap.motions.lineStart`          | `["0"]`      | Move to start of current line.                                                                              |
+| `piVimMode.keymap.motions.lineEnd`            | `["$"]`      | Move to end of current line.                                                                                |
+| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]` | Move to first non-blank character on current line.                                                          |
+| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                                                       |
+| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                                                         |
+| `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line.                               |
+| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]` | Move down by half the visible prompt page; count multiplies the distance.                                   |
+| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]` | Move up by half the visible prompt page; count multiplies the distance.                                     |
+| `piVimMode.keymap.motions.paragraphBackward`  | `["{"]`      | Move to current paragraph start, or previous paragraph start when already there. Blank-line-separated runs. |
+| `piVimMode.keymap.motions.paragraphForward`   | `["}"]`      | Move to next paragraph first column, or prompt end when none remain. Blank-line-separated runs.             |
 
 ### Commands
 
@@ -253,21 +255,22 @@ Use this command path for a shortcut to keybinding discovery. Do not configure `
 
 Text object keys are only read after an operator and a text-object kind key. Defaults preserve Vim-style `iw`, `aw`, plus prompt-native objects.
 
-| Path                                                  | Default      | Effect                                               |
-| ----------------------------------------------------- | ------------ | ---------------------------------------------------- |
-| `piVimMode.keymap.textObjects.kinds.inner`            | `["i"]`      | Kind key for inner text objects, e.g. `diw`, `cif`.  |
-| `piVimMode.keymap.textObjects.kinds.around`           | `["a"]`      | Kind key for around text objects, e.g. `daw`, `yaf`. |
-| `piVimMode.keymap.textObjects.targets.word`           | `["w"]`      | Word text object target.                             |
-| `piVimMode.keymap.textObjects.targets.singleQuote`    | `["'"]`      | Single-quoted string target.                         |
-| `piVimMode.keymap.textObjects.targets.doubleQuote`    | `["\""]`     | Double-quoted string target.                         |
-| `piVimMode.keymap.textObjects.targets.paren`          | `["(", ")"]` | Parenthesized target.                                |
-| `piVimMode.keymap.textObjects.targets.bracket`        | `["[", "]"]` | Bracketed target.                                    |
-| `piVimMode.keymap.textObjects.targets.brace`          | `["{", "}"]` | Braced target.                                       |
-| `piVimMode.keymap.textObjects.targets.codeFence`      | `["f"]`      | Markdown code fence target.                          |
-| `piVimMode.keymap.textObjects.targets.headingSection` | `["h"]`      | Markdown heading section target.                     |
-| `piVimMode.keymap.textObjects.targets.listItem`       | `["l"]`      | Markdown list item target.                           |
-| `piVimMode.keymap.textObjects.targets.tag`            | `["t"]`      | XML-ish tag block target.                            |
-| `piVimMode.keymap.textObjects.targets.errorBlock`     | `["e"]`      | Pasted error/stack-trace block target.               |
+| Path                                                  | Default      | Effect                                                  |
+| ----------------------------------------------------- | ------------ | ------------------------------------------------------- |
+| `piVimMode.keymap.textObjects.kinds.inner`            | `["i"]`      | Kind key for inner text objects, e.g. `diw`, `cif`.     |
+| `piVimMode.keymap.textObjects.kinds.around`           | `["a"]`      | Kind key for around text objects, e.g. `daw`, `yaf`.    |
+| `piVimMode.keymap.textObjects.targets.word`           | `["w"]`      | Word text object target.                                |
+| `piVimMode.keymap.textObjects.targets.singleQuote`    | `["'"]`      | Single-quoted string target.                            |
+| `piVimMode.keymap.textObjects.targets.doubleQuote`    | `["\""]`     | Double-quoted string target.                            |
+| `piVimMode.keymap.textObjects.targets.paren`          | `["(", ")"]` | Parenthesized target.                                   |
+| `piVimMode.keymap.textObjects.targets.bracket`        | `["[", "]"]` | Bracketed target.                                       |
+| `piVimMode.keymap.textObjects.targets.brace`          | `["{", "}"]` | Braced target.                                          |
+| `piVimMode.keymap.textObjects.targets.codeFence`      | `["f"]`      | Markdown code fence target.                             |
+| `piVimMode.keymap.textObjects.targets.headingSection` | `["h"]`      | Markdown heading section target.                        |
+| `piVimMode.keymap.textObjects.targets.listItem`       | `["l"]`      | Markdown list item target.                              |
+| `piVimMode.keymap.textObjects.targets.tag`            | `["t"]`      | XML-ish tag block target.                               |
+| `piVimMode.keymap.textObjects.targets.errorBlock`     | `["e"]`      | Pasted error/stack-trace block target.                  |
+| `piVimMode.keymap.textObjects.targets.paragraph`      | `["p"]`      | Blank-line paragraph target for `ip`/`ap` text objects. |
 
 Example:
 
@@ -289,14 +292,14 @@ Example:
 These settings decide which semantic motions are valid after each operator. Accepted motion action names:
 
 ```text
-left, down, up, right, wordForward, wordBackward, wordEnd, wordForwardBig, wordBackwardBig, wordEndBig, wordPreviousEnd, wordPreviousEndBig, lineStart, firstNonBlank, lineEnd, bufferStart, bufferEnd, matchingPair
+left, down, up, right, wordForward, wordBackward, wordEnd, wordForwardBig, wordBackwardBig, wordEndBig, wordPreviousEnd, wordPreviousEndBig, lineStart, firstNonBlank, lineEnd, bufferStart, bufferEnd, matchingPair, paragraphBackward, paragraphForward
 ```
 
-| Path                                      | Default                                                      | Effect                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `piVimMode.keymap.operatorMotions.delete` | all supported motion actions (`left` through `matchingPair`) | Motions allowed after delete operator. Remove entries to disable combinations. |
-| `piVimMode.keymap.operatorMotions.change` | all supported motion actions (`left` through `matchingPair`) | Motions allowed after change operator.                                         |
-| `piVimMode.keymap.operatorMotions.yank`   | all supported motion actions (`left` through `matchingPair`) | Motions allowed after yank operator.                                           |
+| Path                                      | Default                                                          | Effect                                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `piVimMode.keymap.operatorMotions.delete` | all supported motion actions (`left` through `paragraphForward`) | Motions allowed after delete operator. Remove entries to disable combinations. |
+| `piVimMode.keymap.operatorMotions.change` | all supported motion actions (`left` through `paragraphForward`) | Motions allowed after change operator.                                         |
+| `piVimMode.keymap.operatorMotions.yank`   | all supported motion actions (`left` through `paragraphForward`) | Motions allowed after yank operator.                                           |
 
 WORD and previous-end actions can be customized and used in `operatorMotions` like other finite motions. Example: `{ "piVimMode": { "keymap": { "motions": { "wordForwardBig": ["gw"], "wordPreviousEnd": ["g-"] }, "operatorMotions": { "delete": ["wordForwardBig", "wordPreviousEnd"] } } } }` makes `dgw` and `dg-` valid delete targets.
 

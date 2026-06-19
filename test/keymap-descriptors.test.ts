@@ -40,6 +40,8 @@ const expectedMotions = [
   "matchingPair",
   "halfPageDown",
   "halfPageUp",
+  "paragraphBackward",
+  "paragraphForward",
 ];
 const expectedCommands = [
   "insertBefore",
@@ -87,6 +89,7 @@ const expectedTextObjectTargets = [
   "paren",
   "bracket",
   "brace",
+  "paragraph",
   "codeFence",
   "headingSection",
   "listItem",
@@ -124,6 +127,11 @@ describe("keymap descriptors", () => {
     expect(motions.bufferStart).toEqual(["gg"]);
     expect(motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(motions.paragraphBackward).toEqual(["{"]);
+    expect(motions.paragraphForward).toEqual(["}"]);
+
+    const targets = deriveDefaultKeyBindings(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
+    expect(targets.paragraph).toEqual(["p"]);
 
     motions.wordForward.push("custom");
     expect(KEYMAP_MOTION_DESCRIPTORS.wordForward.defaults).toEqual(["w"]);

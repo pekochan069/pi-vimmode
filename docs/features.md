@@ -111,22 +111,25 @@ Enter        -> submit through Pi
 
 <!-- runtime-help:motions -->
 
-| Key                   | Action                                  | Notes                                                             |
-| --------------------- | --------------------------------------- | ----------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                        |
-| `0` / `$`             | line start / line end                   | Current prompt line.                                              |
-| `^` / `_`             | first non-blank on line                 | Both map to same action.                                          |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.   |
-| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.     |
-| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.        |
-| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                    |
-| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount. |
-| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.  |
-| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                |
-| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                |
-| `;` / `,`             | repeat char search                      | Same/opposite direction.                                          |
+| Key                   | Action                                  | Notes                                                                          |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                                     |
+| `0` / `$`             | line start / line end                   | Current prompt line.                                                           |
+| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                       |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                  |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                     |
+| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                 |
+| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.              |
+| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.               |
+| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds. |
+| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                             |
+| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                             |
+| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                       |
 
-Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
+Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`, `2}`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
+
+Paragraph motions are prompt-local and blank-line based. A paragraph is a contiguous run of non-blank lines separated by one or more whitespace-only blank lines. `}` moves to the first column of the next paragraph, or to the prompt end when no later paragraph exists. `{` moves to the current paragraph start, or to the previous paragraph start when already there. They work in normal and visual modes; visual mode keeps the anchor and moves the active cursor. This is smaller than Vim's full paragraph grammar: no nroff macros, sentence motions, section motions, or language-aware paragraph parsing.
 
 Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, full-page scroll keys such as `<C-f>`/`<C-b>`, viewport recentering such as `zz`/`zt`/`zb`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior.
 
@@ -201,7 +204,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
@@ -217,6 +220,9 @@ dj        delete current and next line
 dgg       delete through buffer start
 yG        yank through buffer end
 d%        delete through matching pair
+d}        delete through next paragraph start, including trailing blank separator
+c{        change back through paragraph start
+y}        yank through next paragraph start
 y$        yank through line end
 c^        change back to first non-blank
 cE        change through the end of the current/next WORD
@@ -253,6 +259,7 @@ Text objects work after `d`, `c`, or `y`.
 | `il` / `al`               | inner/around Markdown list item             |
 | `it` / `at`               | inner/around XML-ish tag                    |
 | `ie` / `ae`               | inner/around pasted error block             |
+| `ip` / `ap`               | inner/around blank-line paragraph           |
 
 Examples:
 
@@ -264,6 +271,8 @@ ya{   yank braced block including braces
 daf   delete whole Markdown code fence
 cih   change body of current Markdown heading section
 yal   yank current Markdown list item
+dip   delete current paragraph body without adjacent blank separators
+dap   delete current paragraph plus one adjacent blank separator group
 ```
 
 Limitations:
@@ -272,6 +281,7 @@ Limitations:
 - Quote objects search current line.
 - Bracket objects balance delimiters in prompt text, but do not implement Vim's full syntax awareness.
 - Prompt-native objects use conservative line-oriented scanning, not full Markdown/XML parsing.
+- Paragraph objects use the same blank-line paragraph model as `{` and `}`. `ip` selects the paragraph body only; `ap` adds one adjacent blank separator group when present (following, otherwise preceding) so deleting a paragraph does not leave double blank separators.
 - XML-ish tags support matching `<name ...>` / `</name>` pairs and ignore self-closing tags.
 - Error block detection is heuristic and stops at blank or unrelated prose lines.
 

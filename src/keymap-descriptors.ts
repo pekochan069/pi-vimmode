@@ -99,6 +99,7 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   visualLine: { defaults: ["V"] },
   visualBlock: { defaults: [] },
   deleteChar: { defaults: ["x"] },
+  deleteCharBefore: { defaults: ["X"] },
   deleteToLineEnd: { defaults: ["D"] },
   changeToLineEnd: { defaults: ["C"] },
   yankLine: { defaults: ["Y"] },

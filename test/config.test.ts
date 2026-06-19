@@ -533,7 +533,7 @@ describe("vim config parsing", () => {
         keymap: {
           textObjects: {
             kinds: { inner: ["Z"], around: ["Q"] },
-            targets: { codeFence: ["R"], tag: ["X"] },
+            targets: { codeFence: ["R"], tag: ["H"] },
           },
         },
         promptStructures: { enabled: true, targets: { tag: false, errorBlock: false } },

@@ -2100,6 +2100,51 @@ describe("modal engine", () => {
     ]);
   });
 
+  test("normal mode supports delete before cursor", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "abcd", p(0, 2), ["X"]);
+    expect(deleted.text).toBe("acd");
+    expect(deleted.cursor).toEqual(p(0, 1));
+    expect(deleted.state.register).toEqual({ type: "char", text: "b" });
+    expect(deleted.state.lastRepeatableChange).toEqual({
+      type: "command",
+      command: "deleteCharBefore",
+      count: 1,
+    });
+
+    const counted = applyModalKeys({ mode: "normal" }, "abcdef", p(0, 5), ["3", "X"]);
+    expect(counted.text).toBe("abf");
+    expect(counted.state.register).toEqual({ type: "char", text: "cde" });
+    expect(counted.state.lastRepeatableChange).toEqual({
+      type: "command",
+      command: "deleteCharBefore",
+      count: 3,
+    });
+
+    const noOp = applyModalKeys(
+      { mode: "normal", register: { type: "char", text: "keep" } },
+      "abc",
+      p(0, 0),
+      ["X"],
+    );
+    expect(noOp.text).toBe("abc");
+    expect(noOp.state.register).toEqual({ type: "char", text: "keep" });
+  });
+
+  test("normal delete before cursor dot-repeat and ctrl-x numeric decrement stay distinct", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "abcde", p(0, 4), ["2", "X"]);
+    const repeated = applyModalKeys(deleted.state, deleted.text, p(0, 2), ["."]);
+    expect(repeated.text).toBe("e");
+    expect(repeated.state.register).toEqual({ type: "char", text: "ab" });
+
+    const decremented = handleModalInput(
+      { mode: "normal" },
+      { text: "v2", lines: ["v2"], cursor },
+      options,
+      "\x18",
+    );
+    expect(decremented.effects[0]).toMatchObject({ type: "edit", result: { text: "v1" } });
+  });
+
   test("normal mode supports counts, numeric adjustment, replacement, toggle case, and substitution", () => {
     const counted = handleModalInput({ mode: "normal" }, snapshot, options, "2");
     const deleted = handleModalInput(

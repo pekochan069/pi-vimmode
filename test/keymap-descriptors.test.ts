@@ -54,6 +54,7 @@ const expectedCommands = [
   "visualLine",
   "visualBlock",
   "deleteChar",
+  "deleteCharBefore",
   "deleteToLineEnd",
   "changeToLineEnd",
   "yankLine",
@@ -179,6 +180,7 @@ describe("keymap descriptors", () => {
 
   test("word search commands default to star and hash", () => {
     const commands = deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS);
+    expect(commands.deleteCharBefore).toEqual(["X"]);
     expect(commands.searchWordForward).toEqual(["*"]);
     expect(commands.searchWordBackward).toEqual(["#"]);
   });

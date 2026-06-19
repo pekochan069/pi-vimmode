@@ -889,6 +889,18 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
   });
 
+  test("normal X deletes character before cursor into register", () => {
+    const { editor } = createEditor();
+    editor.handleInput("a");
+    editor.handleInput("b");
+    editor.handleInput("c");
+    editor.handleInput("\x1b");
+    editor.handleInput("X");
+    expect(editor.getText()).toBe("ab");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 2 });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "c" });
+  });
+
   test("mark keys and behavior are configurable", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,

@@ -16,6 +16,13 @@
 - Paragraph motions and text objects support custom keybindings via `piVimMode.keymap.motions.paragraphBackward`, `piVimMode.keymap.motions.paragraphForward`, and `piVimMode.keymap.textObjects.targets.paragraph`.
 - Updated feature/settings docs and OpenSpec coverage for paragraph behavior.
 
+### Delete-before-cursor command
+
+- Added Vim-style `X` in normal mode to delete the character before the cursor.
+- Supports counts (`3X`), dot-repeat, and named/register semantics matching `x`.
+- Keeps `X` distinct from `Ctrl+X`, which still adjusts numbers.
+- Supports custom keybindings via `piVimMode.keymap.commands.deleteCharBefore`.
+
 ## Bug fixes
 
 - Kept brace text objects (`i{`, `a}`, etc.) distinct from paragraph motion keys by resolving behavior through parser context.

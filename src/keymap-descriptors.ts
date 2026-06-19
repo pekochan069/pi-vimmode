@@ -28,6 +28,9 @@ export const KEYMAP_OPERATOR_DESCRIPTORS = {
   delete: { defaults: ["d"], legacy: "d", motionOperator: true },
   change: { defaults: ["c"], legacy: "c", motionOperator: true },
   yank: { defaults: ["y"], legacy: "y", motionOperator: true },
+  lowercase: { defaults: ["gu"], motionOperator: true },
+  uppercase: { defaults: ["gU"], motionOperator: true },
+  toggleCase: { defaults: ["g~"], motionOperator: true },
   indent: { defaults: [">"] },
   dedent: { defaults: ["<"] },
 } as const satisfies Record<VimOperatorAction, OperatorDescriptor>;

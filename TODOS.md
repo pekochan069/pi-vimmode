@@ -4,8 +4,8 @@
 
 - [x] Add `{` / `}` paragraph motions and `ip` / `ap` paragraph text objects.
 - [x] Add `*` / `#` search word under cursor forward/backward, reusing prompt search repeat state.
-- [ ] Add `X` delete character before cursor.
-- [ ] Add `gu` / `gU` / `g~` case operators, including text-object and visual support.
+- [x] Add `X` delete character before cursor.
+- [x] Add `gu` / `gU` / `g~` case operators, including text-object and visual support.
 - [ ] Add `gv` reselect last visual range.
 - [ ] ex command autocomplete
 

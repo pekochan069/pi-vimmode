@@ -20,7 +20,13 @@ export type VimDiagnostics = {
   warnings: readonly string[];
 };
 
-export type VimMotionOperatorAction = "delete" | "change" | "yank";
+export type VimMotionOperatorAction =
+  | "delete"
+  | "change"
+  | "yank"
+  | "lowercase"
+  | "uppercase"
+  | "toggleCase";
 export type VimOperatorAction = VimMotionOperatorAction | "indent" | "dedent";
 
 export type VimMotionAction =

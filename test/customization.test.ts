@@ -27,7 +27,7 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 86 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 89 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "halfPageDown")).toContain("motion.halfPageDown ctrl+d");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");

@@ -1,3 +1,4 @@
+import type { CaseTransformAction } from "../buffer.ts";
 import type {
   VimCommandAction,
   VimMotion,
@@ -39,6 +40,9 @@ import {
   shiftLinesFromCursor,
   substituteCharAt,
   toggleCaseAt,
+  transformCaseByMotion,
+  transformCaseLineCount,
+  transformCaseTextObject,
   wordBackwardPosition,
   wordEndPosition,
   wordEndBigPosition,
@@ -228,6 +232,12 @@ function withRepeatableChange(
   return changed ? { ...state, lastRepeatableChange: change } : state;
 }
 
+function caseActionForOperator(operator: VimMotionOperatorAction): CaseTransformAction | undefined {
+  if (operator === "lowercase") return "lowercase";
+  if (operator === "uppercase") return "uppercase";
+  if (operator === "toggleCase") return "toggleCase";
+}
+
 export function applyOperatorMotion(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -240,6 +250,28 @@ export function applyOperatorMotion(
   const legacyMotion = operatorMotionKey(motion);
   const baseState = clearCommandPending(state);
   if (!legacyMotion) return invalidate(clearPending(state));
+  const caseAction = caseActionForOperator(operator);
+  if (caseAction) {
+    const result = transformCaseByMotion(
+      snapshot.text,
+      snapshot.cursor,
+      legacyMotion,
+      count,
+      caseAction,
+    );
+    let edited = editState(baseState, result);
+    if (recordRepeat) {
+      edited = withRepeatableChange(
+        edited,
+        { type: "operatorMotion", operator, motion, count },
+        result.changed,
+      );
+    }
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   if (operator === "yank") {
     return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, legacyMotion, count));
   }
@@ -268,6 +300,21 @@ export function applyLineCommand(
   recordRepeat = true,
 ): ModalUpdate {
   const nextState = clearCommandPending(state);
+  const caseAction = caseActionForOperator(operator as VimMotionOperatorAction);
+  if (caseAction) {
+    const result = transformCaseLineCount(snapshot.text, snapshot.cursor, count, caseAction);
+    let edited = editState(nextState, result);
+    if (recordRepeat)
+      edited = withRepeatableChange(
+        edited,
+        { type: "lineCommand", operator, count },
+        result.changed,
+      );
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   const shiftAction = shiftActionForOperator(operator);
   if (shiftAction) {
     const shiftResult = shiftLinesFromCursor(snapshot.text, snapshot.cursor, count, shiftAction);
@@ -667,6 +714,28 @@ export function applyOperatorTextObject(
 ): ModalUpdate {
   const baseState = clearCommandPending(state);
   const promptStructures = promptStructuresForOptions(options);
+  const caseAction = caseActionForOperator(operator);
+  if (caseAction) {
+    const result = transformCaseTextObject(
+      snapshot.text,
+      snapshot.cursor,
+      textObject,
+      caseAction,
+      promptStructures,
+    );
+    let edited = editState(baseState, result);
+    if (recordRepeat) {
+      edited = withRepeatableChange(
+        edited,
+        { type: "operatorTextObject", operator, textObject, count },
+        result.changed,
+      );
+    }
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   if (operator === "yank")
     return yankUpdate(
       baseState,

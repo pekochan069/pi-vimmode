@@ -70,7 +70,7 @@ import {
 } from "./core.ts";
 import { startExCommandUpdate } from "./ex-command-line.ts";
 import { clearRegisterTarget, clipboardTargetToRead, registerToRead } from "./registers.ts";
-import { repeatSearch, startSearchUpdate } from "./search.ts";
+import { repeatSearch, searchWordUnderCursor, startSearchUpdate } from "./search.ts";
 
 export function normalDispatchSummary(state: ModalState): string {
   const pending = state.pending ? ` pending=${state.pending}` : "";
@@ -497,6 +497,10 @@ export function applyCommand(
       return repeatSearch(nextState, snapshot, options, false);
     case "repeatSearchReverse":
       return repeatSearch(nextState, snapshot, options, true);
+    case "searchWordForward":
+      return searchWordUnderCursor(nextState, snapshot, options, "forward");
+    case "searchWordBackward":
+      return searchWordUnderCursor(nextState, snapshot, options, "backward");
     case "startExCommand":
       return startExCommandUpdate(nextState, snapshot, count);
     case "repeatChange":

@@ -1588,6 +1588,25 @@ export function findSearchMatch(
   return findSearchMatchWithMatcher(text, cursor, { mode: "literal", query }, direction)?.position;
 }
 
+export function wordUnderCursor(text: string, cursor: Position): string | undefined {
+  const offset = positionToOffset(text, cursor);
+  const at = text[offset];
+  if (isKeywordWordChar(at)) {
+    let start = offset;
+    let end = offset + 1;
+    while (start > 0 && isKeywordWordChar(text[start - 1])) start--;
+    while (end < text.length && isKeywordWordChar(text[end])) end++;
+    return text.slice(start, end);
+  }
+  const before = text[offset - 1];
+  if (isKeywordWordChar(before)) {
+    let start = offset - 1;
+    while (start > 0 && isKeywordWordChar(text[start - 1])) start--;
+    return text.slice(start, offset);
+  }
+  return undefined;
+}
+
 export function findSearchMatchWithMatcher(
   text: string,
   cursor: Position,

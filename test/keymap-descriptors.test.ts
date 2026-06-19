@@ -76,6 +76,8 @@ const expectedCommands = [
   "startSearchBackward",
   "repeatSearch",
   "repeatSearchReverse",
+  "searchWordForward",
+  "searchWordBackward",
   "startExCommand",
   "repeatChange",
   "undo",
@@ -173,5 +175,11 @@ describe("keymap descriptors", () => {
       jumpExact: ["`"],
       jumpLine: ["'"],
     });
+  });
+
+  test("word search commands default to star and hash", () => {
+    const commands = deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS);
+    expect(commands.searchWordForward).toEqual(["*"]);
+    expect(commands.searchWordBackward).toEqual(["#"]);
   });
 });

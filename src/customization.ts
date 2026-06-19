@@ -107,6 +107,8 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   startSearchBackward: "start backward prompt search",
   repeatSearch: "repeat prompt search",
   repeatSearchReverse: "repeat prompt search in reverse",
+  searchWordForward: "search word under cursor forward",
+  searchWordBackward: "search word under cursor backward",
   startExCommand: "start Ex command-line",
   repeatChange: "repeat last change",
   undo: "undo prompt edit",
@@ -144,6 +146,8 @@ const SEARCH_COMMANDS = new Set<VimCommandAction>([
   "startSearchBackward",
   "repeatSearch",
   "repeatSearchReverse",
+  "searchWordForward",
+  "searchWordBackward",
 ]);
 
 const TRANSFORM_DESCRIPTIONS: Record<PromptTransformAction, string> = {

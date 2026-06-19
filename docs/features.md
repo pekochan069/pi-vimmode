@@ -322,6 +322,14 @@ y?TODO⏎    yank through previous literal TODO match
 /\rTODO|FIXME⏎  bounded regex search
 ```
 
+Word search:
+
+- `*` searches forward for the keyword word under the cursor; `#` searches backward.
+- A keyword word is a contiguous run of ASCII letters, digits, and `_`. The cursor on a keyword character uses that containing word; a cursor immediately after a keyword word (including at line end) uses that preceding word.
+- `*` and `#` are normal-mode only and reuse prompt search repeat state, so `n` repeats the chosen direction and `N` searches the opposite direction. They share literal matching, wrapping, search history, and search highlighting with `/` and `?`.
+- Insert-mode `*` and `#` delegate to Pi default editing.
+- Limitations: no `iskeyword` configuration, no regex query generation from the word, no smartcase, no search offsets, and no visual or operator-motion `*` / `#`.
+
 Search workbench behavior:
 
 - `/` and `?` render a width-safe workbench row below the prompt and shrink the prompt viewport by one row while pending.

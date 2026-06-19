@@ -240,6 +240,19 @@ The fast path should only accept a single printable character when no modal, UI,
 
 Tests should prove both sides of the boundary: safe insert text avoids snapshot construction, while unsafe cases still preserve existing modal semantics for `Esc`, macros, transient Ex messages, redo branch clearing, and search highlight state.
 
+### 8. Reuse existing modal pipelines for command variants
+
+When a new command only resolves its input differently, route it into the existing behavior pipeline instead of forking command state. The `*` / `#` word-under-cursor search feature used this shape:
+
+- `src/buffer.ts` owns the pure word extraction helper, `wordUnderCursor(text, cursor)`, with ASCII keyword semantics (`[A-Za-z0-9_]`). Cursor inside `alpha` or just after `alpha|` resolves the same word.
+- `src/types.ts` and `src/keymap-descriptors.ts` add semantic actions `searchWordForward` and `searchWordBackward` with defaults `*` and `#`.
+- `src/modal/search.ts` feeds the resolved word into the existing search completion path, so word search reuses literal matching, wrapping, `lastSearch`, search history, highlights, and cursor restoration.
+- `src/modal/normal.ts` wires the commands in normal mode only; insert-mode `*` / `#` keep delegating to Pi text input, and visual/operator-motion behavior stays unsupported until explicitly needed.
+
+That avoided a second search state machine. `n` and `N` repeat behavior, history, highlighting, and no-match safety all stayed inside the established prompt-search path.
+
+Add layered tests for this kind of command variant: pure extraction, command resolution, modal repeat/highlight/history, and one live `VimEditor` smoke test when the command is configurable.
+
 ## Why This Matters
 
 Finite prompt-editor Vim support fails when parser, buffer model, and editor dispatch merge into one switch statement:

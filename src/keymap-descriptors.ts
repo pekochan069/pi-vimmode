@@ -121,6 +121,8 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   startSearchBackward: { defaults: ["?"], searchDirection: "backward" },
   repeatSearch: { defaults: ["n"] },
   repeatSearchReverse: { defaults: ["N"] },
+  searchWordForward: { defaults: ["*"] },
+  searchWordBackward: { defaults: ["#"] },
   startExCommand: { defaults: [":"] },
   repeatChange: { defaults: ["."] },
   undo: { defaults: ["u"] },

@@ -2,6 +2,13 @@
 
 ## What's new
 
+### Word-under-cursor search
+
+- Added Vim-style `*` and `#` normal-mode search for the keyword word under the cursor.
+- Reuses prompt search state, so `n` and `N` repeat correctly and search history/highlights stay consistent with `/` and `?`.
+- Supports custom keybindings via `piVimMode.keymap.commands.searchWordForward` and `piVimMode.keymap.commands.searchWordBackward`.
+- Insert-mode `*` and `#` still delegate to Pi text input.
+
 ### Paragraph motions
 
 - Added Vim paragraph motions: `{` moves to the previous paragraph start and `}` moves to the next paragraph.

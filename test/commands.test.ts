@@ -524,6 +524,14 @@ describe("normal command parser", () => {
       type: "command",
       command: "repeatSearchReverse",
     });
+    expect(resolveNormalCommand("*", undefined)).toEqual({
+      type: "command",
+      command: "searchWordForward",
+    });
+    expect(resolveNormalCommand("#", undefined)).toEqual({
+      type: "command",
+      command: "searchWordBackward",
+    });
     expect(resolveNormalCommand("/", "d")).toEqual({
       type: "operatorSearch",
       operator: "delete",

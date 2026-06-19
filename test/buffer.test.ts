@@ -79,6 +79,7 @@ import {
   yankSearchRange,
   yankTextObject,
   yankVisualSelection,
+  wordUnderCursor,
 } from "../src/buffer.ts";
 
 const p = (line: number, col: number) => ({ line, col });
@@ -1339,5 +1340,38 @@ describe("paragraph motions", () => {
       deleteTextObject("\n  \n\n", p(1, 0), { kind: "around", target: "paragraph" }),
     ).toMatchObject({ changed: false });
     expect(yankTextObject("\n\n", p(0, 0), { kind: "inner", target: "paragraph" })).toBeUndefined();
+  });
+});
+
+describe("wordUnderCursor", () => {
+  test("returns the keyword word containing the cursor", () => {
+    expect(wordUnderCursor("foo bar baz", p(0, 1))).toBe("foo");
+    expect(wordUnderCursor("foo bar baz", p(0, 2))).toBe("foo");
+  });
+
+  test("returns the preceding word when cursor sits at word end", () => {
+    expect(wordUnderCursor("foo bar baz", p(0, 3))).toBe("foo");
+    expect(wordUnderCursor("foo bar baz", p(0, 7))).toBe("bar");
+  });
+
+  test("returns the preceding word at line end", () => {
+    expect(wordUnderCursor("foo bar", p(0, 7))).toBe("bar");
+  });
+
+  test("includes underscore and digits as keyword characters", () => {
+    expect(wordUnderCursor("foo_bar 1a2b", p(0, 4))).toBe("foo_bar");
+    expect(wordUnderCursor("foo_bar 1a2b", p(0, 10))).toBe("1a2b");
+  });
+
+  test("returns undefined when no keyword char is under or before the cursor", () => {
+    expect(wordUnderCursor("/foo", p(0, 0))).toBeUndefined();
+    expect(wordUnderCursor("foo / bar", p(0, 4))).toBeUndefined();
+    expect(wordUnderCursor("   ", p(0, 1))).toBeUndefined();
+    expect(wordUnderCursor("", p(0, 0))).toBeUndefined();
+  });
+
+  test("returns the preceding word when cursor sits on punctuation after a keyword", () => {
+    expect(wordUnderCursor("foo/bar", p(0, 3))).toBe("foo");
+    expect(wordUnderCursor("foo,bar", p(0, 3))).toBe("foo");
   });
 });

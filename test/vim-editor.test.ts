@@ -1392,6 +1392,25 @@ describe("vim editor integration", () => {
     expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
   });
 
+  test("word search keys survive live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, searchWordForward: ["*", "K"] },
+      },
+    });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "*"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "K"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+    typeKeys(editor, ["#"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+  });
+
   test("redo preserves modal side-effect state", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("one\ntwo");

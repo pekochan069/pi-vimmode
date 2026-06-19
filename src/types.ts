@@ -80,6 +80,8 @@ export type VimCommandAction =
   | "startSearchBackward"
   | "repeatSearch"
   | "repeatSearchReverse"
+  | "searchWordForward"
+  | "searchWordBackward"
   | "startExCommand"
   | "repeatChange"
   | "undo"

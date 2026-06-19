@@ -2619,6 +2619,99 @@ describe("modal engine", () => {
     expect(opened.state.pendingSearch).toEqual({ query: "", direction: "backward" });
   });
 
+  test("star searches the word under the cursor forward", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["*"]);
+    expect(result.text).toBe("one two one");
+    expect(result.cursor).toEqual(p(0, 8));
+    expect(result.state.lastSearch).toEqual({
+      query: "one",
+      direction: "forward",
+      matcherMode: "literal",
+    });
+    expect(result.state.searchHighlight).toEqual({ query: "one", current: p(0, 8) });
+    expect(result.state.pendingSearch).toBeUndefined();
+  });
+
+  test("hash searches the word under the cursor backward", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 8), ["#"]);
+    expect(result.text).toBe("one two one");
+    expect(result.cursor).toEqual(p(0, 0));
+    expect(result.state.lastSearch).toEqual({
+      query: "one",
+      direction: "backward",
+      matcherMode: "literal",
+    });
+    expect(result.state.searchHighlight).toEqual({ query: "one", current: p(0, 0) });
+  });
+
+  test("word search uses the preceding word at an insertion-point cursor", () => {
+    const result = applyModalKeys({ mode: "normal" }, "foo bar foo", p(0, 3), ["*"]);
+    expect(result.cursor).toEqual(p(0, 8));
+    expect(result.state.lastSearch).toEqual({
+      query: "foo",
+      direction: "forward",
+      matcherMode: "literal",
+    });
+  });
+
+  test("word search on a unique word records search without moving the cursor", () => {
+    const result = applyModalKeys({ mode: "normal" }, "alpha beta", p(0, 6), ["*"]);
+    expect(result.text).toBe("alpha beta");
+    expect(result.cursor).toEqual(p(0, 6));
+    expect(result.state.lastSearch).toEqual({
+      query: "beta",
+      direction: "forward",
+      matcherMode: "literal",
+    });
+    expect(result.state.searchHighlight).toEqual({ query: "beta", current: p(0, 6) });
+  });
+
+  test("word search with no word under the cursor is a safe no-op", () => {
+    const result = applyModalKeys({ mode: "normal" }, " alpha beta", p(0, 0), ["*"]);
+    expect(result.text).toBe(" alpha beta");
+    expect(result.cursor).toEqual(p(0, 0));
+    expect(result.state.lastSearch).toBeUndefined();
+  });
+
+  test("n and N repeat search follows the star direction", () => {
+    const text = "one two one three one";
+    const star = applyModalKeys({ mode: "normal" }, text, p(0, 0), ["*"]);
+    expect(star.cursor).toEqual(p(0, 8));
+
+    const next = applyModalKeys(star.state, text, p(0, 8), ["n"]);
+    expect(next.cursor).toEqual(p(0, 18));
+
+    const reverse = applyModalKeys(star.state, text, p(0, 8), ["N"]);
+    expect(reverse.cursor).toEqual(p(0, 0));
+  });
+
+  test("n repeats search follows the hash direction", () => {
+    const text = "one two one";
+    const hash = applyModalKeys({ mode: "normal" }, text, p(0, 8), ["#"]);
+    expect(hash.cursor).toEqual(p(0, 0));
+
+    const next = applyModalKeys(hash.state, text, p(0, 0), ["n"]);
+    expect(next.cursor).toEqual(p(0, 8));
+  });
+
+  test("word search records prompt-local search history", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one two one", p(0, 0), ["*"]);
+    expect(result.state.searchHistory).toEqual([{ query: "one", matcherMode: "literal" }]);
+  });
+
+  test("insert mode delegates star and hash to Pi default editing", () => {
+    const star = applyModalKeys({ mode: "insert" }, "one two one", p(0, 0), ["*"]);
+    expect(star.text).toBe("one two one");
+    expect(star.state.mode).toBe("insert");
+    expect(star.state.pendingSearch).toBeUndefined();
+    expect(star.state.lastSearch).toBeUndefined();
+
+    const hash = applyModalKeys({ mode: "insert" }, "one two one", p(0, 0), ["#"]);
+    expect(hash.text).toBe("one two one");
+    expect(hash.state.mode).toBe("insert");
+    expect(hash.state.lastSearch).toBeUndefined();
+  });
+
   test("prompt search highlight state honors config and clear events", () => {
     const noHighlight = applyModalKeys(
       { mode: "normal" },

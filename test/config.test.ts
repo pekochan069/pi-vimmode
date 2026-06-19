@@ -248,6 +248,25 @@ describe("vim config parsing", () => {
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
   });
 
+  test("word search command bindings remap, reject protected keys, and preserve siblings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: {
+            searchWordForward: ["<C-s>", "8"],
+            searchWordBackward: ["ctrl+c"],
+            startSearch: ["/"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.searchWordForward).toEqual(["ctrl+s", "8"]);
+    expect(result.options.keymap?.commands.searchWordBackward).toEqual(["#"]);
+    expect(result.options.keymap?.commands.startSearch).toEqual(["/"]);
+    expect(result.warnings.some((warning) => warning.includes("searchWordBackward"))).toBe(true);
+  });
+
   test("scroll control keys are only allowed for scroll motions", () => {
     const result = resolveVimOptions({
       piVimMode: {

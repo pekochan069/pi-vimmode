@@ -222,6 +222,8 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 | `piVimMode.keymap.commands.startSearchBackward`     | `["?"]`      | Start prompt-local backward search. Also works after operator as search motion.                              |
 | `piVimMode.keymap.commands.repeatSearch`            | `["n"]`      | Repeat last prompt search direction.                                                                         |
 | `piVimMode.keymap.commands.repeatSearchReverse`     | `["N"]`      | Repeat prompt search opposite direction.                                                                     |
+| `piVimMode.keymap.commands.searchWordForward`       | `["*"]`      | Normal-mode only: search forward for the keyword word under the cursor; reuses prompt search repeat state.   |
+| `piVimMode.keymap.commands.searchWordBackward`      | `["#"]`      | Normal-mode only: search backward for the keyword word under the cursor; reuses prompt search repeat state.  |
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                       |
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                          |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                  |
@@ -714,6 +716,8 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "startSearchBackward": ["?"],
         "repeatSearch": ["n"],
         "repeatSearchReverse": ["N"],
+        "searchWordForward": ["*"],
+        "searchWordBackward": ["#"],
         "startExCommand": [":"],
         "repeatChange": ["."],
         "undo": ["u"],

@@ -30,6 +30,12 @@
 - Added visual `u`, `U`, and `~` for character, line, and block selections without writing registers.
 - Supports custom keybindings via `piVimMode.keymap.operators.lowercase`, `uppercase`, `toggleCase`, and matching `operatorMotions` entries.
 
+### Modal escape aliases
+
+- Added `piVimMode.keymap.escape` for modified-key aliases that leave insert mode, visual modes, and pending Ex command-lines.
+- Aliases are empty by default, reject raw text, and stay separate from normal-mode keymaps.
+- Autocomplete still owns configured aliases while completion is open.
+
 ## Bug fixes
 
 - Kept brace text objects (`i{`, `a}`, etc.) distinct from paragraph motion keys by resolving behavior through parser context.

@@ -3,6 +3,9 @@
 ## Next Version
 
 - [ ] Force override system keybindings (like `ctrl+j`)
+- [ ] Add more common ex-commands like `q` or `w`
+- [ ] ex command autocomplete
+- [ ] Make pi-vimmode controllable with ex commands?
 
 ## Deferred
 
@@ -10,7 +13,6 @@
 - [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.
 - [ ] Consider `zz` / `zt` / `zb` viewport recentering if prompt viewport state needs explicit cursor positioning.
 - [ ] Consider window/file keybindings only if pi-vimmode expands beyond prompt-local editing.
-- [ ] ex command autocomplete
 
 ## Ideas
 

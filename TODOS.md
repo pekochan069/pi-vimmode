@@ -2,11 +2,7 @@
 
 ## Next Version
 
-- [x] Add `{` / `}` paragraph motions and `ip` / `ap` paragraph text objects.
-- [x] Add `*` / `#` search word under cursor forward/backward, reusing prompt search repeat state.
-- [x] Add `X` delete character before cursor.
-- [x] Add `gu` / `gU` / `g~` case operators, including text-object and visual support.
-- [x] Alternative keymap for Esc to exit insert mode
+- [ ] Force override system keybindings (like `ctrl+j`)
 
 ## Deferred
 

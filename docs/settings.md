@@ -77,7 +77,8 @@ Rules:
   - `<D-x>` / `<Cmd-x>` / `<Super-x>` -> `super+x`
 - Prefer lowercase normalized names such as `ctrl+a` for raw modifier strings.
 - Empty arrays do not override existing/default bindings for classic keymap groups. In `piVimMode.keymap.actions`, an empty array unbinds that action in the current settings scope.
-- Multi-key sequences are finite. There is no recursive mapping or timeout behavior.
+- `piVimMode.keymap.escape` defaults to `[]` and replaces the inherited escape alias list when set.
+- Escape aliases are key aliases such as `<D-j>` or `<C-j>`, not raw text chords such as `jk` or `jj`.
 
 Protected Pi shortcuts cannot be mapped:
 
@@ -146,6 +147,33 @@ Terminal cursor support is best effort. pi-vimmode writes DECSCUSR cursor-shape 
 ## Keymap settings
 
 `piVimMode.keymap` maps key sequences to supported semantic actions. It does not add arbitrary Vim grammar.
+
+### Escape aliases
+
+| Path                      | Default | Effect                                                                                                                       |
+| ------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.escape` | `[]`    | Optional key aliases for leaving insert mode, visual modes, and pending Ex commands, for example `["<D-j>"]` or `["<C-j>"]`. |
+
+Configured escape aliases act like physical `Esc` while insert mode is active and Pi autocomplete is closed, while visual/visual-line/visual-block mode is active, or while a `:` Ex command-line is pending. Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "escape": ["<D-j>", "<C-j>"]
+    }
+  }
+}
+```
+
+Rules:
+
+- Valid modified-key aliases such as `"<D-j>"`, `"<C-j>"`, or `"<A-j>"` leave insert mode, cancel visual mode, or cancel a pending Ex command without inserting text.
+- Raw printable text chords such as `"jk"`, `"jj"`, and `"j"` are rejected so normal typing stays normal.
+- Plain Ctrl-J often arrives from terminals as `enter`; it only works as `ctrl+j` when the terminal/input layer sends distinct enhanced keyboard input.
+- When autocomplete is open, aliases delegate to Pi and do not close autocomplete or enter normal mode.
+- Protected shortcuts such as `enter`, `tab`, `ctrl+c`, and `escape` are rejected.
+- These are not Vim mappings: no runtime `:map`, recursive mappings, insert abbreviations, `.vimrc`, Vimscript, or `timeoutlen`.
 
 ### Operators
 

@@ -122,6 +122,9 @@ function typeKeys(editor: Pick<VimEditor, "handleInput">, keys: readonly string[
   for (const key of keys) editor.handleInput(key);
 }
 
+const ctrlJ = "\u001b[106;5u";
+const superJ = "\u001b[106;9u";
+
 function runEx(editor: VimEditor, command: string) {
   editor.handleInput(":");
   for (const char of command) editor.handleInput(char);
@@ -157,9 +160,13 @@ describe("vim editor integration", () => {
 
   test("constructor clones caller-owned nested keymap options", () => {
     const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: ["K"] } } },
+      piVimMode: {
+        startMode: "normal",
+        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["K"] } },
+      },
     }).options;
     const { editor } = createEditor(options);
+    (options.keymap!.escape as unknown as string[]).splice(0, 1, "ctrl+x");
     (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, "Z");
 
     editor.setText("one\ntwo");
@@ -167,6 +174,8 @@ describe("vim editor integration", () => {
 
     expect(editor.getText()).toBe("one\n\ntwo");
     expect(editor.getVimMode()).toBe("insert");
+    editor.handleInput(superJ);
+    expectEditorState(editor, { text: "one\n\ntwo", mode: "normal" });
   });
 
   test("live editor honors configured case operator keymap", () => {
@@ -198,6 +207,92 @@ describe("vim editor integration", () => {
     editor.handleInput("a");
     editor.handleInput("\x1b");
     expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("configured super+j insert escape exits insert without inserting alias", () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.handleInput("a");
+    editor.handleInput(superJ);
+
+    expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("configured super+j insert escape exits visual mode", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("abc");
+    editor.handleInput("v");
+    expect(editor.getVimMode()).toBe("visual");
+    editor.handleInput(superJ);
+
+    expectEditorState(editor, { text: "abc", mode: "normal" });
+    expect(
+      (editor as unknown as { modalState: ModalState }).modalState.visualAnchor,
+    ).toBeUndefined();
+  });
+
+  test("configured ctrl+j insert escape exits insert when sent as enhanced keyboard input", () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<C-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.handleInput("x");
+    editor.handleInput(ctrlJ);
+
+    expectEditorState(editor, { text: "x", mode: "normal" });
+  });
+
+  test("raw text insert escape config is ignored by live editor", () => {
+    const options = resolveVimOptions({ piVimMode: { keymap: { escape: ["jk"] } } }).options;
+    const { editor } = createEditor(options);
+
+    typeKeys(editor, ["j", "k"]);
+
+    expectEditorState(editor, { text: "jk", mode: "insert" });
+  });
+
+  test("configured insert escape delegates while autocomplete is open", async () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+    installAutocomplete(editor, ["/super-j-suggestion"], 1);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    expect(editor.isShowingAutocomplete()).toBe(true);
+    editor.handleInput(superJ);
+
+    expect(editor.getVimMode()).toBe("insert");
+    expect(
+      (editor as unknown as { modalState: ModalState }).modalState.pendingInsertEscape,
+    ).toBeUndefined();
+  });
+
+  test("macro replay preserves configured insert escape behavior", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    typeKeys(editor, ["q", "a", "i", "X", superJ, "q"]);
+    expect((editor as unknown as { modalState: ModalState }).modalState.macros?.a).toEqual([
+      "i",
+      "X",
+      superJ,
+    ]);
+
+    editor.setText("");
+    typeKeys(editor, ["@", "a"]);
+    expectEditorState(editor, { text: "X", mode: "normal" });
   });
 
   test("insert fast path stays disabled while recording and replaying macros", () => {

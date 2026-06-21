@@ -173,6 +173,7 @@ export type ModalState = {
   pendingWorkbench?: PendingWorkbench;
   pendingSearch?: PendingSearchTarget;
   pendingEx?: PendingExCommand;
+  pendingInsertEscape?: string;
   exHistory?: string[];
   lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;
@@ -188,6 +189,7 @@ export type ModalState = {
 export type FastInsertDelegateContext = {
   isAutocompleteOpen?: boolean;
   isMacroReplaying?: boolean;
+  escape?: readonly string[];
 };
 
 export type AdapterCommand =

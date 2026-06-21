@@ -61,15 +61,16 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 
 pi-vimmode has a finite prompt-local surface. This quickref classifies what is supported; it is not a Vim/Neovim quickref clone.
 
-| Category                             | Examples                                                               | Classification                                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.             |
-| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                      |
-| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                 |
-| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                      |
-| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable. |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.    |
-| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                    |
+| Category                             | Examples                                                               | Classification                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.                 |
+| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                          |
+| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
+| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
+| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
+| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                         | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
 
 <!-- diagnostic-actions:vimmode.doctor -->
 <!-- diagnostic-actions:vimmode.actions -->
@@ -89,11 +90,14 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 
 - Insert + inactive autocomplete: `Esc` enters normal mode.
 - Insert + active autocomplete: `Esc` delegates to Pi so autocomplete can close.
+- Optional `piVimMode.keymap.escape` aliases such as `<D-j>` or `<C-j>` enter normal mode from insert mode when autocomplete is inactive, cancel visual modes, and cancel pending `:` Ex command-lines.
+- Raw printable text chords such as `jk` or `jj` are rejected; aliases are real key sequences, not inserted text.
+- Escape aliases are disabled while autocomplete is open and delegate to Pi instead.
 - Normal: `Esc` delegates to Pi so interrupt/abort behavior still works.
-- Visual modes: `Esc` cancels selection and returns to normal mode.
+- Visual modes: `Esc` and configured escape aliases cancel selection and return to normal mode.
 - In normal/visual prompt editing, `Enter`, `Ctrl-C`, and `Ctrl-G` reset Vim transient state, return to configured startup mode, and delegate to Pi.
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
-- In insert mode, non-`Esc` keys delegate to Pi.
+- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling.
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
 - `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 
@@ -103,7 +107,7 @@ Example:
 Type prompt text in insert mode
 Esc          -> normal mode
 0wciwidea    -> move, change inner word, type replacement
-Esc          -> normal mode again
+<D-j>        -> normal mode again when configured as piVimMode.keymap.escape
 Enter        -> submit through Pi
 ```
 

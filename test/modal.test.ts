@@ -20,6 +20,11 @@ const options: ModalOptions = {
   },
 };
 const snapshot = { text: "abc", lines: ["abc"], cursor };
+const ctrlJ = "\u001b[106;5u";
+const superJ = "\u001b[106;9u";
+const escapeOptions = resolveVimOptions({
+  piVimMode: { keymap: { escape: ["<D-j>"] } },
+}).options;
 
 function applyModalKeys(
   initialState: ModalState,
@@ -85,6 +90,7 @@ describe("modal contracts", () => {
       },
       { mode: "insert", pendingSearch: { query: "", direction: "forward" } },
       { mode: "insert", pendingEx: { command: "", sourceMode: "normal" } },
+      { mode: "insert", pendingInsertEscape: "f" },
       { mode: "insert", exMessage: { kind: "info", text: "message" } },
       {
         mode: "insert",
@@ -111,6 +117,73 @@ describe("modal contracts", () => {
     expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { isMacroReplaying: true })).toBe(
       false,
     );
+  });
+
+  test("canFastDelegateInsertInput keeps configured modifier escape aliases on modal path", () => {
+    expect(canFastDelegateInsertInput({ mode: "insert" }, superJ, { escape: ["super+j"] })).toBe(
+      false,
+    );
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { escape: ["super+j"] })).toBe(true);
+  });
+
+  test("configured modifier insert escape alias exits insert mode", () => {
+    const matched = handleModalInput({ mode: "insert" }, snapshot, escapeOptions, superJ);
+
+    expect(matched.state.mode).toBe("normal");
+    expect(matched.state.pendingInsertEscape).toBeUndefined();
+    expect(matched.effects).toEqual(
+      expect.arrayContaining([{ type: "terminalCursor", style: "block" }, { type: "invalidate" }]),
+    );
+  });
+
+  test("configured modifier insert escape alias exits visual modes", () => {
+    for (const mode of ["visual", "visualLine", "visualBlock"] as const) {
+      const matched = handleModalInput(
+        { mode, visualAnchor: p(0, 1) },
+        snapshot,
+        escapeOptions,
+        superJ,
+      );
+
+      expect(matched.state.mode).toBe("normal");
+      expect(matched.effects).toEqual(
+        expect.arrayContaining([
+          { type: "terminalCursor", style: "block" },
+          { type: "invalidate" },
+        ]),
+      );
+    }
+  });
+
+  test("unmatched modifier insert escape input delegates", () => {
+    const mismatch = handleModalInput({ mode: "insert" }, snapshot, escapeOptions, ctrlJ);
+
+    expect(mismatch.state.mode).toBe("insert");
+    expect(mismatch.state.pendingInsertEscape).toBeUndefined();
+    expect(mismatch.effects).toEqual([{ type: "delegate", input: ctrlJ }]);
+  });
+
+  test("configured insert escape aliases delegate while autocomplete is open", () => {
+    const openSnapshot = { ...snapshot, isAutocompleteOpen: true };
+    const delegated = handleModalInput({ mode: "insert" }, openSnapshot, escapeOptions, superJ);
+
+    expect(delegated.state.pendingInsertEscape).toBeUndefined();
+    expect(delegated.state.mode).toBe("insert");
+    expect(delegated.effects).toEqual([{ type: "delegate", input: superJ }]);
+  });
+
+  test("physical escape keeps insert-mode behavior", () => {
+    const closed = handleModalInput({ mode: "insert" }, snapshot, escapeOptions, "\x1b");
+    const open = handleModalInput(
+      { mode: "insert" },
+      { ...snapshot, isAutocompleteOpen: true },
+      escapeOptions,
+      "\x1b",
+    );
+
+    expect(closed.state.mode).toBe("normal");
+    expect(open.state.mode).toBe("insert");
+    expect(open.effects).toEqual([{ type: "delegate", input: "\x1b" }]);
   });
 
   test("createModalState starts with configured mode and empty transient state", () => {
@@ -278,6 +351,18 @@ describe("Ex command-line modal behavior", () => {
       expect(update.state.mode).toBe("insert");
       expect(update.effects).toContainEqual({ type: "delegate", input: key });
     }
+  });
+
+  test("configured escape alias cancels pending Ex command", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEx: { command: "s/a/b/", sourceMode: "normal" } },
+      snapshot,
+      escapeOptions,
+      superJ,
+    );
+    expect(update.state.pendingEx).toBeUndefined();
+    expect(update.state.mode).toBe("normal");
+    expect(update.effects).toEqual([{ type: "invalidate" }]);
   });
 
   test("Ex input edits command text, executes substitution, and reports success", () => {

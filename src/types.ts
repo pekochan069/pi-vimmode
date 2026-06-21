@@ -148,6 +148,7 @@ export type VimActionKeymapOptions = Partial<
 export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
 
 export type VimKeymapOptions = {
+  escape?: readonly string[];
   operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
   motions?: Partial<Record<VimMotionAction, readonly string[]>>;
   commands?: Partial<Record<VimCommandAction, readonly string[]>>;
@@ -177,6 +178,7 @@ export type ResolvedVimActionKeymap = {
 };
 
 export type ResolvedVimKeymap = {
+  escape: readonly string[];
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
   commands: Record<VimCommandAction, readonly string[]>;

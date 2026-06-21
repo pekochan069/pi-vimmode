@@ -139,6 +139,7 @@ function freezeArrayRecord<T extends Record<string, readonly string[]>>(
 }
 
 export const DEFAULT_VIM_KEYMAP = Object.freeze({
+  escape: Object.freeze([]),
   operators: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_OPERATOR_DESCRIPTORS)),
   motions: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_MOTION_DESCRIPTORS)),
   macros: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_MACRO_DESCRIPTORS)),
@@ -284,6 +285,7 @@ type PartialVimOptions = {
 };
 
 type PartialKeymapOptions = {
+  escape?: string[];
   operators?: Partial<Record<VimOperatorAction, string[]>>;
   motions?: Partial<Record<VimMotionAction, string[]>>;
   commands?: Partial<Record<VimCommandAction, string[]>>;
@@ -349,6 +351,7 @@ function clonePlainRecord<T extends Record<string, unknown>>(record: T): T {
 
 function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVimKeymap {
   return {
+    escape: [...keymap.escape],
     operators: cloneArrayRecord(keymap.operators),
     motions: cloneArrayRecord(keymap.motions),
     macros: cloneArrayRecord(keymap.macros),
@@ -509,6 +512,27 @@ function parseStringArray(
   }
 
   return parsed.length > 0 ? parsed : undefined;
+}
+
+function isPrintableTextSequence(sequence: string): boolean {
+  return !sequence.includes("+") && [...sequence].every((char) => char.charCodeAt(0) >= 32);
+}
+
+function parseInsertEscapeArray(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value) && value.length === 0) return [];
+  const label = `${sourceLabel}: piVimMode.keymap.escape`;
+  const sequences = parseStringArray(value, label, warnings);
+  const parsed = sequences?.filter((sequence) => {
+    if (!isPrintableTextSequence(sequence)) return true;
+    warnings.push(`${label} contains unsupported printable text sequence ${sequence}`);
+    return false;
+  });
+  return parsed && parsed.length > 0 ? parsed : undefined;
 }
 
 function parseActionStringArray<T extends string>(
@@ -710,6 +734,8 @@ function parseKeymap(
     warnings.push(`${sourceLabel}: piVimMode.keymap must be an object`);
     return { warnings };
   }
+
+  partial.escape = parseInsertEscapeArray(value.escape, sourceLabel, warnings);
 
   partial.operators = parseKeyBindings<VimOperatorAction>(
     value.operators,
@@ -1330,6 +1356,7 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
 
 function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
   removeTopLevelKeymapSequences(target, configuredTopLevelKeymapSequences(partial));
+  if (partial.escape) target.escape = [...partial.escape];
   if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
   if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };
@@ -1348,6 +1375,7 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
 }
 
 function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymapOptions): void {
+  if (partial.escape) target.escape = [...partial.escape];
   if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
   if (partial.motions) target.motions = { ...target.motions, ...partial.motions };
   if (partial.commands) target.commands = { ...target.commands, ...partial.commands };

@@ -69,6 +69,20 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(keymap, "zz")).toBe("mapcheck: zz is unmapped");
   });
 
+  test("reports configured escape aliases as modal escape bindings", () => {
+    const { options } = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<C-j>", "<D-j>"] } },
+    });
+
+    expect(actionsMessage(options.keymap!)).toContain("1 escape aliases");
+    expect(keymapMessage(options.keymap!, "escape")).toContain("escape.alias ctrl+j,super+j");
+    expect(keymapMessage(options.keymap!, "escape")).toContain("Ex command-line");
+    expect(mapcheckMessage(options.keymap!, "super+j")).toBe("mapcheck: super+j -> escape.alias");
+    expect(keybindingDetailLines({ keymap: options.keymap! }, "ctrl+j").join("\n")).toContain(
+      "escape.alias -> ctrl+j,super+j [modal]",
+    );
+  });
+
   test("reports canonical prompt transform action bindings only", () => {
     const { options, warnings } = resolveVimOptions({
       piVimMode: {
@@ -100,6 +114,7 @@ describe("vim customization helpers", () => {
     const { options } = resolveVimOptions({
       piVimMode: {
         keymap: {
+          escape: ["<D-j>"],
           commands: { redo: ["U"] },
           actions: { "prompt.transform.reflow": ["gq"] },
         },
@@ -116,6 +131,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("Motions");
     expect(lines).toContain("Operators");
     expect(lines).toContain("Text objects");
+    expect(lines).toContain("Escape aliases");
     expect(lines).toContain("Macros");
     expect(lines).toContain("Marks");
     expect(lines).toContain("Searches");
@@ -126,6 +142,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("▸ Commands");
     expect(lines).toContain("Key            Mode        Action");
     expect(lines).toContain("U              normal      command.redo");
+    expect(lines).toContain("super+j        modal       escape.alias");
     expect(lines).toContain("gq             n/v         prompt.transform.reflow");
     expect(lines).not.toContain("promptTransform");
     expect(lines).not.toContain(" → ");

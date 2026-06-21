@@ -28,7 +28,7 @@ import {
   substituteLineRangeRegex,
   yankExLineRange,
 } from "../buffer.ts";
-import { promptTransformsForOptions } from "../config.ts";
+import { keymapForOptions, promptTransformsForOptions } from "../config.ts";
 import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
 import {
   diagnosticPopup,
@@ -478,7 +478,13 @@ export function handlePendingExInput(
 ): ModalUpdate {
   const pendingEx = state.pendingEx;
   if (!pendingEx) return invalidate(state);
-  if (keyMatches(data, "escape")) return cancelExCommand(state);
+  const parsed = keySequence(data);
+  if (
+    keyMatches(data, "escape") ||
+    (parsed !== undefined && keymapForOptions(options).escape.includes(parsed))
+  ) {
+    return cancelExCommand(state);
+  }
   if (keyMatches(data, "ctrl+c") || keyMatches(data, "ctrl+g"))
     return resetAndDelegate(state, options, data);
   if (keyMatches(data, "enter") || keyMatches(data, "return"))
@@ -495,7 +501,6 @@ export function handlePendingExInput(
       ),
     });
   }
-  const parsed = keySequence(data);
   if (keyMatches(data, "delete") || parsed === "delete" || data === "\x1b[3~") {
     const cursor = exCursor(pendingEx);
     if (cursor >= pendingEx.command.length) return invalidate(state);

@@ -37,11 +37,12 @@ describe("vim config parsing", () => {
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     const redoOptions = {
-      keymap: { commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
+      keymap: { escape: ["<D-j>"], commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.motions?.halfPageDown).toEqual(["<C-d>"]);
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
+    expect(redoOptions.keymap?.escape).toEqual(["<D-j>"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
     expect(redoOptions.keymap?.commands?.showKeybindings).toEqual(["gk"]);
     const backwardSearchOptions = {
@@ -211,6 +212,7 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
+          escape: ["<C-j>", "<D-j>"],
           operators: { delete: ["q"], lowercase: ["zu"], uppercase: ["ctrl+c"], change: ["c"] },
           motions: { wordForward: ["e"] },
           commands: {
@@ -229,6 +231,7 @@ describe("vim config parsing", () => {
       },
     });
 
+    expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
     expect(result.options.keymap?.operators.delete).toEqual(["q"]);
     expect(result.options.keymap?.operators.lowercase).toEqual(["zu"]);
     expect(result.options.keymap?.operators.uppercase).toEqual(["gU"]);
@@ -249,6 +252,72 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
     expect(result.options.keymap?.operatorMotions.lowercase).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
+  });
+
+  test("insert escape aliases validate independently from normal keymap", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          escape: ["<C-j>", "<D-j>", "j", "<C-c>", 42],
+          motions: { down: ["J"], up: ["K"] },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
+    expect(result.options.keymap?.motions.down).toEqual(["J"]);
+    expect(result.options.keymap?.motions.up).toEqual(["K"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h"]);
+    expect(result.options.keymap?.motions.right).toEqual(["l"]);
+    expect(result.options.keymap?.macros.record).toEqual(["q"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("escape contains unsupported printable text sequence j"),
+        expect.stringContaining("escape contains protected key ctrl+c"),
+        expect.stringContaining("escape contains unsupported key"),
+      ]),
+    );
+  });
+
+  test("raw text insert escape aliases are rejected", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["jk", "jj"] } },
+    });
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("escape contains unsupported printable text sequence jk"),
+        expect.stringContaining("escape contains unsupported printable text sequence jj"),
+      ]),
+    );
+  });
+
+  test("invalid insert escape config falls back without dropping valid siblings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          escape: "<D-j>",
+          commands: { openLineBelow: ["n"] },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("escape must be an array")]),
+    );
+  });
+
+  test("project insert escape aliases can clear global aliases", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { escape: ["<D-j>"] } } },
+      { piVimMode: { keymap: { escape: [] } } },
+    );
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.warnings).toEqual([]);
   });
 
   test("word search command bindings remap, reject protected keys, and preserve siblings", () => {

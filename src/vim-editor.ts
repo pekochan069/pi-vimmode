@@ -30,6 +30,7 @@ import {
   cloneResolvedVimOptions,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
+  keymapForOptions,
   searchForOptions,
   uiForOptions,
 } from "./config.ts";
@@ -208,6 +209,7 @@ export class VimEditor extends CustomEditor {
       canFastDelegateInsertInput(this.modalState, data, {
         isAutocompleteOpen: this.isShowingAutocomplete(),
         isMacroReplaying: this.isMacroReplaying,
+        escape: keymapForOptions(this.options).escape,
       })
     ) {
       this.delegateDefaultInput(data);

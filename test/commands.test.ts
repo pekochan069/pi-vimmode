@@ -27,6 +27,8 @@ const operatorMotions = [
   "$",
   "G",
   "%",
+  "{",
+  "}",
 ] as const;
 
 describe("normal command parser", () => {
@@ -85,6 +87,72 @@ describe("normal command parser", () => {
         motion: "bufferStart",
       });
     }
+  });
+
+  test("resolves finite case operators", () => {
+    const lowercase = resolveNormalCommand("u", "g");
+    expect(lowercase).toEqual({ type: "pending", pending: "gu" });
+    expect(
+      resolveNormalCommand("w", lowercase.type === "pending" ? lowercase.pending : ""),
+    ).toEqual({ type: "operatorMotion", operator: "lowercase", motion: "wordForward" });
+
+    const uppercase = resolveNormalCommand("U", "g");
+    const innerWord = resolveNormalCommand(
+      "i",
+      uppercase.type === "pending" ? uppercase.pending : "",
+    );
+    expect(innerWord.type).toBe("pending");
+    expect(
+      resolveNormalCommand("w", innerWord.type === "pending" ? innerWord.pending : ""),
+    ).toEqual({
+      type: "operatorTextObject",
+      operator: "uppercase",
+      textObject: { kind: "inner", target: "word" },
+    });
+
+    const toggle = resolveNormalCommand("~", "g");
+    expect(resolveNormalCommand("g", toggle.type === "pending" ? toggle.pending : "")).toEqual({
+      type: "pending",
+      pending: "g~\u0000line\u0000g\u0000line\u0000",
+    });
+    expect(resolveNormalCommand("~", "g~\u0000line\u0000g\u0000line\u0000")).toEqual({
+      type: "lineCommand",
+      operator: "toggleCase",
+    });
+
+    const counted = resolveNormalCommand("2", undefined);
+    const countedLower = resolveNormalCommand(
+      "g",
+      counted.type === "pending" ? counted.pending : "",
+    );
+    const countedLowercase = resolveNormalCommand(
+      "u",
+      countedLower.type === "pending" ? countedLower.pending : "",
+    );
+    expect(
+      resolveNormalCommand(
+        "w",
+        countedLowercase.type === "pending" ? countedLowercase.pending : "",
+      ),
+    ).toEqual({ type: "operatorMotion", operator: "lowercase", motion: "wordForward", count: 2 });
+  });
+
+  test("case operators preserve g-prefix motions and reject unsupported targets", () => {
+    expect(resolveNormalCommand("g", "g")).toEqual({ type: "motion", motion: "bufferStart" });
+    expect(resolveNormalCommand("e", "g")).toEqual({
+      type: "motion",
+      motion: "wordPreviousEnd",
+    });
+    expect(resolveNormalCommand("E", "g")).toEqual({
+      type: "motion",
+      motion: "wordPreviousEndBig",
+    });
+    const lowercase = resolveNormalCommand("u", "g");
+    const pending = lowercase.type === "pending" ? lowercase.pending : "";
+    expect(resolveNormalCommand("/", pending)).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand("f", pending)).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand(";", pending)).toEqual({ type: "invalid" });
+    expect(resolveNormalCommand("'", pending)).toEqual({ type: "invalid" });
   });
 
   test("invalid pending key clears state", () => {
@@ -289,7 +357,7 @@ describe("normal command parser", () => {
   test("resolves configured semantic operators, motions, and commands", () => {
     const keymap = {
       ...DEFAULT_VIM_KEYMAP,
-      operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"] },
+      operators: { ...DEFAULT_VIM_KEYMAP.operators, delete: ["q"], lowercase: ["zu"] },
       motions: { ...DEFAULT_VIM_KEYMAP.motions, wordForward: ["e"], halfPageDown: ["zz"] },
       commands: {
         ...DEFAULT_VIM_KEYMAP.commands,
@@ -328,6 +396,15 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("zz", undefined, keymap)).toEqual({
       type: "motion",
       motion: "halfPageDown",
+    });
+    const casePrefix = resolveNormalCommand("z", undefined, keymap);
+    expect(
+      resolveNormalCommand("u", casePrefix.type === "pending" ? casePrefix.pending : "", keymap),
+    ).toEqual({ type: "pending", pending: "zu" });
+    expect(resolveNormalCommand("e", "zu", keymap)).toEqual({
+      type: "operatorMotion",
+      operator: "lowercase",
+      motion: "wordForward",
     });
   });
 
@@ -521,6 +598,14 @@ describe("normal command parser", () => {
     expect(resolveNormalCommand("N", undefined)).toEqual({
       type: "command",
       command: "repeatSearchReverse",
+    });
+    expect(resolveNormalCommand("*", undefined)).toEqual({
+      type: "command",
+      command: "searchWordForward",
+    });
+    expect(resolveNormalCommand("#", undefined)).toEqual({
+      type: "command",
+      command: "searchWordBackward",
     });
     expect(resolveNormalCommand("/", "d")).toEqual({
       type: "operatorSearch",
@@ -775,6 +860,99 @@ describe("normal command parser", () => {
     expect(
       resolveNormalCommand("w", deletePending.type === "pending" ? deletePending.pending : ""),
     ).toEqual({ type: "operatorMotion", operator: "delete", motion: "wordForward" });
+  });
+
+  test("resolves paragraph motions and paragraph text objects", () => {
+    expect(resolveNormalCommand("{", undefined)).toEqual({
+      type: "motion",
+      motion: "paragraphBackward",
+    });
+    expect(resolveNormalCommand("}", undefined)).toEqual({
+      type: "motion",
+      motion: "paragraphForward",
+    });
+    expect(parseNormalCommand("}", "d")).toEqual({
+      type: "operatorMotion",
+      operator: "d",
+      motion: "}",
+    });
+    expect(parseNormalCommand("{", "y")).toEqual({
+      type: "operatorMotion",
+      operator: "y",
+      motion: "{",
+    });
+
+    const change = resolveNormalCommand("c", undefined);
+    const inner = resolveNormalCommand("i", change.type === "pending" ? change.pending : "");
+    expect(resolveNormalCommand("p", inner.type === "pending" ? inner.pending : "")).toEqual({
+      type: "operatorTextObject",
+      operator: "change",
+      textObject: { kind: "inner", target: "paragraph" },
+    });
+    const deletePending = resolveNormalCommand("d", undefined);
+    const around = resolveNormalCommand(
+      "a",
+      deletePending.type === "pending" ? deletePending.pending : "",
+    );
+    expect(resolveNormalCommand("p", around.type === "pending" ? around.pending : "")).toEqual({
+      type: "operatorTextObject",
+      operator: "delete",
+      textObject: { kind: "around", target: "paragraph" },
+    });
+  });
+
+  test("uses configured paragraph motion and text object keys", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      motions: {
+        ...DEFAULT_VIM_KEYMAP.motions,
+        paragraphForward: ["P"],
+        paragraphBackward: ["N"],
+      },
+      textObjects: {
+        ...DEFAULT_VIM_KEYMAP.textObjects,
+        targets: { ...DEFAULT_VIM_KEYMAP.textObjects.targets, paragraph: ["g"] },
+      },
+    };
+    expect(resolveNormalCommand("P", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "paragraphForward",
+    });
+    expect(resolveNormalCommand("N", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "paragraphBackward",
+    });
+    const deletePending = resolveNormalCommand("d", undefined, keymap);
+    const inner = resolveNormalCommand(
+      "i",
+      deletePending.type === "pending" ? deletePending.pending : "",
+      keymap,
+    );
+    expect(
+      resolveNormalCommand("g", inner.type === "pending" ? inner.pending : "", keymap),
+    ).toEqual({
+      type: "operatorTextObject",
+      operator: "delete",
+      textObject: { kind: "inner", target: "paragraph" },
+    });
+  });
+
+  test("omitted paragraph operator motion clears pending state", () => {
+    const keymap = {
+      ...DEFAULT_VIM_KEYMAP,
+      operatorMotions: {
+        ...DEFAULT_VIM_KEYMAP.operatorMotions,
+        delete: ["wordForward"] as const,
+      },
+    };
+    const deletePending = resolveNormalCommand("d", undefined, keymap);
+    expect(
+      resolveNormalCommand(
+        "}",
+        deletePending.type === "pending" ? deletePending.pending : "",
+        keymap,
+      ),
+    ).toEqual({ type: "invalid" });
   });
 
   test("keeps duplicate sequence resolution first-match deterministic", () => {

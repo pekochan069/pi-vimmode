@@ -27,6 +27,7 @@ export type VimActionKind =
   | "mark"
   | "textObject"
   | "search"
+  | "escape"
   | "promptTransform"
   | "diagnostic"
   | "runtimeHelp";
@@ -85,6 +86,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   visualLine: "enter linewise visual mode",
   visualBlock: "enter blockwise visual mode",
   deleteChar: "delete character under cursor",
+  deleteCharBefore: "delete character before cursor",
   deleteToLineEnd: "delete to line end",
   changeToLineEnd: "change to line end",
   yankLine: "yank current line",
@@ -107,6 +109,8 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   startSearchBackward: "start backward prompt search",
   repeatSearch: "repeat prompt search",
   repeatSearchReverse: "repeat prompt search in reverse",
+  searchWordForward: "search word under cursor forward",
+  searchWordBackward: "search word under cursor backward",
   startExCommand: "start Ex command-line",
   repeatChange: "repeat last change",
   undo: "undo prompt edit",
@@ -135,6 +139,8 @@ const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {
   matchingPair: "move to matching bracket or quote",
   halfPageDown: "move down by half a prompt page",
   halfPageUp: "move up by half a prompt page",
+  paragraphBackward: "move to previous paragraph",
+  paragraphForward: "move to next paragraph",
 };
 
 const SEARCH_COMMANDS = new Set<VimCommandAction>([
@@ -142,6 +148,8 @@ const SEARCH_COMMANDS = new Set<VimCommandAction>([
   "startSearchBackward",
   "repeatSearch",
   "repeatSearchReverse",
+  "searchWordForward",
+  "searchWordBackward",
 ]);
 
 const TRANSFORM_DESCRIPTIONS: Record<PromptTransformAction, string> = {
@@ -158,6 +166,9 @@ const OPERATOR_DESCRIPTIONS: Record<VimOperatorAction, string> = {
   delete: "delete by motion or text object",
   change: "change by motion or text object",
   yank: "yank by motion or text object",
+  lowercase: "lowercase by motion or text object",
+  uppercase: "uppercase by motion or text object",
+  toggleCase: "toggle case by motion or text object",
   indent: "indent selected/current lines",
   dedent: "dedent selected/current lines",
 };
@@ -294,6 +305,16 @@ export function actionEntriesForKeymap(
   marks?: ResolvedVimMarks,
 ): VimActionEntry[] {
   const entries: VimActionEntry[] = [];
+  if (keymap.escape.length > 0) {
+    entries.push({
+      id: "alias",
+      kind: "escape",
+      description:
+        "escape alias for insert, visual, and Ex command-line states; no recursive mappings or timeoutlen",
+      keys: keymap.escape,
+      aliases: ["escape", "piVimMode.keymap.escape"],
+    });
+  }
   for (const [id, keys] of Object.entries(keymap.commands) as [
     VimCommandAction,
     readonly string[],
@@ -414,7 +435,7 @@ export function actionsMessage(
     return matches[0] ? summarizeEntry(matches[0]) : `actions: no match for ${query.trim()}`;
   const counts = new Map<VimActionKind, number>();
   for (const entry of matches) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
-  return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("promptTransform") ?? 0} transforms, ${counts.get("diagnostic") ?? 0} diagnostic metadata, ${counts.get("runtimeHelp") ?? 0} runtime-help metadata; :actions <query>`;
+  return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("escape") ?? 0} escape aliases, ${counts.get("promptTransform") ?? 0} transforms, ${counts.get("diagnostic") ?? 0} diagnostic metadata, ${counts.get("runtimeHelp") ?? 0} runtime-help metadata; :actions <query>`;
 }
 
 export function keymapMessage(
@@ -447,6 +468,7 @@ export function keybindingCatalogLines(context: KeybindingCatalogContext): strin
     ...whichKeyCategoryLines("Motions", entries, "motion"),
     ...whichKeyCategoryLines("Operators", entries, "operator"),
     ...whichKeyCategoryLines("Text objects", entries, "textObject"),
+    ...whichKeyCategoryLines("Escape aliases", entries, "escape"),
     ...featureWhichKeyCategoryLines("Macros", entries, "macro", context.macros?.enabled !== false),
     ...featureWhichKeyCategoryLines("Marks", entries, "mark", context.marks?.enabled !== false),
     ...whichKeyCategoryLines("Searches", entries, "search"),
@@ -548,6 +570,7 @@ function actionIdDisplay(entry: VimActionEntry): string {
 function modeDisplay(entry: VimActionEntry): string {
   if (entry.kind === "motion" || entry.kind === "search" || entry.kind === "mark") return "n/v/op";
   if (entry.kind === "operator" || entry.kind === "promptTransform") return "n/v";
+  if (entry.kind === "escape") return "modal";
   if (entry.kind === "textObject") return "op";
   return "normal";
 }

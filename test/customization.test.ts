@@ -27,7 +27,7 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 80 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 89 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "halfPageDown")).toContain("motion.halfPageDown ctrl+d");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
@@ -64,7 +64,23 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(keymap, "ctrl+r")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-r>")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-d>")).toBe("mapcheck: ctrl+d -> motion.halfPageDown");
+    expect(mapcheckMessage(keymap, "{")).toBe("mapcheck: { -> motion.paragraphBackward");
+    expect(mapcheckMessage(keymap, "}")).toBe("mapcheck: } -> motion.paragraphForward");
     expect(mapcheckMessage(keymap, "zz")).toBe("mapcheck: zz is unmapped");
+  });
+
+  test("reports configured escape aliases as modal escape bindings", () => {
+    const { options } = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<C-j>", "<D-j>"] } },
+    });
+
+    expect(actionsMessage(options.keymap!)).toContain("1 escape aliases");
+    expect(keymapMessage(options.keymap!, "escape")).toContain("escape.alias ctrl+j,super+j");
+    expect(keymapMessage(options.keymap!, "escape")).toContain("Ex command-line");
+    expect(mapcheckMessage(options.keymap!, "super+j")).toBe("mapcheck: super+j -> escape.alias");
+    expect(keybindingDetailLines({ keymap: options.keymap! }, "ctrl+j").join("\n")).toContain(
+      "escape.alias -> ctrl+j,super+j [modal]",
+    );
   });
 
   test("reports canonical prompt transform action bindings only", () => {
@@ -98,6 +114,7 @@ describe("vim customization helpers", () => {
     const { options } = resolveVimOptions({
       piVimMode: {
         keymap: {
+          escape: ["<D-j>"],
           commands: { redo: ["U"] },
           actions: { "prompt.transform.reflow": ["gq"] },
         },
@@ -114,6 +131,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("Motions");
     expect(lines).toContain("Operators");
     expect(lines).toContain("Text objects");
+    expect(lines).toContain("Escape aliases");
     expect(lines).toContain("Macros");
     expect(lines).toContain("Marks");
     expect(lines).toContain("Searches");
@@ -124,6 +142,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("▸ Commands");
     expect(lines).toContain("Key            Mode        Action");
     expect(lines).toContain("U              normal      command.redo");
+    expect(lines).toContain("super+j        modal       escape.alias");
     expect(lines).toContain("gq             n/v         prompt.transform.reflow");
     expect(lines).not.toContain("promptTransform");
     expect(lines).not.toContain(" → ");

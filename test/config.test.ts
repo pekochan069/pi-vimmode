@@ -37,11 +37,12 @@ describe("vim config parsing", () => {
       promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
     } satisfies VimEditorOptions;
     const redoOptions = {
-      keymap: { commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
+      keymap: { escape: ["<D-j>"], commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
     expect(options.keymap?.motions?.halfPageDown).toEqual(["<C-d>"]);
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
+    expect(redoOptions.keymap?.escape).toEqual(["<D-j>"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
     expect(redoOptions.keymap?.commands?.showKeybindings).toEqual(["gk"]);
     const backwardSearchOptions = {
@@ -211,7 +212,8 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          operators: { delete: ["q"], change: ["ctrl+c"] },
+          escape: ["<C-j>", "<D-j>"],
+          operators: { delete: ["q"], lowercase: ["zu"], uppercase: ["ctrl+c"], change: ["c"] },
           motions: { wordForward: ["e"] },
           commands: {
             openLineBelow: ["n"],
@@ -224,12 +226,15 @@ describe("vim config parsing", () => {
           },
           macros: { record: ["m"], play: ["r"] },
           marks: { set: ["s"], jumpExact: ["<A-m>"], jumpLine: ["'"] },
-          operatorMotions: { delete: ["wordForward"] },
+          operatorMotions: { delete: ["wordForward"], lowercase: ["wordForward"] },
         },
       },
     });
 
+    expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
     expect(result.options.keymap?.operators.delete).toEqual(["q"]);
+    expect(result.options.keymap?.operators.lowercase).toEqual(["zu"]);
+    expect(result.options.keymap?.operators.uppercase).toEqual(["gU"]);
     expect(result.options.keymap?.operators.change).toEqual(["c"]);
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
@@ -245,7 +250,93 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.marks.jumpExact).toEqual(["alt+m"]);
     expect(result.options.keymap?.marks.jumpLine).toEqual(["'"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
+    expect(result.options.keymap?.operatorMotions.lowercase).toEqual(["wordForward"]);
     expect(result.warnings.some((warning) => warning.includes("protected key"))).toBe(true);
+  });
+
+  test("insert escape aliases validate independently from normal keymap", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          escape: ["<C-j>", "<D-j>", "j", "<C-c>", 42],
+          motions: { down: ["J"], up: ["K"] },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
+    expect(result.options.keymap?.motions.down).toEqual(["J"]);
+    expect(result.options.keymap?.motions.up).toEqual(["K"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h"]);
+    expect(result.options.keymap?.motions.right).toEqual(["l"]);
+    expect(result.options.keymap?.macros.record).toEqual(["q"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("escape contains unsupported printable text sequence j"),
+        expect.stringContaining("escape contains protected key ctrl+c"),
+        expect.stringContaining("escape contains unsupported key"),
+      ]),
+    );
+  });
+
+  test("raw text insert escape aliases are rejected", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["jk", "jj"] } },
+    });
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("escape contains unsupported printable text sequence jk"),
+        expect.stringContaining("escape contains unsupported printable text sequence jj"),
+      ]),
+    );
+  });
+
+  test("invalid insert escape config falls back without dropping valid siblings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          escape: "<D-j>",
+          commands: { openLineBelow: ["n"] },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("escape must be an array")]),
+    );
+  });
+
+  test("project insert escape aliases can clear global aliases", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { escape: ["<D-j>"] } } },
+      { piVimMode: { keymap: { escape: [] } } },
+    );
+
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("word search command bindings remap, reject protected keys, and preserve siblings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: {
+            searchWordForward: ["<C-s>", "8"],
+            searchWordBackward: ["ctrl+c"],
+            startSearch: ["/"],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.searchWordForward).toEqual(["ctrl+s", "8"]);
+    expect(result.options.keymap?.commands.searchWordBackward).toEqual(["#"]);
+    expect(result.options.keymap?.commands.startSearch).toEqual(["/"]);
+    expect(result.warnings.some((warning) => warning.includes("searchWordBackward"))).toBe(true);
   });
 
   test("scroll control keys are only allowed for scroll motions", () => {
@@ -296,9 +387,10 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          operators: { indent: ["]"], dedent: ["["], delete: ["d"] },
+          operators: { indent: ["]"], dedent: ["["], delete: ["d"], toggleCase: ["z~"] },
           operatorMotions: {
             delete: ["wordForward"],
+            toggleCase: ["wordForward"],
             indent: ["wordForward"],
             dedent: ["lineEnd"],
           },
@@ -309,7 +401,9 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.operators.indent).toEqual(["]"]);
     expect(result.options.keymap?.operators.dedent).toEqual(["["]);
     expect(result.options.keymap?.operators.delete).toEqual(["d"]);
+    expect(result.options.keymap?.operators.toggleCase).toEqual(["z~"]);
     expect(result.options.keymap?.operatorMotions.delete).toEqual(["wordForward"]);
+    expect(result.options.keymap?.operatorMotions.toggleCase).toEqual(["wordForward"]);
     expect("indent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
     expect("dedent" in (result.options.keymap?.operatorMotions ?? {})).toBe(false);
     expect(
@@ -366,6 +460,13 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEnd).toEqual(["e"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.paragraphBackward).toEqual(["{"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.paragraphForward).toEqual(["}"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.textObjects.targets.paragraph).toEqual(["p"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("paragraphForward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("paragraphBackward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("paragraphForward");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank).toContain("paragraphBackward");
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForwardBig).toEqual(["W"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordBackwardBig).toEqual(["B"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordEndBig).toEqual(["E"]);
@@ -375,6 +476,9 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.decrementNumber).toEqual(["ctrl+x"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.replaceChar).toEqual(["r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.toggleCase).toEqual(["~"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.lowercase).toEqual(["gu"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.uppercase).toEqual(["gU"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operators.toggleCase).toEqual(["g~"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.repeatChange).toEqual(["."]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.redo).toEqual(["ctrl+r"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.commands.startExCommand).toEqual([":"]);
@@ -393,6 +497,15 @@ describe("vim config parsing", () => {
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete).toContain("wordForwardBig");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.change).toContain("wordPreviousEnd");
     expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.yank).toContain("wordPreviousEndBig");
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.lowercase).toEqual(
+      DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete,
+    );
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.uppercase).toEqual(
+      DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete,
+    );
+    expect(DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.toggleCase).toEqual(
+      DEFAULT_VIM_OPTIONS.keymap?.operatorMotions.delete,
+    );
 
     const result = resolveVimOptions({
       piVimMode: {
@@ -404,8 +517,12 @@ describe("vim config parsing", () => {
             halfPageDown: ["<C-d>"],
             halfPageUp: ["<C-u>"],
           },
+          operators: { lowercase: ["gl"] },
           commands: { incrementNumber: ["+"], toggleCase: ["<A-t>"], redo: ["U"] },
-          operatorMotions: { change: ["wordEnd", "wordPreviousEnd", "halfPageDown"] },
+          operatorMotions: {
+            change: ["wordEnd", "wordPreviousEnd", "halfPageDown"],
+            lowercase: ["wordEnd"],
+          },
         },
       },
     });
@@ -414,10 +531,12 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordPreviousEnd).toEqual(["g-"]);
     expect(result.options.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(result.options.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(result.options.keymap?.operators.lowercase).toEqual(["gl"]);
     expect(result.options.keymap?.commands.incrementNumber).toEqual(["+"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["alt+t"]);
     expect(result.options.keymap?.commands.redo).toEqual(["U"]);
     expect(result.options.keymap?.operatorMotions.change).toEqual(["wordEnd", "wordPreviousEnd"]);
+    expect(result.options.keymap?.operatorMotions.lowercase).toEqual(["wordEnd"]);
     expect(
       result.warnings.some((warning) =>
         warning.includes("operatorMotions.change contains unsupported operator motion"),
@@ -507,7 +626,7 @@ describe("vim config parsing", () => {
         keymap: {
           textObjects: {
             kinds: { inner: ["Z"], around: ["Q"] },
-            targets: { codeFence: ["R"], tag: ["X"] },
+            targets: { codeFence: ["R"], tag: ["H"] },
           },
         },
         promptStructures: { enabled: true, targets: { tag: false, errorBlock: false } },
@@ -1002,7 +1121,7 @@ describe("vim config parsing", () => {
     expect(result.warnings).toEqual(
       expect.arrayContaining([
         expect.stringContaining("prefix-shadow conflict"),
-        expect.stringContaining("conflict with motions.wordPreviousEnd"),
+        expect.stringContaining("conflict with operators.lowercase"),
         expect.stringContaining("duplicate action key gq"),
         expect.stringContaining("duplicate action key zq"),
       ]),

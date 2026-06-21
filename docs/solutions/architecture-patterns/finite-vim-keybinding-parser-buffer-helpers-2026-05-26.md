@@ -1,7 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
-last_updated: 2026-06-18
+last_updated: 2026-06-19
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -31,14 +31,15 @@ tags:
 
 ## Context
 
-`pi-vimmode` needed more Vim-native prompt-editing commands without becoming a full Vim emulator. The feature added finite normal-mode bindings such as `gg`, `G`, `^`, `_`, `%`, `o`/`O`, `d`/`c`/`y` with selected motions, `cc`, `D`, `C`, `Y`, `J`, and `P`, then evolved those defaults into a configurable semantic keymap.
+`pi-vimmode` needed more Vim-native prompt-editing commands without becoming a full Vim emulator. The feature added finite normal-mode bindings such as `gg`, `G`, `^`, `_`, `%`, `{`/`}`, `o`/`O`, `d`/`c`/`y` with selected motions, `cc`, `D`, `C`, `Y`, `J`, `P`, and `ip`/`ap` paragraph text objects, then evolved those defaults into a configurable semantic keymap.
 
 The risky part was not wiring individual keys. The risky part was keeping three concerns from collapsing into one fragile editor switch:
 
 - pending command grammar (`g`, `d`, `c`, `y`, operator character-search targets, and custom multi-key prefixes),
 - text-buffer transforms and register semantics,
 - Pi editor dispatch and shortcut delegation,
-- config validation so a user-visible mapping never resolves to a no-op executor path.
+- config validation so a user-visible mapping never resolves to a no-op executor path,
+- contextual key collisions such as `{`/`}` meaning paragraph motions in motion context but brace targets in text-object context.
 
 A later `ct,` regression confirmed that parser precedence is part of this architecture, not incidental cleanup. With `c` pending, `t` must be interpreted as the start of an operator character-search target before generic multi-key prefix checks append it into a raw `ct` sequence. Otherwise textual control-key bindings like `ctrl+a`, `ctrl+x`, and `ctrl+r` can make `ct` look like a longer prefix and turn valid Vim grammar into an invalid pending sequence.
 
@@ -101,20 +102,11 @@ const combined = pending + key;
 if (hasLongerPrefix(combined, keymap)) return { type: "pending", pending: combined };
 ```
 
-This keeps parser namespaces scoped by state: normal-mode command prefixes, operator-pending continuations, and textual control-key names are not interchangeable.
+This keeps parser namespaces scoped by state: normal-mode command prefixes, operator-pending continuations, text-object targets, and textual control-key names are not interchangeable.
 
-Good pattern:
+The paragraph-motion change is the same lesson in smaller form. `{` and `}` are normal/operator motions, while `{` and `}` also remain brace text-object targets after `i`/`a`; `p` is the paragraph text-object target. Route by semantic action and parser state, not by globally special-casing raw keys.
 
-```ts
-const OPERATOR_MOTION_SEPARATOR = "\u0000motion\u0000";
-const OPERATOR_LINE_SEPARATOR = "\u0000line\u0000";
-
-function encodeOperatorMotionPending(operatorSequence: string, motionPrefix: string): string {
-  return `${operatorSequence}${OPERATOR_MOTION_SEPARATOR}${motionPrefix}`;
-}
-```
-
-Expose display text separately from internal pending state so status UI can show `qqe…` without depending on parser sentinels.
+For configurable multi-key mappings, encode operator-pending internal state structurally and expose display text separately, so status UI can show `qqe…` without depending on parser sentinels.
 
 ### 2. Put text semantics in pure `src/buffer.ts` helpers
 
@@ -123,7 +115,8 @@ Keep the editor out of string surgery. Add pure helpers for each behavior family
 - navigation targets: `bufferStartPosition`, `bufferEndPosition`, `firstNonBlankPosition`, `matchingPairPosition`,
 - line edits: `openLineAbove`, `openLineBelow`, `joinLineWithNext`, `changeLine`,
 - register edits: `pasteRegisterBefore`,
-- operator motions: `deleteByMotion`, `yankByMotion`.
+- operator motions: `deleteByMotion`, `yankByMotion`,
+- paragraph helpers: `paragraphForwardPosition`, `paragraphBackwardPosition`, `paragraphTextObjectOffsets`.
 
 This makes edge cases testable without depending on terminal input, Pi cursor behavior, or render state.
 
@@ -148,9 +141,9 @@ if (motion === "w") return orderedOffsetRange(current, nextWordStartOffset(text,
 return orderedOffsetRange(previousWordStartOffset(text, current), current);
 ```
 
-Keep `deleteRange()` / `selectionText()` for visual mode. Use `deleteByMotion()` / `yankByMotion()` for operator commands.
+Keep `deleteRange()` / `selectionText()` for visual mode. Use `deleteByMotion()` / `yankByMotion()` for operator commands. For paragraph features, put blank-line paragraph math in `src/buffer.ts`; modal code should only ask for `paragraphForward`/`paragraphBackward` movement or `paragraph` text-object ranges.
 
-Config should only accept operator motions with executable range semantics. Normal/visual motions such as `right`, `bufferStart`, and `matchingPair` can be valid movement actions while still being invalid after `d`, `c`, or `y` until the buffer module implements matching operator ranges. Reject unsupported operator motions during config parsing with a warning instead of letting the modal engine silently no-op.
+Config should only accept operator motions with executable range semantics. Today that means half-page motions are movement-only and rejected from `operatorMotions`; other configured operator motions need matching buffer range support before they are accepted. Reject unsupported operator motions during config parsing with a warning instead of letting the modal engine silently no-op.
 
 ### 4. Let `VimEditor` dispatch, not compute
 
@@ -172,7 +165,7 @@ Do not imply full Vim parity. Document exact support from the current prompt-buf
 
 - counts are supported for the finite commands that implement them, not arbitrary Vim grammar,
 - text objects are supported only for the implemented prompt-buffer objects,
-- line-local character search is supported, but prompt search (`/`, `?`, `n`, `N`) is not,
+- line-local character search and prompt search are supported only through the finite parser states that implement them,
 - finite operator motions only,
 - `%` supports `()`, `[]`, and `{}` pairs under or after the cursor on the current line.
 
@@ -247,6 +240,19 @@ The fast path should only accept a single printable character when no modal, UI,
 
 Tests should prove both sides of the boundary: safe insert text avoids snapshot construction, while unsafe cases still preserve existing modal semantics for `Esc`, macros, transient Ex messages, redo branch clearing, and search highlight state.
 
+### 8. Reuse existing modal pipelines for command variants
+
+When a new command only resolves its input differently, route it into the existing behavior pipeline instead of forking command state. The `*` / `#` word-under-cursor search feature used this shape:
+
+- `src/buffer.ts` owns the pure word extraction helper, `wordUnderCursor(text, cursor)`, with ASCII keyword semantics (`[A-Za-z0-9_]`). Cursor inside `alpha` or just after `alpha|` resolves the same word.
+- `src/types.ts` and `src/keymap-descriptors.ts` add semantic actions `searchWordForward` and `searchWordBackward` with defaults `*` and `#`.
+- `src/modal/search.ts` feeds the resolved word into the existing search completion path, so word search reuses literal matching, wrapping, `lastSearch`, search history, highlights, and cursor restoration.
+- `src/modal/normal.ts` wires the commands in normal mode only; insert-mode `*` / `#` keep delegating to Pi text input, and visual/operator-motion behavior stays unsupported until explicitly needed.
+
+That avoided a second search state machine. `n` and `N` repeat behavior, history, highlighting, and no-match safety all stayed inside the established prompt-search path.
+
+Add layered tests for this kind of command variant: pure extraction, command resolution, modal repeat/highlight/history, and one live `VimEditor` smoke test when the command is configurable.
+
 ## Why This Matters
 
 Finite prompt-editor Vim support fails when parser, buffer model, and editor dispatch merge into one switch statement:
@@ -305,6 +311,28 @@ this.applyEdit(joinLineWithNext(this.getText(), this.getCursor()));
 ```
 
 over inline `setText()` slicing inside `VimEditor`. The helper can be covered in `test/buffer.test.ts`, while editor integration only needs a command-group smoke test.
+
+### Paragraph motion and text-object addition
+
+For `{`/`}` plus `ip`/`ap`, the working shape was deliberately small:
+
+```ts
+motions.paragraphBackward = ["{"];
+motions.paragraphForward = ["}"];
+textObjects.targets.paragraph = ["p"];
+```
+
+`src/buffer.ts` owns the prompt-local model: paragraphs are contiguous non-blank line runs separated by one or more blank lines. `ip` selects the body only; `ap` adds one adjacent blank separator group, preferring the following separator and falling back to the previous separator at prompt end.
+
+Avoid this shortcut:
+
+```ts
+if (key === "{" || key === "}") moveParagraph(key);
+```
+
+It ignores text-object context and risks breaking `di{`, `da}`, and configured target keys. Add descriptor/default entries first, then wire behavior where the existing parser already knows whether it is resolving a motion or a text-object target.
+
+Validate buffer ranges, parser/config defaults, modal behavior, docs drift, and one configured-key adapter smoke test; then run the standard test/type/lint/format/OpenSpec/graphify checks.
 
 ### Layered tests
 
@@ -418,4 +446,6 @@ Validation for the buffer helper deduplication used `bun test`, `bun test test/b
 - `test/commands.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts` — layered test coverage
 - `scripts/measure-insert-fast-path.ts` — local insert-path measurement for snapshot and delegation cost
 - `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — concrete bug where line-command repeat state and live option cloning drifted from this architecture
+- `docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md` — descriptor/config precedence guardrails for semantic keymaps
+- `docs/solutions/developer-experience/pi-vimmode-ctrl-d-ctrl-u-half-page-scroll-2026-06-18.md` — recent motion-addition recipe using descriptor entries, buffer helpers, modal wiring, docs, and drift tests
 - `docs/solutions/developer-experience/pi-vimmode-auto-activation-2026-05-26.md` — same editor component, focused on lifecycle/activation reliability rather than keybinding behavior

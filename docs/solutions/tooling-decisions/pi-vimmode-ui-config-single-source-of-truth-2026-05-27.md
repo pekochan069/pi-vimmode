@@ -1,7 +1,7 @@
 ---
 title: Pi Vim mode UI config as single source of truth
 date: 2026-05-27
-last_updated: 2026-05-28
+last_updated: 2026-06-21
 category: docs/solutions/tooling-decisions
 module: pi-vimmode
 problem_type: tooling_decision
@@ -12,7 +12,18 @@ applies_when:
   - "Choosing between compatibility aliases and one native JSON config schema"
   - "Debugging mode label, pending command, selection summary, or cursor position display"
   - "Adding a new `VimEditorOptions` field that must survive live editor construction"
-tags: [pi-extension, vim-mode, configuration, single-source-of-truth, user-settings, options]
+  - "Renaming a public config key before release"
+tags:
+  [
+    pi-extension,
+    vim-mode,
+    configuration,
+    single-source-of-truth,
+    user-settings,
+    options,
+    public-api,
+    keymap,
+  ]
 ---
 
 # Pi Vim mode UI config as single source of truth
@@ -104,12 +115,12 @@ A single `ui` surface keeps status behavior:
 - Documentable: README examples map directly to implementation.
 - Testable: one acceptance test can prove aliases are rejected and `ui` remains effective.
 
-For non-UI behavior settings, the same source-of-truth rule applies across the adapter boundary. If a resolved field is added to `VimEditorOptions`, ensure `cloneOptions()` preserves it and add a live `VimEditor` test. Otherwise config parsing can pass while the live editor silently falls back to defaults.
+For non-UI behavior settings, the same source-of-truth rule applies: public key names should match user vocabulary before docs and tests spread. The escape-alias feature first used `piVimMode.keymap.insertEscape`; the final public key became `piVimMode.keymap.escape`, with no compatibility alias because the setting had not shipped yet.
 
 ## When to Apply
 
 - Adding new `piVimMode` settings that could overlap with existing config.
-- Adding new `VimEditorOptions` fields used by modal behavior.
+- Naming or renaming public config keys before release.
 - Changing Vim status UI rendering or terminal-width handling.
 - Migrating user examples from Vim-style option names to Pi-native JSON config.
 - Reviewing archived OpenSpec docs that mention `VimOptionsAliases`; current source/specs supersede those archived design notes.
@@ -128,7 +139,7 @@ Hide the mode label:
 }
 ```
 
-Hide pending command/status command text:
+Hide pending operator text:
 
 ```json
 {
@@ -172,22 +183,31 @@ if (aliases.ruler !== undefined) ui.cursorPosition.enabled = aliases.ruler;
 
 That approach recreates precedence rules and suggests the extension supports a Vim option layer. Prefer direct `ui` config instead.
 
-Adapter option cloning follows the same principle:
+Escape aliases show the naming rule for behavior config:
 
-```ts
-function cloneOptions(options: VimEditorOptions): VimEditorOptions {
-  return {
-    startMode: options.startMode,
-    cursor: { ...options.cursor },
-    keymap: options.keymap,
-    ui: options.ui,
-    macros: options.macros,
-    marks: options.marks,
-  };
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "escape": ["<D-j>", "<C-j>"]
+    }
+  }
 }
 ```
 
-When adding a new runtime option, update this clone and prove the live editor honors the field. Pure config tests alone do not catch adapter construction drift.
+Avoid retaining implementation-shaped aliases when the feature is still unreleased:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "insertEscape": ["<D-j>"]
+    }
+  }
+}
+```
+
+Rename every layer in one sweep: public types, defaults, parser, merge/clone helpers, modal wiring, diagnostics/customization output, docs, tests, and OpenSpec. Then grep for the old key outside generated graph artifacts and run the normal validation set. For runtime option cloning details, see the behavior contract drift doc linked below.
 
 ## Related
 
@@ -195,3 +215,5 @@ When adding a new runtime option, update this clone and prove the live editor ho
 - `openspec/specs/vim-ui-configuration/spec.md` — durable UI configuration contract.
 - `test/config.test.ts` — parser acceptance coverage for ignored `vimOptions`.
 - `docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md` — related keymap/config validation architecture.
+- `docs/solutions/architecture-patterns/pi-vimmode-typed-action-registry-keybindings-2026-06-09.md` — typed action/keybinding registry and docs drift prevention.
+- `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — runtime option cloning and behavior contract drift.

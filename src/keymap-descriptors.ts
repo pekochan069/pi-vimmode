@@ -28,6 +28,9 @@ export const KEYMAP_OPERATOR_DESCRIPTORS = {
   delete: { defaults: ["d"], legacy: "d", motionOperator: true },
   change: { defaults: ["c"], legacy: "c", motionOperator: true },
   yank: { defaults: ["y"], legacy: "y", motionOperator: true },
+  lowercase: { defaults: ["gu"], motionOperator: true },
+  uppercase: { defaults: ["gU"], motionOperator: true },
+  toggleCase: { defaults: ["g~"], motionOperator: true },
   indent: { defaults: [">"] },
   dedent: { defaults: ["<"] },
 } as const satisfies Record<VimOperatorAction, OperatorDescriptor>;
@@ -53,6 +56,8 @@ export const KEYMAP_MOTION_DESCRIPTORS = {
   matchingPair: { defaults: ["%"], legacy: "%" },
   halfPageDown: { defaults: ["ctrl+d"] },
   halfPageUp: { defaults: ["ctrl+u"] },
+  paragraphBackward: { defaults: ["{"], legacy: "{" },
+  paragraphForward: { defaults: ["}"], legacy: "}" },
 } as const satisfies Record<VimMotionAction, KeymapDescriptor>;
 
 export const KEYMAP_MACRO_DESCRIPTORS = {
@@ -78,6 +83,7 @@ export const KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS = {
   paren: { defaults: ["(", ")"] },
   bracket: { defaults: ["[", "]"] },
   brace: { defaults: ["{", "}"] },
+  paragraph: { defaults: ["p"] },
   codeFence: { defaults: ["f"] },
   headingSection: { defaults: ["h"] },
   listItem: { defaults: ["l"] },
@@ -96,6 +102,7 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   visualLine: { defaults: ["V"] },
   visualBlock: { defaults: [] },
   deleteChar: { defaults: ["x"] },
+  deleteCharBefore: { defaults: ["X"] },
   deleteToLineEnd: { defaults: ["D"] },
   changeToLineEnd: { defaults: ["C"] },
   yankLine: { defaults: ["Y"] },
@@ -118,6 +125,8 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   startSearchBackward: { defaults: ["?"], searchDirection: "backward" },
   repeatSearch: { defaults: ["n"] },
   repeatSearchReverse: { defaults: ["N"] },
+  searchWordForward: { defaults: ["*"] },
+  searchWordBackward: { defaults: ["#"] },
   startExCommand: { defaults: [":"] },
   repeatChange: { defaults: ["."] },
   undo: { defaults: ["u"] },

@@ -122,6 +122,9 @@ function typeKeys(editor: Pick<VimEditor, "handleInput">, keys: readonly string[
   for (const key of keys) editor.handleInput(key);
 }
 
+const ctrlJ = "\u001b[106;5u";
+const superJ = "\u001b[106;9u";
+
 function runEx(editor: VimEditor, command: string) {
   editor.handleInput(":");
   for (const char of command) editor.handleInput(char);
@@ -157,9 +160,13 @@ describe("vim editor integration", () => {
 
   test("constructor clones caller-owned nested keymap options", () => {
     const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: ["K"] } } },
+      piVimMode: {
+        startMode: "normal",
+        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["K"] } },
+      },
     }).options;
     const { editor } = createEditor(options);
+    (options.keymap!.escape as unknown as string[]).splice(0, 1, "ctrl+x");
     (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, "Z");
 
     editor.setText("one\ntwo");
@@ -167,6 +174,22 @@ describe("vim editor integration", () => {
 
     expect(editor.getText()).toBe("one\n\ntwo");
     expect(editor.getVimMode()).toBe("insert");
+    editor.handleInput(superJ);
+    expectEditorState(editor, { text: "one\n\ntwo", mode: "normal" });
+  });
+
+  test("live editor honors configured case operator keymap", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { operators: { lowercase: ["zu"] } } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("AbC Def");
+    typeKeys(editor, ["g", "g", "z", "u", "w"]);
+
+    expect(editor.getText()).toBe("abc Def");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    expect(editor.getVimMode()).toBe("normal");
   });
 
   test("plain insert text uses fast path without full snapshot", () => {
@@ -184,6 +207,92 @@ describe("vim editor integration", () => {
     editor.handleInput("a");
     editor.handleInput("\x1b");
     expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("configured super+j insert escape exits insert without inserting alias", () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.handleInput("a");
+    editor.handleInput(superJ);
+
+    expectEditorState(editor, { text: "a", mode: "normal" });
+  });
+
+  test("configured super+j insert escape exits visual mode", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.setText("abc");
+    editor.handleInput("v");
+    expect(editor.getVimMode()).toBe("visual");
+    editor.handleInput(superJ);
+
+    expectEditorState(editor, { text: "abc", mode: "normal" });
+    expect(
+      (editor as unknown as { modalState: ModalState }).modalState.visualAnchor,
+    ).toBeUndefined();
+  });
+
+  test("configured ctrl+j insert escape exits insert when sent as enhanced keyboard input", () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<C-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    editor.handleInput("x");
+    editor.handleInput(ctrlJ);
+
+    expectEditorState(editor, { text: "x", mode: "normal" });
+  });
+
+  test("raw text insert escape config is ignored by live editor", () => {
+    const options = resolveVimOptions({ piVimMode: { keymap: { escape: ["jk"] } } }).options;
+    const { editor } = createEditor(options);
+
+    typeKeys(editor, ["j", "k"]);
+
+    expectEditorState(editor, { text: "jk", mode: "insert" });
+  });
+
+  test("configured insert escape delegates while autocomplete is open", async () => {
+    const options = resolveVimOptions({
+      piVimMode: { keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+    installAutocomplete(editor, ["/super-j-suggestion"], 1);
+
+    editor.handleInput("/");
+    await flushAutocomplete();
+    expect(editor.isShowingAutocomplete()).toBe(true);
+    editor.handleInput(superJ);
+
+    expect(editor.getVimMode()).toBe("insert");
+    expect(
+      (editor as unknown as { modalState: ModalState }).modalState.pendingInsertEscape,
+    ).toBeUndefined();
+  });
+
+  test("macro replay preserves configured insert escape behavior", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { escape: ["<D-j>"] } },
+    }).options;
+    const { editor } = createEditor(options);
+
+    typeKeys(editor, ["q", "a", "i", "X", superJ, "q"]);
+    expect((editor as unknown as { modalState: ModalState }).modalState.macros?.a).toEqual([
+      "i",
+      "X",
+      superJ,
+    ]);
+
+    editor.setText("");
+    typeKeys(editor, ["@", "a"]);
+    expectEditorState(editor, { text: "X", mode: "normal" });
   });
 
   test("insert fast path stays disabled while recording and replaying macros", () => {
@@ -889,6 +998,18 @@ describe("vim editor integration", () => {
     expect(editor.getRegister()).toEqual({ type: "char", text: "b" });
   });
 
+  test("normal X deletes character before cursor into register", () => {
+    const { editor } = createEditor();
+    editor.handleInput("a");
+    editor.handleInput("b");
+    editor.handleInput("c");
+    editor.handleInput("\x1b");
+    editor.handleInput("X");
+    expect(editor.getText()).toBe("ab");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 2 });
+    expect(editor.getRegister()).toEqual({ type: "char", text: "c" });
+  });
+
   test("mark keys and behavior are configurable", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
@@ -1170,6 +1291,59 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("--foo=bar /tmp/a-b");
   });
 
+  test("VimEditor honors default paragraph motions and text objects", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("alpha\nbeta\n\ngamma\n\ndelta\nepsilon");
+    typeKeys(editor, ["g", "g", "}"]);
+    expect(editor.getCursor()).toEqual({ line: 3, col: 0 });
+    typeKeys(editor, ["{"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    typeKeys(editor, ["d", "}"]);
+    expect(editor.getText()).toBe("gamma\n\ndelta\nepsilon");
+    typeKeys(editor, ["g", "g", "d", "a", "p"]);
+    expect(editor.getText()).toBe("delta\nepsilon");
+  });
+
+  test("VimEditor honors configured paragraph motion and text object keys", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { paragraphForward: ["P"], paragraphBackward: ["N"] },
+          textObjects: { targets: { paragraph: ["g"] } },
+          operatorMotions: { delete: ["paragraphForward"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+    editor.setText("alpha\n\ngamma");
+    typeKeys(editor, ["g", "g", "P"]);
+    expect(editor.getCursor()).toEqual({ line: 2, col: 0 });
+    typeKeys(editor, ["d", "i", "g"]);
+    expect(editor.getText()).toBe("alpha\n\n");
+  });
+
+  test("VimEditor propagates configured paragraph options without dropping siblings", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        keymap: {
+          motions: { paragraphForward: ["]"] },
+          commands: { redo: ["U"] },
+          macros: { record: ["q"], play: ["@"] },
+          marks: { set: ["m"], jumpExact: ["`"], jumpLine: ["'"] },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+    expect(options.keymap?.motions.paragraphForward).toEqual(["]"]);
+    expect(options.keymap?.commands.redo).toEqual(["U"]);
+    editor.setText("one\n\ntwo");
+    typeKeys(editor, ["g", "g", "]"]);
+    expect(editor.getCursor()).toEqual({ line: 2, col: 0 });
+    typeKeys(editor, ["U"]);
+  });
+
   test("macro records and replays Ex substitutions and cancellation", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
     editor.setText("old\nold");
@@ -1337,6 +1511,25 @@ describe("vim editor integration", () => {
     editor.setText("abc");
     typeKeys(editor, ["g", "g", "x", "u", "R"]);
     expectEditorState(editor, { text: "bc", cursor: { line: 0, col: 0 }, mode: "normal" });
+  });
+
+  test("word search keys survive live editor keymap cloning", () => {
+    const { editor } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+      keymap: {
+        ...DEFAULT_VIM_OPTIONS.keymap!,
+        commands: { ...DEFAULT_VIM_OPTIONS.keymap!.commands, searchWordForward: ["*", "K"] },
+      },
+    });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "*"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+    editor.setText("one two one");
+    typeKeys(editor, ["g", "g", "K"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+    typeKeys(editor, ["#"]);
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
   });
 
   test("redo preserves modal side-effect state", () => {

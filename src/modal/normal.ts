@@ -1,3 +1,4 @@
+import type { CaseTransformAction } from "../buffer.ts";
 import type {
   VimCommandAction,
   VimMotion,
@@ -22,6 +23,7 @@ import {
   deleteByCharSearch,
   deleteByMotion,
   deleteCharAt,
+  deleteCharBefore,
   deleteLine,
   deleteTextObject,
   findCharOnLine,
@@ -30,12 +32,17 @@ import {
   navigateBuffer,
   openLineAbove,
   openLineBelow,
+  paragraphBackwardPosition,
+  paragraphForwardPosition,
   pasteRegister,
   pasteRegisterBefore,
   replaceCharAt,
   shiftLinesFromCursor,
   substituteCharAt,
   toggleCaseAt,
+  transformCaseByMotion,
+  transformCaseLineCount,
+  transformCaseTextObject,
   wordBackwardPosition,
   wordEndPosition,
   wordEndBigPosition,
@@ -68,7 +75,7 @@ import {
 } from "./core.ts";
 import { startExCommandUpdate } from "./ex-command-line.ts";
 import { clearRegisterTarget, clipboardTargetToRead, registerToRead } from "./registers.ts";
-import { repeatSearch, startSearchUpdate } from "./search.ts";
+import { repeatSearch, searchWordUnderCursor, startSearchUpdate } from "./search.ts";
 
 export function normalDispatchSummary(state: ModalState): string {
   const pending = state.pending ? ` pending=${state.pending}` : "";
@@ -171,6 +178,18 @@ function moveEffectFor(
     const target = navigateBuffer(snapshot.text, snapshot.cursor, "matchingPair");
     return target ? { type: "restoreCursor", position: target } : undefined;
   }
+  if (motion === "paragraphForward") {
+    return {
+      type: "restoreCursor",
+      position: paragraphForwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
+  if (motion === "paragraphBackward") {
+    return {
+      type: "restoreCursor",
+      position: paragraphBackwardPosition(snapshot.text, snapshot.cursor, count),
+    };
+  }
   if (motion === "halfPageDown" || motion === "halfPageUp") {
     const direction = motion === "halfPageDown" ? 1 : -1;
     return {
@@ -213,6 +232,12 @@ function withRepeatableChange(
   return changed ? { ...state, lastRepeatableChange: change } : state;
 }
 
+function caseActionForOperator(operator: VimMotionOperatorAction): CaseTransformAction | undefined {
+  if (operator === "lowercase") return "lowercase";
+  if (operator === "uppercase") return "uppercase";
+  if (operator === "toggleCase") return "toggleCase";
+}
+
 export function applyOperatorMotion(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -225,6 +250,28 @@ export function applyOperatorMotion(
   const legacyMotion = operatorMotionKey(motion);
   const baseState = clearCommandPending(state);
   if (!legacyMotion) return invalidate(clearPending(state));
+  const caseAction = caseActionForOperator(operator);
+  if (caseAction) {
+    const result = transformCaseByMotion(
+      snapshot.text,
+      snapshot.cursor,
+      legacyMotion,
+      count,
+      caseAction,
+    );
+    let edited = editState(baseState, result);
+    if (recordRepeat) {
+      edited = withRepeatableChange(
+        edited,
+        { type: "operatorMotion", operator, motion, count },
+        result.changed,
+      );
+    }
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   if (operator === "yank") {
     return yankUpdate(baseState, yankByMotion(snapshot.text, snapshot.cursor, legacyMotion, count));
   }
@@ -253,6 +300,21 @@ export function applyLineCommand(
   recordRepeat = true,
 ): ModalUpdate {
   const nextState = clearCommandPending(state);
+  const caseAction = caseActionForOperator(operator as VimMotionOperatorAction);
+  if (caseAction) {
+    const result = transformCaseLineCount(snapshot.text, snapshot.cursor, count, caseAction);
+    let edited = editState(nextState, result);
+    if (recordRepeat)
+      edited = withRepeatableChange(
+        edited,
+        { type: "lineCommand", operator, count },
+        result.changed,
+      );
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   const shiftAction = shiftActionForOperator(operator);
   if (shiftAction) {
     const shiftResult = shiftLinesFromCursor(snapshot.text, snapshot.cursor, count, shiftAction);
@@ -314,6 +376,7 @@ export function applyCommand(
   const nextState = clearCommandPending(state);
   const registerAware = [
     "deleteChar",
+    "deleteCharBefore",
     "deleteToLineEnd",
     "changeToLineEnd",
     "yankLine",
@@ -360,6 +423,14 @@ export function applyCommand(
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualBlock", options);
     case "deleteChar": {
       const result = deleteCharAt(snapshot.text, snapshot.cursor, count);
+      const written = editStateAndEffects(nextState, result);
+      let edited = written.state;
+      if (recordRepeat)
+        edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
+      return withEffects(edited, [{ type: "edit", result }, ...written.effects]);
+    }
+    case "deleteCharBefore": {
+      const result = deleteCharBefore(snapshot.text, snapshot.cursor, count);
       const written = editStateAndEffects(nextState, result);
       let edited = written.state;
       if (recordRepeat)
@@ -483,6 +554,10 @@ export function applyCommand(
       return repeatSearch(nextState, snapshot, options, false);
     case "repeatSearchReverse":
       return repeatSearch(nextState, snapshot, options, true);
+    case "searchWordForward":
+      return searchWordUnderCursor(nextState, snapshot, options, "forward");
+    case "searchWordBackward":
+      return searchWordUnderCursor(nextState, snapshot, options, "backward");
     case "startExCommand":
       return startExCommandUpdate(nextState, snapshot, count);
     case "repeatChange":
@@ -639,6 +714,28 @@ export function applyOperatorTextObject(
 ): ModalUpdate {
   const baseState = clearCommandPending(state);
   const promptStructures = promptStructuresForOptions(options);
+  const caseAction = caseActionForOperator(operator);
+  if (caseAction) {
+    const result = transformCaseTextObject(
+      snapshot.text,
+      snapshot.cursor,
+      textObject,
+      caseAction,
+      promptStructures,
+    );
+    let edited = editState(baseState, result);
+    if (recordRepeat) {
+      edited = withRepeatableChange(
+        edited,
+        { type: "operatorTextObject", operator, textObject, count },
+        result.changed,
+      );
+    }
+    return withEffects(
+      edited,
+      result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
+    );
+  }
   if (operator === "yank")
     return yankUpdate(
       baseState,

@@ -61,15 +61,16 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 
 pi-vimmode has a finite prompt-local surface. This quickref classifies what is supported; it is not a Vim/Neovim quickref clone.
 
-| Category                             | Examples                                                               | Classification                                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.             |
-| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                      |
-| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                 |
-| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                      |
-| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable. |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.    |
-| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                    |
+| Category                             | Examples                                                               | Classification                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.                 |
+| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                          |
+| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
+| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
+| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
+| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                         | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
 
 <!-- diagnostic-actions:vimmode.doctor -->
 <!-- diagnostic-actions:vimmode.actions -->
@@ -89,11 +90,14 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 
 - Insert + inactive autocomplete: `Esc` enters normal mode.
 - Insert + active autocomplete: `Esc` delegates to Pi so autocomplete can close.
+- Optional `piVimMode.keymap.escape` aliases such as `<D-j>` or `<C-j>` enter normal mode from insert mode when autocomplete is inactive, cancel visual modes, and cancel pending `:` Ex command-lines.
+- Raw printable text chords such as `jk` or `jj` are rejected; aliases are real key sequences, not inserted text.
+- Escape aliases are disabled while autocomplete is open and delegate to Pi instead.
 - Normal: `Esc` delegates to Pi so interrupt/abort behavior still works.
-- Visual modes: `Esc` cancels selection and returns to normal mode.
+- Visual modes: `Esc` and configured escape aliases cancel selection and return to normal mode.
 - In normal/visual prompt editing, `Enter`, `Ctrl-C`, and `Ctrl-G` reset Vim transient state, return to configured startup mode, and delegate to Pi.
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
-- In insert mode, non-`Esc` keys delegate to Pi.
+- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling.
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
 - `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 
@@ -103,7 +107,7 @@ Example:
 Type prompt text in insert mode
 Esc          -> normal mode
 0wciwidea    -> move, change inner word, type replacement
-Esc          -> normal mode again
+<D-j>        -> normal mode again when configured as piVimMode.keymap.escape
 Enter        -> submit through Pi
 ```
 
@@ -111,22 +115,25 @@ Enter        -> submit through Pi
 
 <!-- runtime-help:motions -->
 
-| Key                   | Action                                  | Notes                                                             |
-| --------------------- | --------------------------------------- | ----------------------------------------------------------------- |
-| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                        |
-| `0` / `$`             | line start / line end                   | Current prompt line.                                              |
-| `^` / `_`             | first non-blank on line                 | Both map to same action.                                          |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.   |
-| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.     |
-| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.        |
-| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                    |
-| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount. |
-| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.  |
-| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                |
-| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                |
-| `;` / `,`             | repeat char search                      | Same/opposite direction.                                          |
+| Key                   | Action                                  | Notes                                                                          |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                                     |
+| `0` / `$`             | line start / line end                   | Current prompt line.                                                           |
+| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                       |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                  |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                     |
+| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                 |
+| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.              |
+| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.               |
+| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds. |
+| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                             |
+| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                             |
+| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                       |
 
-Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
+Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`, `2}`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
+
+Paragraph motions are prompt-local and blank-line based. A paragraph is a contiguous run of non-blank lines separated by one or more whitespace-only blank lines. `}` moves to the first column of the next paragraph, or to the prompt end when no later paragraph exists. `{` moves to the current paragraph start, or to the previous paragraph start when already there. They work in normal and visual modes; visual mode keeps the anchor and moves the active cursor. This is smaller than Vim's full paragraph grammar: no nroff macros, sentence motions, section motions, or language-aware paragraph parsing.
 
 Motion limitations: this feature set does not add subword/camelCase navigation, display-line motions such as `gj`/`gk`, full-page scroll keys such as `<C-f>`/`<C-b>`, viewport recentering such as `zz`/`zt`/`zb`, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity. Lowercase `w`, `b`, and `e` keep their current prompt-local boundary behavior.
 
@@ -151,7 +158,7 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 | `a`                 | move right, then insert                                                 |
 | `I` / `A`           | move to line start/end, then insert                                     |
 | `o` / `O`           | open blank line below/above, then insert                                |
-| `x`                 | delete character under cursor                                           |
+| `x` / `X`           | delete character under/before cursor                                    |
 | `dd` / `cc` / `yy`  | delete/change/yank current line                                         |
 | `D` / `C`           | delete/change from cursor through line end                              |
 | `Y`                 | yank current line                                                       |
@@ -168,7 +175,8 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 Counts work for supported edits:
 
 ```text
-3x    delete 3 characters
+3x    delete 3 characters under/after cursor
+3X    delete 3 characters before cursor
 2dd   delete 2 lines
 3>>   indent 3 lines from cursor line
 2<<   dedent 2 lines from cursor line
@@ -187,6 +195,9 @@ Supported operators:
 - `d` delete
 - `c` change, then enter insert
 - `y` yank
+- `gu` lowercase
+- `gU` uppercase
+- `g~` toggle case
 - `>` indent line-only shift
 - `<` dedent line-only shift
 
@@ -201,7 +212,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
@@ -216,7 +227,14 @@ dl        delete one character to the right
 dj        delete current and next line
 dgg       delete through buffer start
 yG        yank through buffer end
+guw       lowercase to next word start
+gUiw      uppercase inner word
+g~g~      toggle current line case
+2guw      lowercase two word motions
 d%        delete through matching pair
+d}        delete through next paragraph start, including trailing blank separator
+c{        change back through paragraph start
+y}        yank through next paragraph start
 y$        yank through line end
 c^        change back to first non-blank
 cE        change through the end of the current/next WORD
@@ -232,9 +250,9 @@ d2f,      delete through the second next comma on current line
 d/foo⏎    delete from cursor through next literal foo match
 ```
 
-Successful `d`/`c` motion and character-search targets record dot-repeat. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
+Successful `d`/`c` motion and character-search targets record dot-repeat. Successful normal `gu`/`gU`/`g~` motion, text-object, and doubled line targets also record dot-repeat. Case operators edit text only: they do not write unnamed or named registers and do not enter insert mode. Successful `d`/`c`/`y` character-search targets update `;` and `,` repeat state, and pending operators can use that state with `d;`, `c,`, and matching configured repeat keys. Missing targets and adjacent `t`/`T` empty ranges are safe no-ops that clear the pending operator without changing text, cursor, registers, or repeat state.
 
-Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. `Ctrl-D` and `Ctrl-U` are motions, not operator targets; `d<C-d>` and `y<C-u>` are unsupported safe no-ops. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
+Operator targets are smaller than Vim's full grammar. Character-search operator targets are current-line only and use configured semantic `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, and `repeatCharSearchReverse` bindings. Case operators support finite motions, text objects, and doubled line forms only; mark, prompt-search, and character-search case targets are unsupported safe no-ops. `Ctrl-D` and `Ctrl-U` are motions, not operator targets; `d<C-d>` and `y<C-u>` are unsupported safe no-ops. Shift operators are line-only in normal mode: arbitrary `>{motion}`, `<{motion}`, `>iw`, `>/query`, and mark-based shift ranges are unsupported safe no-ops. In visual modes, counts before `>` or `<` change shift depth, so `2>` indents selected/touched lines by two levels.
 
 ## Text objects
 
@@ -253,6 +271,7 @@ Text objects work after `d`, `c`, or `y`.
 | `il` / `al`               | inner/around Markdown list item             |
 | `it` / `at`               | inner/around XML-ish tag                    |
 | `ie` / `ae`               | inner/around pasted error block             |
+| `ip` / `ap`               | inner/around blank-line paragraph           |
 
 Examples:
 
@@ -264,6 +283,8 @@ ya{   yank braced block including braces
 daf   delete whole Markdown code fence
 cih   change body of current Markdown heading section
 yal   yank current Markdown list item
+dip   delete current paragraph body without adjacent blank separators
+dap   delete current paragraph plus one adjacent blank separator group
 ```
 
 Limitations:
@@ -272,6 +293,7 @@ Limitations:
 - Quote objects search current line.
 - Bracket objects balance delimiters in prompt text, but do not implement Vim's full syntax awareness.
 - Prompt-native objects use conservative line-oriented scanning, not full Markdown/XML parsing.
+- Paragraph objects use the same blank-line paragraph model as `{` and `}`. `ip` selects the paragraph body only; `ap` adds one adjacent blank separator group when present (following, otherwise preceding) so deleting a paragraph does not leave double blank separators.
 - XML-ish tags support matching `<name ...>` / `</name>` pairs and ignore self-closing tags.
 - Error block detection is heuristic and stops at blank or unrelated prose lines.
 
@@ -312,6 +334,14 @@ y?TODO⏎    yank through previous literal TODO match
 /\rTODO|FIXME⏎  bounded regex search
 ```
 
+Word search:
+
+- `*` searches forward for the keyword word under the cursor; `#` searches backward.
+- A keyword word is a contiguous run of ASCII letters, digits, and `_`. The cursor on a keyword character uses that containing word; a cursor immediately after a keyword word (including at line end) uses that preceding word.
+- `*` and `#` are normal-mode only and reuse prompt search repeat state, so `n` repeats the chosen direction and `N` searches the opposite direction. They share literal matching, wrapping, search history, and search highlighting with `/` and `?`.
+- Insert-mode `*` and `#` delegate to Pi default editing.
+- Limitations: no `iskeyword` configuration, no regex query generation from the word, no smartcase, no search offsets, and no visual or operator-motion `*` / `#`.
+
 Search workbench behavior:
 
 - `/` and `?` render a width-safe workbench row below the prompt and shrink the prompt viewport by one row while pending.
@@ -349,7 +379,7 @@ Supported actions:
 - `d` / `x` deletes selection and returns normal.
 - `c` deletes selection and enters insert.
 - `r{char}` replaces selected characters and returns normal.
-- `~` toggles selected character case and returns normal.
+- `u` lowercases, `U` uppercases, and `~` toggles selected character case; each returns normal without writing registers.
 - `>` / `<` indents or dedents every touched line and returns normal.
 - `:` opens Ex command-line with `'<,'>` prefilled.
 - `"{a-z}` / `"{A-Z}` targets next yank/delete/change with named register.
@@ -370,7 +400,7 @@ Supported actions:
 - Motions extend selected line range.
 - `v` switches to visual char mode without resetting anchor.
 - `Ctrl-v` switches to visual block mode without resetting anchor.
-- `y`, `d`, `x`, `c`, `r{char}`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
+- `y`, `d`, `x`, `c`, `r{char}`, `u`, `U`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
 - Linewise `p` in visual line mode replaces selected lines with the register content.
 
 Example:
@@ -393,7 +423,7 @@ Supported actions:
 - `d` / `x` delete selected slices.
 - `c` deletes selected slices and enters insert.
 - `r{char}` replaces selected cells.
-- `~` toggles selected cell case.
+- `u` lowercases, `U` uppercases, and `~` toggles selected cell case without writing registers.
 - `>` / `<` indents or dedents every line touched by the block, regardless of selected columns.
 - `I` starts block insert before block on each selected line; typed text is applied when `Esc` is pressed.
 - `A` starts block append after block on each selected line; typed text is applied when `Esc` is pressed.

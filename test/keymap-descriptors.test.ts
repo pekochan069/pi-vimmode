@@ -17,8 +17,24 @@ import {
 
 const actionNames = (values: readonly unknown[]): string[] => values.map(String);
 
-const expectedOperators = ["delete", "change", "yank", "indent", "dedent"];
-const expectedMotionOperators = ["delete", "change", "yank"];
+const expectedOperators = [
+  "delete",
+  "change",
+  "yank",
+  "lowercase",
+  "uppercase",
+  "toggleCase",
+  "indent",
+  "dedent",
+];
+const expectedMotionOperators = [
+  "delete",
+  "change",
+  "yank",
+  "lowercase",
+  "uppercase",
+  "toggleCase",
+];
 const expectedMotions = [
   "left",
   "down",
@@ -40,6 +56,8 @@ const expectedMotions = [
   "matchingPair",
   "halfPageDown",
   "halfPageUp",
+  "paragraphBackward",
+  "paragraphForward",
 ];
 const expectedCommands = [
   "insertBefore",
@@ -52,6 +70,7 @@ const expectedCommands = [
   "visualLine",
   "visualBlock",
   "deleteChar",
+  "deleteCharBefore",
   "deleteToLineEnd",
   "changeToLineEnd",
   "yankLine",
@@ -74,6 +93,8 @@ const expectedCommands = [
   "startSearchBackward",
   "repeatSearch",
   "repeatSearchReverse",
+  "searchWordForward",
+  "searchWordBackward",
   "startExCommand",
   "repeatChange",
   "undo",
@@ -87,6 +108,7 @@ const expectedTextObjectTargets = [
   "paren",
   "bracket",
   "brace",
+  "paragraph",
   "codeFence",
   "headingSection",
   "listItem",
@@ -124,6 +146,11 @@ describe("keymap descriptors", () => {
     expect(motions.bufferStart).toEqual(["gg"]);
     expect(motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(motions.halfPageUp).toEqual(["ctrl+u"]);
+    expect(motions.paragraphBackward).toEqual(["{"]);
+    expect(motions.paragraphForward).toEqual(["}"]);
+
+    const targets = deriveDefaultKeyBindings(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
+    expect(targets.paragraph).toEqual(["p"]);
 
     motions.wordForward.push("custom");
     expect(KEYMAP_MOTION_DESCRIPTORS.wordForward.defaults).toEqual(["w"]);
@@ -165,5 +192,12 @@ describe("keymap descriptors", () => {
       jumpExact: ["`"],
       jumpLine: ["'"],
     });
+  });
+
+  test("word search commands default to star and hash", () => {
+    const commands = deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS);
+    expect(commands.deleteCharBefore).toEqual(["X"]);
+    expect(commands.searchWordForward).toEqual(["*"]);
+    expect(commands.searchWordBackward).toEqual(["#"]);
   });
 });

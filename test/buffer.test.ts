@@ -27,6 +27,7 @@ import {
   moveExLineRange,
   moveResolvedLineRange,
   deleteCharAt,
+  deleteCharBefore,
   deleteLine,
   deleteLineMarkRange,
   deleteLineRange,
@@ -46,6 +47,8 @@ import {
   openLineBelow,
   pasteRegister,
   pasteRegisterBefore,
+  paragraphForwardPosition,
+  paragraphBackwardPosition,
   putExRegisterAfterRange,
   putRegisterAfterResolvedLineRange,
   replaceVisualRangeChars,
@@ -53,6 +56,7 @@ import {
   substituteLineRangeRegex,
   toggleCaseAt,
   toggleCaseVisualRange,
+  transformCaseVisualRange,
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
@@ -77,6 +81,7 @@ import {
   yankSearchRange,
   yankTextObject,
   yankVisualSelection,
+  wordUnderCursor,
 } from "../src/buffer.ts";
 
 const p = (line: number, col: number) => ({ line, col });
@@ -411,6 +416,37 @@ describe("charwise edits", () => {
     expect(result.changed).toBe(false);
   });
 
+  test("deletes characters before cursor within current line", () => {
+    expect(deleteCharBefore("abcd", p(0, 2))).toMatchObject({
+      text: "acd",
+      cursor: p(0, 1),
+      register: { type: "char", text: "b" },
+      changed: true,
+    });
+
+    expect(deleteCharBefore("abcdef", p(0, 5), 3)).toMatchObject({
+      text: "abf",
+      cursor: p(0, 2),
+      register: { type: "char", text: "cde" },
+      changed: true,
+    });
+  });
+
+  test("delete before cursor is safe at line start and clamps count to current line", () => {
+    expect(deleteCharBefore("abc", p(0, 0))).toMatchObject({
+      text: "abc",
+      cursor: p(0, 0),
+      changed: false,
+    });
+
+    expect(deleteCharBefore("one\ntwo", p(1, 1), 3)).toMatchObject({
+      text: "one\nwo",
+      cursor: p(1, 0),
+      register: { type: "char", text: "t" },
+      changed: true,
+    });
+  });
+
   test("toggles character case within the current line", () => {
     expect(toggleCaseAt("AbC", p(0, 0), 3)).toMatchObject({
       text: "aBc",
@@ -469,14 +505,18 @@ describe("charwise edits", () => {
     });
   });
 
-  test("toggles visual case by selection kind", () => {
-    expect(toggleCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "char")).toMatchObject({
-      text: "aBc\ndEF",
+  test("transforms visual case by selection kind", () => {
+    expect(
+      transformCaseVisualRange("abC\nDeF", p(0, 1), p(1, 1), "char", "lowercase"),
+    ).toMatchObject({
+      text: "abc\ndeF",
       cursor: p(0, 1),
       changed: true,
     });
-    expect(toggleCaseVisualRange("abC\nDeF", p(0, 0), p(1, 0), "line")).toMatchObject({
-      text: "ABc\ndEf",
+    expect(
+      transformCaseVisualRange("abC\nDeF", p(0, 0), p(1, 0), "line", "uppercase"),
+    ).toMatchObject({
+      text: "ABC\nDEF",
       cursor: p(0, 0),
       changed: true,
     });
@@ -484,6 +524,24 @@ describe("charwise edits", () => {
       text: "aBC\nDEF",
       cursor: p(0, 1),
       changed: true,
+    });
+  });
+
+  test("case transform leaves non-letters, empty ranges, and expanding mappings safe", () => {
+    expect(transformCaseVisualRange("123", p(0, 0), p(0, 2), "char", "uppercase")).toMatchObject({
+      text: "123",
+      cursor: p(0, 0),
+      changed: false,
+    });
+    expect(transformCaseVisualRange("abc", p(0, 3), p(0, 3), "char", "uppercase")).toMatchObject({
+      text: "abc",
+      cursor: p(0, 3),
+      changed: false,
+    });
+    expect(transformCaseVisualRange("ßİ", p(0, 0), p(0, 1), "char", "uppercase")).toMatchObject({
+      text: "ßİ",
+      cursor: p(0, 0),
+      changed: false,
     });
   });
 });
@@ -1213,5 +1271,162 @@ describe("Ex line operations", () => {
     );
 
     expect(result).toMatchObject({ ok: true, edit: { text, changed: false } });
+  });
+});
+
+describe("paragraph motions", () => {
+  const three = "alpha\nbeta\n\ngamma\n\ndelta\nepsilon";
+
+  test("forward motion moves to next paragraph first column", () => {
+    expect(paragraphForwardPosition(three, p(0, 2))).toEqual(p(3, 0));
+    expect(paragraphForwardPosition(three, p(1, 1))).toEqual(p(3, 0));
+    expect(paragraphForwardPosition(three, p(3, 0))).toEqual(p(5, 0));
+  });
+
+  test("forward motion reaches prompt end at last paragraph", () => {
+    expect(paragraphForwardPosition(three, p(5, 2))).toEqual(p(6, 7));
+    expect(paragraphForwardPosition(three, p(6, 7))).toEqual(p(6, 7));
+  });
+
+  test("backward motion moves to current paragraph start", () => {
+    expect(paragraphBackwardPosition(three, p(1, 1))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(6, 3))).toEqual(p(5, 0));
+  });
+
+  test("backward motion jumps to previous paragraph when already at start", () => {
+    expect(paragraphBackwardPosition(three, p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(3, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition(three, p(5, 0))).toEqual(p(3, 0));
+  });
+
+  test("counted motions repeat and clamp at boundaries", () => {
+    expect(paragraphForwardPosition(three, p(0, 0), 2)).toEqual(p(5, 0));
+    expect(paragraphForwardPosition(three, p(0, 0), 9)).toEqual(p(6, 7));
+    expect(paragraphBackwardPosition(three, p(6, 0), 2)).toEqual(p(3, 0));
+    expect(paragraphBackwardPosition(three, p(6, 0), 9)).toEqual(p(0, 0));
+  });
+
+  test("separator-only and empty prompts are safe no-ops", () => {
+    expect(paragraphForwardPosition("", p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphBackwardPosition("", p(0, 0))).toEqual(p(0, 0));
+    expect(paragraphForwardPosition("\n\n  \n", p(1, 0))).toEqual(p(3, 0));
+    expect(paragraphBackwardPosition("\n\n  \n", p(1, 0))).toEqual(p(0, 0));
+  });
+
+  test("delete by forward paragraph removes through separator boundary", () => {
+    const text = "alpha\nbeta\n\ngamma\n\ndelta";
+    const result = deleteByMotion(text, p(0, 0), "}");
+    expect(result.text).toBe("gamma\n\ndelta");
+    expect(result.cursor).toEqual(p(0, 0));
+    expect(result.register).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(result.changed).toBe(true);
+  });
+
+  test("delete by forward paragraph reaches prompt end at last paragraph", () => {
+    const result = deleteByMotion("alpha\n\nbeta", p(2, 0), "}");
+    expect(result.text).toBe("alpha\n\n");
+    expect(result.register).toEqual({ type: "char", text: "beta" });
+  });
+
+  test("delete by backward paragraph resolves toward paragraph start", () => {
+    const text = "alpha\n\ngamma\nline";
+    const result = deleteByMotion(text, p(3, 2), "{");
+    expect(result.text).toBe("alpha\n\nne");
+    expect(result.cursor).toEqual(p(2, 0));
+    expect(result.register).toEqual({ type: "char", text: "gamma\nli" });
+  });
+
+  test("yank by paragraph motion preserves prompt text", () => {
+    const text = "alpha\nbeta\n\ngamma";
+    expect(yankByMotion(text, p(0, 0), "}")).toEqual({
+      type: "char",
+      text: "alpha\nbeta\n\n",
+    });
+    expect(yankByMotion(text, p(3, 0), "{")).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(yankByMotion(text, p(0, 0), "}")).toEqual({ type: "char", text: "alpha\nbeta\n\n" });
+    expect(yankByMotion("alpha", p(0, 5), "}")).toBeUndefined();
+  });
+
+  test("inner paragraph text object deletes body without separators", () => {
+    const text = "para1\n\npara2\n\npara3";
+    expect(deleteTextObject(text, p(0, 2), { kind: "inner", target: "paragraph" })).toMatchObject({
+      text: "\npara2\n\npara3",
+      cursor: p(0, 0),
+      register: { type: "char", text: "para1\n" },
+      changed: true,
+    });
+    expect(deleteTextObject(text, p(2, 0), { kind: "inner", target: "paragraph" })).toMatchObject({
+      register: { type: "char", text: "para2\n" },
+    });
+  });
+
+  test("around paragraph text object includes one adjacent separator group", () => {
+    const text = "para1\n\npara2\n\npara3";
+    expect(deleteTextObject(text, p(0, 2), { kind: "around", target: "paragraph" })).toMatchObject({
+      text: "para2\n\npara3",
+      cursor: p(0, 0),
+      register: { type: "char", text: "para1\n\n" },
+      changed: true,
+    });
+    expect(deleteTextObject(text, p(4, 0), { kind: "around", target: "paragraph" })).toMatchObject({
+      text: "para1\n\npara2\n",
+      register: { type: "char", text: "\npara3" },
+    });
+  });
+
+  test("yank paragraph text object preserves prompt text", () => {
+    const text = "para1\n\npara2";
+    expect(yankTextObject(text, p(0, 0), { kind: "inner", target: "paragraph" })).toEqual({
+      type: "char",
+      text: "para1\n",
+    });
+    expect(yankTextObject(text, p(2, 0), { kind: "around", target: "paragraph" })).toEqual({
+      type: "char",
+      text: "\npara2",
+    });
+  });
+
+  test("missing paragraph text object is a safe no-op", () => {
+    expect(deleteTextObject("", p(0, 0), { kind: "inner", target: "paragraph" })).toMatchObject({
+      text: "",
+      changed: false,
+    });
+    expect(
+      deleteTextObject("\n  \n\n", p(1, 0), { kind: "around", target: "paragraph" }),
+    ).toMatchObject({ changed: false });
+    expect(yankTextObject("\n\n", p(0, 0), { kind: "inner", target: "paragraph" })).toBeUndefined();
+  });
+});
+
+describe("wordUnderCursor", () => {
+  test("returns the keyword word containing the cursor", () => {
+    expect(wordUnderCursor("foo bar baz", p(0, 1))).toBe("foo");
+    expect(wordUnderCursor("foo bar baz", p(0, 2))).toBe("foo");
+  });
+
+  test("returns the preceding word when cursor sits at word end", () => {
+    expect(wordUnderCursor("foo bar baz", p(0, 3))).toBe("foo");
+    expect(wordUnderCursor("foo bar baz", p(0, 7))).toBe("bar");
+  });
+
+  test("returns the preceding word at line end", () => {
+    expect(wordUnderCursor("foo bar", p(0, 7))).toBe("bar");
+  });
+
+  test("includes underscore and digits as keyword characters", () => {
+    expect(wordUnderCursor("foo_bar 1a2b", p(0, 4))).toBe("foo_bar");
+    expect(wordUnderCursor("foo_bar 1a2b", p(0, 10))).toBe("1a2b");
+  });
+
+  test("returns undefined when no keyword char is under or before the cursor", () => {
+    expect(wordUnderCursor("/foo", p(0, 0))).toBeUndefined();
+    expect(wordUnderCursor("foo / bar", p(0, 4))).toBeUndefined();
+    expect(wordUnderCursor("   ", p(0, 1))).toBeUndefined();
+    expect(wordUnderCursor("", p(0, 0))).toBeUndefined();
+  });
+
+  test("returns the preceding word when cursor sits on punctuation after a keyword", () => {
+    expect(wordUnderCursor("foo/bar", p(0, 3))).toBe("foo");
+    expect(wordUnderCursor("foo,bar", p(0, 3))).toBe("foo");
   });
 });

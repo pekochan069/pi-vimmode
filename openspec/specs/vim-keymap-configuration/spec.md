@@ -37,22 +37,27 @@ The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported
 
 ### Requirement: Operator-motion matrix is configurable
 
-The Vim editor SHALL use `piVimMode.keymap.operatorMotions` to determine which configured motions are valid after each configured operator.
+The Vim editor SHALL use `piVimMode.keymap.operatorMotions` to determine which configured motions are valid after each configured motion-capable operator.
 
 #### Scenario: Configured operator-motion combination executes
 
 - **WHEN** `delete` is bound to a configured operator key and `wordForward` is included in `piVimMode.keymap.operatorMotions.delete`
 - **THEN** pressing the delete operator followed by the configured `wordForward` motion deletes that text range and stores it in the unnamed character register
 
+#### Scenario: Configured case operator-motion combination executes
+
+- **WHEN** `lowercase` is bound to a configured operator key and `wordForward` is included in `piVimMode.keymap.operatorMotions.lowercase`
+- **THEN** pressing the lowercase operator followed by the configured `wordForward` motion lowercases that text range without writing registers
+
 #### Scenario: Configured operator-motion combination is disabled
 
-- **WHEN** a motion action is omitted from `piVimMode.keymap.operatorMotions.change`
-- **THEN** pressing the configured change operator followed by that motion clears the pending operator, leaves prompt text unchanged, and does not insert the motion key as text
+- **WHEN** a motion action is omitted from `piVimMode.keymap.operatorMotions.uppercase`
+- **THEN** pressing the configured uppercase operator followed by that motion clears the pending operator, leaves prompt text unchanged, and does not insert the motion key as text
 
 #### Scenario: Default operator-motion matrix preserved
 
 - **WHEN** no `piVimMode.keymap.operatorMotions` setting is configured
-- **THEN** `delete`, `change`, and `yank` support the default `wordForward`, `wordBackward`, `lineStart`, `firstNonBlank`, and `lineEnd` motion actions
+- **THEN** `delete`, `change`, `yank`, `lowercase`, `uppercase`, and `toggleCase` support the default finite motion actions documented for each operator family
 
 ### Requirement: Key sequence matching is finite and deterministic
 
@@ -166,7 +171,7 @@ The change SHALL include tests and documentation for configurable roadmap keybin
 #### Scenario: Config validation runs
 
 - **WHEN** `bun test` is executed
-- **THEN** tests cover default roadmap keymap resolution, configurable word-end motion, configurable finite roadmap commands, operator-motion matrix integration, invalid input safety, and protected shortcut handling
+- **THEN** tests cover default roadmap keymap resolution, configurable word-end motion, configurable finite roadmap commands, configurable case operators, operator-motion matrix integration, invalid input safety, and protected shortcut handling
 
 #### Scenario: Typecheck runs
 
@@ -176,7 +181,7 @@ The change SHALL include tests and documentation for configurable roadmap keybin
 #### Scenario: Canonical docs document configurable roadmap actions
 
 - **WHEN** the user opens `docs/features.md` and `docs/settings.md`
-- **THEN** they document which roadmap keybindings are configurable, which remain fixed or deferred, and how `Ctrl+A` / `Ctrl+X` interact with protected Pi shortcuts
+- **THEN** they document which roadmap keybindings are configurable, which remain fixed or deferred, how `Ctrl+A` / `Ctrl+X` interact with protected Pi shortcuts, and how case operators participate in semantic keymap configuration
 
 ### Requirement: Ex command-line entry is configurable
 
@@ -243,7 +248,7 @@ The Vim editor SHALL NOT treat shift operators as configurable motion, search, t
 #### Scenario: Shift operator motion configuration is rejected
 
 - **WHEN** `piVimMode.keymap.operatorMotions.indent` or `piVimMode.keymap.operatorMotions.dedent` is configured
-- **THEN** the unsupported operator-motion field is ignored with a warning and configured delete/change/yank operator-motion fields remain usable
+- **THEN** the unsupported operator-motion field is ignored with a warning and configured delete, change, yank, and case operator-motion fields remain usable
 
 #### Scenario: Configured shift operator motion remains unsupported
 
@@ -253,7 +258,7 @@ The Vim editor SHALL NOT treat shift operators as configurable motion, search, t
 #### Scenario: Settings reference documents line-only shift operators
 
 - **WHEN** the user opens `docs/settings.md`
-- **THEN** it documents `piVimMode.keymap.operators.indent`, `piVimMode.keymap.operators.dedent`, their defaults, and the fact that `operatorMotions` applies only to motion-capable delete/change/yank operators
+- **THEN** it documents `piVimMode.keymap.operators.indent`, `piVimMode.keymap.operators.dedent`, their defaults, and the fact that `operatorMotions` excludes line-only shift operators
 
 ### Requirement: Redo command participates in semantic keymap configuration
 
@@ -882,3 +887,206 @@ The Vim editor SHALL expose prompt-local half-page scroll motions through the se
 
 - **WHEN** the user opens `docs/settings.md`
 - **THEN** it documents the `halfPageDown` and `halfPageUp` motion action names, defaults, and operator-motion limitation
+
+### Requirement: Paragraph motions participate in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose paragraph motions as finite semantic motion actions while preserving default Vim keys and existing keymap validation behavior.
+
+#### Scenario: Default paragraph motion keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal or visual mode
+- **THEN** the resolved keymap binds `paragraphBackward` to `{` and `paragraphForward` to `}`
+
+#### Scenario: Configured paragraph motion key is used
+
+- **WHEN** `piVimMode.keymap.motions.paragraphForward` or `piVimMode.keymap.motions.paragraphBackward` is set to a valid finite key sequence
+- **THEN** that key sequence performs the matching paragraph motion in normal and visual contexts where motions are supported
+
+#### Scenario: Configured operator-motion matrix accepts paragraph motions
+
+- **WHEN** `paragraphForward` or `paragraphBackward` is included in `piVimMode.keymap.operatorMotions.delete`, `change`, or `yank`
+- **THEN** the resolved operator followed by the configured paragraph motion applies that operator to the addressed finite paragraph range
+
+#### Scenario: Omitted paragraph operator motion is disabled safely
+
+- **WHEN** a motion-capable operator has an explicit `piVimMode.keymap.operatorMotions` list that omits `paragraphForward` or `paragraphBackward`
+- **THEN** pressing that operator followed by the omitted paragraph motion clears the pending operator, leaves prompt text unchanged, and does not insert the motion key as text
+
+#### Scenario: Paragraph motion configuration survives live editor construction
+
+- **WHEN** a live `VimEditor` is constructed with resolved keymap options that include configured paragraph motion bindings
+- **THEN** the editor uses those bindings without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
+
+### Requirement: Paragraph text object participates in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose paragraph as a finite text-object target while preserving existing inner and around text-object kind behavior.
+
+#### Scenario: Default paragraph text object target is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode with a pending delete, change, or yank operator followed by `i` or `a`
+- **THEN** the resolved keymap binds `textObjects.targets.paragraph` to `p` so `ip` and `ap` target paragraph text objects
+
+#### Scenario: Configured paragraph text object target is used
+
+- **WHEN** `piVimMode.keymap.textObjects.targets.paragraph` is set to a valid finite key sequence
+- **THEN** pending operator text-object resolution uses that key sequence as the paragraph target while preserving configured `inner` and `around` kind keys
+
+#### Scenario: Invalid paragraph text object binding falls back safely
+
+- **WHEN** `piVimMode.keymap.textObjects.targets.paragraph` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored or rejected with a warning and sibling keymap fields remain usable
+
+#### Scenario: Paragraph keymap documentation is updated
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `paragraphForward`, `paragraphBackward`, `textObjects.targets.paragraph`, their default keys, and the finite blank-line paragraph scope
+
+#### Scenario: Keybinding discovery lists paragraph bindings
+
+- **WHEN** runtime keybinding discovery shows effective motion and text-object bindings
+- **THEN** paragraph motions and paragraph text-object targets appear with descriptions matching their prompt-local behavior
+
+### Requirement: Word-under-cursor search commands participate in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose word-under-cursor prompt search as finite semantic command actions while preserving the default `*` and `#` bindings.
+
+#### Scenario: Default star keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode with the cursor on a keyword word
+- **THEN** pressing `*` searches forward for that word using prompt-local word search behavior
+
+#### Scenario: Default hash keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode with the cursor on a keyword word
+- **THEN** pressing `#` searches backward for that word using prompt-local word search behavior
+
+#### Scenario: Configured forward word search key is used
+
+- **WHEN** `piVimMode.keymap.commands.searchWordForward` is set to a valid key sequence and the editor is in normal mode with the cursor on a keyword word
+- **THEN** that key sequence searches forward for that word instead of requiring the default `*` key
+
+#### Scenario: Configured backward word search key is used
+
+- **WHEN** `piVimMode.keymap.commands.searchWordBackward` is set to a valid key sequence and the editor is in normal mode with the cursor on a keyword word
+- **THEN** that key sequence searches backward for that word instead of requiring the default `#` key
+
+#### Scenario: Insert mode remains Pi-owned for word search keys
+
+- **WHEN** the editor is in insert mode and the user presses `*`, `#`, or a configured word search key
+- **THEN** input delegates to Pi default editor behavior unless that insert-mode input is otherwise supported by pi-vimmode
+
+#### Scenario: Invalid word search binding falls back safely
+
+- **WHEN** `piVimMode.keymap.commands.searchWordForward` or `piVimMode.keymap.commands.searchWordBackward` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored, a warning is recorded, and sibling keymap fields remain usable
+
+#### Scenario: Word search configuration survives live editor construction
+
+- **WHEN** a live `VimEditor` is constructed with resolved keymap options that include word search command bindings
+- **THEN** the editor uses the resolved word search bindings without dropping other command, motion, operator, macro, mark, search, UI, prompt-structure, prompt-transform, or feedback options
+
+### Requirement: Word search keymap documentation is updated and validated
+
+The change SHALL include tests and settings documentation for configurable word-under-cursor search behavior.
+
+#### Scenario: Config validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover default word search keymap resolution, configured word search command execution, invalid binding fallback, live editor option propagation, and insert-mode delegation
+
+#### Scenario: Settings reference documents word search commands
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.commands.searchWordForward`, default `*`, `piVimMode.keymap.commands.searchWordBackward`, default `#`, normal-mode ownership, and insert-mode delegation
+
+### Requirement: Case operators participate in semantic keymap configuration
+
+The Vim editor SHALL expose finite case operators through `piVimMode.keymap.operators` while preserving deterministic prefix resolution for existing `g` bindings.
+
+#### Scenario: Default case operator keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting
+- **THEN** the resolved keymap binds `lowercase` to `gu`, `uppercase` to `gU`, and `toggleCase` to `g~`
+
+#### Scenario: Configured lowercase operator works
+
+- **WHEN** `piVimMode.keymap.operators.lowercase` is set to a valid finite key sequence and the editor is in normal mode
+- **THEN** pressing that configured operator followed by a supported configured motion lowercases the addressed prompt range
+
+#### Scenario: Configured case operator text object works
+
+- **WHEN** `piVimMode.keymap.operators.uppercase` is configured and the editor receives that operator followed by a configured text-object kind and target
+- **THEN** the addressed text object is uppercased without changing registers or mode
+
+#### Scenario: Case operators do not capture unsupported target families
+
+- **WHEN** the editor is in normal mode with a pending case operator and the user enters a mark, search, character-search, or unsupported command target
+- **THEN** the pending operator clears, prompt text is unchanged, and the unmatched key sequence is not inserted into the prompt
+
+#### Scenario: Invalid case operator binding falls back safely
+
+- **WHEN** `piVimMode.keymap.operators.lowercase`, `uppercase`, or `toggleCase` contains an unsupported type, protected key, or conflicting key sequence
+- **THEN** the invalid field is ignored, a warning is recorded, and sibling keymap fields remain usable
+
+#### Scenario: Live editor uses configured case operator
+
+- **WHEN** a live `VimEditor` is constructed with resolved keymap options that include a configured case operator
+- **THEN** the editor uses that binding without dropping other command, motion, operator, macro, mark, search, UI, or prompt-transform options
+
+### Requirement: Escape aliases are configurable
+
+The Vim keymap configuration SHALL accept an opt-in `piVimMode.keymap.escape` array of finite key sequences that act as aliases for insert-mode and visual-mode escape behavior without changing normal-mode, operator-pending, or Pi-owned shortcut bindings.
+
+#### Scenario: Default insert escape aliases are absent
+
+- **WHEN** Pi starts with no `piVimMode.keymap.escape` setting
+- **THEN** the resolved keymap has no custom escape aliases and ordinary insert-mode text delegation remains unchanged
+
+#### Scenario: Modified-key escape alias is accepted
+
+- **WHEN** `piVimMode.keymap.escape` contains a valid modified-key alias such as `<C-j>` or `<D-j>`
+- **THEN** the resolved keymap records that sequence as an escape alias without removing normal-mode `j`, normal-mode `k`, or any other existing normal/visual key binding
+
+#### Scenario: Protected shortcut alias is rejected
+
+- **WHEN** `piVimMode.keymap.escape` contains a protected Pi shortcut such as `enter`, `tab`, `ctrl+c`, or `escape`
+- **THEN** that alias is ignored, a warning is recorded, and the protected shortcut keeps its existing Pi or pi-vimmode behavior
+
+#### Scenario: Raw printable text aliases are rejected
+
+- **WHEN** `piVimMode.keymap.escape` contains printable text such as `j`, `jk`, or `jj`
+- **THEN** that alias is ignored with a warning so users can still type that text normally in insert mode
+
+#### Scenario: Invalid alias fields fall back safely
+
+- **WHEN** `piVimMode.keymap.escape` is not an array or contains unsupported key values
+- **THEN** invalid entries are ignored with warnings and valid sibling keymap settings remain usable
+
+#### Scenario: Escape aliases are finite and non-recursive
+
+- **WHEN** users configure escape aliases
+- **THEN** aliases are resolved as finite key sequences only and do not enable recursive mappings, Vimscript, `.vimrc`, insert abbreviations, or timeout-based mapping behavior
+
+### Requirement: Escape aliases are documented and discoverable
+
+The change SHALL document configured escape aliases and keep runtime keymap diagnostics aligned with the effective configuration.
+
+#### Scenario: Settings reference documents escape aliases
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.escape`, examples such as `<C-j>` and `<D-j>`, protected-key rejection, raw printable text rejection, autocomplete behavior, and Ctrl-J terminal ambiguity
+
+#### Scenario: Feature guide documents escape behavior
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** the escape and reset behavior section describes configured escape aliases for leaving insert mode, visual modes, and pending Ex command-lines
+
+#### Scenario: Runtime diagnostics describe escape aliases
+
+- **WHEN** runtime keymap diagnostics such as `:keymap`, `:mapcheck`, `:keybindings`, or `:features` report configured escape aliases
+- **THEN** they identify the aliases as escape bindings and do not imply full Vim mapping support
+
+#### Scenario: Automated validation covers insert escape configuration
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover accepted modified-key aliases, rejected protected shortcuts, rejected raw printable text aliases, invalid config fallback, normal-mode keymap preservation, and live editor option cloning for the new setting

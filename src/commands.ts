@@ -773,6 +773,10 @@ function isMotionOperator(operator: VimOperatorAction): operator is VimMotionOpe
   return !isLineOnlyOperator(operator);
 }
 
+function supportsSearchTargets(operator: VimMotionOperatorAction): boolean {
+  return operator === "delete" || operator === "change" || operator === "yank";
+}
+
 function resolveOperatorMotionPending(
   pending: EncodedOperatorMotionPending,
   key: string,
@@ -980,54 +984,59 @@ function resolveAfterOperator(
     return { type: "pending", pending: encodeOperatorLinePending(operatorSequence, key, count) };
   }
   if (!isMotionOperator(operator)) return { type: "invalid" };
-  if (/^[1-9]$/.test(key)) {
-    return {
-      type: "pending",
-      pending: encodeOperatorCharSearchPending(operatorSequence, "", count, Number(key)),
-    };
-  }
-  const charSearchCommand = charSearchCommandForBinding(key, keymap);
-  if (charSearchCommand) {
-    return {
-      type: "pending",
-      pending: encodeOperatorCharSearchPending(
-        operatorSequence,
-        key,
+  if (supportsSearchTargets(operator)) {
+    if (/^[1-9]$/.test(key)) {
+      return {
+        type: "pending",
+        pending: encodeOperatorCharSearchPending(operatorSequence, "", count, Number(key)),
+      };
+    }
+    const charSearchCommand = charSearchCommandForBinding(key, keymap);
+    if (charSearchCommand) {
+      return {
+        type: "pending",
+        pending: encodeOperatorCharSearchPending(
+          operatorSequence,
+          key,
+          count,
+          undefined,
+          charSearchCommand,
+        ),
+      };
+    }
+    if (hasCharSearchLongerPrefix(key, keymap)) {
+      return {
+        type: "pending",
+        pending: encodeOperatorCharSearchPending(operatorSequence, key, count),
+      };
+    }
+
+    const repeatCharSearchCommand = repeatCharSearchCommandForBinding(key, keymap);
+    if (repeatCharSearchCommand) {
+      return {
+        type: "operatorCharSearchRepeat",
+        operator,
+        reverse: repeatCharSearchCommand === "repeatCharSearchReverse",
         count,
-        undefined,
-        charSearchCommand,
-      ),
-    };
-  }
-  if (hasCharSearchLongerPrefix(key, keymap)) {
-    return {
-      type: "pending",
-      pending: encodeOperatorCharSearchPending(operatorSequence, key, count),
-    };
-  }
+      };
+    }
+    if (hasRepeatCharSearchLongerPrefix(key, keymap)) {
+      return {
+        type: "pending",
+        pending: encodeOperatorCharSearchRepeatPending(operatorSequence, key, count),
+      };
+    }
 
-  const repeatCharSearchCommand = repeatCharSearchCommandForBinding(key, keymap);
-  if (repeatCharSearchCommand) {
-    return {
-      type: "operatorCharSearchRepeat",
-      operator,
-      reverse: repeatCharSearchCommand === "repeatCharSearchReverse",
-      count,
-    };
-  }
-  if (hasRepeatCharSearchLongerPrefix(key, keymap)) {
-    return {
-      type: "pending",
-      pending: encodeOperatorCharSearchRepeatPending(operatorSequence, key, count),
-    };
-  }
-
-  const searchDirection = searchDirectionForBinding(key, keymap);
-  if (searchDirection) {
-    return { type: "operatorSearch", operator, direction: searchDirection, count };
-  }
-  if (hasSearchLongerPrefix(key, keymap)) {
-    return { type: "pending", pending: encodeOperatorSearchPending(operatorSequence, key, count) };
+    const searchDirection = searchDirectionForBinding(key, keymap);
+    if (searchDirection) {
+      return { type: "operatorSearch", operator, direction: searchDirection, count };
+    }
+    if (hasSearchLongerPrefix(key, keymap)) {
+      return {
+        type: "pending",
+        pending: encodeOperatorSearchPending(operatorSequence, key, count),
+      };
+    }
   }
 
   const textObjectKind = textObjectKindForKey(key, keymap);

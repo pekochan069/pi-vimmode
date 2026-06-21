@@ -20,7 +20,13 @@ export type VimDiagnostics = {
   warnings: readonly string[];
 };
 
-export type VimMotionOperatorAction = "delete" | "change" | "yank";
+export type VimMotionOperatorAction =
+  | "delete"
+  | "change"
+  | "yank"
+  | "lowercase"
+  | "uppercase"
+  | "toggleCase";
 export type VimOperatorAction = VimMotionOperatorAction | "indent" | "dedent";
 
 export type VimMotionAction =
@@ -43,7 +49,9 @@ export type VimMotionAction =
   | "bufferEnd"
   | "matchingPair"
   | "halfPageDown"
-  | "halfPageUp";
+  | "halfPageUp"
+  | "paragraphBackward"
+  | "paragraphForward";
 
 export type VimCommandAction =
   | "insertBefore"
@@ -56,6 +64,7 @@ export type VimCommandAction =
   | "visualLine"
   | "visualBlock"
   | "deleteChar"
+  | "deleteCharBefore"
   | "deleteToLineEnd"
   | "changeToLineEnd"
   | "yankLine"
@@ -78,6 +87,8 @@ export type VimCommandAction =
   | "startSearchBackward"
   | "repeatSearch"
   | "repeatSearchReverse"
+  | "searchWordForward"
+  | "searchWordBackward"
   | "startExCommand"
   | "repeatChange"
   | "undo"
@@ -100,6 +111,7 @@ export type VimTextObjectTarget =
   | "paren"
   | "bracket"
   | "brace"
+  | "paragraph"
   | PromptStructureTarget;
 
 export type VimTextObject = {
@@ -136,6 +148,7 @@ export type VimActionKeymapOptions = Partial<
 export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
 
 export type VimKeymapOptions = {
+  escape?: readonly string[];
   operators?: Partial<Record<VimOperatorAction, readonly string[]>>;
   motions?: Partial<Record<VimMotionAction, readonly string[]>>;
   commands?: Partial<Record<VimCommandAction, readonly string[]>>;
@@ -165,6 +178,7 @@ export type ResolvedVimActionKeymap = {
 };
 
 export type ResolvedVimKeymap = {
+  escape: readonly string[];
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
   commands: Record<VimCommandAction, readonly string[]>;
@@ -344,7 +358,9 @@ export type VimMotion =
   | "$"
   | "gg"
   | "G"
-  | "%";
+  | "%"
+  | "{"
+  | "}";
 
 export type PendingOperator = string;
 

@@ -628,3 +628,210 @@ The implementation SHALL include automated validation and user-facing documentat
 
 - **WHEN** runtime keybinding discovery shows supported motion keys
 - **THEN** `<C-d>` and `<C-u>` appear with descriptions matching their prompt-local half-page scroll behavior
+
+### Requirement: Normal and visual modes support paragraph motions
+
+The Vim editor SHALL support prompt-local paragraph motions using blank-line-separated paragraph runs while preserving finite prompt-editing scope.
+
+#### Scenario: Forward paragraph motion moves to next paragraph
+
+- **WHEN** the editor is in normal mode with the cursor inside a nonblank paragraph and the user presses `}` while a later paragraph exists
+- **THEN** the cursor moves to the first column of the next paragraph's first nonblank line
+
+#### Scenario: Forward paragraph motion reaches prompt end
+
+- **WHEN** the editor is in normal mode with the cursor inside the last nonblank paragraph and the user presses `}`
+- **THEN** the cursor moves to the end of the prompt or remains there when already at the prompt end
+
+#### Scenario: Backward paragraph motion moves to paragraph start
+
+- **WHEN** the editor is in normal mode with the cursor inside a nonblank paragraph and the user presses `{`
+- **THEN** the cursor moves to the first column of the current paragraph, or to the previous paragraph start when already at the current paragraph start
+
+#### Scenario: Counted paragraph motion repeats targets
+
+- **WHEN** the editor is in normal mode and the user presses `2}` or `2{`
+- **THEN** the paragraph motion repeats twice and clamps safely at the prompt boundary when fewer paragraph targets exist
+
+#### Scenario: Visual paragraph motion extends selection
+
+- **WHEN** the editor is in visual character, visual line, or visual block mode with an active selection and the user presses `{` or `}`
+- **THEN** the visual anchor remains unchanged and the active cursor moves using the same paragraph target semantics as normal mode
+
+### Requirement: Operators support paragraph motions and paragraph text objects
+
+The Vim editor SHALL allow motion-capable operators to target paragraph motions and SHALL support paragraph text objects with `ip` and `ap` defaults.
+
+#### Scenario: Delete by forward paragraph motion
+
+- **WHEN** the editor is in normal mode inside a paragraph and the user presses `d}`
+- **THEN** text from the cursor through the resolved forward paragraph boundary is removed, copied to the unnamed character register, and the editor remains in normal mode
+
+#### Scenario: Change by backward paragraph motion
+
+- **WHEN** the editor is in normal mode inside a paragraph and the user presses `c{`
+- **THEN** text from the resolved backward paragraph boundary through the cursor is removed, copied to the unnamed character register, and the editor enters insert mode at the removed range start
+
+#### Scenario: Yank by paragraph motion preserves prompt text
+
+- **WHEN** the editor is in normal mode inside a paragraph and the user presses `y}` or `y{`
+- **THEN** the addressed paragraph-motion range is copied to the unnamed character register without changing prompt text or mode
+
+#### Scenario: Delete inner paragraph
+
+- **WHEN** the editor is in normal mode with the cursor inside a nonblank paragraph and the user presses `dip`
+- **THEN** the paragraph body is removed without adjacent blank separator lines, copied to the unnamed character register, and the editor remains in normal mode
+
+#### Scenario: Delete around paragraph
+
+- **WHEN** the editor is in normal mode with the cursor inside a nonblank paragraph and the user presses `dap`
+- **THEN** the paragraph body plus one adjacent blank separator group when present is removed and copied to the unnamed character register
+
+#### Scenario: Missing paragraph text object is safe
+
+- **WHEN** the editor is in normal mode on an empty prompt or only whitespace separator lines and the user presses `dip` or `dap`
+- **THEN** prompt text, cursor position, registers, and mode are unchanged, and pending operator state clears
+
+#### Scenario: Paragraph changes are repeatable
+
+- **WHEN** a delete or change paragraph motion or paragraph text-object command changes prompt text and the user later presses `.` in normal mode at another valid paragraph location
+- **THEN** the same supported paragraph change is applied at the new location using the recorded operation and count
+
+### Requirement: Paragraph keybindings are documented and validated
+
+The change SHALL include automated validation and user-facing documentation for paragraph motions and paragraph text objects.
+
+#### Scenario: Automated validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover paragraph motions, counts, operator paragraph motions, paragraph text objects, visual extension, safe no-op behavior, dot-repeat for paragraph changes, and existing Vim behavior
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the extension TypeScript compiles without type errors
+
+#### Scenario: Feature guide documents paragraph behavior
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents `{` / `}` paragraph motions, `ip` / `ap` paragraph text objects, blank-line-only paragraph semantics, supported operator usage, and non-goals compared with full Vim paragraph grammar
+
+### Requirement: Normal mode supports delete before cursor
+
+The Vim editor SHALL support `X` in normal mode as a prompt-local delete-before-cursor command.
+
+#### Scenario: Delete character before cursor
+
+- **WHEN** the editor is in normal mode with the cursor after at least one character on the current line and the user presses `X`
+- **THEN** the character immediately before the cursor is deleted, copied to the unnamed character register, and the editor remains in normal mode
+
+#### Scenario: Counted delete before cursor
+
+- **WHEN** the editor is in normal mode with characters before the cursor and the user presses `3X`
+- **THEN** up to three characters immediately before the cursor on the current line are deleted, copied to the unnamed character register in prompt order, and the editor remains in normal mode
+
+#### Scenario: Delete before cursor at line start is safe
+
+- **WHEN** the editor is in normal mode with the cursor at the start of a line and the user presses `X`
+- **THEN** prompt text is unchanged, the unnamed register is unchanged, and the editor remains in normal mode
+
+#### Scenario: Delete before cursor does not cross line boundary
+
+- **WHEN** the editor is in normal mode with the cursor near the start of a line and the user presses a count larger than the number of characters before the cursor on that line followed by `X`
+- **THEN** only characters before the cursor on the current line are deleted and no previous line text is removed
+
+#### Scenario: Delete before cursor remains distinct from numeric decrement
+
+- **WHEN** the editor is in normal mode and the user presses `X`
+- **THEN** the editor runs delete-before-cursor behavior instead of `Ctrl+X` numeric decrement behavior
+
+### Requirement: Delete-before-cursor behavior is documented and validated
+
+The implementation SHALL include focused tests and user-facing documentation for `X`.
+
+#### Scenario: Automated validation covers delete before cursor
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover normal, counted, line-start no-op, register, and dot-repeat behavior for `X`
+
+#### Scenario: Feature guide documents delete before cursor
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** the normal-mode keymap documents `X` as delete character before cursor
+
+### Requirement: Normal mode supports case operators
+
+The Vim editor SHALL support finite prompt-local case operators for lowercasing, uppercasing, and toggling case across supported normal-mode ranges.
+
+#### Scenario: Lowercase by motion
+
+- **WHEN** the editor is in normal mode with mixed-case text under the cursor and the user presses `guw`
+- **THEN** the addressed word range is lowercased, the editor remains in normal mode, and unnamed and named registers are unchanged
+
+#### Scenario: Uppercase text object
+
+- **WHEN** the editor is in normal mode with the cursor inside a word and the user presses `gUiw`
+- **THEN** the inner word text object is uppercased, the editor remains in normal mode, and registers are unchanged
+
+#### Scenario: Toggle current line
+
+- **WHEN** the editor is in normal mode and the user presses `g~g~`
+- **THEN** the current prompt line has letter case toggled, the editor remains in normal mode, and registers are unchanged
+
+#### Scenario: Counted case operator applies to finite target
+
+- **WHEN** the editor is in normal mode and the user presses `2guw` with two word ranges available
+- **THEN** the addressed finite range is lowercased and the cursor is restored to the start of the changed range
+
+#### Scenario: Missing case target is safe
+
+- **WHEN** the editor is in normal mode with a pending case operator and the requested motion or text object target does not exist
+- **THEN** prompt text, cursor position, registers, and mode are unchanged, and pending operator state clears
+
+#### Scenario: Case operator is repeatable
+
+- **WHEN** a normal-mode case operator changes prompt text and the user later presses `.` in normal mode at another valid target
+- **THEN** the same case operator target is applied at the new cursor position
+
+### Requirement: Visual modes support selected case transforms
+
+The Vim editor SHALL support prompt-local lower, upper, and toggle case transforms for active visual selections.
+
+#### Scenario: Visual character selection lowercases selected text
+
+- **WHEN** the editor is in visual character mode with selected mixed-case text and the user presses `u`
+- **THEN** only the selected character range is lowercased, visual selection clears, the editor returns to normal mode, and registers are unchanged
+
+#### Scenario: Visual line selection uppercases selected lines
+
+- **WHEN** the editor is in visual line mode with one or more selected lines and the user presses `U`
+- **THEN** all selected lines are uppercased, visual selection clears, the editor returns to normal mode, and registers are unchanged
+
+#### Scenario: Visual block selection toggles selected cells
+
+- **WHEN** the editor is in visual block mode with a rectangular selection and the user presses `~`
+- **THEN** only selected block cells have letter case toggled, visual selection clears, the editor returns to normal mode, and registers are unchanged
+
+#### Scenario: Non-letter and expanding case mappings stay safe
+
+- **WHEN** a case transform range includes non-letter characters or characters whose JavaScript case mapping expands to multiple code points
+- **THEN** those characters remain width-safe and prompt text outside one-code-point case mappings is unchanged
+
+### Requirement: Case operators are documented and validated
+
+The implementation SHALL include automated validation and user-facing documentation for normal and visual case transforms.
+
+#### Scenario: Automated validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover normal case operators, motion targets, text-object targets, line targets, counts, visual character/line/block transforms, safe no-op behavior, register preservation, dot-repeat, and existing Vim behavior
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the extension TypeScript compiles without type errors
+
+#### Scenario: Feature guide documents case behavior
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents `gu`, `gU`, `g~`, visual `u` / `U` / `~`, supported targets, register behavior, repeat behavior, and non-goals compared with full Vim case grammar

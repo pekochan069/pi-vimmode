@@ -88,6 +88,7 @@ import {
   replaceVisualSelection,
   startBlockInsert,
   toggleVisualSelection,
+  transformVisualSelection,
   visualKindForMode,
 } from "./visual.ts";
 
@@ -116,6 +117,55 @@ function isPlainFastInsertText(data: string): boolean {
   return codePoint >= 32 && codePoint !== 127;
 }
 
+function clearPendingInsertEscape(state: ModalState): ModalState {
+  const { pendingInsertEscape: _pendingInsertEscape, ...rest } = state;
+  return rest;
+}
+
+function escapeKey(data: string): string | undefined {
+  return keySequence(data);
+}
+
+function aliasStartsWith(alias: string, sequence: string): boolean {
+  return alias.includes("+") ? alias === sequence : alias.startsWith(sequence);
+}
+
+function isInsertEscapePrefix(data: string, sequences: readonly string[]): boolean {
+  const key = escapeKey(data);
+  return Boolean(key && sequences.some((sequence) => aliasStartsWith(sequence, key)));
+}
+
+type InsertEscapeMatch =
+  | { kind: "ignored" }
+  | { kind: "pending"; sequence: string }
+  | { kind: "matched" }
+  | { kind: "mismatched" };
+
+function matchInsertEscapeInput(
+  state: ModalState,
+  data: string,
+  aliases: readonly string[],
+): InsertEscapeMatch {
+  if (aliases.length === 0 && !state.pendingInsertEscape) return { kind: "ignored" };
+  const key = escapeKey(data);
+  if (!key) return state.pendingInsertEscape ? { kind: "mismatched" } : { kind: "ignored" };
+
+  const sequence = `${state.pendingInsertEscape ?? ""}${key}`;
+  if (aliases.includes(sequence)) return { kind: "matched" };
+  if (aliases.some((alias) => aliasStartsWith(alias, sequence)))
+    return { kind: "pending", sequence };
+  return state.pendingInsertEscape ? { kind: "mismatched" } : { kind: "ignored" };
+}
+
+function delegateBufferedInsertEscape(state: ModalState, input: string): ModalUpdate {
+  const pending = state.pendingInsertEscape;
+  const effects: ModalEffect[] = [
+    ...Array.from(pending ?? "", (char) => ({ type: "delegate" as const, input: char })),
+    { type: "delegate", input },
+  ];
+  return withEffects(clearPendingInsertEscape(state), effects);
+}
+
 export function canFastDelegateInsertInput(
   state: ModalState,
   data: string,
@@ -126,6 +176,8 @@ export function canFastDelegateInsertInput(
     isPlainFastInsertText(data) &&
     !context.isAutocompleteOpen &&
     !context.isMacroReplaying &&
+    !state.pendingInsertEscape &&
+    !isInsertEscapePrefix(data, context.escape ?? []) &&
     !state.visualAnchor &&
     !state.pending &&
     !state.blockInsert &&
@@ -151,10 +203,19 @@ function handleInsertInput(
   if (state.blockInsert) return handleBlockInsertInput(state, snapshot, options, data);
 
   if (matchesKey(data, "escape")) {
-    if (snapshot.isAutocompleteOpen) return delegate(state, data);
-    return modeUpdate(state, "normal", options);
+    if (snapshot.isAutocompleteOpen) return delegateBufferedInsertEscape(state, data);
+    return modeUpdate(clearPendingInsertEscape(state), "normal", options);
   }
 
+  if (snapshot.isAutocompleteOpen) return delegateBufferedInsertEscape(state, data);
+
+  const match = matchInsertEscapeInput(state, data, keymapForOptions(options).escape);
+  if (match.kind === "matched")
+    return modeUpdate(clearPendingInsertEscape(state), "normal", options);
+  if (match.kind === "pending") {
+    return withEffects({ ...state, pendingInsertEscape: match.sequence }, []);
+  }
+  if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
   return delegate(state, data);
 }
 
@@ -428,6 +489,8 @@ function handleVisualInput(
   data: string,
 ): ModalUpdate {
   if (matchesKey(data, "escape")) return modeUpdate(state, "normal", options);
+  if (matchInsertEscapeInput(state, data, keymapForOptions(options).escape).kind === "matched")
+    return modeUpdate(state, "normal", options);
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   if (matchesKey(data, "ctrl+v")) {
     return state.mode === "visualBlock"
@@ -448,6 +511,24 @@ function handleVisualInput(
   if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   if (!state.pending && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+  if (!state.pending && !state.pendingRegister && key === "u") {
+    return transformVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      "lowercase",
+    );
+  }
+  if (!state.pending && !state.pendingRegister && key === "U") {
+    return transformVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      "uppercase",
+    );
   }
   if (!state.pending && !state.pendingRegister) {
     const markTarget = markPendingForKey(key, options);

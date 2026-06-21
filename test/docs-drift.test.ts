@@ -121,6 +121,21 @@ describe("documentation drift guard", () => {
     expect(allUserDocs).toContain("display-line motions");
   });
 
+  test("docs cover paragraph motion and text object names and defaults", () => {
+    for (const key of ["`{`", "`}`", "`ip`", "`ap`", "d}", "c{", "dap"]) {
+      expect(featuresDoc).toContain(key);
+    }
+    for (const action of ["paragraphForward", "paragraphBackward"]) {
+      expect(settingsDoc).toContain(action);
+    }
+    expect(settingsDoc).toContain("textObjects.targets.paragraph");
+    expect(settingsDoc).toContain('["{"]');
+    expect(settingsDoc).toContain('["}"]');
+    expect(settingsDoc).toContain('["p"]');
+    expect(featuresDoc).toContain("blank-line");
+    expect(featuresDoc).toContain("paragraph");
+  });
+
   test("docs cannot regress :noh or :nohlsearch into unsupported claims", () => {
     const forbidden =
       /(?:unsupported|not supported|no support)[^\n.]{0,120}:(?:noh|nohlsearch)|:(?:noh|nohlsearch)[^\n.]{0,120}(?:unsupported|not supported|no support)/i;
@@ -134,6 +149,7 @@ describe("documentation drift guard", () => {
       "piVimMode.startMode": `"${DEFAULT_VIM_OPTIONS.startMode}"`,
       "piVimMode.cursor.insert": `"${DEFAULT_VIM_OPTIONS.cursor.insert}"`,
       "piVimMode.cursor.normal": `"${DEFAULT_VIM_OPTIONS.cursor.normal}"`,
+      "piVimMode.keymap.escape": JSON.stringify(DEFAULT_VIM_OPTIONS.keymap!.escape),
       "piVimMode.search.highlight": String(DEFAULT_VIM_OPTIONS.search!.highlight),
       "piVimMode.search.maxHighlights": String(DEFAULT_VIM_OPTIONS.search!.maxHighlights),
       "piVimMode.feedback.noop": `"${DEFAULT_VIM_OPTIONS.feedback!.noop}"`,
@@ -197,6 +213,10 @@ describe("documentation drift guard", () => {
     expect(featuresDoc).toContain(":keybindings");
     expect(featuresDoc).toContain(":keybindings <query>");
     expect(settingsDoc).toContain("piVimMode.keymap.commands.showKeybindings");
+    expect(settingsDoc).toContain("piVimMode.keymap.escape");
+    expect(featuresDoc).toContain("piVimMode.keymap.escape");
+    expect(featuresDoc).toContain("Escape aliases");
+    expect(settingsDoc).toContain("Raw printable text chords");
     expect(featuresDoc).toContain("dedicated bounded read-only overlay popup");
     expect(featuresDoc).toContain("keybinding discovery entry point");
     expect(featuresDoc).toContain("j`/`k`");

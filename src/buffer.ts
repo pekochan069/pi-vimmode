@@ -16,6 +16,7 @@ import type {
   VimMotion,
   VimRegister,
   VimTextObject,
+  VimTextObjectKind,
 } from "./types.ts";
 
 import { isErrorBlockLine, resolvePromptStructureRange } from "./prompt-structures.ts";
@@ -292,6 +293,20 @@ function motionOffsetRange(
       Math.min(text.length, Math.max(current, targetOffset) + 1),
     );
   }
+  if (motion === "}" || motion === "{") {
+    const lines = splitText(text);
+    let pos = clampPosition(lines, cursor);
+    const step = motion === "}" ? paragraphForwardStep : paragraphBackwardStep;
+    const repetitions = Math.max(1, count);
+    for (let index = 0; index < repetitions; index++) {
+      const next = step(lines, pos);
+      if (comparePositions(next, pos) === 0) break;
+      pos = next;
+    }
+    const targetOffset = positionToOffset(text, pos);
+    if (targetOffset === current) return undefined;
+    return orderedOffsetRange(current, targetOffset);
+  }
   let target = current;
   const repetitions = Math.max(1, count);
   for (let index = 0; index < repetitions; index++) {
@@ -344,6 +359,25 @@ function deleteOffsetRange(text: string, start: number, end: number): EditResult
     text: nextText,
     cursor: offsetToPosition(nextText, range.start),
     register: { type: "char", text: removed },
+    changed: nextText !== text,
+  };
+}
+
+function transformCaseOffsetRange(
+  text: string,
+  start: number,
+  end: number,
+  action: CaseTransformAction,
+): EditResult {
+  const range = orderedOffsetRange(start, end);
+  if (!range) return { text, cursor: offsetToPosition(text, start), changed: false };
+  const nextText =
+    text.slice(0, range.start) +
+    transformCaseText(text.slice(range.start, range.end), action) +
+    text.slice(range.end);
+  return {
+    text: nextText,
+    cursor: offsetToPosition(nextText, range.start),
     changed: nextText !== text,
   };
 }
@@ -1362,6 +1396,14 @@ export function deleteCharAt(text: string, cursor: Position, count = 1): EditRes
   return deleteRange(text, pos, { line: pos.line, col: endCol });
 }
 
+export function deleteCharBefore(text: string, cursor: Position, count = 1): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  if (pos.col <= 0) return { text, cursor: pos, changed: false };
+  const startCol = Math.max(0, pos.col - Math.max(1, count));
+  return deleteRange(text, { line: pos.line, col: startCol }, { line: pos.line, col: pos.col - 1 });
+}
+
 export function replaceCharAt(text: string, cursor: Position, char: string, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
@@ -1391,7 +1433,23 @@ function toggleCaseChar(char: string): string {
   const lower = char.toLowerCase();
   const toggled =
     char === lower && char !== upper ? upper : char === upper && char !== lower ? lower : char;
-  return Array.from(toggled).length === 1 ? toggled : char;
+  return oneCodePointOrOriginal(char, toggled);
+}
+
+function oneCodePointOrOriginal(original: string, transformed: string): string {
+  return Array.from(transformed).length === 1 ? transformed : original;
+}
+
+export type CaseTransformAction = "lowercase" | "uppercase" | "toggleCase";
+
+function transformCaseChar(char: string, action: CaseTransformAction): string {
+  if (action === "lowercase") return oneCodePointOrOriginal(char, char.toLowerCase());
+  if (action === "uppercase") return oneCodePointOrOriginal(char, char.toUpperCase());
+  return toggleCaseChar(char);
+}
+
+function transformCaseText(text: string, action: CaseTransformAction): string {
+  return [...text].map((char) => transformCaseChar(char, action)).join("");
 }
 
 function codePointSpans(line: string): Array<{ start: number; end: number }> {
@@ -1418,7 +1476,7 @@ export function toggleCaseAt(text: string, cursor: Position, count = 1): EditRes
   const end = selected.at(-1)?.end ?? spans[startIndex]?.end ?? pos.col;
   const start = spans[startIndex]?.start ?? pos.col;
   const target = line.slice(start, end);
-  const toggled = toggleCaseText(target);
+  const toggled = transformCaseText(target, "toggleCase");
   const nextLine = line.slice(0, start) + toggled + line.slice(end);
   const nextLines = [...lines];
   nextLines[pos.line] = nextLine;
@@ -1431,15 +1489,12 @@ export function toggleCaseAt(text: string, cursor: Position, count = 1): EditRes
   };
 }
 
-function toggleCaseText(text: string): string {
-  return [...text].map(toggleCaseChar).join("");
-}
-
-export function toggleCaseVisualRange(
+export function transformCaseVisualRange(
   text: string,
   anchor: Position,
   active: Position,
   kind: "char" | "line" | "block",
+  action: CaseTransformAction,
 ): EditResult {
   const lines = splitText(text);
 
@@ -1447,7 +1502,7 @@ export function toggleCaseVisualRange(
     const range = normalizeLineRange(lines, anchor, active);
     const nextLines = [...lines];
     for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-      nextLines[lineIndex] = toggleCaseText(nextLines[lineIndex] ?? "");
+      nextLines[lineIndex] = transformCaseText(nextLines[lineIndex] ?? "", action);
     }
     const nextText = joinLines(nextLines);
     return {
@@ -1465,7 +1520,7 @@ export function toggleCaseVisualRange(
       const start = Math.min(range.startCol, line.length);
       const end = Math.min(range.endCol + 1, line.length);
       nextLines[lineIndex] =
-        line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+        line.slice(0, start) + transformCaseText(line.slice(start, end), action) + line.slice(end);
     }
     const nextText = joinLines(nextLines);
     return {
@@ -1483,7 +1538,7 @@ export function toggleCaseVisualRange(
     const end =
       lineIndex === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
     nextLines[lineIndex] =
-      line.slice(0, start) + toggleCaseText(line.slice(start, end)) + line.slice(end);
+      line.slice(0, start) + transformCaseText(line.slice(start, end), action) + line.slice(end);
   }
   const nextText = joinLines(nextLines);
   return {
@@ -1491,6 +1546,55 @@ export function toggleCaseVisualRange(
     cursor: clampPosition(nextLines, range.start),
     changed: nextText !== text,
   };
+}
+
+export function toggleCaseVisualRange(
+  text: string,
+  anchor: Position,
+  active: Position,
+  kind: "char" | "line" | "block",
+): EditResult {
+  return transformCaseVisualRange(text, anchor, active, kind, "toggleCase");
+}
+
+export function transformCaseLineCount(
+  text: string,
+  cursor: Position,
+  count: number,
+  action: CaseTransformAction,
+): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
+  return transformCaseVisualRange(
+    text,
+    { line: pos.line, col: 0 },
+    { line: endLine, col: 0 },
+    "line",
+    action,
+  );
+}
+
+export function transformCaseByMotion(
+  text: string,
+  cursor: Position,
+  motion: VimMotion,
+  count: number,
+  action: CaseTransformAction,
+): EditResult {
+  const lineRange = motionLineRange(text, cursor, motion, count);
+  if (lineRange) {
+    return transformCaseVisualRange(
+      text,
+      { line: lineRange.startLine, col: 0 },
+      { line: lineRange.endLine, col: 0 },
+      "line",
+      action,
+    );
+  }
+  const range = motionOffsetRange(text, cursor, motion, count);
+  if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
+  return transformCaseOffsetRange(text, range.start, range.end, action);
 }
 
 export function adjustNumberAtOrAfterCursor(
@@ -1571,6 +1675,25 @@ export function findSearchMatch(
   direction: SearchDirection = "forward",
 ): Position | undefined {
   return findSearchMatchWithMatcher(text, cursor, { mode: "literal", query }, direction)?.position;
+}
+
+export function wordUnderCursor(text: string, cursor: Position): string | undefined {
+  const offset = positionToOffset(text, cursor);
+  const at = text[offset];
+  if (isKeywordWordChar(at)) {
+    let start = offset;
+    let end = offset + 1;
+    while (start > 0 && isKeywordWordChar(text[start - 1])) start--;
+    while (end < text.length && isKeywordWordChar(text[end])) end++;
+    return text.slice(start, end);
+  }
+  const before = text[offset - 1];
+  if (isKeywordWordChar(before)) {
+    let start = offset - 1;
+    while (start > 0 && isKeywordWordChar(text[start - 1])) start--;
+    return text.slice(start, offset);
+  }
+  return undefined;
 }
 
 export function findSearchMatchWithMatcher(
@@ -1847,6 +1970,78 @@ export function wordPreviousEndPosition(text: string, cursor: Position, count = 
 
 export function wordPreviousEndBigPosition(text: string, cursor: Position, count = 1): Position {
   return countedWordPosition(text, cursor, count, previousWordEndWORDOffset);
+}
+
+function isBlankLine(line: string): boolean {
+  return line.trim().length === 0;
+}
+
+function paragraphRunStart(lines: string[], line: number): number {
+  let start = line;
+  while (start > 0 && !isBlankLine(lines[start - 1]!)) start--;
+  return start;
+}
+
+function paragraphRunEnd(lines: string[], line: number): number {
+  let end = line;
+  while (end < lines.length - 1 && !isBlankLine(lines[end + 1]!)) end++;
+  return end;
+}
+
+function promptEndPosition(lines: string[]): Position {
+  const line = Math.max(0, lines.length - 1);
+  return { line, col: lines[line]?.length ?? 0 };
+}
+
+function paragraphForwardStep(lines: string[], pos: Position): Position {
+  const lastLine = lines.length - 1;
+  let index = pos.line;
+  if (!isBlankLine(lines[index]!)) {
+    index = paragraphRunEnd(lines, index) + 1;
+  }
+  while (index <= lastLine && isBlankLine(lines[index]!)) index++;
+  if (index > lastLine) return promptEndPosition(lines);
+  return { line: index, col: 0 };
+}
+
+function paragraphBackwardStep(lines: string[], pos: Position): Position {
+  if (!isBlankLine(lines[pos.line]!)) {
+    const runStart = paragraphRunStart(lines, pos.line);
+    if (pos.line > runStart || pos.col > 0) return { line: runStart, col: 0 };
+    let index = runStart - 1;
+    while (index >= 0 && isBlankLine(lines[index]!)) index--;
+    if (index < 0) return { line: 0, col: 0 };
+    return { line: paragraphRunStart(lines, index), col: 0 };
+  }
+  let index = pos.line - 1;
+  while (index >= 0 && isBlankLine(lines[index]!)) index--;
+  if (index < 0) return { line: 0, col: 0 };
+  return { line: paragraphRunStart(lines, index), col: 0 };
+}
+
+function countedParagraphPosition(
+  text: string,
+  cursor: Position,
+  count: number,
+  step: (lines: string[], pos: Position) => Position,
+): Position {
+  const lines = splitText(text);
+  let pos = clampPosition(lines, cursor);
+  const repetitions = Math.max(1, count);
+  for (let index = 0; index < repetitions; index++) {
+    const next = step(lines, pos);
+    if (comparePositions(next, pos) === 0) break;
+    pos = next;
+  }
+  return pos;
+}
+
+export function paragraphForwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedParagraphPosition(text, cursor, count, paragraphForwardStep);
+}
+
+export function paragraphBackwardPosition(text: string, cursor: Position, count = 1): Position {
+  return countedParagraphPosition(text, cursor, count, paragraphBackwardStep);
 }
 
 export function deleteByMotion(
@@ -2256,6 +2451,8 @@ export function textObjectRange(
   else if (textObject.target === "paren") range = bracketRangeAtOffset(text, cursor, "(", ")");
   else if (textObject.target === "bracket") range = bracketRangeAtOffset(text, cursor, "[", "]");
   else if (textObject.target === "brace") range = bracketRangeAtOffset(text, cursor, "{", "}");
+  else if (textObject.target === "paragraph")
+    range = paragraphTextObjectOffsets(text, cursor, textObject.kind);
   else if (
     isPromptStructureTarget(textObject.target) &&
     (promptStructures?.enabled ?? true) &&
@@ -2280,7 +2477,37 @@ export function textObjectRange(
 }
 
 function isPromptStructureTarget(target: VimTextObject["target"]): target is PromptStructureTarget {
-  return !["word", "singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(target);
+  return !["word", "singleQuote", "doubleQuote", "paren", "bracket", "brace", "paragraph"].includes(
+    target,
+  );
+}
+
+function paragraphTextObjectOffsets(
+  text: string,
+  cursor: Position,
+  kind: VimTextObjectKind,
+): { start: number; end: number } | undefined {
+  const lines = splitText(text);
+  if (lines.length === 0) return undefined;
+  const pos = clampPosition(lines, cursor);
+  if (isBlankLine(lines[pos.line]!)) return undefined;
+  const starts = lineStartOffsets(lines);
+  const runStart = paragraphRunStart(lines, pos.line);
+  const runEnd = paragraphRunEnd(lines, pos.line);
+  const afterBody = runEnd + 1 < lines.length ? starts[runEnd + 1]! : text.length;
+  if (kind === "inner") return { start: starts[runStart]!, end: afterBody };
+  if (runEnd + 1 < lines.length && isBlankLine(lines[runEnd + 1]!)) {
+    let sepEnd = runEnd + 1;
+    while (sepEnd + 1 < lines.length && isBlankLine(lines[sepEnd + 1]!)) sepEnd++;
+    const end = sepEnd + 1 < lines.length ? starts[sepEnd + 1]! : text.length;
+    return { start: starts[runStart]!, end };
+  }
+  if (runStart - 1 >= 0 && isBlankLine(lines[runStart - 1]!)) {
+    let sepStart = runStart - 1;
+    while (sepStart - 1 >= 0 && isBlankLine(lines[sepStart - 1]!)) sepStart--;
+    return { start: starts[sepStart]!, end: afterBody };
+  }
+  return { start: starts[runStart]!, end: afterBody };
 }
 
 function promptStructureTextObjectRange(
@@ -2311,6 +2538,11 @@ export function yankTextObject(
   const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
   if (structureRange)
     return { type: "char", text: text.slice(structureRange.start, structureRange.endExclusive) };
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end) return undefined;
+    return { type: "char", text: text.slice(offsets.start, offsets.end) };
+  }
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return undefined;
   return yankVisualSelection(text, range.start, range.end, "char");
@@ -2348,9 +2580,42 @@ export function deleteTextObject(
       changed: nextText !== text,
     };
   }
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end)
+      return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+    return deleteOffsetRange(text, offsets.start, offsets.end);
+  }
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
   return deleteRange(text, range.start, range.end);
+}
+
+export function transformCaseTextObject(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+  action: CaseTransformAction,
+  promptStructures?: ResolvedVimPromptStructures,
+): EditResult {
+  const structureRange = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
+  if (structureRange) {
+    return transformCaseOffsetRange(
+      text,
+      structureRange.start,
+      structureRange.endExclusive,
+      action,
+    );
+  }
+  if (textObject.target === "paragraph") {
+    const offsets = paragraphTextObjectOffsets(text, cursor, textObject.kind);
+    if (!offsets || offsets.start >= offsets.end)
+      return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+    return transformCaseOffsetRange(text, offsets.start, offsets.end, action);
+  }
+  const range = textObjectRange(text, cursor, textObject, promptStructures);
+  if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
+  return transformCaseVisualRange(text, range.start, range.end, "char", action);
 }
 
 export function visualBlockSelectionSummary(

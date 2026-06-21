@@ -13,6 +13,7 @@ import {
   compileRegexSearchMatcher,
   deleteSearchMatchRange,
   findSearchMatchWithMatcher,
+  wordUnderCursor,
   yankSearchMatchRange,
 } from "../buffer.ts";
 import { searchForOptions } from "../config.ts";
@@ -118,6 +119,46 @@ function addSearchHistory(
   return [...deduped, entry].slice(-SEARCH_HISTORY_LIMIT);
 }
 
+function completeResolvedSearch(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  query: string,
+  matcherMode: "literal" | "regex",
+  matcher: { mode: "literal"; query: string } | { mode: "regex"; query: string; regex: RegExp },
+  direction: "forward" | "backward",
+): ModalUpdate {
+  const baseState = clearPending(state);
+  const target = findSearchMatchWithMatcher(snapshot.text, snapshot.cursor, matcher, direction);
+  if (!target) return invalidate(baseState);
+  const searchState = { query, direction, matcherMode };
+  const searchHistory = addSearchHistory(state.searchHistory, { query, matcherMode });
+  const searchedState = { ...baseState, lastSearch: searchState, searchHistory };
+  return withEffects(withSearchHighlight(searchedState, options, query, target.position), [
+    { type: "restoreCursor", position: target.position },
+    { type: "invalidate" },
+  ]);
+}
+
+export function searchWordUnderCursor(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  direction: "forward" | "backward",
+): ModalUpdate {
+  const word = wordUnderCursor(snapshot.text, snapshot.cursor);
+  if (!word) return invalidate(clearCommandPending(state));
+  return completeResolvedSearch(
+    state,
+    snapshot,
+    options,
+    word,
+    "literal",
+    { mode: "literal", query: word },
+    direction,
+  );
+}
+
 function completeSearch(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -164,9 +205,14 @@ function completeSearch(
     return withEffects(edited, effects);
   }
 
-  return withEffects(
-    withSearchHighlight(searchedState, options, resolved.value.query, target.position),
-    [{ type: "restoreCursor", position: target.position }, { type: "invalidate" }],
+  return completeResolvedSearch(
+    state,
+    snapshot,
+    options,
+    resolved.value.query,
+    resolved.value.matcherMode,
+    resolved.value.matcher,
+    search.direction,
   );
 }
 

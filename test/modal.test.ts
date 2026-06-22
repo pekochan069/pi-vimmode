@@ -1971,6 +1971,100 @@ describe("Ex command-line modal behavior", () => {
     );
     expect(update.state.exMessage).toBeUndefined();
   });
+
+  test("bare numeric line jump moves cursor without editing text", () => {
+    const result = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 1), [":", "3", "\r"]);
+    expect(result.text).toBe("one\ntwo\nthree");
+    expect(result.cursor).toEqual(p(2, 1));
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.exMessage).toEqual({ kind: "success", text: "line 3" });
+  });
+
+  test("current-line and last-line address jumps move cursor", () => {
+    const dotResult = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(1, 0), [":", ".", "\r"]);
+    expect(dotResult.cursor).toEqual(p(1, 0));
+    expect(dotResult.state.exMessage).toEqual({ kind: "success", text: "line 2" });
+
+    const dollarResult = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(0, 0), [":", "$", "\r"]);
+    expect(dollarResult.cursor).toEqual(p(2, 0));
+    expect(dollarResult.state.exMessage).toEqual({ kind: "success", text: "line 3" });
+  });
+
+  test("line jump clamps column to target line length", () => {
+    const result = applyModalKeys({ mode: "normal" }, "long line\nshort", p(0, 8), [
+      ":",
+      "2",
+      "\r",
+    ]);
+    expect(result.cursor).toEqual(p(1, 5));
+  });
+
+  test("line jump preserves registers, marks, search, macros, and dot-repeat", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const result = applyModalKeys(initial, "abc\ndef", p(0, 1), [":", "2", "\r"]);
+    expect(result.text).toBe("abc\ndef");
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+  });
+
+  test("commandless range rejects without editing text or cursor", () => {
+    const percentResult = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(1, 0), [":", "%", "\r"]);
+    expect(percentResult.text).toBe("a\nb\nc");
+    expect(percentResult.cursor).toEqual(p(1, 0));
+    expect(percentResult.state.exMessage).toEqual({
+      kind: "error",
+      text: "Unsupported Ex command",
+    });
+
+    const commaResult = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(1, 0), [
+      ":",
+      "2",
+      ",",
+      "3",
+      "\r",
+    ]);
+    expect(commaResult.text).toBe("a\nb\nc");
+    expect(commaResult.cursor).toEqual(p(1, 0));
+    expect(commaResult.state.exMessage).toEqual({ kind: "error", text: "Unsupported Ex command" });
+  });
+
+  test("visual-source line jump exits visual mode to normal mode", () => {
+    const initial: ModalState = {
+      mode: "visual",
+      visualAnchor: p(0, 1),
+    };
+    const opened = handleModalInput(
+      initial,
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    const typeReturn = handleModalInput(
+      opened.state,
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: p(1, 2) },
+      options,
+      "3",
+    );
+    const result = handleModalInput(
+      typeReturn.state,
+      { text: "one\ntwo\nthree", lines: ["one", "two", "three"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.visualAnchor).toBeUndefined();
+  });
 });
 
 describe("modal view state", () => {

@@ -18,6 +18,12 @@
 - No registers, marks, visual state, macros, or dot-repeat affected.
 - Documented in `docs/settings.md` and `docs/features.md`.
 
+### Ex line jumps
+
+- Added bare single-address Ex line jumps such as `:3`, `:.`, `:$`, and `:2+1`.
+- Line jumps move the cursor only, preserve prompt text and Vim state, and reject commandless ranges such as `:%` and `:2,4`.
+- `parseExCommand()` now returns a `lineJump` parse result for successful bare single-address jumps.
+
 ## Bug fixes
 
 - `isPrintableTextSequence` now also rejects named non-printable keys (`enter`, `tab`, `escape`, etc.) in addition to modifier-prefixed keys, making it correct for both escape alias and insert binding validation.

@@ -297,6 +297,15 @@ function executeExCommand(
     });
   }
 
+  if (parsed.type === "lineJump") {
+    const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
+    const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);
+    return withEffects(finished, [
+      { type: "restoreCursor", position: { line: parsed.line, col: targetCol } },
+      { type: "invalidate" },
+    ]);
+  }
+
   if (parsed.type === "nohlsearch") {
     return invalidate(finishExState(clearSearchHighlight(state)));
   }

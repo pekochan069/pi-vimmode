@@ -177,6 +177,37 @@ Rules:
 - Protected shortcuts such as `enter`, `tab`, `ctrl+c`, and `escape` are rejected.
 - These are not Vim mappings: no runtime `:map`, recursive mappings, insert abbreviations, `.vimrc`, Vimscript, or `timeoutlen`.
 
+### Insert mode newline bindings
+
+| Path                                    | Default | Effect                                                                                                                    |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.insert.openLineBelow` | `[]`    | Insert a blank line below the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+| `piVimMode.keymap.insert.openLineAbove` | `[]`    | Insert a blank line above the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "insert": {
+        "openLineBelow": ["ctrl+j"],
+        "openLineAbove": ["ctrl+k"]
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+- Only modified or protected single-key chords are accepted. Raw printable text such as `"j"` or `"oo"` is rejected so normal typing stays normal.
+- Protected keys such as `"enter"` require same-layer `piVimMode.keymap.allowProtectedOverrides` before they are accepted.
+- Insert newline bindings only work in insert mode when Pi autocomplete is inactive. Normal and visual modes use the existing `openLineBelow` / `openLineAbove` commands under `piVimMode.keymap.commands`.
+- No registers, marks, visual state, macro slots, or dot-repeat state are affected by insert-mode line opening.
+- Autocomplete-active input keeps Pi ownership and does not open new lines.
+- These are opt-in: with no `piVimMode.keymap.insert` config, every insert-mode key delegates to Pi default behavior.
+
 ### Operators
 
 | Path                                    | Default  | Effect                                                                                               |

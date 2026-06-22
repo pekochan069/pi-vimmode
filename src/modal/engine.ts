@@ -15,6 +15,8 @@ import {
   deleteMarkRange,
   exactMarkPosition,
   lineMarkPosition,
+  openLineAbove,
+  openLineBelow,
   yankLineMarkRange,
   yankMarkRange,
 } from "../buffer.ts";
@@ -217,6 +219,26 @@ function handleInsertInput(
     return withEffects({ ...state, pendingInsertEscape: match.sequence }, []);
   }
   if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
+
+  const key = keySequence(data);
+  if (key) {
+    const insert = keymapForOptions(options).insert;
+    if (insert.openLineBelow.includes(key)) {
+      const result = openLineBelow(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.openLineAbove.includes(key)) {
+      const result = openLineAbove(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+  }
+
   return delegate(state, data);
 }
 

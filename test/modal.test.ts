@@ -126,6 +126,13 @@ describe("modal contracts", () => {
     expect(canFastDelegateInsertInput({ mode: "insert" }, "a", { escape: ["super+j"] })).toBe(true);
   });
 
+  test("canFastDelegateInsertInput keeps configured insert newline keys on modal path", () => {
+    // Insert newline keys are non-printable control sequences, not plain fast-insert text.
+    expect(canFastDelegateInsertInput({ mode: "insert" }, ctrlJ)).toBe(false);
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "\x0a")).toBe(false);
+    expect(canFastDelegateInsertInput({ mode: "insert" }, "a")).toBe(true);
+  });
+
   test("configured modifier insert escape alias exits insert mode", () => {
     const matched = handleModalInput({ mode: "insert" }, snapshot, escapeOptions, superJ);
 
@@ -184,6 +191,82 @@ describe("modal contracts", () => {
     expect(closed.state.mode).toBe("normal");
     expect(open.state.mode).toBe("insert");
     expect(open.effects).toEqual([{ type: "delegate", input: "\x1b" }]);
+  });
+
+  describe("insert mode newline bindings", () => {
+    const insertOptions = resolveVimOptions({
+      piVimMode: {
+        keymap: { insert: { openLineBelow: ["ctrl+j"], openLineAbove: ["ctrl+k"] } },
+      },
+    }).options;
+
+    test("default insert mode delegates non-escape keys to Pi", () => {
+      const result = handleModalInput({ mode: "insert" }, snapshot, options, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects).toEqual([{ type: "delegate", input: ctrlJ }]);
+    });
+
+    test("configured insert open-line-below opens line and stays in insert", () => {
+      const result = handleModalInput({ mode: "insert" }, snapshot, insertOptions, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      const editEffect = result.effects.find((e) => e.type === "edit") as
+        | { type: "edit"; result: { text: string; cursor: { line: number; col: number } } }
+        | undefined;
+      expect(editEffect).toBeDefined();
+      expect(editEffect!.result.text).toBe("abc\n");
+      expect(editEffect!.result.cursor).toEqual({ line: 1, col: 0 });
+    });
+
+    test("configured insert open-line-above opens line and stays in insert", () => {
+      const ctrlK = "\u001b[107;5u";
+      const result = handleModalInput({ mode: "insert" }, snapshot, insertOptions, ctrlK);
+      expect(result.state.mode).toBe("insert");
+      const editEffect = result.effects.find((e) => e.type === "edit") as
+        | { type: "edit"; result: { text: string; cursor: { line: number; col: number } } }
+        | undefined;
+      expect(editEffect).toBeDefined();
+      expect(editEffect!.result.text).toBe("\nabc");
+      expect(editEffect!.result.cursor).toEqual({ line: 0, col: 0 });
+    });
+
+    test("empty prompt stays editable with configured insert open-line-below", () => {
+      const empty = { text: "", lines: [""], cursor: p(0, 0) };
+      const result = handleModalInput({ mode: "insert" }, empty, insertOptions, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects.some((e) => e.type === "edit")).toBe(true);
+    });
+
+    test("autocomplete active keeps Pi ownership for configured insert binding", () => {
+      const openSnapshot = { ...snapshot, isAutocompleteOpen: true };
+      const result = handleModalInput({ mode: "insert" }, openSnapshot, insertOptions, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects).toEqual([{ type: "delegate", input: ctrlJ }]);
+    });
+
+    test("configured insert open-line-below clears search highlights on change", () => {
+      const state = { mode: "insert" as const, searchHighlight: { query: "abc", current: cursor } };
+      const result = handleModalInput(state, snapshot, insertOptions, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      expect(result.state).not.toHaveProperty("searchHighlight");
+      expect(result.effects.some((e) => e.type === "edit")).toBe(true);
+    });
+
+    test("configured insert open-line-below clear ex message before editing", () => {
+      const state = {
+        mode: "insert" as const,
+        exMessage: { kind: "info" as const, text: "message" },
+      };
+      const result = handleModalInput(state, snapshot, insertOptions, ctrlJ);
+      expect(result.state.mode).toBe("insert");
+      expect(result.state).not.toHaveProperty("exMessage");
+      expect(result.effects.some((e) => e.type === "edit")).toBe(true);
+    });
+
+    test("unconfigured insert key still delegates", () => {
+      const result = handleModalInput({ mode: "insert" }, snapshot, insertOptions, "a");
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects).toEqual([{ type: "delegate", input: "a" }]);
+    });
   });
 
   test("createModalState starts with configured mode and empty transient state", () => {

@@ -71,6 +71,11 @@ export const KEYMAP_MARK_DESCRIPTORS = {
   jumpLine: { defaults: ["'"] },
 } as const satisfies Record<keyof VimMarkKeymapOptions, KeymapDescriptor>;
 
+export const KEYMAP_INSERT_DESCRIPTORS = {
+  openLineBelow: { defaults: [] },
+  openLineAbove: { defaults: [] },
+} as const satisfies Record<string, KeymapDescriptor>;
+
 export const KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS = {
   inner: { defaults: ["i"] },
   around: { defaults: ["a"] },

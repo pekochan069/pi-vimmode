@@ -9,6 +9,7 @@ import type {
   PromptStructureTarget,
   PromptTransformAction,
   ResolvedVimActionBinding,
+  ResolvedVimInsertKeymap,
   ResolvedVimKeymap,
   ResolvedVimMacros,
   ResolvedVimMarks,
@@ -113,6 +114,7 @@ const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
 const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
 const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
 const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
+const INSERT_ACTION_SET = new Set<string>(["openLineBelow", "openLineAbove"]);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTIONS = VIM_MOTION_ACTIONS.filter(
   (action) => action !== "halfPageDown" && action !== "halfPageUp",
@@ -154,6 +156,10 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
       VIM_MOTION_OPERATOR_ACTIONS.map((action) => [action, OPERATOR_MOTION_ACTIONS]),
     ),
   ),
+  insert: Object.freeze({
+    openLineBelow: Object.freeze([]),
+    openLineAbove: Object.freeze([]),
+  }),
   actions: Object.freeze({
     accepted: Object.freeze([]),
   }),
@@ -296,6 +302,7 @@ type PartialKeymapOptions = {
     targets?: Partial<Record<VimTextObjectTarget, string[]>>;
   };
   operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
+  insert?: Partial<ResolvedVimInsertKeymap>;
   actionPresets?: VimActionKeybindingPreset[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
   allowProtectedOverrides?: string[];
@@ -363,6 +370,10 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
     },
     commands: cloneArrayRecord(keymap.commands),
     operatorMotions: cloneArrayRecord(keymap.operatorMotions),
+    insert: {
+      openLineBelow: [...keymap.insert.openLineBelow],
+      openLineAbove: [...keymap.insert.openLineAbove],
+    },
     actions: {
       accepted: keymap.actions.accepted.map((binding) => ({
         ...binding,
@@ -515,8 +526,27 @@ function parseStringArray(
   return parsed.length > 0 ? parsed : undefined;
 }
 
+const NON_PRINTABLE_KEY_NAMES = new Set([
+  "enter",
+  "tab",
+  "escape",
+  "backspace",
+  "delete",
+  "home",
+  "end",
+  "pageup",
+  "pagedown",
+  "insert",
+  "up",
+  "down",
+  "left",
+  "right",
+]);
+
 function isPrintableTextSequence(sequence: string): boolean {
-  return !sequence.includes("+") && [...sequence].every((char) => char.charCodeAt(0) >= 32);
+  if (sequence.includes("+")) return false;
+  if (NON_PRINTABLE_KEY_NAMES.has(sequence)) return false;
+  return [...sequence].every((char) => char.charCodeAt(0) >= 32);
 }
 
 function parseInsertEscapeArray(
@@ -535,6 +565,53 @@ function parseInsertEscapeArray(
     return false;
   });
   return parsed && parsed.length > 0 ? parsed : undefined;
+}
+
+function parseInsertBindings(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+  options: { allowProtectedKey?: (key: string) => boolean } = {},
+): Partial<ResolvedVimInsertKeymap> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.keymap.insert must be an object`);
+    return undefined;
+  }
+
+  const parsed: Partial<ResolvedVimInsertKeymap> = {};
+  const seen = new Map<string, string>();
+  for (const [action, bindings] of Object.entries(value)) {
+    if (!INSERT_ACTION_SET.has(action)) {
+      warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.insert.${action}`);
+      continue;
+    }
+    const label = `${sourceLabel}: piVimMode.keymap.insert.${action}`;
+    const keys = parseStringArray(bindings, label, warnings, {
+      allowProtectedKey: options.allowProtectedKey,
+    });
+    if (!keys) continue;
+    const filtered = keys.filter((sequence) => {
+      if (!isPrintableTextSequence(sequence)) return true;
+      warnings.push(`${label} contains unsupported printable text sequence ${sequence}`);
+      return false;
+    });
+    if (filtered.length > 0) {
+      parsed[action as keyof ResolvedVimInsertKeymap] = filtered;
+      for (const key of filtered) {
+        const previous = seen.get(key);
+        if (previous && previous !== action) {
+          warnings.push(
+            `${sourceLabel}: duplicate piVimMode.keymap.insert binding ${key} for ${previous} and ${action}`,
+          );
+        } else {
+          seen.set(key, action);
+        }
+      }
+    }
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
 function parseActionStringArray<T extends string>(
@@ -793,6 +870,10 @@ function parseKeymap(
     warnings,
     { allowProtectedKey },
   );
+
+  partial.insert = parseInsertBindings(value.insert, sourceLabel, warnings, {
+    allowProtectedKey,
+  });
 
   if (value.textObjects !== undefined) {
     if (!isRecord(value.textObjects)) {
@@ -1407,6 +1488,9 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.operatorMotions) {
     target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
   }
+  if (partial.insert) {
+    target.insert = { ...target.insert, ...partial.insert };
+  }
   if (partial.actions) mergeActionBindings(target, partial.actions);
 }
 
@@ -1425,6 +1509,9 @@ function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymap
   }
   if (partial.operatorMotions) {
     target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
+  }
+  if (partial.insert) {
+    target.insert = { ...target.insert, ...partial.insert };
   }
   if (partial.actions) {
     target.actions = { ...target.actions, ...partial.actions };

@@ -2,7 +2,8 @@
 
 ## Next Version
 
-- [ ] Force override system keybindings (like `ctrl+j`)
+- [x] Force override system keybindings (like `ctrl+j`)
+- [ ] Insert mode new line keybindings (previous line and next line)
 - [ ] Add more common ex-commands like `q` or `w`
 - [ ] ex command autocomplete
 - [ ] Make pi-vimmode controllable with ex commands?

@@ -298,6 +298,7 @@ type PartialKeymapOptions = {
   operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
   actionPresets?: VimActionKeybindingPreset[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
+  allowProtectedOverrides?: string[];
 };
 
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
@@ -522,11 +523,12 @@ function parseInsertEscapeArray(
   value: unknown,
   sourceLabel: string,
   warnings: string[],
+  options: { allowProtectedKey?: (key: string) => boolean } = {},
 ): string[] | undefined {
   if (value === undefined) return undefined;
   if (Array.isArray(value) && value.length === 0) return [];
   const label = `${sourceLabel}: piVimMode.keymap.escape`;
-  const sequences = parseStringArray(value, label, warnings);
+  const sequences = parseStringArray(value, label, warnings, options);
   const parsed = sequences?.filter((sequence) => {
     if (!isPrintableTextSequence(sequence)) return true;
     warnings.push(`${label} contains unsupported printable text sequence ${sequence}`);
@@ -561,7 +563,7 @@ function parseKeyBindings<T extends string>(
   sourceLabel: string,
   group: string,
   warnings: string[],
-  options: { singleKeyOnly?: boolean } = {},
+  options: { singleKeyOnly?: boolean; allowProtectedKey?: (key: string) => boolean } = {},
 ): Partial<Record<T, string[]>> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
@@ -583,9 +585,10 @@ function parseKeyBindings<T extends string>(
       {
         ...options,
         allowProtectedKey: (key) =>
-          group === "motions" &&
-          ((action === "halfPageDown" && key === "ctrl+d") ||
-            (action === "halfPageUp" && key === "ctrl+u")),
+          (group === "motions" &&
+            ((action === "halfPageDown" && key === "ctrl+d") ||
+              (action === "halfPageUp" && key === "ctrl+u"))) ||
+          options.allowProtectedKey?.(key) === true,
       },
     );
     if (!keys) continue;
@@ -610,6 +613,7 @@ function parseActionBindingEntry(
   actionId: BindablePromptTransformActionId,
   label: string,
   warnings: string[],
+  options: { allowProtectedKey?: (key: string) => boolean } = {},
 ): ResolvedVimActionBinding | undefined {
   let rawKey: unknown;
   let rawArgs: unknown;
@@ -628,7 +632,7 @@ function parseActionBindingEntry(
     return undefined;
   }
   const protectedShortcut = protectedShortcutForKey(key);
-  if (protectedShortcut) {
+  if (protectedShortcut && !options.allowProtectedKey?.(key)) {
     warnings.push(`${label} contains protected key ${key} (${protectedShortcut.reason})`);
     return undefined;
   }
@@ -649,6 +653,7 @@ function parseActionBindings(
   value: unknown,
   sourceLabel: string,
   warnings: string[],
+  options: { allowProtectedKey?: (key: string) => boolean } = {},
 ): Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
@@ -669,7 +674,7 @@ function parseActionBindings(
     const actionId = rawActionId as BindablePromptTransformActionId;
     const label = `${sourceLabel}: piVimMode.keymap.actions.${rawActionId}`;
     const bindings = entries
-      .map((entry) => parseActionBindingEntry(entry, actionId, label, warnings))
+      .map((entry) => parseActionBindingEntry(entry, actionId, label, warnings, options))
       .filter((binding): binding is ResolvedVimActionBinding => Boolean(binding));
     parsed[actionId] = bindings;
   }
@@ -735,7 +740,18 @@ function parseKeymap(
     return { warnings };
   }
 
-  partial.escape = parseInsertEscapeArray(value.escape, sourceLabel, warnings);
+  partial.allowProtectedOverrides = parseAllowProtectedOverrides(
+    value.allowProtectedOverrides,
+    sourceLabel,
+    warnings,
+  );
+  const allowProtectedKey: (key: string) => boolean = partial.allowProtectedOverrides
+    ? (key: string) => partial.allowProtectedOverrides!.includes(key)
+    : () => false;
+
+  partial.escape = parseInsertEscapeArray(value.escape, sourceLabel, warnings, {
+    allowProtectedKey,
+  });
 
   partial.operators = parseKeyBindings<VimOperatorAction>(
     value.operators,
@@ -743,6 +759,7 @@ function parseKeymap(
     sourceLabel,
     "operators",
     warnings,
+    { allowProtectedKey },
   );
   partial.motions = parseKeyBindings<VimMotionAction>(
     value.motions,
@@ -750,6 +767,7 @@ function parseKeymap(
     sourceLabel,
     "motions",
     warnings,
+    { allowProtectedKey },
   );
   partial.commands = parseKeyBindings<VimCommandAction>(
     value.commands,
@@ -757,6 +775,7 @@ function parseKeymap(
     sourceLabel,
     "commands",
     warnings,
+    { allowProtectedKey },
   );
   partial.macros = parseKeyBindings<keyof ResolvedVimKeymap["macros"]>(
     value.macros,
@@ -764,6 +783,7 @@ function parseKeymap(
     sourceLabel,
     "macros",
     warnings,
+    { allowProtectedKey },
   );
   partial.marks = parseKeyBindings<keyof ResolvedVimKeymap["marks"]>(
     value.marks,
@@ -771,6 +791,7 @@ function parseKeymap(
     sourceLabel,
     "marks",
     warnings,
+    { allowProtectedKey },
   );
 
   if (value.textObjects !== undefined) {
@@ -784,7 +805,7 @@ function parseKeymap(
         sourceLabel,
         "textObjects.kinds",
         warnings,
-        { singleKeyOnly: true },
+        { singleKeyOnly: true, allowProtectedKey },
       );
       textObjects.targets = parseKeyBindings<VimTextObjectTarget>(
         value.textObjects.targets,
@@ -792,7 +813,7 @@ function parseKeymap(
         sourceLabel,
         "textObjects.targets",
         warnings,
-        { singleKeyOnly: true },
+        { singleKeyOnly: true, allowProtectedKey },
       );
       if (textObjects.kinds || textObjects.targets) partial.textObjects = textObjects;
     }
@@ -824,10 +845,25 @@ function parseKeymap(
   partial.actionPresets = actionPresets.presets;
   const actions: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
   mergeParsedActionBindings(actions, actionPresets.actions);
-  mergeParsedActionBindings(actions, parseActionBindings(value.actions, sourceLabel, warnings));
+  mergeParsedActionBindings(
+    actions,
+    parseActionBindings(value.actions, sourceLabel, warnings, { allowProtectedKey }),
+  );
   partial.actions = Object.keys(actions).length > 0 ? actions : undefined;
 
   return { partial, warnings };
+}
+
+function parseAllowProtectedOverrides(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  const label = `${sourceLabel}: piVimMode.keymap.allowProtectedOverrides`;
+  return parseStringArray(value, label, warnings, {
+    allowProtectedKey: () => true,
+  });
 }
 
 function parseModeLabelMap(
@@ -1508,9 +1544,10 @@ function grammarConflictForActionKey(
 ): string | undefined {
   const exact = grammarBindings.find((binding) => binding.sequence === key);
   if (exact) return `conflicts with ${exact.label}`;
-  const prefix = grammarBindings.find(
-    (binding) => key.startsWith(binding.sequence) || binding.sequence.startsWith(key),
-  );
+  const prefix = grammarBindings.find((binding) => {
+    if (key.includes("+") || binding.sequence.includes("+")) return false;
+    return key.startsWith(binding.sequence) || binding.sequence.startsWith(key);
+  });
   return prefix ? `prefix-shadow conflict with ${prefix.label}` : undefined;
 }
 

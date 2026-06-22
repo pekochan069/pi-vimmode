@@ -1102,6 +1102,91 @@ describe("vim config parsing", () => {
     expect(unbound.options.keymap?.actions.accepted).toEqual([]);
   });
 
+  test("protected keys remain rejected when allowProtectedOverrides is absent", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: undefined,
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+  });
+
+  test("allow-listed protected classic bindings are accepted and normalized", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: ["ctrl+p"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual(["ctrl+p"]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("allow-listed protected action bindings are accepted unless another action validation rule rejects them", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": [{ key: "ctrl+p" }],
+          },
+          allowProtectedOverrides: ["ctrl+p"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "ctrl+p", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("global allow-list entries do not authorize project-layer protected bindings without a project allow-list", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { allowProtectedOverrides: ["ctrl+p"] } } },
+      {
+        piVimMode: {
+          keymap: {
+            commands: { showKeybindings: ["ctrl+p"] },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+  });
+
+  test("invalid allow-list entries warn while valid protected entries and sibling keymap fields remain usable", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: ["ctrl+p", "", "<invalid>", "ctrl+t"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual(["ctrl+p"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("unsupported key")]),
+    );
+    expect(result.warnings).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+  });
+
   test("rejects action conflicts but allows shared non-executable prefixes", () => {
     const result = resolveVimOptions({
       piVimMode: {

@@ -39,6 +39,7 @@ import {
   invalidate,
   isDelegatedResetKey,
   isProtectedPiDelegateKey,
+  keymapHasBinding,
   keySequence,
   modeUpdate,
   resetAndDelegate,
@@ -334,12 +335,17 @@ function handleNormalInput(
       options,
     );
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
-
   const key = keySequence(data);
   if (!key) {
     const nextState = clearPending(state);
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
+  }
+
+  if (isProtectedPiDelegateKey(data)) {
+    const keymap = keymapForOptions(options);
+    if (!keymapHasBinding(keymap, key)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
   }
 
   if (state.pendingRegister === "awaitingSlot") {
@@ -497,10 +503,15 @@ function handleVisualInput(
       ? invalidate(state)
       : modeUpdate(state, "visualBlock", options);
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
-
   const key = keySequence(data);
   if (!key) return delegate(state, data);
+
+  if (isProtectedPiDelegateKey(data)) {
+    const keymap = keymapForOptions(options);
+    if (!keymapHasBinding(keymap, key)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
+  }
 
   if (state.pendingRegister === "awaitingSlot") {
     const target = registerTargetForKey(key);

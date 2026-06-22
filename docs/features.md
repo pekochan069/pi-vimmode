@@ -463,6 +463,8 @@ Supported commands:
 :3,4move0    " alias :m
 :join        " alias :j
 :nohlsearch " alias :noh
+:q            " request Pi shutdown
+:quit         " alias :q
 :quote
 :unquote
 :bulletize
@@ -544,6 +546,8 @@ Important semantics:
 - `:help [topic]` opens a read-only popup with source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
 - `:features [query]` opens a read-only popup listing/searching supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
 - `:messages` opens a read-only popup with a bounded prompt-local summary of retained recent runtime messages without opening a pager.
+- `:q` and `:quit` request graceful Pi shutdown through the Pi extension runtime without editing prompt text, registers, marks, search state, macros, cursor, or dot-repeat.
+- `:q!`, `:quit!`, `:wq`, `:x`, `:qa`, `:write`, `:edit`, `:shell`, and other file/window/shell Ex commands are intentionally unsupported.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
 - `Left` / `Right` / `Home` / `End`, forward delete, `Alt-Left`, `Alt-Right`, and `Ctrl-W` edit the pending Ex command text without editing prompt text.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance and move the command cursor to the end of the recalled command.

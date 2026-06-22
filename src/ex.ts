@@ -87,6 +87,13 @@ export type ParsedExInspectCommand = {
   query: "inspect";
 };
 
+export type ParsedExQuitCommand = {
+  type: "quit";
+  command: "q" | "quit";
+  range: LineRange;
+  rangeExplicit: boolean;
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
   | ParsedExRepeatSubstitution
@@ -98,6 +105,7 @@ export type ExParseResult =
   | ParsedExKeybindingsCommand
   | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
+  | ParsedExQuitCommand
   | { type: "lineJump"; range: LineRange; line: number }
   | { type: "empty" }
   | { type: "error"; message: string };
@@ -134,7 +142,9 @@ type ParsedCommandName =
   | "keybindings"
   | "vimmode"
   | "noh"
-  | "nohlsearch";
+  | "nohlsearch"
+  | "q"
+  | "quit";
 
 type ParsedCommandType =
   | "substitute"
@@ -149,7 +159,8 @@ type ParsedCommandType =
   | "runtimeHelp"
   | "keybindings"
   | "inspect"
-  | "nohlsearch";
+  | "nohlsearch"
+  | "quit";
 
 type ParsedCommand = {
   name: string;
@@ -227,6 +238,9 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
+    case "q":
+    case "quit":
+      return "quit";
   }
 }
 
@@ -271,6 +285,8 @@ function parseCommand(
     "vimmode",
     "noh",
     "nohlsearch",
+    "q",
+    "quit",
   ]);
   if (supported.has(name)) {
     const type = commandType(name as ParsedCommandName);
@@ -546,6 +562,17 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
 
   if (type === "nohlsearch") {
     return { type, command: command.command.name as "noh" | "nohlsearch" };
+  }
+
+  if (type === "quit") {
+    const trailingError = rejectTrailingArgs(command.rest);
+    if (trailingError) return trailingError;
+    return {
+      type,
+      command: command.command.name as "q" | "quit",
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
+    };
   }
 
   return {

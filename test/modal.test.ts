@@ -2065,6 +2065,117 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.mode).toBe("normal");
     expect(result.state.visualAnchor).toBeUndefined();
   });
+
+  test(":q emits shutdown without editing prompt text or mutating editing state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const result = applyModalKeys(initial, "hello world", p(0, 5), [":", "q", "\r"]);
+    expect(result.text).toBe("hello world");
+    expect(result.cursor).toEqual(p(0, 5));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.effects).toContainEqual({ type: "shutdown" });
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.namedRegisters).toEqual(initial.namedRegisters);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.messageHistory).toEqual(initial.messageHistory);
+  });
+
+  test(":quit emits shutdown without editing prompt text or mutating editing state", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+    };
+    const result = applyModalKeys(initial, "old text", p(0, 3), [":", "q", "u", "i", "t", "\r"]);
+    expect(result.text).toBe("old text");
+    expect(result.cursor).toEqual(p(0, 3));
+    expect(result.state.mode).toBe("normal");
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.effects).toContainEqual({ type: "shutdown" });
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+  });
+
+  test(":quit! is rejected without emitting shutdown", () => {
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), [
+      ":",
+      "q",
+      "u",
+      "i",
+      "t",
+      "!",
+      "\r",
+    ]);
+    expect(result.text).toBe("hello");
+    expect(result.state.pendingEx).toBeUndefined();
+    expect(result.state.exMessage).toEqual({
+      kind: "error",
+      text: "Unexpected Ex command arguments",
+    });
+    expect(result.effects).not.toContainEqual({ type: "shutdown" });
+  });
+
+  test(":wq is rejected without emitting shutdown", () => {
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), [":", "w", "q", "\r"]);
+    expect(result.text).toBe("hello");
+    expect(result.state.exMessage).toEqual({
+      kind: "error",
+      text: "Unsupported Ex command: wq",
+    });
+    expect(result.effects).not.toContainEqual({ type: "shutdown" });
+  });
+
+  test("visual-source :q emits shutdown without editing state", () => {
+    const initial: ModalState = {
+      mode: "visual",
+      visualAnchor: p(0, 1),
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const opened = handleModalInput(
+      initial,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    const typed = handleModalInput(
+      opened.state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "q",
+    );
+    const result = handleModalInput(
+      typed.state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\r",
+    );
+    const state = result.state;
+    expect(result.effects).toContainEqual({ type: "shutdown" });
+    expect(state.mode).toBe("normal");
+    expect(state.pendingEx).toBeUndefined();
+    expect(state.visualAnchor).toBeUndefined();
+    expect(state.register).toEqual(initial.register);
+    expect(state.marks).toEqual(initial.marks);
+    expect(state.lastSearch).toEqual(initial.lastSearch);
+    expect(state.searchHighlight).toEqual(initial.searchHighlight);
+    expect(state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+  });
 });
 
 describe("modal view state", () => {

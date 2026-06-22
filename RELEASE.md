@@ -24,6 +24,12 @@
 - Line jumps move the cursor only, preserve prompt text and Vim state, and reject commandless ranges such as `:%` and `:2,4`.
 - `parseExCommand()` now returns a `lineJump` parse result for successful bare single-address jumps.
 
+### Ex quit commands
+
+- Added `:q` and `:quit` as finite Ex commands that request graceful Pi shutdown through the extension runtime.
+- Quit commands preserve prompt text, registers, marks, search state, macros, cursor, and dot-repeat.
+- Unsupported file/window/shell variants such as `:q!`, `:wq`, `:x`, `:qa`, `:write`, and `:shell` remain rejected.
+
 ## Bug fixes
 
 - `isPrintableTextSequence` now also rejects named non-printable keys (`enter`, `tab`, `escape`, etc.) in addition to modifier-prefixed keys, making it correct for both escape alias and insert binding validation.

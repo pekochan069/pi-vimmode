@@ -4,12 +4,12 @@
 
 - [x] Force override system keybindings (like `ctrl+j`)
 - [x] Insert mode new line keybindings (previous line and next line)
-- [ ] Add more common ex-commands like `q` or `w`
+- [x] `:n` line jumps
 - [ ] ex command autocomplete
-- [ ] `:n` line jumps
 
 ## Deferred
 
+- [ ] Add more common ex-commands like `q` or `w`
 - [ ] More insert mode keybindings
 - [ ] Add `gv` reselect last visual range.
 - [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.

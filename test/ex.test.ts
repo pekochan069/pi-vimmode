@@ -501,6 +501,65 @@ describe("Ex command parser", () => {
     ).toEqual({ type: "error", message: "Unsupported Ex command: reflow" });
   });
 
+  test("parses bare single-address line jumps", () => {
+    expect(parseExCommand("3", context)).toMatchObject({
+      type: "lineJump",
+      line: 2,
+      range: { startLine: 2, endLine: 2 },
+    });
+    expect(parseExCommand(".", context)).toMatchObject({
+      type: "lineJump",
+      line: 1,
+      range: { startLine: 1, endLine: 1 },
+    });
+    expect(parseExCommand("$", context)).toMatchObject({
+      type: "lineJump",
+      line: 4,
+      range: { startLine: 4, endLine: 4 },
+    });
+    expect(parseExCommand("2+1", context)).toMatchObject({
+      type: "lineJump",
+      line: 2,
+      range: { startLine: 2, endLine: 2 },
+    });
+  });
+
+  test("rejects commandless percent, comma, semicolon, and visual ranges", () => {
+    expect(parseExCommand("%", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(parseExCommand("2,4", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(parseExCommand("2;.+1", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(
+      parseExCommand("'<,'>", { ...context, visualRange: { startLine: 0, endLine: 2 } }),
+    ).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+  });
+
+  test("rejects out-of-bounds bare single-address line jumps", () => {
+    expect(parseExCommand("0", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("999", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("$+1", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+  });
+
   test("rejects invalid Ex commands and arguments", () => {
     expect(parseExCommand("0delete", context)).toEqual({
       type: "error",

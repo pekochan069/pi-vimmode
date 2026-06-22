@@ -453,6 +453,9 @@ Supported commands:
 :.,$substitute/old/new/i
 :2;.+1s/old/new/g
 :'<,'>s/old/new/g
+:3             " line jump to line 3
+:$             " jump to last line
+:2+1           " jump to line 3 (line 2 + offset 1)
 :delete      " alias :d
 :yank        " alias :y
 :put         " alias :pu
@@ -558,6 +561,9 @@ Important semantics:
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
 - Ex commands do not update dot-repeat. Only documented register operands on `:delete`, `:yank`, and `:put` touch named registers.
+- Bare single-address line jumps such as `:3`, `:.`, `:$`, and offset forms like `:2+1` move the cursor to the addressed line without editing prompt text. Column is preserved when possible, clamped to target line length.
+- Commandless ranges such as `:%`, `:2,4`, `:2;.+1`, and `:'<,'>` are unsupported and produce an Ex error without editing prompt text.
+- Line jumps from visual Ex exit to normal mode, clear the visual selection, and move the cursor.
 
 Transform examples:
 

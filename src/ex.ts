@@ -98,6 +98,7 @@ export type ExParseResult =
   | ParsedExKeybindingsCommand
   | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
+  | { type: "lineJump"; range: LineRange; line: number }
   | { type: "empty" }
   | { type: "error"; message: string };
 
@@ -430,6 +431,20 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
       range: range.value.range,
       rangeExplicit: range.value.explicit,
     };
+  }
+
+  if (repeat.length === 0 && range.value.explicit) {
+    const ast = range.value.ast;
+    if (ast.type === "single") {
+      return {
+        type: "lineJump",
+        range: range.value.range,
+        line: range.value.range.startLine,
+      };
+    }
+    if (ast.type === "percent" || ast.type === "range" || ast.type === "visual") {
+      return { type: "error", message: "Unsupported Ex command" };
+    }
   }
 
   const command = parseCommand(range.value.rest, context);

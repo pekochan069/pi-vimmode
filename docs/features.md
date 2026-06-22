@@ -97,7 +97,8 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 - Visual modes: `Esc` and configured escape aliases cancel selection and return to normal mode.
 - In normal/visual prompt editing, `Enter`, `Ctrl-C`, and `Ctrl-G` reset Vim transient state, return to configured startup mode, and delegate to Pi.
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
-- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling.
+- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling or configured `piVimMode.keymap.insert` newline bindings.
+- Configured insert newline bindings (`piVimMode.keymap.insert.openLineBelow` / `openLineAbove`) open a blank line above or below the current prompt line while staying in insert mode. They only work when Pi autocomplete is inactive; autocomplete-active input keeps Pi ownership.
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
 - `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 

@@ -236,6 +236,7 @@ describe("golden modal effects", () => {
         marks: DEFAULT_VIM_KEYMAP.marks,
         textObjects: DEFAULT_VIM_KEYMAP.textObjects,
         operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
+        insert: { openLineBelow: [], openLineAbove: [] },
         actions: { accepted: [] },
       },
     };
@@ -257,6 +258,7 @@ describe("golden modal effects", () => {
         marks: DEFAULT_VIM_KEYMAP.marks,
         textObjects: DEFAULT_VIM_KEYMAP.textObjects,
         operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
+        insert: { openLineBelow: [], openLineAbove: [] },
         actions: { accepted: [] },
       },
     };

@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "src/config.ts": {
-    "mtime": 1782093057.2005186,
-    "ast_hash": "97ee62e7e9c98b1534941cd61e04d80c",
+    "mtime": 1782101698.9393032,
+    "ast_hash": "fc6a431b68c9d44e9861c5c348719600",
     "semantic_hash": ""
   },
   "src/customization.ts": {
@@ -85,13 +85,13 @@
     "semantic_hash": "bb91bc63db1edb4c37f7a5afa25cfa09"
   },
   "src/modal/core.ts": {
-    "mtime": 1782093057.208612,
+    "mtime": 1782101038.56471,
     "ast_hash": "55c896af980408a81a72ea444e63f97a",
     "semantic_hash": ""
   },
   "src/modal/engine.ts": {
-    "mtime": 1782092590.8298278,
-    "ast_hash": "9a4aaf35d4c23b9a128b4f7ff4d6411b",
+    "mtime": 1782101864.3892283,
+    "ast_hash": "d0bbb6911eb3e4c6e5bd7bbbc7c47c04",
     "semantic_hash": ""
   },
   "src/modal/ex-command-line.ts": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "src/types.ts": {
-    "mtime": 1782092420.7153742,
-    "ast_hash": "e0ccd31a41c60f140bd5703eeaf6014e",
+    "mtime": 1782101493.806349,
+    "ast_hash": "e2765a86b0a3de55fa42ab1d827613b4",
     "semantic_hash": ""
   },
   "src/vim-editor.ts": {
@@ -200,8 +200,8 @@
     "semantic_hash": ""
   },
   "test/config.test.ts": {
-    "mtime": 1782092635.5356925,
-    "ast_hash": "da9f9f994648b42fac437bbc66f944cc",
+    "mtime": 1782101981.2416644,
+    "ast_hash": "79ef4574d66196f68503440445753050",
     "semantic_hash": ""
   },
   "test/customization.test.ts": {
@@ -230,8 +230,8 @@
     "semantic_hash": "a97ed5ad66b3630ac8c7d85f98ce4c85"
   },
   "test/modal-effects.test.ts": {
-    "mtime": 1782093057.188518,
-    "ast_hash": "f9a8526348e99e48bce732d9f87b9d37",
+    "mtime": 1782101609.2408547,
+    "ast_hash": "3078dbf15bbe40aae681f3c3ad0b62df",
     "semantic_hash": ""
   },
   "test/modal-inspect.test.ts": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "test/modal.test.ts": {
-    "mtime": 1782050996.7694578,
-    "ast_hash": "19f6f90ff34aa3cf8085268baf13871a",
+    "mtime": 1782101901.1959136,
+    "ast_hash": "41ddec38e5914cafe892c857f68a132e",
     "semantic_hash": ""
   },
   "test/prompt-structures.test.ts": {
@@ -350,8 +350,8 @@
     "semantic_hash": "7da320a8a1e0e0f2a35e4d19308e4442"
   },
   "TODOS.md": {
-    "mtime": 1782094446.814072,
-    "ast_hash": "746cad03a054a1cca2cbac2c0bd9558b",
+    "mtime": 1782101956.9324162,
+    "ast_hash": "3950b41b8e91abe99fc47b4898b9ed3d",
     "semantic_hash": ""
   },
   "docs/adr/0001-dedicated-ex-command-line-row.md": {
@@ -375,8 +375,8 @@
     "semantic_hash": "3fa0d68704646e44258b4980bf260c7e"
   },
   "docs/features.md": {
-    "mtime": 1782093041.4688745,
-    "ast_hash": "cd7793b19e4e8196c0e92e8932aa47ae",
+    "mtime": 1782101950.7684333,
+    "ast_hash": "cf685e2611f7393997873b02501d49e9",
     "semantic_hash": ""
   },
   "docs/plans/2026-05-26-001-feat-vim-mode-extension-plan.md": {
@@ -405,8 +405,8 @@
     "semantic_hash": "463007679f01c2939cc5f854338ba65e"
   },
   "docs/settings.md": {
-    "mtime": 1782093058.8298714,
-    "ast_hash": "cac945d55f02a3422f13211b0ff14842",
+    "mtime": 1782101981.4936774,
+    "ast_hash": "3f851ab487ec3ee447bc80d2f9cbc732",
     "semantic_hash": ""
   },
   "docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": "cd8a037c03f2d11acce622ff9f549634"
   },
   "openspec/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1782050996.7694578,
-    "ast_hash": "8796e1f95aaeaacc90002d67f7ee9694",
+    "mtime": 1782103522.5613644,
+    "ast_hash": "6b24b494d648110985587a8563c24714",
     "semantic_hash": ""
   },
   "openspec/specs/vim-macro-recording/spec.md": {
@@ -1770,8 +1770,8 @@
     "semantic_hash": "b57e5c9ea95088af3cac848f5448c18b"
   },
   "openspec/specs/vim-mode-editor/spec.md": {
-    "mtime": 1782050996.7694578,
-    "ast_hash": "bc5f86f989dc441185f683b5e663da45",
+    "mtime": 1782103522.5613644,
+    "ast_hash": "187e5ba231ac5f76ba3bc752dd7bfeda",
     "semantic_hash": ""
   },
   "openspec/specs/vim-mode-visual-configuration/spec.md": {
@@ -2190,8 +2190,8 @@
     "semantic_hash": ""
   },
   "src/keymap-descriptors.ts": {
-    "mtime": 1782050996.7694578,
-    "ast_hash": "506b391a64c73557efe4ce09dbe48737",
+    "mtime": 1782101500.2060251,
+    "ast_hash": "aba0431e5db248e408a9717a8420ae72",
     "semantic_hash": ""
   },
   "test/keymap-descriptors.test.ts": {
@@ -2405,8 +2405,8 @@
     "semantic_hash": ""
   },
   "RELEASE.md": {
-    "mtime": 1782050996.743891,
-    "ast_hash": "61a98cb8d241810c22c5465815b64b30",
+    "mtime": 1782101038.538905,
+    "ast_hash": "e148230f654a7a0c01be02cc459a7e92",
     "semantic_hash": ""
   },
   "openspec/changes/archive/2026-06-19-add-search-word-under-cursor/.openspec.yaml": {
@@ -2535,33 +2535,73 @@
     "semantic_hash": ""
   },
   "docs/solutions/developer-experience/pi-vimmode-ctrl-p-insert-mode-delegates-to-pi-2026-06-22.md": {
-    "mtime": 1782100681.2354376,
-    "ast_hash": "4a6d3cfb99c29b757536f9217607da41",
+    "mtime": 1782101038.5394719,
+    "ast_hash": "c00b8c0480960d60c808de929f03ee49",
     "semantic_hash": ""
   },
-  "openspec/changes/add-system-keybinding-override-setting/.openspec.yaml": {
-    "mtime": 1782091122.3979976,
+  "openspec/changes/archive/2026-06-22-add-system-keybinding-override-setting/.openspec.yaml": {
+    "mtime": 1782101038.5635762,
     "ast_hash": "5d2aca6d8a01a19751422b0f8fa08339",
     "semantic_hash": ""
   },
-  "openspec/changes/add-system-keybinding-override-setting/design.md": {
-    "mtime": 1782091281.7290943,
+  "openspec/changes/archive/2026-06-22-add-system-keybinding-override-setting/design.md": {
+    "mtime": 1782101038.5636542,
     "ast_hash": "45f72aa2615985f98f195ed79f2fb2ca",
     "semantic_hash": ""
   },
-  "openspec/changes/add-system-keybinding-override-setting/proposal.md": {
-    "mtime": 1782091145.198336,
+  "openspec/changes/archive/2026-06-22-add-system-keybinding-override-setting/proposal.md": {
+    "mtime": 1782101038.5636542,
     "ast_hash": "9c01aade28cfec2e8802159a6dafd1f0",
     "semantic_hash": ""
   },
-  "openspec/changes/add-system-keybinding-override-setting/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1782093058.6125958,
+  "openspec/changes/archive/2026-06-22-add-system-keybinding-override-setting/specs/vim-keymap-configuration/spec.md": {
+    "mtime": 1782101038.5639062,
     "ast_hash": "90a5ce3deea5e1448b005d53d114da16",
     "semantic_hash": ""
   },
-  "openspec/changes/add-system-keybinding-override-setting/tasks.md": {
-    "mtime": 1782093068.6921813,
+  "openspec/changes/archive/2026-06-22-add-system-keybinding-override-setting/tasks.md": {
+    "mtime": 1782101038.5639782,
     "ast_hash": "92acd91078820b5583787530c610a7ff",
+    "semantic_hash": ""
+  },
+  "context.md": {
+    "mtime": 1782102886.7216065,
+    "ast_hash": "2ba60c7fdef81c4583afb42b2e06c755",
+    "semantic_hash": ""
+  },
+  "docs/solutions/design-patterns/pi-vimmode-configurable-insert-mode-newline-keybindings-2026-06-22.md": {
+    "mtime": 1782102957.6205108,
+    "ast_hash": "4d48ad0d7256aafd9f20a4c5d8794e72",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/.openspec.yaml": {
+    "mtime": 1782101155.5109744,
+    "ast_hash": "5d2aca6d8a01a19751422b0f8fa08339",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/design.md": {
+    "mtime": 1782101333.4586957,
+    "ast_hash": "09d3b26805b9fb41274db11d45f2ff1d",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/proposal.md": {
+    "mtime": 1782101244.7286956,
+    "ast_hash": "84494d395a1c379a7cf1e4d7e3e9f32e",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/specs/vim-keymap-configuration/spec.md": {
+    "mtime": 1782101370.7175422,
+    "ast_hash": "ea71b8de6f95b9c9d91dcc45d42f38e4",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/specs/vim-mode-editor/spec.md": {
+    "mtime": 1782101353.443822,
+    "ast_hash": "c93aaf8ef65c6f279e6bf939233e5b5b",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-06-22-todos-insert-mode-new-line-keybindings/tasks.md": {
+    "mtime": 1782101995.6735635,
+    "ast_hash": "6bc3829ff62c02430b3b7da46cb96dae",
     "semantic_hash": ""
   }
 }

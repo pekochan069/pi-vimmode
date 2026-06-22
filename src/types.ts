@@ -158,6 +158,7 @@ export type VimKeymapOptions = {
   operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
   actionPresets?: readonly VimActionKeybindingPreset[];
   actions?: VimActionKeymapOptions;
+  allowProtectedOverrides?: readonly string[];
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;

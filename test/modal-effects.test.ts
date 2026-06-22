@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { EditorSnapshot, ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
-import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { DEFAULT_VIM_KEYMAP, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { handleModalInput } from "../src/modal/engine.ts";
 
 const p = (line: number, col: number) => ({ line, col });
@@ -222,5 +222,59 @@ describe("golden modal effects", () => {
       text: "ctrl+p protected for Pi command/model palette",
     });
     expect(result.effects).toEqual([{ type: "delegate", input: "\x10" }, { type: "invalidate" }]);
+  });
+
+  test("allow-listed ctrl+p normal-mode command dispatches through keymap instead of delegation", () => {
+    const allowOptions: ModalOptions = {
+      ...options,
+      keymap: {
+        escape: DEFAULT_VIM_KEYMAP.escape,
+        operators: DEFAULT_VIM_KEYMAP.operators,
+        motions: DEFAULT_VIM_KEYMAP.motions,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, showKeybindings: ["ctrl+p"] },
+        macros: DEFAULT_VIM_KEYMAP.macros,
+        marks: DEFAULT_VIM_KEYMAP.marks,
+        textObjects: DEFAULT_VIM_KEYMAP.textObjects,
+        operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
+        actions: { accepted: [] },
+      },
+    };
+    const result = runGolden({ mode: "normal" }, "abc", p(0, 0), ["\x10"], allowOptions);
+
+    expect(result.effects.every((e) => (e as { type: string }).type !== "delegate")).toBe(true);
+    expect(result.effects.some((e) => (e as { type: string }).type === "invalidate")).toBe(true);
+  });
+
+  test("allow-listed ctrl+p visual-mode command dispatches through keymap", () => {
+    const allowOptions: ModalOptions = {
+      ...options,
+      keymap: {
+        escape: DEFAULT_VIM_KEYMAP.escape,
+        operators: DEFAULT_VIM_KEYMAP.operators,
+        motions: DEFAULT_VIM_KEYMAP.motions,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, showKeybindings: ["ctrl+p"] },
+        macros: DEFAULT_VIM_KEYMAP.macros,
+        marks: DEFAULT_VIM_KEYMAP.marks,
+        textObjects: DEFAULT_VIM_KEYMAP.textObjects,
+        operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
+        actions: { accepted: [] },
+      },
+    };
+    const result = runGolden(
+      { mode: "visual", visualAnchor: { line: 0, col: 2 } },
+      "abc",
+      p(0, 2),
+      ["\x10"],
+      allowOptions,
+    );
+
+    expect(result.effects.every((e) => (e as { type: string }).type !== "delegate")).toBe(true);
+    expect(result.effects.some((e) => (e as { type: string }).type === "invalidate")).toBe(true);
+  });
+
+  test("unmapped protected shortcut delegates to Pi and does not become unmapped Vim key", () => {
+    const result = runGolden({ mode: "normal" }, "abc", p(0, 0), ["\x10"], options);
+
+    expect(result.effects).toContainEqual({ type: "delegate", input: "\x10" });
   });
 });

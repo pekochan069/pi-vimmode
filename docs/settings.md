@@ -97,6 +97,8 @@ Protected Pi shortcuts cannot be mapped:
 
 Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `ctrl+d`, `ctrl+u`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, half-page scroll, and prompt search; insert mode still delegates them to Pi.
 
+Protected keys can be overridden by listing them in `piVimMode.keymap.allowProtectedOverrides` within the same settings layer. See the allow-list section below.
+
 ## Top-level settings
 
 | Path                   | Default     | Accepted values                             | Effect                                                                                                                                                             |
@@ -344,6 +346,39 @@ WORD and previous-end actions can be customized and used in `operatorMotions` li
 Character-search commands are configured under `piVimMode.keymap.commands`, not `operatorMotions`; they are current-line operator targets for motion-capable `delete`, `change`, and `yank` when their `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, or `repeatCharSearchReverse` command bindings resolve. Case operators intentionally do not accept character-search, prompt-search, or mark targets. `operatorMotions` applies only to motion-capable `delete`, `change`, `yank`, `lowercase`, `uppercase`, and `toggleCase`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
 Motion configuration boundaries: no subword/camelCase navigation, display-line motions, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity are added by these settings.
+
+### Protected key allow-list
+
+| Path                                       | Default | Effect                                                                                           |
+| ------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------ |
+| `piVimMode.keymap.allowProtectedOverrides` | `[]`    | Opt-in array of protected key sequences to allow pi-vimmode to bind instead of delegating to Pi. |
+
+Protected Pi shortcuts such as `ctrl+p`, `ctrl+t`, and `tab` are rejected from all keymap groups by default. Adding a key to this allow-list within the same settings layer authorizes that key in classic keymap groups, escape aliases, and action keybindings of the same layer.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "commands": {
+        "showKeybindings": ["ctrl+p"]
+      },
+      "allowProtectedOverrides": ["ctrl+p"]
+    }
+  }
+}
+```
+
+Rules:
+
+- The allow-list is scoped to its settings layer. Global allow-list entries do not authorize project-layer bindings without a project-layer allow-list. Add the same key to `allowProtectedOverrides` in the layer where it is bound.
+- Entries are normalized the same way as keymap bindings: `"<C-p>"`, `"ctrl+p"`, and `"control+p"` are equivalent.
+- Invalid or unparseable entries produce a warning without affecting valid siblings.
+- Protected keys not listed remain rejected regardless of the keymap group.
+- Overrides are not OS or terminal guarantees. pi-vimmode can only handle keys Pi delivers distinctly. For example, Ctrl+J often arrives as `enter` and cannot be distinguished from the Enter key in many terminal configurations.
+- Insert mode still delegates protected shortcuts to Pi unless the key is configured as an escape alias.
+- To roll back, remove the key from `allowProtectedOverrides`.
 
 ### Action keybindings
 

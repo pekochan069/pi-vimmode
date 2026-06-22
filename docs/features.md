@@ -814,6 +814,8 @@ Pi remains owner of app-level shortcuts.
 - `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
 - `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
+- Protected key rejection can be explicitly overridden per settings layer through `piVimMode.keymap.allowProtectedOverrides`. See `docs/settings.md` for allow-list rules, scope, and limits.
+- Overrides are not OS or terminal guarantees. pi-vimmode can only handle keys Pi delivers distinctly. Chorded shortcuts such as `ctrl+j` may arrive as `enter` depending on terminal configuration.
 - `Ctrl-a`, `Ctrl-x`, and `Ctrl-r` are owned by pi-vimmode only in normal mode for numeric adjustment and redo.
 
 <!-- runtime-help:settings -->
@@ -828,6 +830,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- opt-in protected shortcut override list per settings layer
 - text object kind/target keys
 - allowed operator motions
 - status item order

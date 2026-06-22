@@ -1,6 +1,12 @@
 import { decodeKittyPrintable, matchesKey, parseKey } from "@earendil-works/pi-tui";
 
-import type { EditResult, VimMode, VimOperatorAction, VimRegister } from "../types.ts";
+import type {
+  EditResult,
+  ResolvedVimKeymap,
+  VimMode,
+  VimOperatorAction,
+  VimRegister,
+} from "../types.ts";
 import type {
   EditorSnapshot,
   ExMessage,
@@ -49,6 +55,24 @@ const PROTECTED_PI_DELEGATE_KEYS = [
 
 export function isProtectedPiDelegateKey(data: string): boolean {
   return PROTECTED_PI_DELEGATE_KEYS.some((key) => keyMatches(data, key));
+}
+
+function hasKeyInMap(map: Record<string, readonly string[]>, key: string): boolean {
+  return Object.values(map).some((bindings) => bindings.includes(key));
+}
+
+export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string): boolean {
+  if (keymap.escape.includes(key)) return true;
+  if (hasKeyInMap(keymap.operators as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.motions as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.commands as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.macros as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.marks as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.textObjects.kinds as Record<string, readonly string[]>, key)) return true;
+  if (hasKeyInMap(keymap.textObjects.targets as Record<string, readonly string[]>, key))
+    return true;
+  if (keymap.actions.accepted.some((binding) => binding.key === key)) return true;
+  return false;
 }
 
 export function shiftActionForOperator(

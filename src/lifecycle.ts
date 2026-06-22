@@ -16,6 +16,9 @@ type VimEditorFactory = (
   keybindings: ConstructorParameters<typeof VimEditor>[2],
 ) => VimEditor;
 
+/** Callback type for shutdown requests from VimEditor. */
+export type VimShutdownCallback = () => void;
+
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
 
 type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle" | "setAgentBusy">;
@@ -26,6 +29,7 @@ type CreateEditor = (
   keybindings: ConstructorParameters<typeof VimEditor>[2],
   options: ResolvedVimEditorOptions,
   diagnostics: VimDiagnostics,
+  vimOptions?: { onShutdown?: () => void },
 ) => TrackedEditor;
 
 type Schedule = (callback: () => void) => void;
@@ -43,6 +47,7 @@ export function registerVimLifecycle(
 ) {
   let currentOptions = dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS;
   let currentDiagnostics: VimDiagnostics = { warnings: [] };
+  let currentShutdown: (() => void) | undefined;
   let enabled = true;
   let agentBusy = false;
   let previousEditorFactory: EditorComponentFactory;
@@ -50,12 +55,14 @@ export function registerVimLifecycle(
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
   const createEditor =
     dependencies.createEditor ??
-    ((tui, theme, keybindings, options, diagnostics) =>
-      new VimEditor(tui, theme, keybindings, options, diagnostics));
+    ((tui, theme, keybindings, options, diagnostics, vimOptions) =>
+      new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions));
   const schedule = dependencies.schedule ?? ((callback) => setTimeout(callback, 0));
 
   const editorFactory: VimEditorFactory = (tui, theme, keybindings) => {
-    const editor = createEditor(tui, theme, keybindings, currentOptions, currentDiagnostics);
+    const editor = createEditor(tui, theme, keybindings, currentOptions, currentDiagnostics, {
+      onShutdown: currentShutdown,
+    });
     editors.add(editor);
     if (agentBusy) editor.setAgentBusy(true);
     return editor as VimEditor;
@@ -74,6 +81,7 @@ export function registerVimLifecycle(
       return;
     }
     refreshOptions(ctx);
+    currentShutdown = () => ctx.shutdown();
     if (ctx.ui.getEditorComponent() !== editorFactory) {
       previousEditorFactory = ctx.ui.getEditorComponent();
       ctx.ui.setEditorComponent(editorFactory);

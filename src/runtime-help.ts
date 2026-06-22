@@ -66,11 +66,16 @@ const ENTRIES = [
   {
     id: "ex",
     category: "ex",
-    topics: ["ex", ":", "substitute", "s", "commands", "repeat", "register", "line"],
+    topics: ["ex", ":", "substitute", "s", "commands", "repeat", "register", "line", "quit", "q"],
     summary:
-      "finite Ex command-line supports :s substitution, :& repeat substitution, bare line jumps, line commands with register operands, transforms, diagnostics, and runtime help",
-    examples: [":3", ":$", ":s/old/new/", ":%s/old/new/gn", ":&", ":delete a", ":help ex"],
-    limits: ["no Vimscript", "no confirmation flag", "no shell/file/window commands"],
+      "finite Ex command-line supports :s substitution, :& repeat substitution, bare line jumps, line commands with register operands, transforms, diagnostics, runtime help, and :q/:quit Pi shutdown",
+    examples: [":3", ":$", ":s/old/new/", ":%s/old/new/gn", ":&", ":delete a", ":q", ":help ex"],
+    limits: [
+      "no Vimscript",
+      "no confirmation flag",
+      "no shell/file/window commands",
+      ":q!/:wq/:x/:qa unsupported",
+    ],
   },
   {
     id: "actions",

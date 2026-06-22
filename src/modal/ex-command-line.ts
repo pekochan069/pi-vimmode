@@ -297,6 +297,11 @@ function executeExCommand(
     });
   }
 
+  if (parsed.type === "quit") {
+    const finished = finishExState(state);
+    return withEffects(finished, [{ type: "shutdown" }]);
+  }
+
   if (parsed.type === "lineJump") {
     const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
     const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);

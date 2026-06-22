@@ -622,4 +622,67 @@ describe("Ex command parser", () => {
       message: "Invalid Ex destination",
     });
   });
+
+  test("parses quit commands with current line default range", () => {
+    expect(parseExCommand("q", context)).toMatchObject({
+      type: "quit",
+      command: "q",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+    expect(parseExCommand("quit", context)).toMatchObject({
+      type: "quit",
+      command: "quit",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+  });
+
+  test("parses visual-range quit without mutating prompt text", () => {
+    expect(
+      parseExCommand("'<,'>q", {
+        ...context,
+        visualRange: { startLine: 0, endLine: 3 },
+      }),
+    ).toMatchObject({
+      type: "quit",
+      command: "q",
+      range: { startLine: 0, endLine: 3 },
+      rangeExplicit: true,
+    });
+    expect(
+      parseExCommand("'<,'>quit", {
+        ...context,
+        visualRange: { startLine: 2, endLine: 4 },
+      }),
+    ).toMatchObject({
+      type: "quit",
+      command: "quit",
+      range: { startLine: 2, endLine: 4 },
+      rangeExplicit: true,
+    });
+  });
+
+  test("rejects unsupported quit-like commands", () => {
+    expect(parseExCommand("q!", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("quit!", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("wq", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: wq",
+    });
+    expect(parseExCommand("x", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: x",
+    });
+    expect(parseExCommand("qa", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: qa",
+    });
+  });
 });

@@ -14,6 +14,7 @@ function createEditor(
   diagnostics: VimDiagnostics = { warnings: [] },
   initialHardwareCursorVisible = false,
   terminalSize: { rows?: number; columns?: number } = {},
+  vimOptions?: { onShutdown?: () => void },
 ) {
   const writes: string[] = [];
   const hardwareCursorChanges: boolean[] = [];
@@ -78,7 +79,7 @@ function createEditor(
     },
   } as any;
   return {
-    editor: new VimEditor(tui, theme, keybindings, options, diagnostics),
+    editor: new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions),
     writes,
     hardwareCursorChanges,
     overlays,
@@ -2026,5 +2027,73 @@ describe("vim editor clipboard register integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(editor.getText()).toBe("one\none\n");
+  });
+});
+
+describe("VimEditor shutdown wiring", () => {
+  const normalOpts = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+
+  test(":q requests shutdown through injected callback without editing text", () => {
+    let shutdownCalled = false;
+    const { editor } = createEditor(
+      normalOpts,
+      { warnings: [] },
+      false,
+      {},
+      {
+        onShutdown: () => {
+          shutdownCalled = true;
+        },
+      },
+    );
+    editor.setText("hello world");
+    runEx(editor, "q");
+    expect(shutdownCalled).toBe(true);
+    expect(editor.getText()).toBe("hello world");
+  });
+
+  test(":quit requests shutdown through injected callback without editing text", () => {
+    let shutdownCalled = false;
+    const { editor } = createEditor(
+      normalOpts,
+      { warnings: [] },
+      false,
+      {},
+      {
+        onShutdown: () => {
+          shutdownCalled = true;
+        },
+      },
+    );
+    editor.setText("old text");
+    runEx(editor, "quit");
+    expect(shutdownCalled).toBe(true);
+    expect(editor.getText()).toBe("old text");
+  });
+
+  test(":q! is rejected without calling shutdown callback", () => {
+    let shutdownCalled = false;
+    const { editor } = createEditor(
+      normalOpts,
+      { warnings: [] },
+      false,
+      {},
+      {
+        onShutdown: () => {
+          shutdownCalled = true;
+        },
+      },
+    );
+    editor.setText("hello");
+    runEx(editor, "q!");
+    expect(shutdownCalled).toBe(false);
+    expect(editor.getText()).toBe("hello");
+  });
+
+  test("missing shutdown callback does not throw", () => {
+    const { editor } = createEditor(normalOpts);
+    editor.setText("hello");
+    runEx(editor, "q");
+    expect(editor.getText()).toBe("hello");
   });
 });

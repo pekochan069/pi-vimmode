@@ -142,6 +142,10 @@ function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
   return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
 }
 
+export type VimEditorOptions = {
+  onShutdown?: () => void;
+};
+
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private readonly options: ResolvedVimEditorOptions;
@@ -153,6 +157,7 @@ export class VimEditor extends CustomEditor {
   private helpOverlay: OverlayHandle | undefined;
   private agentBusy = false;
   private isMacroReplaying = false;
+  private readonly onShutdown?: () => void;
 
   constructor(
     tui: TUI,
@@ -160,11 +165,13 @@ export class VimEditor extends CustomEditor {
     keybindings: KeybindingsManager,
     options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
     diagnostics: VimDiagnostics = { warnings: [] },
+    vimOptions?: VimEditorOptions,
   ) {
     super(tui, theme, keybindings);
     this.options = cloneOptions(options);
     this.diagnostics = { warnings: [...diagnostics.warnings] };
     this.overlayTheme = theme;
+    this.onShutdown = vimOptions?.onShutdown;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -396,6 +403,9 @@ export class VimEditor extends CustomEditor {
         return;
       case "invalidate":
         this.invalidate();
+        return;
+      case "shutdown":
+        this.onShutdown?.();
         return;
     }
   }

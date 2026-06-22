@@ -224,7 +224,8 @@ export type ModalEffect =
       fallback?: VimRegister;
     }
   | { type: "invalidate" }
-  | { type: "terminalCursor"; style: CursorStyle };
+  | { type: "terminalCursor"; style: CursorStyle }
+  | { type: "shutdown" };
 
 export type ModalUpdate = {
   state: ModalState;

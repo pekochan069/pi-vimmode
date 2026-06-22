@@ -33,6 +33,8 @@ type FakeUi = {
 type FakeContext = {
   cwd: string;
   ui: FakeUi;
+  shutdownCalls: number;
+  shutdown: () => void;
 };
 
 type FakeEditor = {
@@ -65,7 +67,15 @@ function createUi(): FakeUi {
 }
 
 function createContext(cwd = "/workspace"): FakeContext {
-  return { cwd, ui: createUi() };
+  const ctx: FakeContext = {
+    cwd,
+    ui: createUi(),
+    shutdownCalls: 0,
+    shutdown: () => {
+      ctx.shutdownCalls += 1;
+    },
+  };
+  return ctx;
 }
 
 function createLifecycleHarness(
@@ -79,6 +89,7 @@ function createLifecycleHarness(
   const scheduled: Array<() => void> = [];
   const loadCalls: Array<{ cwd?: string }> = [];
   const createdEditors: FakeEditor[] = [];
+  const shutdownCallbacks: Array<(() => void) | undefined> = [];
   const warnings: string[][] = [];
   let loadIndex = 0;
 
@@ -99,7 +110,8 @@ function createLifecycleHarness(
       loadIndex += 1;
       return { options: option, warnings: warning };
     },
-    createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics) => {
+    createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
+      shutdownCallbacks.push(vimOptions?.onShutdown);
       const editor: FakeEditor = {
         options: editorOptions,
         diagnostics,
@@ -120,7 +132,7 @@ function createLifecycleHarness(
     },
   });
 
-  return { hooks, commands, scheduled, loadCalls, createdEditors, warnings };
+  return { hooks, commands, scheduled, loadCalls, createdEditors, shutdownCallbacks, warnings };
 }
 
 describe("vim extension lifecycle", () => {
@@ -231,6 +243,19 @@ describe("vim extension lifecycle", () => {
       ["pi-vimmode", "vim"],
       ["pi-vimmode", "vim"],
     ]);
+  });
+
+  test("editor factory wires shutdown requests to ExtensionContext.shutdown", () => {
+    const { hooks, shutdownCallbacks } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+
+    shutdownCallbacks[0]?.();
+
+    expect(ctx.shutdownCalls).toBe(1);
   });
 
   test("multiple installs reuse one editor factory reference", () => {

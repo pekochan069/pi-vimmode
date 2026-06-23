@@ -11,7 +11,13 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 
-import type { AdapterCommand, EditorSnapshot, ModalEffect, ModalState } from "./modal/types.ts";
+import type {
+  AdapterCommand,
+  EditorSnapshot,
+  ModalEffect,
+  ModalOptions,
+  ModalState,
+} from "./modal/types.ts";
 import type { ReadOnlyPopup } from "./read-only-popup.ts";
 import type {
   CursorStyle,
@@ -31,9 +37,11 @@ import {
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
   keymapForOptions,
+  promptTransformsForOptions,
   searchForOptions,
   uiForOptions,
 } from "./config.ts";
+import { suggestExCommands } from "./ex.ts";
 import {
   canShowReadOnlyPopup,
   READ_ONLY_POPUP_MIN_WIDTH,
@@ -83,15 +91,80 @@ function workbenchText(state: ModalState): string | undefined {
         : state.exMessage?.text;
 }
 
-function renderWorkbenchRows(state: ModalState, width: number, reservedRows: number): string[] {
+const MAX_VISIBLE_SUGGESTIONS = 5;
+
+function workbenchSuggestions(
+  state: ModalState,
+  options: ModalOptions,
+): { items: { text: string; selected: boolean }[]; selectedIndex: number; total: number } {
+  if (!state.pendingEx || state.pendingEx.preview) return { items: [], selectedIndex: 0, total: 0 };
+  if (options.exCommand?.autocomplete === false) return { items: [], selectedIndex: 0, total: 0 };
+  const command = state.pendingEx.command;
+  if (!/^[A-Za-z&\s]*$/.test(command)) return { items: [], selectedIndex: 0, total: 0 };
+  const suggestions = suggestExCommands(command, {
+    lineCount: 1,
+    cursorLine: 0,
+    visualRange: state.pendingEx.visualRange,
+    promptTransforms: promptTransformsForOptions(options),
+  });
+  const selectedIndex = state.pendingEx.selectedSuggestion ?? 0;
+  const items = suggestions.map((text, index) => ({
+    text,
+    selected: index === selectedIndex,
+  }));
+  return { items, selectedIndex, total: suggestions.length };
+}
+
+function renderWorkbenchRows(
+  state: ModalState,
+  options: ModalOptions,
+  width: number,
+  reservedRows: number,
+  theme?: {
+    selectList?: {
+      selectedPrefix?: (t: string) => string;
+      selectedText?: (t: string) => string;
+      scrollInfo?: (t: string) => string;
+    };
+  },
+): string[] {
   if (width <= 0) return [];
   const text = workbenchText(state);
-  const rows = Math.max(text === undefined ? 0 : 1, reservedRows);
-  if (rows === 0) return [];
-  return [
-    fitWidth(text ?? "", width),
-    ...Array.from({ length: rows - 1 }, () => fitWidth("", width)),
-  ];
+  const { items: suggestions, selectedIndex, total } = workbenchSuggestions(state, options);
+  const baseRows = Math.max(text === undefined ? 0 : 1, reservedRows);
+  if (baseRows === 0 && suggestions.length === 0) return [];
+
+  const rows: string[] = Array.from({ length: baseRows }, () => fitWidth(text ?? "", width));
+
+  if (suggestions.length > 0) {
+    const visibleCount = Math.min(suggestions.length, MAX_VISIBLE_SUGGESTIONS);
+    const scrollOffset = Math.max(
+      0,
+      Math.min(selectedIndex - visibleCount + 1, suggestions.length - visibleCount),
+    );
+    const visibleItems = suggestions.slice(scrollOffset, scrollOffset + visibleCount);
+
+    for (const item of visibleItems) {
+      if (item.selected && theme?.selectList) {
+        const prefixFn = theme.selectList.selectedPrefix;
+        const prefix = prefixFn ? prefixFn("→ ") : "> ";
+        const textFn = theme.selectList.selectedText;
+        const maxContent = width - 2;
+        const content = item.text.length > maxContent ? item.text.slice(0, maxContent) : item.text;
+        rows.push(prefix + (textFn ? textFn(content) : content));
+      } else {
+        rows.push(fitWidth("  " + item.text, width));
+      }
+    }
+
+    if (theme?.selectList?.scrollInfo) {
+      rows.push(theme.selectList.scrollInfo(`(${selectedIndex + 1}/${total})`));
+    } else {
+      rows.push(fitWidth(`(${selectedIndex + 1}/${total})`, width));
+    }
+  }
+
+  return rows;
 }
 
 export function fitStatusBorder(
@@ -236,7 +309,13 @@ export class VimEditor extends CustomEditor {
 
   override render(width: number): string[] {
     const reservedRows = Math.max(0, uiForOptions(this.options).workbench.reservedRows);
-    const workbenchRows = renderWorkbenchRows(this.modalState, width, reservedRows);
+    const workbenchRows = renderWorkbenchRows(
+      this.modalState,
+      this.options,
+      width,
+      reservedRows,
+      this.overlayTheme,
+    );
     const terminalRows = workbenchRows.length
       ? Math.max(1, (this.terminalRows() ?? 24) - workbenchRows.length)
       : this.terminalRows();

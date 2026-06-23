@@ -122,6 +122,7 @@ export type PendingExCommand = {
   preview?: ExSubstitutionPreview;
   historyIndex?: number;
   historyDraft?: string;
+  selectedSuggestion?: number;
 };
 
 export type ExMessage = {

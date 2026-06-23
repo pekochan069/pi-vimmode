@@ -463,6 +463,7 @@ Normal-mode `:` opens a dedicated Ex row below the prompt. Visual `:` opens the 
 Supported commands:
 
 ```vim
+:       " show command suggestions below the Ex row
 :s/old/new/
 :%s/old/new/g
 :2,4s#old/path#new/path#g
@@ -565,6 +566,7 @@ Important semantics:
 - `:q` and `:quit` request graceful Pi shutdown through the Pi extension runtime without editing prompt text, registers, marks, search state, macros, cursor, or dot-repeat.
 - `:q!`, `:quit!`, `:wq`, `:x`, `:qa`, `:write`, `:edit`, `:shell`, and other file/window/shell Ex commands are intentionally unsupported.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
+- `Tab` completes a single matching supported Ex command name or extends to the longest shared supported command prefix when multiple suggestions share it. Completion is limited to the command word; command arguments, range completion, Vimscript abbreviation expansion, and menu cycling are intentionally unsupported.
 - `Left` / `Right` / `Home` / `End`, forward delete, `Alt-Left`, `Alt-Right`, and `Ctrl-W` edit the pending Ex command text without editing prompt text.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance and move the command cursor to the end of the recalled command.
 - Enter on an empty command closes the Ex row without a message.

@@ -7,7 +7,7 @@
 - [x] `:n` line jumps
 - [x] Add more common ex-commands like `q`(quit pi)
 - [x] Add `gv` reselect last visual range.
-- [ ] ex command autocomplete
+- [x] ex command autocomplete
 
 ## Deferred
 

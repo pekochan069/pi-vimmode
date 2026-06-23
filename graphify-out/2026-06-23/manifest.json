@@ -350,8 +350,8 @@
     "semantic_hash": "7da320a8a1e0e0f2a35e4d19308e4442"
   },
   "TODOS.md": {
-    "mtime": 1782171992.6642187,
-    "ast_hash": "68add3ea8831838e89bd1ca2ed211f7e",
+    "mtime": 1782181501.64005,
+    "ast_hash": "2f04ab6c8a4b86461a7dc63b4c65b3f8",
     "semantic_hash": ""
   },
   "docs/adr/0001-dedicated-ex-command-line-row.md": {
@@ -1705,8 +1705,8 @@
     "semantic_hash": ""
   },
   "openspec/specs/pi-vimmode-documentation/spec.md": {
-    "mtime": 1781765503.002502,
-    "ast_hash": "5e866dd242d409ce4f8baee30eebfcd4",
+    "mtime": 1782181466.2874653,
+    "ast_hash": "86d8ff4d7316909bb5cd7aa088dd734a",
     "semantic_hash": ""
   },
   "openspec/specs/prompt-buffer-operations/spec.md": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": "cd8a037c03f2d11acce622ff9f549634"
   },
   "openspec/specs/vim-keymap-configuration/spec.md": {
-    "mtime": 1782105046.6988707,
-    "ast_hash": "de6008fe98538946ebfc6b2c1c55e5db",
+    "mtime": 1782181466.2914655,
+    "ast_hash": "28b62237762bfc1b64cfe1c21b682711",
     "semantic_hash": ""
   },
   "openspec/specs/vim-macro-recording/spec.md": {
@@ -1775,9 +1775,9 @@
     "semantic_hash": ""
   },
   "openspec/specs/vim-mode-visual-configuration/spec.md": {
-    "mtime": 1780881040.523894,
-    "ast_hash": "1ba1f38b7074b7c8a70f67872e9d9d65",
-    "semantic_hash": "1ba1f38b7074b7c8a70f67872e9d9d65"
+    "mtime": 1782181466.2954657,
+    "ast_hash": "9500600b6a58556cc61625dc0b58a74e",
+    "semantic_hash": ""
   },
   "openspec/specs/vim-named-registers/spec.md": {
     "mtime": 1781487855.5057411,
@@ -2649,37 +2649,37 @@
     "ast_hash": "7c7f9ae25fda9f2399cd2d3dcfcd0ede",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/.openspec.yaml": {
+  "openspec/changes/archive/2026-06-23-add-gv/.openspec.yaml": {
     "mtime": 1782172096.0868065,
     "ast_hash": "5d2aca6d8a01a19751422b0f8fa08339",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/design.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/design.md": {
     "mtime": 1782172199.8756413,
     "ast_hash": "a608ddb92df2dcf021f8ec61a4eaeea9",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/proposal.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/proposal.md": {
     "mtime": 1782172137.822494,
     "ast_hash": "05c3d3ac0b55fd87912b65c45e39c947",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/specs/pi-vimmode-documentation/spec.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/specs/pi-vimmode-documentation/spec.md": {
     "mtime": 1782172236.9371622,
     "ast_hash": "91f581f4a31148682aecccebcc002a91",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/specs/vim-keymap-configuration/spec.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/specs/vim-keymap-configuration/spec.md": {
     "mtime": 1782172226.5150175,
     "ast_hash": "054f03a78f381820d37dec2cec5aac11",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/specs/vim-mode-visual-configuration/spec.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/specs/vim-mode-visual-configuration/spec.md": {
     "mtime": 1782172216.7619135,
     "ast_hash": "8a2ba597d1b2abdc1588bdadb91afb45",
     "semantic_hash": ""
   },
-  "openspec/changes/add-gv/tasks.md": {
+  "openspec/changes/archive/2026-06-23-add-gv/tasks.md": {
     "mtime": 1782173418.676501,
     "ast_hash": "d23d30eeeae6a2dc069feb3d12532f2c",
     "semantic_hash": ""

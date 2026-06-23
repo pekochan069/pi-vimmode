@@ -503,6 +503,58 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.exMessage).toEqual({ kind: "success", text: "3 substitutions" });
   });
 
+  test("Tab completes a single matching Ex command name", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [":", "h", "e", "l", "\t"]);
+    expect(result.state.pendingEx?.command).toBe("help");
+    expect(result.state.pendingEx?.cursor).toBe(4);
+    expect(result.text).toBe("abc");
+  });
+
+  test("Up/Down navigates Ex command suggestions when multiple exist", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [":", "h", "\x1b[B"]);
+    expect(result.state.pendingEx?.selectedSuggestion).toBe(0);
+    expect(result.text).toBe("abc");
+  });
+
+  test("Tab accepts selected suggestion when navigating", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [":", "h", "\x1b[B", "\t"]);
+    expect(result.state.pendingEx?.command).toBe("help");
+    expect(result.state.pendingEx?.cursor).toBe(4);
+    expect(result.text).toBe("abc");
+  });
+
+  test("Tab completes Ex command word at the cursor position inside a range prefix", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [":", "%", "s", "\t"]);
+    expect(result.state.pendingEx?.command).toBe("%s");
+    expect(result.state.pendingEx?.cursor).toBe(2);
+    expect(result.text).toBe("abc");
+  });
+
+  test("visual-source Ex Tab completion preserves visual source state", () => {
+    const opened = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      ":",
+    );
+    let state = opened.state;
+    state = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "h",
+    ).state;
+    const result = handleModalInput(
+      state,
+      { text: "one\ntwo", lines: ["one", "two"], cursor: p(1, 2) },
+      options,
+      "\t",
+    );
+    expect(result.state.pendingEx?.command).toBe("'<,'>help");
+    expect(result.state.mode).toBe("visual");
+    expect(result.state.visualAnchor).toEqual(p(0, 1));
+  });
+
   test("diagnostic Ex commands report info without editing state", () => {
     const initial: ModalState = {
       mode: "normal",

@@ -74,6 +74,14 @@ export const KEYMAP_MARK_DESCRIPTORS = {
 export const KEYMAP_INSERT_DESCRIPTORS = {
   openLineBelow: { defaults: [] },
   openLineAbove: { defaults: [] },
+  deleteWordBackward: { defaults: [] },
+  deleteWordForward: { defaults: [] },
+  deleteLineBackward: { defaults: [] },
+  deleteLineForward: { defaults: [] },
+  moveWordBackward: { defaults: [] },
+  moveWordForward: { defaults: [] },
+  moveLineStart: { defaults: [] },
+  moveLineEnd: { defaults: [] },
 } as const satisfies Record<string, KeymapDescriptor>;
 
 export const KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS = {

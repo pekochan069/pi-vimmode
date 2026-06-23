@@ -45,6 +45,14 @@ import {
   normalizeBufferPosition,
   openLineAbove,
   openLineBelow,
+  insertWordBackwardPosition,
+  insertWordForwardPosition,
+  insertLineStartPosition,
+  insertLineEndPosition,
+  insertDeleteWordBackward,
+  insertDeleteWordForward,
+  insertDeleteLineBackward,
+  insertDeleteLineForward,
   pasteRegister,
   pasteRegisterBefore,
   paragraphForwardPosition,
@@ -1037,6 +1045,65 @@ describe("line/open/join helpers", () => {
       cursor: p(1, 0),
     });
     expect(openLineBelow("", p(0, 0))).toMatchObject({ text: "", cursor: p(0, 0), changed: false });
+  });
+
+  test("insert move helpers use small-word and current-line boundaries", () => {
+    const text = "alpha beta\nsecond line";
+    expect(insertWordBackwardPosition(text, p(0, 6))).toEqual(p(0, 0));
+    expect(insertWordForwardPosition(text, p(0, 4))).toEqual(p(0, 6));
+    expect(insertLineStartPosition(text, p(1, 5))).toEqual(p(1, 0));
+    expect(insertLineEndPosition(text, p(1, 99))).toEqual(p(1, 11));
+  });
+
+  test("insert move helpers clamp at prompt boundaries", () => {
+    expect(insertWordBackwardPosition("abc", p(0, 0))).toEqual(p(0, 0));
+    expect(insertWordForwardPosition("abc", p(0, 3))).toEqual(p(0, 3));
+    expect(insertLineStartPosition("", p(0, 0))).toEqual(p(0, 0));
+    expect(insertLineEndPosition("", p(0, 0))).toEqual(p(0, 0));
+  });
+
+  test("insert delete helpers remove register-free prompt text", () => {
+    const text = "alpha beta\nsecond line";
+    expect(insertDeleteWordBackward(text, p(0, 6))).toMatchObject({
+      text: "beta\nsecond line",
+      cursor: p(0, 0),
+      changed: true,
+    });
+    expect(insertDeleteWordBackward(text, p(0, 6)).register).toBeUndefined();
+    expect(insertDeleteWordForward(text, p(0, 4))).toMatchObject({
+      text: "alphbeta\nsecond line",
+      cursor: p(0, 4),
+      changed: true,
+    });
+    expect(insertDeleteWordForward(text, p(0, 4)).register).toBeUndefined();
+  });
+
+  test("insert line-backward delete stays on current line", () => {
+    expect(insertDeleteLineBackward("one\ntwo", p(1, 2))).toMatchObject({
+      text: "one\no",
+      cursor: p(1, 0),
+      changed: true,
+    });
+    expect(insertDeleteLineBackward("abc", p(0, 0))).toMatchObject({ changed: false });
+  });
+
+  test("insert line-forward delete joins EOL without trimming spaces", () => {
+    expect(insertDeleteLineForward("abc\ndef", p(0, 3))).toMatchObject({
+      text: "abcdef",
+      cursor: p(0, 3),
+      changed: true,
+    });
+    expect(insertDeleteLineForward("  \n  ", p(0, 2))).toMatchObject({
+      text: "    ",
+      cursor: p(0, 2),
+      changed: true,
+    });
+    expect(insertDeleteLineForward("abc", p(0, 2))).toMatchObject({
+      text: "ab",
+      cursor: p(0, 2),
+      changed: true,
+    });
+    expect(insertDeleteLineForward("abc", p(0, 3))).toMatchObject({ changed: false });
   });
 
   test("changes a line by replacing it with an editable blank line", () => {

@@ -2149,6 +2149,85 @@ export function yankLineCount(text: string, cursor: Position, count = 1): VimReg
   return { type: "line", text: lines.slice(pos.line, endLine + 1).join("\n") };
 }
 
+export function insertWordBackwardPosition(text: string, cursor: Position): Position {
+  return wordBackwardPosition(text, cursor);
+}
+
+export function insertWordForwardPosition(text: string, cursor: Position): Position {
+  return wordForwardPosition(text, cursor);
+}
+
+export function insertLineStartPosition(text: string, cursor: Position): Position {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  return { line: pos.line, col: 0 };
+}
+
+export function insertLineEndPosition(text: string, cursor: Position): Position {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  return { line: pos.line, col: lines[pos.line]?.length ?? 0 };
+}
+
+export function insertDeleteWordBackward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const start = wordBackwardPosition(text, pos);
+  if (comparePositions(start, pos) === 0) return { text, cursor: pos, changed: false };
+  const startOffset = positionToOffset(text, start);
+  const endOffset = positionToOffset(text, pos);
+  const nextText = text.slice(0, startOffset) + text.slice(endOffset);
+  const nextLines = splitText(nextText);
+  return { text: nextText, cursor: clampPosition(nextLines, start), changed: nextText !== text };
+}
+
+export function insertDeleteWordForward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const target = wordForwardPosition(text, pos);
+  if (comparePositions(target, pos) === 0) return { text, cursor: pos, changed: false };
+  const startOffset = positionToOffset(text, pos);
+  const endOffset = positionToOffset(text, target);
+  const nextText = text.slice(0, startOffset) + text.slice(endOffset);
+  const nextLines = splitText(nextText);
+  return { text: nextText, cursor: clampPosition(nextLines, pos), changed: nextText !== text };
+}
+
+export function insertDeleteLineBackward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  if (pos.col === 0) return { text, cursor: pos, changed: false };
+  const line = lines[pos.line] ?? "";
+  const nextLine = line.slice(pos.col);
+  const nextLines = [...lines.slice(0, pos.line), nextLine, ...lines.slice(pos.line + 1)];
+  const nextText = joinLines(nextLines);
+  return { text: nextText, cursor: { line: pos.line, col: 0 }, changed: nextText !== text };
+}
+
+export function insertDeleteLineForward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  if (pos.col < line.length) {
+    const nextLine = line.slice(0, pos.col);
+    const nextLines = [...lines.slice(0, pos.line), nextLine, ...lines.slice(pos.line + 1)];
+    const nextText = joinLines(nextLines);
+    return { text: nextText, cursor: { line: pos.line, col: pos.col }, changed: nextText !== text };
+  }
+  if (pos.line >= lines.length - 1) return { text, cursor: pos, changed: false };
+  const nextLines = [
+    ...lines.slice(0, pos.line),
+    line + (lines[pos.line + 1] ?? ""),
+    ...lines.slice(pos.line + 2),
+  ];
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: { line: pos.line, col: line.length },
+    changed: nextText !== text,
+  };
+}
+
 export function openLineBelow(text: string, cursor: Position): EditResult {
   if (text.length === 0) return { text, cursor: { line: 0, col: 0 }, changed: false };
   const lines = splitText(text);

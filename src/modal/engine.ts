@@ -83,6 +83,7 @@ import {
   startSearchUpdate,
 } from "./search.ts";
 import { transitionMode } from "./state.ts";
+import { captureBeforeVisualExit } from "./visual.ts";
 import {
   applyVisualOperator,
   deleteVisualSelection,
@@ -516,9 +517,10 @@ function handleVisualInput(
   options: ModalOptions,
   data: string,
 ): ModalUpdate {
-  if (matchesKey(data, "escape")) return modeUpdate(state, "normal", options);
+  if (matchesKey(data, "escape"))
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (matchInsertEscapeInput(state, data, keymapForOptions(options).escape).kind === "matched")
-    return modeUpdate(state, "normal", options);
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   if (matchesKey(data, "ctrl+v")) {
     return state.mode === "visualBlock"
@@ -597,7 +599,9 @@ function handleVisualInput(
 
     if (result.command === "startSearch") return startSearchUpdate(state);
     if (result.command === "startSearchBackward") return startSearchUpdate(state, "backward");
-    if (result.command === "startExCommand") return startVisualExCommandUpdate(state, snapshot);
+    if (result.command === "startExCommand") {
+      return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
+    }
     if (result.command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
     if (result.command === "repeatSearchReverse")
       return repeatSearch(state, snapshot, options, true);

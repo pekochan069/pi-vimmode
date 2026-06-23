@@ -55,6 +55,37 @@ function applyModalKeys(
         cursor = effect.result.cursor;
       }
       if (effect.type === "restoreCursor") cursor = effect.position;
+      if (effect.type === "adapterCommand") {
+        const lines = text.split("\n");
+        const maxLine = lines.length - 1;
+        const maxCol = (lines[cursor.line] ?? "").length;
+        switch (effect.command) {
+          case "up":
+            cursor = {
+              line: Math.max(0, cursor.line - 1),
+              col: Math.min(cursor.col, (lines[Math.max(0, cursor.line - 1)] ?? "").length),
+            };
+            break;
+          case "down":
+            cursor = {
+              line: Math.min(maxLine, cursor.line + 1),
+              col: Math.min(cursor.col, (lines[Math.min(maxLine, cursor.line + 1)] ?? "").length),
+            };
+            break;
+          case "left":
+            cursor = { line: cursor.line, col: Math.max(0, cursor.col - 1) };
+            break;
+          case "right":
+            cursor = { line: cursor.line, col: Math.min(maxCol, cursor.col + 1) };
+            break;
+          case "lineStart":
+            cursor = { line: cursor.line, col: 0 };
+            break;
+          case "lineEnd":
+            cursor = { line: cursor.line, col: maxCol };
+            break;
+        }
+      }
     }
   }
 
@@ -4126,6 +4157,12 @@ describe("modal engine", () => {
       mode: "normal",
       register: { type: "char", text: "bc" },
       namedRegisters: { a: { type: "char", text: "bc" } },
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: { line: 0, col: 1 },
+        cursor: { line: 0, col: 2 },
+        text: "abcd",
+      },
     });
   });
 
@@ -4193,7 +4230,16 @@ describe("modal engine", () => {
       "d",
     );
 
-    expect(result.state).toEqual({ mode: "normal", register: { type: "char", text: "bc" } });
+    expect(result.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "bc" },
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: { line: 0, col: 1 },
+        cursor: { line: 0, col: 2 },
+        text: "abcd",
+      },
+    });
     expect(result.effects[0]).toEqual({
       type: "edit",
       result: {
@@ -4214,7 +4260,16 @@ describe("modal engine", () => {
       "y",
     );
 
-    expect(result.state).toEqual({ mode: "normal", register: { type: "line", text: "one\ntwo" } });
+    expect(result.state).toEqual({
+      mode: "normal",
+      register: { type: "line", text: "one\ntwo" },
+      lastVisualSelection: {
+        mode: "visualLine",
+        anchor: { line: 0, col: 0 },
+        cursor: { line: 1, col: 0 },
+        text: "one\ntwo",
+      },
+    });
     expect(result.effects).toEqual([
       { type: "terminalCursor", style: "block" },
       { type: "invalidate" },
@@ -4267,11 +4322,26 @@ describe("modal engine", () => {
       cursor: { line: 1, col: 2 },
     };
 
+    const expectedBlockLastSelection = {
+      mode: "visualBlock" as const,
+      anchor: { line: 0, col: 1 },
+      cursor: { line: 1, col: 2 },
+      text: "abcd\nefgh",
+    };
+
     const yanked = handleModalInput(blockState, blockSnapshot, options, "y");
-    expect(yanked.state).toEqual({ mode: "normal", register: { type: "char", text: "bc\nfg" } });
+    expect(yanked.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "bc\nfg" },
+      lastVisualSelection: expectedBlockLastSelection,
+    });
 
     const deleted = handleModalInput(blockState, blockSnapshot, options, "d");
-    expect(deleted.state).toEqual({ mode: "normal", register: { type: "char", text: "bc\nfg" } });
+    expect(deleted.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "bc\nfg" },
+      lastVisualSelection: expectedBlockLastSelection,
+    });
     expect(deleted.effects[0]).toEqual({
       type: "edit",
       result: {
@@ -4285,6 +4355,7 @@ describe("modal engine", () => {
     const changed = handleModalInput(blockState, blockSnapshot, options, "c");
     expect(changed.state.mode).toBe("insert");
     expect(changed.state.register).toEqual({ type: "char", text: "bc\nfg" });
+    expect(changed.state.lastVisualSelection).toEqual(expectedBlockLastSelection);
   });
 
   test("visual block I and A collect text and insert across selected lines on escape", () => {
@@ -4304,6 +4375,12 @@ describe("modal engine", () => {
         placement: "start",
         previewLine: 0,
         text: "",
+      },
+      lastVisualSelection: {
+        mode: "visualBlock",
+        anchor: { line: 0, col: 1 },
+        cursor: { line: 1, col: 2 },
+        text: "abcd\nefgh",
       },
     });
     expect(started.effects[0]).toEqual({ type: "restoreCursor", position: { line: 0, col: 1 } });
@@ -4458,7 +4535,16 @@ describe("modal engine", () => {
       "c",
     );
 
-    expect(result.state).toEqual({ mode: "insert", register: { type: "line", text: "two" } });
+    expect(result.state).toEqual({
+      mode: "insert",
+      register: { type: "line", text: "two" },
+      lastVisualSelection: {
+        mode: "visualLine",
+        anchor: { line: 1, col: 0 },
+        cursor: { line: 1, col: 0 },
+        text: "one\ntwo",
+      },
+    });
     expect(result.effects[0]).toEqual({
       type: "edit",
       result: {
@@ -4483,7 +4569,16 @@ describe("modal engine", () => {
       "y",
     );
 
-    expect(result.state).toEqual({ mode: "normal", register: { type: "char", text: "keep" } });
+    expect(result.state).toEqual({
+      mode: "normal",
+      register: { type: "char", text: "keep" },
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: cursor,
+        cursor: cursor,
+        text: "",
+      },
+    });
   });
 });
 
@@ -4690,5 +4785,195 @@ describe("paragraph motions and text objects", () => {
     expect(first.text).toBe("para2\n\npara3\n\npara4");
     const repeated = applyModalKeys(first.state, first.text, p(0, 0), ["."]);
     expect(repeated.text).toBe("para3\n\npara4");
+  });
+});
+
+describe("gv visual reselection", () => {
+  test("characterwise gv after exiting visual mode restores mode, anchor, and cursor", () => {
+    // Enter visual mode, move, escape, then press gv
+    const entered = applyModalKeys({ mode: "normal" }, "abcd", p(0, 0), ["v", "l", "l", "\x1b"]);
+    expect(entered.state.mode).toBe("normal");
+    expect(entered.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 0),
+      cursor: p(0, 2),
+      text: "abcd",
+    });
+
+    // Press gv to reselect
+    const reselected = applyModalKeys(entered.state, entered.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visual");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(0, 2));
+  });
+
+  test("visual line gv preserves linewise selection kind", () => {
+    // Enter visual line mode, move, escape
+    const entered = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), [
+      "V",
+      "j",
+      "\x1b",
+    ]);
+    expect(entered.state.lastVisualSelection).toEqual({
+      mode: "visualLine",
+      anchor: p(0, 0),
+      cursor: p(1, 0),
+      text: "one\ntwo\nthree",
+    });
+
+    // Press gv to reselect
+    const reselected = applyModalKeys(entered.state, entered.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visualLine");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(1, 0));
+  });
+
+  test("visual block gv preserves blockwise selection kind", () => {
+    // Enter visual block mode, move, escape
+    const entered = applyModalKeys({ mode: "normal" }, "abcd\nefgh", p(0, 0), [
+      "\x16",
+      "l",
+      "j",
+      "\x1b",
+    ]);
+    expect(entered.state.lastVisualSelection).toEqual({
+      mode: "visualBlock",
+      anchor: p(0, 0),
+      cursor: p(1, 1),
+      text: "abcd\nefgh",
+    });
+
+    // Press gv to reselect
+    const reselected = applyModalKeys(entered.state, entered.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visualBlock");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(1, 1));
+  });
+
+  test("gv after visual Ex exit reselects the Ex range", () => {
+    const exited = applyModalKeys({ mode: "normal" }, "abcd", p(0, 0), ["v", "l", ":", "\r"]);
+    expect(exited.state.mode).toBe("normal");
+    expect(exited.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 0),
+      cursor: p(0, 1),
+      text: "abcd",
+    });
+
+    const reselected = applyModalKeys(exited.state, exited.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visual");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(0, 1));
+  });
+
+  test("gv after yank reselects the yanked range", () => {
+    // Enter visual, select, yank
+    const yanked = applyModalKeys({ mode: "normal" }, "abcd", p(0, 0), ["v", "l", "l", "y"]);
+    expect(yanked.state.mode).toBe("normal");
+    expect(yanked.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 0),
+      cursor: p(0, 2),
+      text: "abcd",
+    });
+
+    // Press gv to reselect
+    const reselected = applyModalKeys(yanked.state, yanked.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visual");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(0, 2));
+  });
+
+  test("gv after delete reselects the deleted range", () => {
+    // Enter visual, select, delete
+    const deleted = applyModalKeys({ mode: "normal" }, "abcd", p(0, 0), ["v", "l", "l", "d"]);
+    expect(deleted.state.mode).toBe("normal");
+    expect(deleted.text).toBe("d");
+    expect(deleted.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 0),
+      cursor: p(0, 2),
+      text: "abcd",
+    });
+
+    // Press gv to reselect (stale positions after edit)
+    const reselected = applyModalKeys(deleted.state, deleted.text, p(0, 0), ["g", "v"]);
+    // Should no-op because cursor position is now stale
+    expect(reselected.state.mode).toBe("normal");
+  });
+
+  test("gv after edit no-ops when old coordinates still fit changed text", () => {
+    const deleted = applyModalKeys({ mode: "normal" }, "abcdef", p(0, 1), ["v", "l", "l", "d"]);
+    expect(deleted.text).toBe("aef");
+    expect(deleted.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 1),
+      cursor: p(0, 3),
+      text: "abcdef",
+    });
+
+    const reselected = applyModalKeys(deleted.state, deleted.text, p(0, 1), ["g", "v"]);
+    expect(reselected.state.mode).toBe("normal");
+    expect(reselected.cursor).toEqual(p(0, 1));
+  });
+
+  test("gv with no last visual selection is a no-op", () => {
+    const result = applyModalKeys({ mode: "normal" }, "abcd", p(0, 0), ["g", "v"]);
+    expect(result.state.mode).toBe("normal");
+    expect(result.text).toBe("abcd");
+    expect(result.cursor).toEqual(p(0, 0));
+  });
+
+  test("later visual exits replace previous stored selection", () => {
+    // First visual selection
+    const first = applyModalKeys({ mode: "normal" }, "abcdefgh", p(0, 0), ["v", "l", "\x1b"]);
+    expect(first.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 0),
+      cursor: p(0, 1),
+      text: "abcdefgh",
+    });
+
+    // Second visual selection replaces first
+    const second = applyModalKeys(first.state, first.text, p(0, 4), ["v", "l", "l", "\x1b"]);
+    expect(second.state.lastVisualSelection).toEqual({
+      mode: "visual",
+      anchor: p(0, 4),
+      cursor: p(0, 6),
+      text: "abcdefgh",
+    });
+
+    // gv uses the second selection
+    const reselected = applyModalKeys(second.state, second.text, p(0, 0), ["g", "v"]);
+    expect(reselected.state.mode).toBe("visual");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 4));
+    expect(reselected.cursor).toEqual(p(0, 6));
+  });
+
+  test("configured reselectVisual key works", () => {
+    const configuredOptions = resolveVimOptions({
+      piVimMode: { keymap: { commands: { reselectVisual: ["grv"] } } },
+    }).options;
+
+    // Enter visual, select, escape
+    const entered = applyModalKeys(
+      { mode: "normal" },
+      "abcd",
+      p(0, 0),
+      ["v", "l", "l", "\x1b"],
+      configuredOptions,
+    );
+
+    // Press configured key
+    const reselected = applyModalKeys(
+      entered.state,
+      entered.text,
+      p(0, 0),
+      ["g", "r", "v"],
+      configuredOptions,
+    );
+    expect(reselected.state.mode).toBe("visual");
+    expect(reselected.state.visualAnchor).toEqual(p(0, 0));
+    expect(reselected.cursor).toEqual(p(0, 2));
   });
 });

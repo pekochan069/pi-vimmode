@@ -93,7 +93,8 @@ export type VimCommandAction =
   | "repeatChange"
   | "undo"
   | "redo"
-  | "showKeybindings";
+  | "showKeybindings"
+  | "reselectVisual";
 
 export type VimTextObjectKind = "inner" | "around";
 

@@ -116,6 +116,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   undo: "undo prompt edit",
   redo: "redo prompt edit",
   showKeybindings: "show keybindings popup",
+  reselectVisual: "reselect last visual selection",
 };
 
 const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {

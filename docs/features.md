@@ -438,6 +438,22 @@ Ctrl-v jj I- Esc
 
 Adds `-` before the selected block column on three lines.
 
+## Visual reselection (gv)
+
+From normal mode, `gv` re-enters the last visual selection when available.
+
+- Preserves the previous visual mode: characterwise, linewise, or blockwise.
+- Restores the visual anchor and active cursor from the most recent visual exit.
+- Safe no-op when no previous selection exists or stored positions are stale after edits.
+- Configurable via `piVimMode.keymap.commands.reselectVisual` (default: `gv`).
+
+Example:
+
+```text
+vll\x1b  select three characters, escape to normal
+gv       reselect the same three characters
+```
+
 <!-- runtime-help:ex -->
 
 ## Ex command-line

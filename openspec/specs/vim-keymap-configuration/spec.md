@@ -1090,3 +1090,167 @@ The change SHALL document configured escape aliases and keep runtime keymap diag
 
 - **WHEN** `bun test` is executed
 - **THEN** tests cover accepted modified-key aliases, rejected protected shortcuts, rejected raw printable text aliases, invalid config fallback, normal-mode keymap preservation, and live editor option cloning for the new setting
+
+### Requirement: Protected shortcut overrides require explicit allow-list
+
+The Vim keymap configuration SHALL reject protected Pi shortcuts unless the same keymap settings layer explicitly allow-lists the normalized protected key through `piVimMode.keymap.allowProtectedOverrides`.
+
+#### Scenario: Protected key remains rejected by default
+
+- **WHEN** `piVimMode.keymap.commands.showKeybindings` is configured with `ctrl+p` and `piVimMode.keymap.allowProtectedOverrides` is absent
+- **THEN** the `ctrl+p` binding is rejected with a protected-key warning and the shortcut continues to delegate to Pi behavior
+
+#### Scenario: Allow-listed classic keymap binding is accepted
+
+- **WHEN** one settings layer configures `piVimMode.keymap.allowProtectedOverrides` with `ctrl+p` and `piVimMode.keymap.commands.showKeybindings` with `ctrl+p`
+- **THEN** the resolved keymap accepts `ctrl+p` for `showKeybindings` instead of rejecting it solely because it is protected
+
+#### Scenario: Allow-listed action binding is accepted
+
+- **WHEN** one settings layer configures `piVimMode.keymap.allowProtectedOverrides` with `ctrl+p` and binds `piVimMode.keymap.actions.prompt.transform.reflow` to `ctrl+p`
+- **THEN** the resolved action keymap accepts the `ctrl+p` action binding unless another normal keymap validation rule rejects it
+
+#### Scenario: Allow-list is scoped to its settings layer
+
+- **WHEN** global settings allow-list `ctrl+p` but project settings bind `ctrl+p` without project `piVimMode.keymap.allowProtectedOverrides`
+- **THEN** the project binding is rejected as protected and valid sibling project keymap fields remain usable
+
+#### Scenario: Invalid allow-list entries preserve valid siblings
+
+- **WHEN** `piVimMode.keymap.allowProtectedOverrides` contains unsupported key entries and a valid protected key entry
+- **THEN** unsupported entries produce warnings, the valid protected key entry remains usable for bindings in the same settings layer, and valid sibling keymap fields remain usable
+
+### Requirement: Allow-listed protected shortcuts dispatch in configured Vim contexts
+
+The Vim editor SHALL route accepted allow-listed protected key bindings through the finite pi-vimmode keymap in states where the configured binding is meaningful, while preserving Pi delegation for unmapped protected keys.
+
+#### Scenario: Normal-mode protected command dispatches
+
+- **WHEN** `ctrl+p` is allow-listed and configured for a supported normal-mode command such as `showKeybindings`
+- **THEN** pressing `ctrl+p` in normal mode invokes that pi-vimmode command instead of delegating to Pi
+
+#### Scenario: Visual-mode protected command dispatches where supported
+
+- **WHEN** `ctrl+p` is allow-listed and configured for a command supported from visual mode
+- **THEN** pressing `ctrl+p` in visual mode invokes the configured pi-vimmode behavior instead of delegating to Pi
+
+#### Scenario: Unmapped protected shortcut still delegates
+
+- **WHEN** the editor receives a protected shortcut that is not accepted in the effective keymap for the current context
+- **THEN** the shortcut delegates to Pi behavior and does not become an unmapped Vim key
+
+#### Scenario: Insert mode remains Pi-owned unless explicitly configured
+
+- **WHEN** the editor is in insert mode and receives a protected shortcut that is not configured as an accepted insert escape alias
+- **THEN** the shortcut delegates to Pi behavior according to existing insert-mode rules
+
+#### Scenario: Protected escape alias can be explicit
+
+- **WHEN** one settings layer allow-lists `enter` and configures `piVimMode.keymap.escape` with `enter`
+- **THEN** pressing `enter` in insert mode exits to normal mode instead of submitting through Pi
+
+### Requirement: Protected override settings are documented and validated
+
+The change SHALL include tests and user documentation for protected shortcut override settings, defaults, precedence, and runtime limits.
+
+#### Scenario: Automated validation runs
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover default protected-key rejection, allow-listed classic bindings, allow-listed action bindings, same-layer allow-list scope, invalid allow-list warnings, runtime dispatch, and preserved delegation for unmapped protected keys
+
+#### Scenario: Typecheck runs
+
+- **WHEN** `bun run check-types` is executed
+- **THEN** the TypeScript project compiles without type errors
+
+#### Scenario: Settings reference documents protected overrides
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.allowProtectedOverrides`, default empty behavior, same-layer allow-list scope, protected shortcut examples, and the fact that Pi/terminal input may not deliver every chord distinctly
+
+#### Scenario: Feature guide documents shortcut ownership limits
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it explains that pi-vimmode can override protected shortcuts only through explicit keymap configuration and only for keys Pi delivers to the editor
+
+### Requirement: Insert newline bindings are configurable
+
+The Vim keymap configuration SHALL accept opt-in insert-mode newline bindings for opening a prompt line below or above the current line without enabling a broad insert-mode mapping surface.
+
+#### Scenario: Default insert newline keymap is empty
+
+- **WHEN** Pi starts with no `piVimMode.keymap.insert` setting
+- **THEN** the resolved keymap has no insert-mode newline bindings and existing insert-mode Pi delegation is preserved
+
+#### Scenario: Insert line below binding is accepted
+
+- **WHEN** `piVimMode.keymap.insert.openLineBelow` contains a valid modified key such as `ctrl+j`
+- **THEN** the resolved keymap records `ctrl+j` as an insert-mode open-line-below binding without changing normal-mode `openLineBelow` bindings
+
+#### Scenario: Insert line above binding is accepted
+
+- **WHEN** `piVimMode.keymap.insert.openLineAbove` contains a valid modified key such as `ctrl+k`
+- **THEN** the resolved keymap records `ctrl+k` as an insert-mode open-line-above binding without changing normal-mode `openLineAbove` bindings
+
+#### Scenario: Raw printable insert binding is rejected
+
+- **WHEN** `piVimMode.keymap.insert.openLineBelow` contains raw printable text such as `j`, `oo`, or `open`
+- **THEN** that binding is ignored with a warning and valid sibling keymap fields remain usable
+
+#### Scenario: Protected insert binding requires same-layer allow-list
+
+- **WHEN** `piVimMode.keymap.insert.openLineBelow` contains a protected Pi shortcut such as `enter` and the same settings layer does not include it in `piVimMode.keymap.allowProtectedOverrides`
+- **THEN** the binding is rejected with a protected-key warning and the shortcut continues to delegate to Pi behavior
+
+#### Scenario: Allow-listed protected insert binding is accepted
+
+- **WHEN** one settings layer configures `piVimMode.keymap.allowProtectedOverrides` with `enter` and `piVimMode.keymap.insert.openLineBelow` with `enter`
+- **THEN** the resolved keymap accepts `enter` as an insert-mode open-line-below binding unless another validation rule rejects it
+
+#### Scenario: Invalid insert binding fields preserve valid siblings
+
+- **WHEN** `piVimMode.keymap.insert` contains unsupported field types, unknown insert actions, or invalid key entries alongside valid insert newline bindings
+- **THEN** invalid entries produce warnings, valid insert newline bindings remain usable, and valid normal/visual keymap fields remain usable
+
+### Requirement: Insert newline configuration is documented and validated
+
+The change SHALL include automated validation and user-facing documentation for insert-mode newline keybindings.
+
+#### Scenario: Automated validation covers insert newline config
+
+- **WHEN** `bun test` is executed
+- **THEN** tests cover default empty insert bindings, accepted modified keys, raw printable rejection, protected-key allow-list behavior, invalid config fallback, live editor option cloning, and insert-mode dispatch
+
+#### Scenario: Settings reference documents insert newline bindings
+
+- **WHEN** the user opens `docs/settings.md`
+- **THEN** it documents `piVimMode.keymap.insert.openLineBelow`, `piVimMode.keymap.insert.openLineAbove`, empty defaults, valid key forms, protected-key allow-list requirements, and non-goals for full insert-mode mappings
+
+#### Scenario: Feature guide documents insert newline behavior
+
+- **WHEN** the user opens `docs/features.md`
+- **THEN** it documents that insert mode delegates to Pi by default and only configured insert newline bindings are handled by pi-vimmode while autocomplete is inactive
+
+### Requirement: Visual reselection participates in semantic keymap configuration
+
+The Vim keymap configuration SHALL expose visual reselection as a finite semantic command action with a default `gv` binding.
+
+#### Scenario: Default visual reselection keymap is available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting and the editor is in normal mode with a valid stored last visual selection
+- **THEN** pressing `gv` reselects the stored visual selection
+
+#### Scenario: Configured visual reselection key executes
+
+- **WHEN** `piVimMode.keymap.commands.reselectVisual` is set to a valid finite key sequence and the editor is in normal mode with a valid stored last visual selection
+- **THEN** pressing that configured key sequence reselects the stored visual selection
+
+#### Scenario: Invalid visual reselection keymap falls back safely
+
+- **WHEN** `piVimMode.keymap.commands.reselectVisual` is configured with an unsupported value or protected key sequence
+- **THEN** that invalid binding is ignored, a warning is recorded, and valid sibling keymap fields remain usable
+
+#### Scenario: Visual reselection is normal-mode only
+
+- **WHEN** the editor is in insert mode or an active visual mode
+- **THEN** the `reselectVisual` command binding does not steal ordinary insert input or replace existing visual-mode key handling

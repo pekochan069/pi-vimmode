@@ -122,6 +122,7 @@ export type PendingExCommand = {
   preview?: ExSubstitutionPreview;
   historyIndex?: number;
   historyDraft?: string;
+  selectedSuggestion?: number;
 };
 
 export type ExMessage = {
@@ -184,6 +185,12 @@ export type ModalState = {
   searchHistory?: SearchHistoryEntry[];
   searchHighlight?: SearchHighlightState;
   lastRepeatableChange?: RepeatableChange;
+  lastVisualSelection?: {
+    mode: "visual" | "visualLine" | "visualBlock";
+    anchor: Position;
+    cursor: Position;
+    text: string;
+  };
 };
 
 export type FastInsertDelegateContext = {
@@ -224,7 +231,8 @@ export type ModalEffect =
       fallback?: VimRegister;
     }
   | { type: "invalidate" }
-  | { type: "terminalCursor"; style: CursorStyle };
+  | { type: "terminalCursor"; style: CursorStyle }
+  | { type: "shutdown" };
 
 export type ModalUpdate = {
   state: ModalState;

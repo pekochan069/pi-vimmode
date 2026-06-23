@@ -87,6 +87,13 @@ export type ParsedExInspectCommand = {
   query: "inspect";
 };
 
+export type ParsedExQuitCommand = {
+  type: "quit";
+  command: "q" | "quit";
+  range: LineRange;
+  rangeExplicit: boolean;
+};
+
 export type ExParseResult =
   | ParsedExSubstitution
   | ParsedExRepeatSubstitution
@@ -98,6 +105,8 @@ export type ExParseResult =
   | ParsedExKeybindingsCommand
   | ParsedExInspectCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
+  | ParsedExQuitCommand
+  | { type: "lineJump"; range: LineRange; line: number }
   | { type: "empty" }
   | { type: "error"; message: string };
 
@@ -133,7 +142,9 @@ type ParsedCommandName =
   | "keybindings"
   | "vimmode"
   | "noh"
-  | "nohlsearch";
+  | "nohlsearch"
+  | "q"
+  | "quit";
 
 type ParsedCommandType =
   | "substitute"
@@ -148,7 +159,8 @@ type ParsedCommandType =
   | "runtimeHelp"
   | "keybindings"
   | "inspect"
-  | "nohlsearch";
+  | "nohlsearch"
+  | "quit";
 
 type ParsedCommand = {
   name: string;
@@ -226,8 +238,13 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
+    case "q":
+    case "quit":
+      return "quit";
   }
 }
+
+export type ExCommandSuggestionKind = ParsedCommandType | "repeatSubstitute";
 
 function parseCommand(
   source: string,
@@ -270,6 +287,8 @@ function parseCommand(
     "vimmode",
     "noh",
     "nohlsearch",
+    "q",
+    "quit",
   ]);
   if (supported.has(name)) {
     const type = commandType(name as ParsedCommandName);
@@ -432,6 +451,20 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     };
   }
 
+  if (repeat.length === 0 && range.value.explicit) {
+    const ast = range.value.ast;
+    if (ast.type === "single") {
+      return {
+        type: "lineJump",
+        range: range.value.range,
+        line: range.value.range.startLine,
+      };
+    }
+    if (ast.type === "percent" || ast.type === "range" || ast.type === "visual") {
+      return { type: "error", message: "Unsupported Ex command" };
+    }
+  }
+
   const command = parseCommand(range.value.rest, context);
   if (!command.ok) return { type: "error", message: command.message };
 
@@ -533,6 +566,17 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     return { type, command: command.command.name as "noh" | "nohlsearch" };
   }
 
+  if (type === "quit") {
+    const trailingError = rejectTrailingArgs(command.rest);
+    if (trailingError) return trailingError;
+    return {
+      type,
+      command: command.command.name as "q" | "quit",
+      range: range.value.range,
+      rangeExplicit: range.value.explicit,
+    };
+  }
+
   return {
     type,
     command: command.command.name,
@@ -543,4 +587,114 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
 
 export function parseExSubstitution(commandLine: string, context: ExParseContext): ExParseResult {
   return parseExCommand(commandLine, context);
+}
+
+function stableUnique(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+const CANDIDATE_NAMES_BY_COMMAND_TYPE: Record<string, string[]> = {
+  substitute: ["s", "substitute"],
+  delete: ["d", "delete"],
+  yank: ["y", "yank"],
+  put: ["pu", "put"],
+  copy: ["t", "copy"],
+  move: ["m", "move"],
+  join: ["j", "join"],
+  nohlsearch: ["noh", "nohlsearch"],
+  quit: ["q", "quit"],
+  repeatSubstitute: ["&", "&&"],
+  lineJump: [] as string[],
+  diagnostic: ["vimdoctor", "keymap", "mapcheck", "actions"],
+  runtimeHelp: ["help", "features", "messages"],
+  keybindings: ["keybindings"],
+  inspect: ["vimmode"],
+  transform: [] as string[],
+};
+
+function resolvedTransformCommandAliases(promptTransforms?: ResolvedVimPromptTransforms): string[] {
+  if (promptTransforms?.enabled === false) return [];
+  const commands = promptTransforms?.commands;
+  const actions: Array<{
+    action: PromptTransformAction;
+    enabled?: boolean;
+    commandNames: readonly string[];
+  }> = [
+    {
+      action: "quote",
+      enabled: promptTransforms?.actions.quote,
+      commandNames: commands?.quote ?? ["quote"],
+    },
+    {
+      action: "unquote",
+      enabled: promptTransforms?.actions.unquote,
+      commandNames: commands?.unquote ?? ["unquote"],
+    },
+    {
+      action: "bulletize",
+      enabled: promptTransforms?.actions.bulletize,
+      commandNames: commands?.bulletize ?? ["bulletize"],
+    },
+    {
+      action: "fence",
+      enabled: promptTransforms?.actions.fence,
+      commandNames: commands?.fence ?? ["fence"],
+    },
+    {
+      action: "indent",
+      enabled: promptTransforms?.actions.indent,
+      commandNames: commands?.indent ?? ["indent"],
+    },
+    {
+      action: "dedent",
+      enabled: promptTransforms?.actions.dedent,
+      commandNames: commands?.dedent ?? ["dedent"],
+    },
+    {
+      action: "reflow",
+      enabled: promptTransforms?.actions.reflow,
+      commandNames: commands?.reflow ?? ["reflow"],
+    },
+  ];
+
+  const names: string[] = [];
+  for (const entry of actions) {
+    if (entry.enabled === false) continue;
+    for (const name of entry.commandNames) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+const allBuiltInCandidateNames = Object.values(CANDIDATE_NAMES_BY_COMMAND_TYPE).flat().sort();
+
+export function suggestExCommands(commandLine: string, context: ExParseContext): string[] {
+  const source = commandLine.trim();
+  if (source.length === 0) {
+    return stableUnique([
+      ...allBuiltInCandidateNames,
+      ...resolvedTransformCommandAliases(context.promptTransforms),
+    ]).sort();
+  }
+
+  const range = parseExLineRange(source, context);
+  const commandSource = range.ok ? range.value.rest.trim() : source;
+  if (!/^[A-Za-z&]+$/.test(commandSource)) return [];
+
+  const allCandidates = stableUnique([
+    ...allBuiltInCandidateNames,
+    ...resolvedTransformCommandAliases(context.promptTransforms),
+  ]);
+  if (commandSource.length === 0) return allCandidates;
+
+  const prefix = commandSource;
+  return stableUnique(allCandidates.filter((candidate) => candidate.startsWith(prefix))).sort();
 }

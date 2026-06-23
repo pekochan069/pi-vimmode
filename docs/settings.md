@@ -97,6 +97,8 @@ Protected Pi shortcuts cannot be mapped:
 
 Protected or unsupported keys are ignored with a warning that names the protected key and reason. Use `:mapcheck <key>` at runtime for current ownership and binding details. `ctrl+a`, `ctrl+x`, `ctrl+r`, `ctrl+d`, `ctrl+u`, `/`, and `?` are explicitly owned by pi-vimmode in normal mode for numeric adjustment, redo, half-page scroll, and prompt search; insert mode still delegates them to Pi.
 
+Protected keys can be overridden by listing them in `piVimMode.keymap.allowProtectedOverrides` within the same settings layer. See the allow-list section below.
+
 ## Top-level settings
 
 | Path                   | Default     | Accepted values                             | Effect                                                                                                                                                             |
@@ -174,6 +176,37 @@ Rules:
 - When autocomplete is open, aliases delegate to Pi and do not close autocomplete or enter normal mode.
 - Protected shortcuts such as `enter`, `tab`, `ctrl+c`, and `escape` are rejected.
 - These are not Vim mappings: no runtime `:map`, recursive mappings, insert abbreviations, `.vimrc`, Vimscript, or `timeoutlen`.
+
+### Insert mode newline bindings
+
+| Path                                    | Default | Effect                                                                                                                    |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.insert.openLineBelow` | `[]`    | Insert a blank line below the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+| `piVimMode.keymap.insert.openLineAbove` | `[]`    | Insert a blank line above the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "insert": {
+        "openLineBelow": ["ctrl+j"],
+        "openLineAbove": ["ctrl+k"]
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+- Only modified or protected single-key chords are accepted. Raw printable text such as `"j"` or `"oo"` is rejected so normal typing stays normal.
+- Protected keys such as `"enter"` require same-layer `piVimMode.keymap.allowProtectedOverrides` before they are accepted.
+- Insert newline bindings only work in insert mode when Pi autocomplete is inactive. Normal and visual modes use the existing `openLineBelow` / `openLineAbove` commands under `piVimMode.keymap.commands`.
+- No registers, marks, visual state, macro slots, or dot-repeat state are affected by insert-mode line opening.
+- Autocomplete-active input keeps Pi ownership and does not open new lines.
+- These are opt-in: with no `piVimMode.keymap.insert` config, every insert-mode key delegates to Pi default behavior.
 
 ### Operators
 
@@ -259,6 +292,7 @@ Rules:
 | `piVimMode.keymap.commands.searchWordBackward`      | `["#"]`      | Normal-mode only: search backward for the keyword word under the cursor; reuses prompt search repeat state.                 |
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                                      |
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                                         |
+| `piVimMode.keymap.commands.reselectVisual`          | `["gv"]`     | Re-enter the last valid visual selection from normal mode.                                                                  |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                                 |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                                        |
 | `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                                |
@@ -344,6 +378,39 @@ WORD and previous-end actions can be customized and used in `operatorMotions` li
 Character-search commands are configured under `piVimMode.keymap.commands`, not `operatorMotions`; they are current-line operator targets for motion-capable `delete`, `change`, and `yank` when their `findCharForward`, `findCharBackward`, `tillCharForward`, `tillCharBackward`, `repeatCharSearch`, or `repeatCharSearchReverse` command bindings resolve. Case operators intentionally do not accept character-search, prompt-search, or mark targets. `operatorMotions` applies only to motion-capable `delete`, `change`, `yank`, `lowercase`, `uppercase`, and `toggleCase`; `operatorMotions.indent` and `operatorMotions.dedent` are rejected with warnings because shift operators are line-only.
 
 Motion configuration boundaries: no subword/camelCase navigation, display-line motions, recursive mappings, Vimscript, `.vimrc`, or full Vim/Neovim parity are added by these settings.
+
+### Protected key allow-list
+
+| Path                                       | Default | Effect                                                                                           |
+| ------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------ |
+| `piVimMode.keymap.allowProtectedOverrides` | `[]`    | Opt-in array of protected key sequences to allow pi-vimmode to bind instead of delegating to Pi. |
+
+Protected Pi shortcuts such as `ctrl+p`, `ctrl+t`, and `tab` are rejected from all keymap groups by default. Adding a key to this allow-list within the same settings layer authorizes that key in classic keymap groups, escape aliases, and action keybindings of the same layer.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "commands": {
+        "showKeybindings": ["ctrl+p"]
+      },
+      "allowProtectedOverrides": ["ctrl+p"]
+    }
+  }
+}
+```
+
+Rules:
+
+- The allow-list is scoped to its settings layer. Global allow-list entries do not authorize project-layer bindings without a project-layer allow-list. Add the same key to `allowProtectedOverrides` in the layer where it is bound.
+- Entries are normalized the same way as keymap bindings: `"<C-p>"`, `"ctrl+p"`, and `"control+p"` are equivalent.
+- Invalid or unparseable entries produce a warning without affecting valid siblings.
+- Protected keys not listed remain rejected regardless of the keymap group.
+- Overrides are not OS or terminal guarantees. pi-vimmode can only handle keys Pi delivers distinctly. For example, Ctrl+J often arrives as `enter` and cannot be distinguished from the Enter key in many terminal configurations.
+- Insert mode still delegates protected shortcuts to Pi unless the key is configured as an escape alias.
+- To roll back, remove the key from `allowProtectedOverrides`.
 
 ### Action keybindings
 
@@ -756,6 +823,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "searchWordBackward": ["#"],
         "startExCommand": [":"],
         "repeatChange": ["."],
+        "reselectVisual": ["gv"],
         "undo": ["u"],
         "redo": ["ctrl+r"]
       },

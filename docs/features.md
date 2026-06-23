@@ -97,7 +97,8 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 - Visual modes: `Esc` and configured escape aliases cancel selection and return to normal mode.
 - In normal/visual prompt editing, `Enter`, `Ctrl-C`, and `Ctrl-G` reset Vim transient state, return to configured startup mode, and delegate to Pi.
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
-- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling.
+- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling or configured `piVimMode.keymap.insert` newline bindings.
+- Configured insert newline bindings (`piVimMode.keymap.insert.openLineBelow` / `openLineAbove`) open a blank line above or below the current prompt line while staying in insert mode. They only work when Pi autocomplete is inactive; autocomplete-active input keeps Pi ownership.
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
 - `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 
@@ -437,6 +438,22 @@ Ctrl-v jj I- Esc
 
 Adds `-` before the selected block column on three lines.
 
+## Visual reselection (gv)
+
+From normal mode, `gv` re-enters the last visual selection when available.
+
+- Preserves the previous visual mode: characterwise, linewise, or blockwise.
+- Restores the visual anchor and active cursor from the most recent visual exit.
+- Safe no-op when no previous selection exists or stored positions are stale after edits.
+- Configurable via `piVimMode.keymap.commands.reselectVisual` (default: `gv`).
+
+Example:
+
+```text
+vll\x1b  select three characters, escape to normal
+gv       reselect the same three characters
+```
+
 <!-- runtime-help:ex -->
 
 ## Ex command-line
@@ -446,12 +463,16 @@ Normal-mode `:` opens a dedicated Ex row below the prompt. Visual `:` opens the 
 Supported commands:
 
 ```vim
+:       " show command suggestions below the Ex row
 :s/old/new/
 :%s/old/new/g
 :2,4s#old/path#new/path#g
 :.,$substitute/old/new/i
 :2;.+1s/old/new/g
 :'<,'>s/old/new/g
+:3             " line jump to line 3
+:$             " jump to last line
+:2+1           " jump to line 3 (line 2 + offset 1)
 :delete      " alias :d
 :yank        " alias :y
 :put         " alias :pu
@@ -459,6 +480,8 @@ Supported commands:
 :3,4move0    " alias :m
 :join        " alias :j
 :nohlsearch " alias :noh
+:q            " request Pi shutdown
+:quit         " alias :q
 :quote
 :unquote
 :bulletize
@@ -540,7 +563,10 @@ Important semantics:
 - `:help [topic]` opens a read-only popup with source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
 - `:features [query]` opens a read-only popup listing/searching supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
 - `:messages` opens a read-only popup with a bounded prompt-local summary of retained recent runtime messages without opening a pager.
+- `:q` and `:quit` request graceful Pi shutdown through the Pi extension runtime without editing prompt text, registers, marks, search state, macros, cursor, or dot-repeat.
+- `:q!`, `:quit!`, `:wq`, `:x`, `:qa`, `:write`, `:edit`, `:shell`, and other file/window/shell Ex commands are intentionally unsupported.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
+- `Tab` completes a single matching supported Ex command name or extends to the longest shared supported command prefix when multiple suggestions share it. Completion is limited to the command word; command arguments, range completion, Vimscript abbreviation expansion, and menu cycling are intentionally unsupported.
 - `Left` / `Right` / `Home` / `End`, forward delete, `Alt-Left`, `Alt-Right`, and `Ctrl-W` edit the pending Ex command text without editing prompt text.
 - `Up` / `Down` navigate prompt-local in-memory Ex history for successful commands in the current editor instance and move the command cursor to the end of the recalled command.
 - Enter on an empty command closes the Ex row without a message.
@@ -557,6 +583,9 @@ Important semantics:
 - `Ctrl-C` and `Ctrl-G` reset Vim transient state and delegate to Pi.
 - Text-changing Ex commands clear visible prompt search highlights.
 - Ex commands do not update dot-repeat. Only documented register operands on `:delete`, `:yank`, and `:put` touch named registers.
+- Bare single-address line jumps such as `:3`, `:.`, `:$`, and offset forms like `:2+1` move the cursor to the addressed line without editing prompt text. Column is preserved when possible, clamped to target line length.
+- Commandless ranges such as `:%`, `:2,4`, `:2;.+1`, and `:'<,'>` are unsupported and produce an Ex error without editing prompt text.
+- Line jumps from visual Ex exit to normal mode, clear the visual selection, and move the cursor.
 
 Transform examples:
 
@@ -814,6 +843,8 @@ Pi remains owner of app-level shortcuts.
 - `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
 - `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
+- Protected key rejection can be explicitly overridden per settings layer through `piVimMode.keymap.allowProtectedOverrides`. See `docs/settings.md` for allow-list rules, scope, and limits.
+- Overrides are not OS or terminal guarantees. pi-vimmode can only handle keys Pi delivers distinctly. Chorded shortcuts such as `ctrl+j` may arrive as `enter` depending on terminal configuration.
 - `Ctrl-a`, `Ctrl-x`, and `Ctrl-r` are owned by pi-vimmode only in normal mode for numeric adjustment and redo.
 
 <!-- runtime-help:settings -->
@@ -828,6 +859,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- opt-in protected shortcut override list per settings layer
 - text object kind/target keys
 - allowed operator motions
 - status item order

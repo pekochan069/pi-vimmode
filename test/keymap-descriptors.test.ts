@@ -100,6 +100,7 @@ const expectedCommands = [
   "undo",
   "redo",
   "showKeybindings",
+  "reselectVisual",
 ];
 const expectedTextObjectTargets = [
   "word",

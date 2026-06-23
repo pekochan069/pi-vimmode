@@ -93,7 +93,8 @@ export type VimCommandAction =
   | "repeatChange"
   | "undo"
   | "redo"
-  | "showKeybindings";
+  | "showKeybindings"
+  | "reselectVisual";
 
 export type VimTextObjectKind = "inner" | "around";
 
@@ -145,6 +146,11 @@ export type VimActionKeymapOptions = Partial<
   Record<BindablePromptTransformActionId, readonly VimActionKeyBindingEntry[]>
 >;
 
+export type VimInsertKeymapOptions = {
+  openLineBelow?: readonly string[];
+  openLineAbove?: readonly string[];
+};
+
 export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
 
 export type VimKeymapOptions = {
@@ -156,8 +162,10 @@ export type VimKeymapOptions = {
   marks?: VimMarkKeymapOptions;
   textObjects?: VimTextObjectKeymapOptions;
   operatorMotions?: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
+  insert?: VimInsertKeymapOptions;
   actionPresets?: readonly VimActionKeybindingPreset[];
   actions?: VimActionKeymapOptions;
+  allowProtectedOverrides?: readonly string[];
 };
 
 export type ResolvedVimMacroKeymap = Required<VimMacroKeymapOptions>;
@@ -177,6 +185,11 @@ export type ResolvedVimActionKeymap = {
   accepted: readonly ResolvedVimActionBinding[];
 };
 
+export type ResolvedVimInsertKeymap = {
+  openLineBelow: readonly string[];
+  openLineAbove: readonly string[];
+};
+
 export type ResolvedVimKeymap = {
   escape: readonly string[];
   operators: Record<VimOperatorAction, readonly string[]>;
@@ -186,6 +199,7 @@ export type ResolvedVimKeymap = {
   marks: ResolvedVimMarkKeymap;
   textObjects: ResolvedVimTextObjectKeymap;
   operatorMotions: Record<VimMotionOperatorAction, readonly VimMotionAction[]>;
+  insert: ResolvedVimInsertKeymap;
   actions: ResolvedVimActionKeymap;
 };
 
@@ -232,6 +246,12 @@ export type VimMacroOptions = {
 };
 
 export type ResolvedVimMacros = VimMacroOptions;
+
+export type VimExCommandOptions = {
+  autocomplete: boolean;
+};
+
+export type ResolvedVimExCommand = VimExCommandOptions;
 
 export type VimMarkOptions = {
   enabled: boolean;
@@ -289,6 +309,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  exCommand?: ResolvedVimExCommand;
   feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
   promptTransforms?: ResolvedVimPromptTransforms;

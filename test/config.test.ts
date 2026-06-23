@@ -281,7 +281,7 @@ describe("vim config parsing", () => {
 
   test("raw text insert escape aliases are rejected", () => {
     const result = resolveVimOptions({
-      piVimMode: { keymap: { escape: ["jk", "jj"] } },
+      piVimMode: { keymap: { escape: ["jk", "jj", "space"] } },
     });
 
     expect(result.options.keymap?.escape).toEqual([]);
@@ -289,6 +289,7 @@ describe("vim config parsing", () => {
       expect.arrayContaining([
         expect.stringContaining("escape contains unsupported printable text sequence jk"),
         expect.stringContaining("escape contains unsupported printable text sequence jj"),
+        expect.stringContaining("escape contains unsupported printable text sequence space"),
       ]),
     );
   });
@@ -318,6 +319,145 @@ describe("vim config parsing", () => {
 
     expect(result.options.keymap?.escape).toEqual([]);
     expect(result.warnings).toEqual([]);
+  });
+
+  describe("insert mode newline bindings", () => {
+    test("default insert keymap is empty", () => {
+      const result = resolveVimOptions(undefined);
+      expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+    });
+
+    test("accepts configured insert open line below", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: { openLineBelow: ["ctrl+j"] } },
+        },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.insert.openLineBelow).toEqual(["ctrl+j"]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+    });
+
+    test("accepts configured insert open line above", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: { openLineAbove: ["ctrl+k"] } },
+        },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual(["ctrl+k"]);
+      expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+    });
+
+    test("rejects raw printable text in insert bindings", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: { openLineBelow: ["j", "space"] } },
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            "insert.openLineBelow contains unsupported printable text sequence j",
+          ),
+          expect.stringContaining(
+            "insert.openLineBelow contains unsupported printable text sequence space",
+          ),
+        ]),
+      );
+    });
+
+    test("rejects protected key in insert binding without allow-list", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: { openLineBelow: ["enter"] } },
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("insert.openLineBelow contains protected key enter"),
+        ]),
+      );
+    });
+
+    test("accepts allow-listed protected key in insert binding", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: {
+            insert: { openLineBelow: ["enter"] },
+            allowProtectedOverrides: ["enter"],
+          },
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual(["enter"]);
+      expect(result.warnings).toEqual([]);
+    });
+
+    test("warns when insert actions share a binding", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: {
+            insert: { openLineBelow: ["ctrl+o"], openLineAbove: ["<C-O>"] },
+          },
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual(["ctrl+o"]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual(["ctrl+o"]);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            "duplicate piVimMode.keymap.insert binding ctrl+o for openLineBelow and openLineAbove",
+          ),
+        ]),
+      );
+    });
+
+    test("invalid insert binding fields preserve valid siblings", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: {
+            insert: {
+              openLineBelow: ["ctrl+j"],
+              unknownAction: ["ctrl+l"],
+            } as Record<string, string[]>,
+            commands: { openLineBelow: ["o"] },
+          },
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual(["ctrl+j"]);
+      expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("unsupported piVimMode.keymap.insert.unknownAction"),
+        ]),
+      );
+    });
+
+    test("non-object insert is rejected", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: "invalid" } as Record<string, unknown>,
+        },
+      });
+      expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining("keymap.insert must be an object")]),
+      );
+    });
+
+    test("insert bindings survive cloning without sharing arrays with defaults", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: { insert: { openLineBelow: ["ctrl+j"] } },
+        },
+      });
+      (result.options.keymap!.insert.openLineBelow as unknown as string[]).push("ctrl+k");
+      expect(DEFAULT_VIM_OPTIONS.keymap?.insert.openLineBelow).toEqual([]);
+    });
   });
 
   test("word search command bindings remap, reject protected keys, and preserve siblings", () => {
@@ -1100,6 +1240,91 @@ describe("vim config parsing", () => {
       { piVimMode: { keymap: { actions: { "prompt.transform.reflow": [] } } } },
     );
     expect(unbound.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("protected keys remain rejected when allowProtectedOverrides is absent", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: undefined,
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+  });
+
+  test("allow-listed protected classic bindings are accepted and normalized", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: ["ctrl+p"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual(["ctrl+p"]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("allow-listed protected action bindings are accepted unless another action validation rule rejects them", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": [{ key: "ctrl+p" }],
+          },
+          allowProtectedOverrides: ["ctrl+p"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      { key: "ctrl+p", actionId: "prompt.transform.reflow", args: { action: "reflow" } },
+    ]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("global allow-list entries do not authorize project-layer protected bindings without a project allow-list", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { allowProtectedOverrides: ["ctrl+p"] } } },
+      {
+        piVimMode: {
+          keymap: {
+            commands: { showKeybindings: ["ctrl+p"] },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
+  });
+
+  test("invalid allow-list entries warn while valid protected entries and sibling keymap fields remain usable", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { showKeybindings: ["ctrl+p"] },
+          allowProtectedOverrides: ["ctrl+p", "", "<invalid>", "ctrl+t"],
+        },
+      },
+    });
+
+    expect(result.options.keymap?.commands.showKeybindings).toEqual(["ctrl+p"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("unsupported key")]),
+    );
+    expect(result.warnings).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+    );
   });
 
   test("rejects action conflicts but allows shared non-executable prefixes", () => {

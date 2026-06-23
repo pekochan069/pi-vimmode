@@ -1,7 +1,7 @@
 ---
 title: Pi vimmode finite Ex line commands architecture
 date: 2026-06-01
-last_updated: 2026-06-05
+last_updated: 2026-06-22
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -13,6 +13,7 @@ applies_when:
   - "Keeping prompt-buffer line edits in buffer helpers instead of modal dispatch"
   - "Documenting command aliases, side effects, ranges, destinations, and deferred Vim parity"
   - "Completing stale Ex TODOs while keeping docs, runtime help, OpenSpec specs, and drift guards synchronized"
+  - "Adding commandless single-address jumps like :3, :., :$, and :2+1 while rejecting commandless ranges"
 related_components:
   - development_workflow
   - testing_framework
@@ -26,6 +27,7 @@ tags:
   - substitution
   - docs-drift
   - openspec
+  - line-jumps
 ---
 
 # Pi vimmode finite Ex line commands architecture
@@ -34,7 +36,9 @@ tags:
 
 `pi-vimmode` already had prompt-local Ex command-line mode for literal substitution, but common Vim-fluent line commands still returned unsupported-command errors. The `add-more-ex-commands` OpenSpec change expanded that surface to a finite command set: `:delete`/`:d`, `:yank`/`:y`, `:put`/`:pu`, `:copy`/`:t`, `:move`/`:m`, `:join`/`:j`, and `:nohlsearch`/`:noh`.
 
-The reusable architecture problem was bigger than adding aliases. Ex line commands cross the parser, range handling, destination addresses, pure prompt-buffer transforms, unnamed and named register semantics, visible search highlights, transient Ex messages, macro replay, dot-repeat boundaries, docs, and tests. Later range-algebra and TODO-completion work extended the same architecture: finite Ex address/range/destination parsing now lives in a pure `src/range.ts` kernel; repeat substitution, safe substitution flags, Ex register operands, and command-line editing live behind focused parser/modal helpers; `src/ex.ts`, `src/buffer.ts`, and modal helpers stay responsible for syntax dispatch, prompt-buffer operations, and editor side effects respectively.
+The reusable architecture problem was bigger than adding aliases. Ex line commands cross the parser, range handling, destination addresses, pure prompt-buffer transforms, unnamed and named register semantics, visible search highlights, transient Ex messages, macro replay, dot-repeat boundaries, docs, and tests. Later range-algebra and TODO-completion work extended the same architecture: finite Ex address/range/destination parsing now lives in a pure `src/range.ts` kernel; repeat substitution, safe substitution flags, Ex register operands, command-line editing, and commandless single-address line jumps live behind focused parser/modal helpers; `src/ex.ts`, `src/buffer.ts`, and modal helpers stay responsible for syntax dispatch, prompt-buffer operations, and editor side effects respectively.
+
+The 2026-06-22 line-jump update completed the stale `:n` TODO without widening the parser into full commandless Ex behavior. Bare single-address inputs such as `:3`, `:.`, `:$`, and `:2+1` now parse as navigation-only `lineJump` results. Commandless percent, comma, semicolon, and visual ranges such as `:%`, `:2,4`, `:2;.+1`, and `:'<,'>` remain explicit errors.
 
 ## Guidance
 
@@ -88,7 +92,21 @@ Use a finite typed Ex-command architecture rather than broad Vimscript parsing.
 
    Reject repeated offsets like `3+1-2`, missing addresses around separators, reversed ranges, and broad Vim syntax that the finite parser does not explicitly support. Parse and resolve first; mutate prompt text only after the typed range or destination is valid.
 
-5. **Keep prompt-buffer edits in `src/buffer.ts`.** Add operation-level helpers such as:
+5. **Model commandless single-address navigation as a cursor-only result.** A bare single address is a finite Ex command, not a text edit and not implicit range printing. After range parsing, `src/ex.ts` should detect explicit commandless `single` address ASTs and return a typed `lineJump` result with the resolved 0-based line. Reject commandless `%`, comma/semicolon ranges, and visual ranges before command parsing so unsupported forms fail without side effects.
+
+   ```ts
+   if (repeat.length === 0 && range.value.explicit) {
+     const ast = range.value.ast;
+     if (ast.type === "single") {
+       return { type: "lineJump", range: range.value.range, line: range.value.range.startLine };
+     }
+     if (ast.type === "percent" || ast.type === "range" || ast.type === "visual") {
+       return { type: "error", message: "Unsupported Ex command" };
+     }
+   }
+   ```
+
+6. **Keep prompt-buffer edits in `src/buffer.ts`.** Add operation-level helpers such as:
    - `deleteExLineRange`
    - `yankExLineRange`
    - `putExRegisterAfterRange`
@@ -98,18 +116,20 @@ Use a finite typed Ex-command architecture rather than broad Vimscript parsing.
 
    Modal code should not splice prompt text directly. Buffer helpers own line splitting, clamping, destination math, cursor placement, linewise register payloads, and no-op/error cases.
 
-6. **Keep Ex input behavior out of the main modal dispatcher.** `src/modal/ex-command-line.ts` owns pending Ex input editing, history navigation, preview/apply state, and repeat-substitution source updates. Keep helpers bounded: cursor-aware edits can support navigation/deletion/word deletion without embedding the full prompt editor inside Ex input.
+7. **Keep Ex input behavior out of the main modal dispatcher.** `src/modal/ex-command-line.ts` owns pending Ex input editing, history navigation, preview/apply state, and repeat-substitution source updates. Keep helpers bounded: cursor-aware edits can support navigation/deletion/word deletion without embedding the full prompt editor inside Ex input.
 
-7. **Keep side effects in modal Ex execution helpers.** Ex execution is the chokepoint for applying parsed command results:
+8. **Keep side effects in modal Ex execution helpers.** Ex execution is the chokepoint for applying parsed command results:
    - `:delete` writes deleted text to the unnamed linewise register, and `:delete a` / `:delete A` also write or append named register `a`.
    - `:yank` writes addressed lines to the unnamed linewise register, and `:yank a` / `:yank A` also write or append named register `a` without editing text.
    - `:put` reads the unnamed register by default; `:put a` and `:put A` read lowercase named register `a` and error when the target register is empty.
    - substitution `n` counts matches without mutating prompt text, `e` suppresses no-match errors, and `:&` / `:&&` repeat the last successfully applied substitution through the preview/apply flow.
    - text-changing commands clear visible prompt search highlights.
    - `:nohlsearch` clears visible highlights but preserves repeat-search state for `n`/`N`.
+   - bare line jumps finish Ex state, restore cursor to the target line with the current column clamped to target line length, invalidate rendering, and leave prompt text, registers, marks, search state, macros, and dot-repeat untouched.
+   - visual-source bare line jumps return to normal mode and clear the visual selection.
    - Ex line commands do not update dot-repeat.
 
-8. **Lock behavior at three levels.** Use parser tests for grammar, buffer tests for pure line transforms, and editor integration tests for modal side effects. For range algebra and Ex TODO completion, validation covered `test/range.test.ts`, `test/ex.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts`, config tests, and docs-drift tests for offset/semicolon preview/apply, invalid range safety, destination `0`, named-register writes/appends/reads, repeat substitution, count/no-error flags, workbench row reservation, search-highlight behavior, and dot-repeat preservation. Keep the durable validation checklist small: OpenSpec validation, Bun tests, typecheck, lint, and formatter.
+9. **Lock behavior at three levels.** Use parser tests for grammar, buffer tests for pure line transforms, and editor integration tests for modal side effects. For range algebra and Ex TODO completion, validation covered `test/range.test.ts`, `test/ex.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts`, config tests, and docs-drift tests for offset/semicolon preview/apply, invalid range safety, destination `0`, named-register writes/appends/reads, repeat substitution, count/no-error flags, workbench row reservation, search-highlight behavior, and dot-repeat preservation. Keep the durable validation checklist small: OpenSpec validation, Bun tests, typecheck, lint, and formatter.
 
 ## Why This Matters
 
@@ -122,13 +142,13 @@ The working shape keeps each concern testable:
 - Modal Ex helpers own command-line lifecycle, preview/apply state, register side effects, and UI messages; `src/modal/engine.ts` stays the router rather than the sink for every Ex branch.
 - `docs/features.md` and OpenSpec own the public contract.
 
-This also prevents Vim-parity drift. A user can rely on the documented finite commands, finite range grammar, finite substitution flags, repeat-substitution flow, and supported lowercase/uppercase register operands. Future implementers can see that quoted/special register operands, `:global`, shell/file/window commands, arbitrary expressions, repeated offsets, confirmation/print substitution flags, replacement backrefs, and Vimscript evaluation remain intentionally out of scope.
+This also prevents Vim-parity drift. A user can rely on the documented finite commands, finite range grammar, finite substitution flags, repeat-substitution flow, and supported lowercase/uppercase register operands. Future implementers can see that quoted/special register operands, commandless range printing, `:global`, shell/file/window commands, arbitrary expressions, repeated offsets, confirmation/print substitution flags, replacement backrefs, and Vimscript evaluation remain intentionally out of scope.
 
 ## When to Apply
 
 - Adding another bounded prompt-local Ex command.
 - Generalizing a parser from one command family to several finite command variants.
-- Implementing Vim-like range, offset, semicolon, or destination behavior without full Vim grammar.
+- Implementing Vim-like range, offset, semicolon, destination, or commandless single-address behavior without full Vim grammar.
 - Adding line/range operations whose register, search-highlight, cursor, or preview effects matter.
 - Keeping OpenSpec, README, feature docs, runtime help, and drift tests synchronized for editor behavior.
 
@@ -139,6 +159,10 @@ Do not use this pattern as-is for broad Ex features that require full Vim comman
 Parser examples:
 
 ```vim
+:3
+:.
+:$
+:2+1
 :2,4delete
 :%y
 :put
@@ -157,9 +181,27 @@ Parser examples:
 :noh
 ```
 
+Commandless forms to keep rejected:
+
+```vim
+:%
+:2,4
+:2;.+1
+:'<,'>
+```
+
 Implementation examples:
 
 ```ts
+if (parsed.type === "lineJump") {
+  const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
+  const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);
+  return withEffects(finished, [
+    { type: "restoreCursor", position: { line: parsed.line, col: targetCol } },
+    { type: "invalidate" },
+  ]);
+}
+
 if (parsed.type === "nohlsearch") {
   return invalidate(finishExState(clearSearchHighlight(state)));
 }
@@ -175,6 +217,10 @@ if (parsed.type === "delete") {
 
 Behavior examples to preserve in tests:
 
+- `:3`, `:.`, `:$`, and `:2+1` move the cursor to one addressed line without editing prompt text.
+- Commandless `:%`, `:2,4`, `:2;.+1`, and `:'<,'>` return an Ex error without editing text or moving the cursor.
+- Line jumps preserve the cursor column when possible and clamp it to the target line length.
+- Visual-source line jumps exit visual mode to normal mode and clear the visual selection.
 - `:.+1s/foo/bar/` previews and applies on the line after the cursor.
 - `:3;.+2d` resolves the second address relative to line 3.
 - `:3+1-2d` is rejected instead of interpreted as a chained offset.
@@ -195,7 +241,8 @@ Behavior examples to preserve in tests:
 
 ## Related
 
-- `openspec/changes/prompt-range-algebra-kernel/` — follow-up OpenSpec change that extracted finite Ex range algebra into `src/range.ts`.
+- `openspec/changes/archive/2026-06-22-support-todos-line-jump/` — OpenSpec change that added commandless single-address line jumps while rejecting commandless ranges.
+- `openspec/changes/archive/2026-06-05-prompt-range-algebra-kernel/` — follow-up OpenSpec change that extracted finite Ex range algebra into `src/range.ts`.
 - `openspec/specs/vim-ex-command-line/spec.md` — durable requirements for Ex command-line behavior.
 - `docs/solutions/architecture-patterns/pi-vimmode-ex-command-line-substitution-architecture-2026-05-28.md` — precursor substitution architecture; now historical in places because regex mode, history, offsets, `:noh`, `n`/`e`, and repeat substitution have since shipped.
 - `docs/solutions/ui-bugs/ex-substitution-match-preview-highlighting-2026-06-04.md` — substitution preview/workbench UX that repeat substitution continues to use.

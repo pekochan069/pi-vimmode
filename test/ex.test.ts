@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseExCommand, parseExSubstitution } from "../src/ex.ts";
+import type { ResolvedVimPromptTransforms } from "../src/types.ts";
+
+import { parseExCommand, parseExSubstitution, suggestExCommands } from "../src/ex.ts";
 
 const context = {
   lineCount: 5,
@@ -501,6 +503,65 @@ describe("Ex command parser", () => {
     ).toEqual({ type: "error", message: "Unsupported Ex command: reflow" });
   });
 
+  test("parses bare single-address line jumps", () => {
+    expect(parseExCommand("3", context)).toMatchObject({
+      type: "lineJump",
+      line: 2,
+      range: { startLine: 2, endLine: 2 },
+    });
+    expect(parseExCommand(".", context)).toMatchObject({
+      type: "lineJump",
+      line: 1,
+      range: { startLine: 1, endLine: 1 },
+    });
+    expect(parseExCommand("$", context)).toMatchObject({
+      type: "lineJump",
+      line: 4,
+      range: { startLine: 4, endLine: 4 },
+    });
+    expect(parseExCommand("2+1", context)).toMatchObject({
+      type: "lineJump",
+      line: 2,
+      range: { startLine: 2, endLine: 2 },
+    });
+  });
+
+  test("rejects commandless percent, comma, semicolon, and visual ranges", () => {
+    expect(parseExCommand("%", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(parseExCommand("2,4", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(parseExCommand("2;.+1", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+    expect(
+      parseExCommand("'<,'>", { ...context, visualRange: { startLine: 0, endLine: 2 } }),
+    ).toEqual({
+      type: "error",
+      message: "Unsupported Ex command",
+    });
+  });
+
+  test("rejects out-of-bounds bare single-address line jumps", () => {
+    expect(parseExCommand("0", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("999", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+    expect(parseExCommand("$+1", context)).toEqual({
+      type: "error",
+      message: "Invalid Ex range",
+    });
+  });
+
   test("rejects invalid Ex commands and arguments", () => {
     expect(parseExCommand("0delete", context)).toEqual({
       type: "error",
@@ -562,5 +623,189 @@ describe("Ex command parser", () => {
       type: "error",
       message: "Invalid Ex destination",
     });
+  });
+
+  test("parses quit commands with current line default range", () => {
+    expect(parseExCommand("q", context)).toMatchObject({
+      type: "quit",
+      command: "q",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+    expect(parseExCommand("quit", context)).toMatchObject({
+      type: "quit",
+      command: "quit",
+      range: { startLine: 1, endLine: 1 },
+      rangeExplicit: false,
+    });
+  });
+
+  test("parses visual-range quit without mutating prompt text", () => {
+    expect(
+      parseExCommand("'<,'>q", {
+        ...context,
+        visualRange: { startLine: 0, endLine: 3 },
+      }),
+    ).toMatchObject({
+      type: "quit",
+      command: "q",
+      range: { startLine: 0, endLine: 3 },
+      rangeExplicit: true,
+    });
+    expect(
+      parseExCommand("'<,'>quit", {
+        ...context,
+        visualRange: { startLine: 2, endLine: 4 },
+      }),
+    ).toMatchObject({
+      type: "quit",
+      command: "quit",
+      range: { startLine: 2, endLine: 4 },
+      rangeExplicit: true,
+    });
+  });
+
+  test("rejects unsupported quit-like commands", () => {
+    expect(parseExCommand("q!", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("quit!", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(parseExCommand("wq", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: wq",
+    });
+    expect(parseExCommand("x", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: x",
+    });
+    expect(parseExCommand("qa", context)).toEqual({
+      type: "error",
+      message: "Unsupported Ex command: qa",
+    });
+  });
+});
+
+describe("Ex command suggestions", () => {
+  const transformsContext = (overrides?: Partial<ResolvedVimPromptTransforms>) => ({
+    ...context,
+    promptTransforms: {
+      enabled: true,
+      actions: {
+        quote: true,
+        unquote: true,
+        bulletize: true,
+        fence: true,
+        indent: true,
+        dedent: true,
+        reflow: true,
+      },
+      commands: {
+        quote: ["quote"],
+        unquote: ["unquote"],
+        bulletize: ["bulletize"],
+        fence: ["fence"],
+        indent: ["indent"],
+        dedent: ["dedent"],
+        reflow: ["reflow"],
+      },
+      ...overrides,
+    } as ResolvedVimPromptTransforms,
+  });
+
+  test("returns supported built-in command names for empty input", () => {
+    const suggestions = suggestExCommands("", context);
+
+    expect(suggestions).toEqual(
+      expect.arrayContaining(["s", "substitute", "delete", "yank", "help", "quit"]),
+    );
+    expect(suggestions).toEqual(expect.arrayContaining(["&", "&&"]));
+    expect(suggestions.filter((name) => name === "s").length).toBe(1);
+    expect(suggestions.filter((name) => name === "quit").length).toBe(1);
+  });
+
+  test("filters suggestions to exact command names by prefix", () => {
+    expect(suggestExCommands("ma", context)).toEqual(["mapcheck"]);
+    expect(suggestExCommands("s", context)).toEqual(["s", "substitute"]);
+    expect(suggestExCommands("qu", context)).toEqual(["quit", "quote"]);
+  });
+
+  test("suggests commands after a valid range prefix", () => {
+    expect(suggestExCommands("%s", context)).toEqual(["s", "substitute"]);
+    expect(suggestExCommands("2,4delete", context)).toEqual(["delete"]);
+    expect(
+      suggestExCommands("'<,'>help", { ...context, visualRange: { startLine: 0, endLine: 2 } }),
+    ).toEqual(["help"]);
+  });
+
+  test("suppresses suggestions once command arguments appear", () => {
+    expect(suggestExCommands("help keybindings", context)).toEqual([]);
+    expect(suggestExCommands("actions vimmode.help", context)).toEqual([]);
+  });
+
+  test("returns empty suggestions for invalid input and unsupported commandless ranges", () => {
+    expect(suggestExCommands("@", context)).toEqual([]);
+    expect(suggestExCommands("%", context)).toEqual([]);
+    expect(suggestExCommands("2,4", context)).toEqual([]);
+    expect(suggestExCommands("'z','z", context)).toEqual([]);
+  });
+
+  test("includes enabled transform command names", () => {
+    expect(suggestExCommands("qu", transformsContext())).toEqual(["quit", "quote"]);
+    expect(suggestExCommands("", transformsContext())).toEqual(
+      expect.arrayContaining([
+        "quote",
+        "unquote",
+        "bulletize",
+        "fence",
+        "indent",
+        "dedent",
+        "reflow",
+      ]),
+    );
+  });
+
+  test("includes configured transform aliases", () => {
+    const ctx = transformsContext({
+      commands: {
+        quote: ["qte", "wrapquote"],
+        unquote: ["unquote"],
+        bulletize: ["bulletize"],
+        fence: ["fence"],
+        indent: ["indent"],
+        dedent: ["dedent"],
+        reflow: ["reflow"],
+      },
+    });
+
+    expect(suggestExCommands("qte", ctx)).toEqual(["qte"]);
+    expect(suggestExCommands("wrap", ctx)).toEqual(["wrapquote"]);
+  });
+
+  test("omits transform command names when action is disabled", () => {
+    const ctx = transformsContext({
+      actions: {
+        quote: false,
+        unquote: true,
+        bulletize: true,
+        fence: true,
+        indent: true,
+        dedent: true,
+        reflow: true,
+      },
+    });
+
+    expect(suggestExCommands("qu", ctx)).toEqual(["quit"]);
+    expect(suggestExCommands("", ctx)).toEqual(expect.not.arrayContaining(["quote"]));
+  });
+
+  test("omits all transform commands when transform feature is disabled", () => {
+    const ctx = transformsContext({ enabled: false });
+
+    expect(suggestExCommands("qu", ctx)).toEqual(["quit"]);
+    expect(suggestExCommands("", ctx)).toEqual(expect.not.arrayContaining(["quote"]));
   });
 });

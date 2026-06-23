@@ -2,23 +2,26 @@
 
 ## Next Version
 
-- [x] Add `{` / `}` paragraph motions and `ip` / `ap` paragraph text objects.
-- [x] Add `*` / `#` search word under cursor forward/backward, reusing prompt search repeat state.
-- [x] Add `X` delete character before cursor.
-- [x] Add `gu` / `gU` / `g~` case operators, including text-object and visual support.
-- [x] Alternative keymap for Esc to exit insert mode
+- [x] Force override system keybindings (like `ctrl+j`)
+- [x] Insert mode new line keybindings (previous line and next line)
+- [x] `:n` line jumps
+- [x] Add more common ex-commands like `q`(quit pi)
+- [x] Add `gv` reselect last visual range.
+- [x] ex command autocomplete
 
 ## Deferred
 
-- [ ] Add `gv` reselect last visual range.
+- [ ] More insert mode keybindings
 - [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.
 - [ ] Consider `zz` / `zt` / `zb` viewport recentering if prompt viewport state needs explicit cursor positioning.
 - [ ] Consider window/file keybindings only if pi-vimmode expands beyond prompt-local editing.
-- [ ] ex command autocomplete
 
 ## Ideas
 
+- [ ] Keybinding presets (qwerty, dvorak, colemak, etc)
+- [ ] Separate escape keybindings (escapeInsert, escapeVisual, escapeEx, ...)
 - [ ] Explore a full user-defined action/plugin surface for pi-vimmode after the finite named prompt action/transform keybinding layer proves demand.
   - [ ] javascript/typescript based config files in `~/.pi/agent/`
 - [ ] Add registry-backed diagnostic action entries and a fuller Neovim quickref classification after M1 prompt transform action keybindings ship. Context: /plan-eng-review intentionally cut `vimmode.*` diagnostic metadata and quickref polish from the first code PR so resolver/config/dispatch risk stays bounded.
 - [ ] Explore config-hacker and extension-author workflows: action registry introspection, recipes, community presets, and future extension seams.
+- [ ] Make pi-vimmode controllable with ex commands?

@@ -29,13 +29,14 @@ import {
   yankExLineRange,
 } from "../buffer.ts";
 import { keymapForOptions, promptTransformsForOptions } from "../config.ts";
-import { parseExCommand, type ParsedExSubstitution } from "../ex.ts";
+import { parseExCommand, suggestExCommands, type ParsedExSubstitution } from "../ex.ts";
 import {
   diagnosticPopup,
   inspectPopup,
   keybindingsPopup,
   runtimeHelpPopup,
 } from "../keybinding-discovery-popup.ts";
+import { parseExLineRange } from "../range.ts";
 import { type ReadOnlyPopup } from "../read-only-popup.ts";
 import {
   clearPending,
@@ -297,6 +298,20 @@ function executeExCommand(
     });
   }
 
+  if (parsed.type === "quit") {
+    const finished = finishExState(state);
+    return withEffects(finished, [{ type: "shutdown" }]);
+  }
+
+  if (parsed.type === "lineJump") {
+    const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
+    const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);
+    return withEffects(finished, [
+      { type: "restoreCursor", position: { line: parsed.line, col: targetCol } },
+      { type: "invalidate" },
+    ]);
+  }
+
   if (parsed.type === "nohlsearch") {
     return invalidate(finishExState(clearSearchHighlight(state)));
   }
@@ -390,6 +405,92 @@ function exCursor(pendingEx: NonNullable<ModalState["pendingEx"]>): number {
     0,
     Math.min(pendingEx.cursor ?? pendingEx.command.length, pendingEx.command.length),
   );
+}
+
+function exCommandWordBoundaries(
+  command: string,
+  cursor: number,
+  visualRange?: LineRange,
+): { left: number; right: number } | undefined {
+  const range = parseExLineRange(command, { lineCount: 1, cursorLine: 0, visualRange });
+  const commandSource = range.ok ? range.value.rest : command;
+  const trimmedCommandSource = commandSource.trim();
+  const tokenMatch = /^[A-Za-z&]+/.exec(trimmedCommandSource);
+  if (tokenMatch) {
+    const left =
+      command.length -
+      commandSource.length +
+      commandSource.indexOf(trimmedCommandSource) +
+      trimmedCommandSource.indexOf(tokenMatch[0]);
+    const right = left + tokenMatch[0].length;
+    if (cursor < left) return undefined;
+    return { left, right };
+  }
+  const tokenInCommand = /([A-Za-z&]+)[^A-Za-z&]*$/.exec(command);
+  if (tokenInCommand) {
+    const token = tokenInCommand[1] as string;
+    const left = command.length - tokenInCommand[0].length;
+    const right = left + token.length;
+    if (cursor < left) return undefined;
+    return { left, right };
+  }
+  return undefined;
+}
+
+export function completePendingExCommand(
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+): { command: string; cursor: number } | undefined {
+  const command = pendingEx.command;
+  const cursor = exCursor(pendingEx);
+  const boundaries = exCommandWordBoundaries(command, cursor, pendingEx.visualRange);
+  if (!boundaries) return undefined;
+  const prefix = command.slice(boundaries.left, boundaries.right);
+  const candidates = suggestExCommands(prefix, {
+    lineCount: 1,
+    cursorLine: 0,
+    visualRange: pendingEx.visualRange,
+    promptTransforms: promptTransformsForOptions(options),
+  });
+
+  let replacement: string | undefined;
+  if (candidates.length === 1) {
+    replacement = candidates[0];
+  } else if (candidates.length > 1) {
+    const common = candidates.reduce((shared, candidate) => {
+      let limit = Math.min(shared.length, candidate.length);
+      let index = 0;
+      while (index < limit && shared[index] === candidate[index]) index++;
+      return shared.slice(0, index);
+    });
+    if (common.length > prefix.length) replacement = common;
+  }
+  if (!replacement) return undefined;
+
+  const nextCommand =
+    command.slice(0, boundaries.left) + replacement + command.slice(boundaries.right);
+  return {
+    command: nextCommand,
+    cursor: Math.max(cursor, boundaries.left + replacement.length),
+  };
+}
+
+function suggestExCommandsForPending(
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+): string[] {
+  const command = pendingEx.command;
+  if (!/^[A-Za-z&\s]*$/.test(command)) return [];
+  const cursor = exCursor(pendingEx);
+  const boundaries = exCommandWordBoundaries(command, cursor, pendingEx.visualRange);
+  const prefix = boundaries ? command.slice(boundaries.left, boundaries.right) : command;
+  if (prefix && !/^[A-Za-z&\s]+$/.test(prefix)) return [];
+  return suggestExCommands(prefix, {
+    lineCount: 1,
+    cursorLine: 0,
+    visualRange: pendingEx.visualRange,
+    promptTransforms: promptTransformsForOptions(options),
+  });
 }
 
 function commandWordKind(char: string | undefined): "space" | "alpha" | "digit" | "punct" {
@@ -530,8 +631,39 @@ export function handlePendingExInput(
       pendingEx: { ...clearExPreview(pendingEx), cursor: pendingEx.command.length },
     });
   }
-  if (keyMatches(data, "up")) return invalidate(navigateExHistory(state, pendingEx, "previous"));
-  if (keyMatches(data, "down")) return invalidate(navigateExHistory(state, pendingEx, "next"));
+  if (keyMatches(data, "up")) {
+    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
+    if (autocompleteEnabled) {
+      const suggestions = suggestExCommandsForPending(pendingEx, options);
+      const hasHistory = (state.exHistory ?? []).length > 0;
+      if (suggestions.length > 0 && (!hasHistory || pendingEx.command)) {
+        const current = pendingEx.selectedSuggestion ?? suggestions.length;
+        return invalidate({
+          ...state,
+          pendingEx: {
+            ...pendingEx,
+            selectedSuggestion: (current - 1 + suggestions.length) % suggestions.length,
+          },
+        });
+      }
+    }
+    return invalidate(navigateExHistory(state, pendingEx, "previous"));
+  }
+  if (keyMatches(data, "down")) {
+    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
+    if (autocompleteEnabled) {
+      const suggestions = suggestExCommandsForPending(pendingEx, options);
+      const hasHistory = (state.exHistory ?? []).length > 0;
+      if (suggestions.length > 0 && (!hasHistory || pendingEx.command)) {
+        const current = pendingEx.selectedSuggestion ?? -1;
+        return invalidate({
+          ...state,
+          pendingEx: { ...pendingEx, selectedSuggestion: (current + 1) % suggestions.length },
+        });
+      }
+    }
+    return invalidate(navigateExHistory(state, pendingEx, "next"));
+  }
 
   const key = parsed;
   if (key === "alt+left") {
@@ -562,6 +694,34 @@ export function handlePendingExInput(
         pendingEx.command.slice(0, nextCursor) + pendingEx.command.slice(cursor),
         nextCursor,
       ),
+    });
+  }
+  if (keyMatches(data, "tab") || data === "\t") {
+    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
+    if (autocompleteEnabled) {
+      const suggestions = pendingEx.command ? suggestExCommandsForPending(pendingEx, options) : [];
+      if (suggestions.length > 0) {
+        const selected = pendingEx.selectedSuggestion ?? 0;
+        if (selected < suggestions.length) {
+          const boundaries = exCommandWordBoundaries(
+            pendingEx.command,
+            exCursor(pendingEx),
+            pendingEx.visualRange,
+          );
+          const range = boundaries ? pendingEx.command.slice(0, boundaries.left) : "";
+          const newCommand = range + suggestions[selected];
+          return invalidate({
+            ...state,
+            pendingEx: editPendingEx(pendingEx, newCommand, newCommand.length),
+          });
+        }
+      }
+    }
+    const completed = completePendingExCommand(pendingEx, options);
+    if (!completed) return invalidate(state);
+    return invalidate({
+      ...state,
+      pendingEx: editPendingEx(pendingEx, completed.command, completed.cursor),
     });
   }
   if (!key || key.length !== 1) return invalidate(state);

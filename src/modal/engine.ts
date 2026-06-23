@@ -15,6 +15,8 @@ import {
   deleteMarkRange,
   exactMarkPosition,
   lineMarkPosition,
+  openLineAbove,
+  openLineBelow,
   yankLineMarkRange,
   yankMarkRange,
 } from "../buffer.ts";
@@ -39,6 +41,7 @@ import {
   invalidate,
   isDelegatedResetKey,
   isProtectedPiDelegateKey,
+  keymapHasBinding,
   keySequence,
   modeUpdate,
   resetAndDelegate,
@@ -80,6 +83,7 @@ import {
   startSearchUpdate,
 } from "./search.ts";
 import { transitionMode } from "./state.ts";
+import { captureBeforeVisualExit } from "./visual.ts";
 import {
   applyVisualOperator,
   deleteVisualSelection,
@@ -216,6 +220,26 @@ function handleInsertInput(
     return withEffects({ ...state, pendingInsertEscape: match.sequence }, []);
   }
   if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
+
+  const key = keySequence(data);
+  if (key) {
+    const insert = keymapForOptions(options).insert;
+    if (insert.openLineBelow.includes(key)) {
+      const result = openLineBelow(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.openLineAbove.includes(key)) {
+      const result = openLineAbove(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+  }
+
   return delegate(state, data);
 }
 
@@ -334,12 +358,17 @@ function handleNormalInput(
       options,
     );
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
-
   const key = keySequence(data);
   if (!key) {
     const nextState = clearPending(state);
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
+  }
+
+  if (isProtectedPiDelegateKey(data)) {
+    const keymap = keymapForOptions(options);
+    if (!keymapHasBinding(keymap, key)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
   }
 
   if (state.pendingRegister === "awaitingSlot") {
@@ -488,19 +517,25 @@ function handleVisualInput(
   options: ModalOptions,
   data: string,
 ): ModalUpdate {
-  if (matchesKey(data, "escape")) return modeUpdate(state, "normal", options);
+  if (matchesKey(data, "escape"))
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (matchInsertEscapeInput(state, data, keymapForOptions(options).escape).kind === "matched")
-    return modeUpdate(state, "normal", options);
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   if (matchesKey(data, "ctrl+v")) {
     return state.mode === "visualBlock"
       ? invalidate(state)
       : modeUpdate(state, "visualBlock", options);
   }
-  if (isProtectedPiDelegateKey(data)) return delegateProtectedShortcut(state, options, data);
-
   const key = keySequence(data);
   if (!key) return delegate(state, data);
+
+  if (isProtectedPiDelegateKey(data)) {
+    const keymap = keymapForOptions(options);
+    if (!keymapHasBinding(keymap, key)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
+  }
 
   if (state.pendingRegister === "awaitingSlot") {
     const target = registerTargetForKey(key);
@@ -564,7 +599,9 @@ function handleVisualInput(
 
     if (result.command === "startSearch") return startSearchUpdate(state);
     if (result.command === "startSearchBackward") return startSearchUpdate(state, "backward");
-    if (result.command === "startExCommand") return startVisualExCommandUpdate(state, snapshot);
+    if (result.command === "startExCommand") {
+      return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
+    }
     if (result.command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
     if (result.command === "repeatSearchReverse")
       return repeatSearch(state, snapshot, options, true);

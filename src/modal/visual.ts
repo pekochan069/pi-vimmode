@@ -37,7 +37,7 @@ export function visualKindForMode(mode: VimMode): VisualKind {
   return "char";
 }
 
-export function isVisualMode(mode: VimMode): boolean {
+function isVisualMode(mode: VimMode): mode is "visual" | "visualLine" | "visualBlock" {
   return mode === "visual" || mode === "visualLine" || mode === "visualBlock";
 }
 
@@ -65,7 +65,11 @@ function shiftVisualSelection(
   );
   if (!shiftResult.ok) return modeUpdate(state, "normal", options);
   const result = shiftResult.edit;
-  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]),
+  );
 }
 
 export function applyVisualOperator(
@@ -95,7 +99,11 @@ export function yankVisualUpdate(
   if (!state.visualAnchor) return modeUpdate(state, "normal", options);
   const register = yankVisualSelection(snapshot.text, state.visualAnchor, snapshot.cursor, kind);
   const written = applyRegisterWrite(state, register);
-  return modeUpdate(written.state, "normal", options, written.effects);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(written.state, "normal", options, written.effects),
+  );
 }
 
 export function deleteVisualSelection(
@@ -113,10 +121,11 @@ export function deleteVisualSelection(
         ? deleteBlockRange(snapshot.text, state.visualAnchor, snapshot.cursor)
         : deleteRange(snapshot.text, state.visualAnchor, snapshot.cursor);
   const written = editStateAndEffects(state, result);
-  return modeUpdate(written.state, nextMode, options, [
-    { type: "edit", result },
-    ...written.effects,
-  ]);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(written.state, nextMode, options, [{ type: "edit", result }, ...written.effects]),
+  );
 }
 
 export function transformVisualSelection(
@@ -134,7 +143,11 @@ export function transformVisualSelection(
     kind,
     action,
   );
-  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]),
+  );
 }
 
 export function toggleVisualSelection(
@@ -161,7 +174,11 @@ export function replaceVisualSelection(
     kind,
     char,
   );
-  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]),
+  );
 }
 
 export function pasteVisualLineSelection(
@@ -176,7 +193,11 @@ export function pasteVisualLineSelection(
     snapshot.cursor,
     registerToRead(state),
   );
-  return modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]);
+  return captureBeforeVisualExit(
+    state,
+    snapshot,
+    modeUpdate(editState(state, result), "normal", options, [{ type: "edit", result }]),
+  );
 }
 
 export function startBlockInsert(
@@ -190,9 +211,10 @@ export function startBlockInsert(
   const startCol = Math.min(state.visualAnchor.col, snapshot.cursor.col);
   const endCol = Math.max(state.visualAnchor.col, snapshot.cursor.col);
   const previewCol = placement === "start" ? startCol : endCol + 1;
+  const captured = captureVisualSelection(state, snapshot);
   return withEffects(
     {
-      ...state,
+      ...captured,
       mode: "insert",
       pending: undefined,
       pendingMacro: undefined,
@@ -258,4 +280,73 @@ export function handleBlockInsertInput(
     },
     [{ type: "delegate", input: data }, { type: "invalidate" }],
   );
+}
+
+function captureVisualSelection(state: ModalState, snapshot: EditorSnapshot): ModalState {
+  if (!isVisualMode(state.mode) || !state.visualAnchor) return state;
+  return {
+    ...state,
+    lastVisualSelection: {
+      mode: state.mode,
+      anchor: state.visualAnchor,
+      cursor: snapshot.cursor,
+      text: snapshot.text,
+    },
+  };
+}
+
+function isValidVisualSelection(
+  last: NonNullable<ModalState["lastVisualSelection"]>,
+  snapshot: EditorSnapshot,
+): boolean {
+  if (last.text !== snapshot.text) return false;
+  const { anchor, cursor } = last;
+  const lineCount = snapshot.lines.length;
+  if (anchor.line < 0 || anchor.line >= lineCount) return false;
+  if (cursor.line < 0 || cursor.line >= lineCount) return false;
+  const anchorLine = snapshot.lines[anchor.line] ?? "";
+  const cursorLine = snapshot.lines[cursor.line] ?? "";
+  if (anchor.col < 0 || anchor.col > anchorLine.length) return false;
+  if (cursor.col < 0 || cursor.col > cursorLine.length) return false;
+  return true;
+}
+
+export function reselectVisualUpdate(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+): ModalUpdate {
+  const last = state.lastVisualSelection;
+  if (!last || !isValidVisualSelection(last, snapshot)) {
+    return invalidate(state);
+  }
+  return {
+    state: {
+      ...state,
+      mode: last.mode,
+      visualAnchor: last.anchor,
+      pending: undefined,
+      pendingMacro: undefined,
+      pendingRegister: undefined,
+      pendingMark: undefined,
+    },
+    effects: [
+      { type: "restoreCursor", position: last.cursor },
+      { type: "terminalCursor", style: options.cursor[last.mode] },
+      { type: "invalidate" },
+    ],
+  };
+}
+
+export function captureBeforeVisualExit(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  update: ModalUpdate,
+): ModalUpdate {
+  if (!isVisualMode(state.mode)) return update;
+  const captured = captureVisualSelection(state, snapshot);
+  return {
+    ...update,
+    state: { ...update.state, lastVisualSelection: captured.lastVisualSelection },
+  };
 }

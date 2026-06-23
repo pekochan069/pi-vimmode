@@ -76,6 +76,7 @@ import {
 import { startExCommandUpdate } from "./ex-command-line.ts";
 import { clearRegisterTarget, clipboardTargetToRead, registerToRead } from "./registers.ts";
 import { repeatSearch, searchWordUnderCursor, startSearchUpdate } from "./search.ts";
+import { reselectVisualUpdate } from "./visual.ts";
 
 export function normalDispatchSummary(state: ModalState): string {
   const pending = state.pending ? ` pending=${state.pending}` : "";
@@ -568,6 +569,8 @@ export function applyCommand(
       return snapshot.isRedoAvailable
         ? withEffects(nextState, [{ type: "adapterCommand", command: "redo" }])
         : invalidate(withNoopFeedback(nextState, options, "redo stack empty"));
+    case "reselectVisual":
+      return reselectVisualUpdate(nextState, snapshot, options);
     case "showKeybindings": {
       const popup = keybindingsPopup(options);
       return withEffects({ ...nextState, helpPopup: popup }, [

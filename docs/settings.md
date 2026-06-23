@@ -292,6 +292,7 @@ Rules:
 | `piVimMode.keymap.commands.searchWordBackward`      | `["#"]`      | Normal-mode only: search backward for the keyword word under the cursor; reuses prompt search repeat state.                 |
 | `piVimMode.keymap.commands.startExCommand`          | `[":"]`      | Open Ex command-line row. Count in normal mode pre-fills a line range.                                                      |
 | `piVimMode.keymap.commands.repeatChange`            | `["."]`      | Repeat last supported completed normal-mode change.                                                                         |
+| `piVimMode.keymap.commands.reselectVisual`          | `["gv"]`     | Re-enter the last valid visual selection from normal mode.                                                                  |
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                                 |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                                        |
 | `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                                |
@@ -822,6 +823,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "searchWordBackward": ["#"],
         "startExCommand": [":"],
         "repeatChange": ["."],
+        "reselectVisual": ["gv"],
         "undo": ["u"],
         "redo": ["ctrl+r"]
       },

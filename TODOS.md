@@ -6,12 +6,12 @@
 - [x] Insert mode new line keybindings (previous line and next line)
 - [x] `:n` line jumps
 - [x] Add more common ex-commands like `q`(quit pi)
+- [x] Add `gv` reselect last visual range.
 - [ ] ex command autocomplete
 
 ## Deferred
 
 - [ ] More insert mode keybindings
-- [ ] Add `gv` reselect last visual range.
 - [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.
 - [ ] Consider `zz` / `zt` / `zb` viewport recentering if prompt viewport state needs explicit cursor positioning.
 - [ ] Consider window/file keybindings only if pi-vimmode expands beyond prompt-local editing.

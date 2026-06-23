@@ -18,6 +18,14 @@
 - No registers, marks, visual state, macros, or dot-repeat affected.
 - Documented in `docs/settings.md` and `docs/features.md`.
 
+### Visual reselection (`gv`)
+
+- Added Vim-style `gv` to re-enter the last valid visual selection from normal mode.
+- Preserves characterwise, linewise, and blockwise visual selections by restoring the previous visual mode, anchor, and active cursor.
+- Added `piVimMode.keymap.commands.reselectVisual` with default `gv` for semantic keymap customization.
+- Safely no-ops when no previous selection exists or the stored selection is stale after prompt edits.
+- Documented visual reselection in `docs/features.md`, `docs/settings.md`, and OpenSpec requirements.
+
 ### Ex line jumps
 
 - Added bare single-address Ex line jumps such as `:3`, `:.`, `:$`, and `:2+1`.
@@ -36,3 +44,5 @@
 - Kept protected shortcuts delegated by default unless the same settings layer allow-lists them.
 - Preserved Pi-owned insert-mode behavior for protected shortcuts unless they are configured as insert escape aliases.
 - Avoided false prefix-shadow conflicts between chorded keys such as `ctrl+p` and plain Vim grammar prefixes.
+- Captured visual selection history across visual exits, including visual Ex entry and mutating visual operations, so `gv` does not lose the last selection.
+- Rejected stale `gv` reselection after prompt edits by validating the stored source text and saved positions before restoring visual mode.

@@ -184,6 +184,12 @@ export type ModalState = {
   searchHistory?: SearchHistoryEntry[];
   searchHighlight?: SearchHighlightState;
   lastRepeatableChange?: RepeatableChange;
+  lastVisualSelection?: {
+    mode: "visual" | "visualLine" | "visualBlock";
+    anchor: Position;
+    cursor: Position;
+    text: string;
+  };
 };
 
 export type FastInsertDelegateContext = {

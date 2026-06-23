@@ -1027,4 +1027,46 @@ describe("normal command parser", () => {
       motion: "wordForward",
     });
   });
+
+  test("gv resolves to reselectVisual with default keymap", () => {
+    const pendingG = resolveNormalCommand("g", undefined);
+    expect(pendingG).toEqual({ type: "pending", pending: "g" });
+    const result = resolveNormalCommand("v", pendingG.type === "pending" ? pendingG.pending : "");
+    expect(result).toEqual({ type: "command", command: "reselectVisual" });
+  });
+
+  test("configured reselectVisual key executes", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { commands: { reselectVisual: ["grv"] } } },
+    }).options.keymap;
+    const pendingG = resolveNormalCommand("g", undefined, keymap);
+    const pendingR = resolveNormalCommand(
+      "r",
+      pendingG.type === "pending" ? pendingG.pending : "",
+      keymap,
+    );
+    const result = resolveNormalCommand(
+      "v",
+      pendingR.type === "pending" ? pendingR.pending : "",
+      keymap,
+    );
+    expect(result).toEqual({ type: "command", command: "reselectVisual" });
+  });
+
+  test("reselectVisual default binding does not conflict with existing g-prefix motions", () => {
+    const pendingG = resolveNormalCommand("g", undefined);
+    expect(resolveNormalCommand("g", pendingG.type === "pending" ? pendingG.pending : "")).toEqual({
+      type: "motion",
+      motion: "bufferStart",
+    });
+    expect(resolveNormalCommand("e", pendingG.type === "pending" ? pendingG.pending : "")).toEqual({
+      type: "motion",
+      motion: "wordPreviousEnd",
+    });
+    const pendingGV = resolveNormalCommand(
+      "v",
+      pendingG.type === "pending" ? pendingG.pending : "",
+    );
+    expect(pendingGV).toEqual({ type: "command", command: "reselectVisual" });
+  });
 });

@@ -247,6 +247,12 @@ export type VimMacroOptions = {
 
 export type ResolvedVimMacros = VimMacroOptions;
 
+export type VimExCommandOptions = {
+  autocomplete: boolean;
+};
+
+export type ResolvedVimExCommand = VimExCommandOptions;
+
 export type VimMarkOptions = {
   enabled: boolean;
   slots: readonly string[];
@@ -303,6 +309,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  exCommand?: ResolvedVimExCommand;
   feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
   promptTransforms?: ResolvedVimPromptTransforms;

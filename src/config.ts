@@ -9,6 +9,7 @@ import type {
   PromptStructureTarget,
   PromptTransformAction,
   ResolvedVimActionBinding,
+  ResolvedVimExCommand,
   ResolvedVimInsertKeymap,
   ResolvedVimKeymap,
   ResolvedVimMacros,
@@ -220,6 +221,10 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   maxHighlights: 200,
 }) as unknown as ResolvedVimSearch;
 
+export const DEFAULT_VIM_EX_COMMAND = Object.freeze({
+  autocomplete: true,
+}) as unknown as ResolvedVimExCommand;
+
 export const DEFAULT_VIM_PROMPT_STRUCTURES = Object.freeze({
   enabled: true,
   targets: Object.freeze({
@@ -271,6 +276,7 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
   search: DEFAULT_VIM_SEARCH,
+  exCommand: DEFAULT_VIM_EX_COMMAND,
   feedback: DEFAULT_VIM_FEEDBACK,
   promptStructures: DEFAULT_VIM_PROMPT_STRUCTURES,
   promptTransforms: DEFAULT_VIM_PROMPT_TRANSFORMS,
@@ -285,6 +291,7 @@ type PartialVimOptions = {
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
   search?: PartialSearchOptions;
+  exCommand?: PartialExCommandOptions;
   feedback?: PartialFeedbackOptions;
   promptStructures?: PartialPromptStructureOptions;
   promptTransforms?: PartialPromptTransformOptions;
@@ -402,6 +409,12 @@ function cloneSearch(search: ResolvedVimSearch = DEFAULT_VIM_SEARCH): ResolvedVi
   return { ...search };
 }
 
+function cloneExCommand(
+  exCommand: ResolvedVimExCommand = DEFAULT_VIM_EX_COMMAND,
+): ResolvedVimExCommand {
+  return { ...exCommand };
+}
+
 function cloneFeedback(feedback: VimFeedbackOptions = DEFAULT_VIM_FEEDBACK): VimFeedbackOptions {
   return { ...feedback };
 }
@@ -448,6 +461,7 @@ export function cloneResolvedVimOptions(
     macros: options.macros ? cloneMacros(options.macros) : undefined,
     marks: options.marks ? cloneMarks(options.marks) : undefined,
     search: options.search ? cloneSearch(options.search) : undefined,
+    exCommand: options.exCommand ? cloneExCommand(options.exCommand) : undefined,
     feedback: options.feedback ? cloneFeedback(options.feedback) : undefined,
     promptStructures: options.promptStructures
       ? clonePromptStructures(options.promptStructures)
@@ -1216,6 +1230,27 @@ function parseFeedback(
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
 }
 
+type PartialExCommandOptions = {
+  autocomplete?: boolean;
+};
+
+function parseExCommand(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialExCommandOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.exCommand must be an object`);
+    return { warnings };
+  }
+  const partial: PartialExCommandOptions = {};
+  if (typeof value.autocomplete === "boolean") partial.autocomplete = value.autocomplete;
+  else if (value.autocomplete !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.exCommand.autocomplete must be a boolean`);
+  return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };
+}
+
 function parseBooleanMap<T extends string>(
   value: unknown,
   allowed: Set<string>,
@@ -1418,6 +1453,10 @@ function parsePiVimMode(
   partial.search = search.partial;
   warnings.push(...search.warnings);
 
+  const exCommand = parseExCommand(value.exCommand, sourceLabel);
+  partial.exCommand = exCommand.partial;
+  warnings.push(...exCommand.warnings);
+
   const feedback = parseFeedback(value.feedback, sourceLabel);
   partial.feedback = feedback.partial;
   warnings.push(...feedback.warnings);
@@ -1539,6 +1578,10 @@ function mergeMarks(target: ResolvedVimMarks, partial: PartialMarkOptions): void
 }
 
 function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): void {
+  Object.assign(target, partial);
+}
+
+function mergeExCommand(target: ResolvedVimExCommand, partial: PartialExCommandOptions): void {
   Object.assign(target, partial);
 }
 
@@ -1843,6 +1886,7 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
   if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
   if (partial.search) mergeSearch(target.search ?? cloneSearch(), partial.search);
+  if (partial.exCommand) mergeExCommand(target.exCommand ?? cloneExCommand(), partial.exCommand);
   if (partial.feedback) mergeFeedback(target.feedback ?? cloneFeedback(), partial.feedback);
   if (partial.promptStructures) {
     mergePromptStructures(

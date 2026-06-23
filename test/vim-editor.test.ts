@@ -443,7 +443,7 @@ describe("vim editor integration", () => {
       const rendered = lines.join("\n");
       expect(rendered).toContain("/workbench-row");
       expect(rendered).toContain("INSERT");
-      expect(lines.at(-1)).toContain(item.expected);
+      expect(lines.some((line) => line.includes(item.expected))).toBe(true);
       expectRenderedWidth(lines, 44);
     }
   });
@@ -510,10 +510,28 @@ describe("vim editor integration", () => {
     editor.handleInput(":");
     typeKeys(editor, ["h", "e", "l", "p"]);
     const active = editor.render(20);
-    expect(active.length).toBe(baseline.length);
-    expect(active.at(-2)).toContain(":help");
-    expect(active.at(-1)).toBe(" ".repeat(20));
+    expect(active.length).toBe(baseline.length + 2);
+    expect(active.at(-3)).toContain(":help");
+    expect(active.at(-2)).toContain("help");
+    expect(active.at(-1)).toContain("(1/1)");
     expectRenderedWidth(active, 20);
+  });
+
+  test("renders Ex command suggestions width-safely and reserves viewport rows", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const baseline = editor.render(20);
+
+    editor.handleInput(":");
+    typeKeys(editor, ["m", "a"]);
+    const active = editor.render(20);
+
+    expect(active.length).toBe(baseline.length + 3);
+    expect(active.at(-3)).toContain(":ma");
+    expect(active.at(-2)).toContain("mapcheck");
+    expect(active.at(-1)).toContain("(");
+    expectRenderedWidth(active, 20);
+
+    editor.handleInput("");
   });
 
   test("search and substitution preview rows render width-safely below prompt", () => {

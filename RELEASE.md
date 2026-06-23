@@ -38,6 +38,13 @@
 - Quit commands preserve prompt text, registers, marks, search state, macros, cursor, and dot-repeat.
 - Unsupported file/window/shell variants such as `:q!`, `:wq`, `:x`, `:qa`, `:write`, and `:shell` remain rejected.
 
+### Ex command autocomplete
+
+- Added bounded Ex command suggestions for the finite command surface, including configured prompt transform command aliases.
+- Suggestions are alphabetized, width-safe, and aligned with Pi-style selection rows.
+- `Tab` completes command words without changing prompt text or command execution semantics.
+- Added `piVimMode.exCommand.autocomplete` to disable suggestion navigation and hide the autocomplete UI.
+
 ## Bug fixes
 
 - `isPrintableTextSequence` now also rejects named non-printable keys (`enter`, `tab`, `escape`, etc.) in addition to modifier-prefixed keys, making it correct for both escape alias and insert binding validation.

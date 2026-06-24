@@ -442,6 +442,33 @@ describe("normal command parser", () => {
     });
   });
 
+  test("resolves default arrow-key motion aliases", () => {
+    expect(resolveNormalCommand("left", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+    expect(resolveNormalCommand("down", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "down",
+    });
+    expect(resolveNormalCommand("up", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "up",
+    });
+    expect(resolveNormalCommand("right", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "right",
+    });
+  });
+
+  test("resolves counted default arrow-key motions", () => {
+    expect(resolveNormalCommand("left", "3\u0000count\u0000", DEFAULT_VIM_KEYMAP)).toEqual({
+      type: "motion",
+      motion: "left",
+      count: 3,
+    });
+  });
+
   test("resolves finite multi-key sequences and invalid pending prefixes", () => {
     expect(resolveNormalCommand("g", undefined, DEFAULT_VIM_KEYMAP)).toEqual({
       type: "pending",

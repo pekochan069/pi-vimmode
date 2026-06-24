@@ -2798,5 +2798,10 @@
     "mtime": 1782222031.912905,
     "ast_hash": "fcde308bdfd71225ca4ab5d0d0a0ef43",
     "semantic_hash": ""
+  },
+  "docs/solutions/logic-errors/pi-vimmode-insert-mode-legacy-esc-alt-bindings-2026-06-23.md": {
+    "mtime": 1782258793.7498157,
+    "ast_hash": "3dd6b466ebedcdf968a5dcf0552da631",
+    "semantic_hash": ""
   }
 }

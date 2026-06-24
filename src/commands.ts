@@ -291,6 +291,11 @@ function compiledKeymapFor(keymap: ResolvedVimKeymap): CompiledKeymap {
   return compiled;
 }
 
+function isAtomicKeySequence(sequence: string): boolean {
+  // Arrow-key aliases arrive as complete terminal escape sequences, never character-by-character.
+  return sequence === "left" || sequence === "down" || sequence === "up" || sequence === "right";
+}
+
 function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
   const exactBindings = new Map<string, Binding>();
   const longerPrefixes = new Set<string>();
@@ -332,8 +337,10 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
   ][]) {
     for (const sequence of sequences) {
       setFirstBinding(exactBindings, { sequence, kind: "motion", motion });
-      addLongerPrefixes(longerPrefixes, sequence);
-      addLongerPrefixes(motionLongerPrefixes, sequence);
+      if (!isAtomicKeySequence(sequence)) {
+        addLongerPrefixes(longerPrefixes, sequence);
+        addLongerPrefixes(motionLongerPrefixes, sequence);
+      }
     }
   }
 

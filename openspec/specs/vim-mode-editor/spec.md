@@ -46,12 +46,17 @@ The Vim editor SHALL start in insert mode and MUST delegate ordinary text entry,
 
 ### Requirement: Normal mode supports core Vim navigation
 
-The Vim editor SHALL support core normal-mode cursor movement across the current prompt.
+The Vim editor SHALL support core normal-mode cursor movement across the current prompt using Vim directional keys and physical arrow-key aliases.
 
 #### Scenario: Character navigation
 
-- **WHEN** the editor is in normal mode and the user presses `h`, `j`, `k`, or `l`
+- **WHEN** the editor is in normal mode and the user presses `h`, `j`, `k`, `l`, `Left`, `Down`, `Up`, or `Right`
 - **THEN** the cursor moves left, down, up, or right respectively when movement is possible
+
+#### Scenario: Counted arrow navigation
+
+- **WHEN** the editor is in normal mode and the user enters a numeric count before an arrow key
+- **THEN** the cursor moves by that count using the same bounds and line-wrapping behavior as the matching `h`, `j`, `k`, or `l` motion
 
 #### Scenario: Line boundary navigation
 

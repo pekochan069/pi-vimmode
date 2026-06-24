@@ -161,21 +161,21 @@ Enter        -> submit through Pi
 
 <!-- runtime-help:motions -->
 
-| Key                   | Action                                  | Notes                                                                          |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
-| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                                     |
-| `0` / `$`             | line start / line end                   | Current prompt line.                                                           |
-| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                       |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                |
-| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                  |
-| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                     |
-| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                 |
-| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.              |
-| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.               |
-| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds. |
-| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                             |
-| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                             |
-| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                       |
+| Key                   | Action                                  | Notes                                                                                                                       |
+| --------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`. Arrow keys (Left, Down, Up, Right) are aliases for the same directional motions. |
+| `0` / `$`             | line start / line end                   | Current prompt line.                                                                                                        |
+| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                                                                    |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                                                             |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                                                               |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                                                                  |
+| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                                                              |
+| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.                                                           |
+| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.                                                            |
+| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds.                                              |
+| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                                                                          |
+| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                                                                          |
+| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                                                                    |
 
 Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`, `2}`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
 
@@ -258,7 +258,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
+- motions: `h`, `j`, `k`, `l`, arrow keys `Left`/`Down`/`Up`/`Right`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`

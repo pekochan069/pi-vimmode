@@ -3107,6 +3107,67 @@ describe("modal engine", () => {
     expect(repeatedChange.state.register).toEqual({ type: "char", text: "next-token" });
   });
 
+  test("normal mode arrow keys move cursor like h/j/k/l", () => {
+    const left = "\x1b[D";
+    const down = "\x1b[B";
+    const up = "\x1b[A";
+    const right = "\x1b[C";
+
+    // Single-line navigation
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 1), [right]).cursor).toEqual(p(0, 2));
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 1), [left]).cursor).toEqual(p(0, 0));
+
+    // Multi-line navigation
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc", p(0, 0), [down]).cursor).toEqual(p(1, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc", p(1, 0), [up]).cursor).toEqual(p(0, 0));
+
+    // Boundary clamping
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 2), [right]).cursor).toEqual(p(0, 3));
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [left]).cursor).toEqual(p(0, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb", p(0, 0), [up]).cursor).toEqual(p(0, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb", p(1, 0), [down]).cursor).toEqual(p(1, 0));
+  });
+
+  test("normal mode counted arrow keys move by count", () => {
+    const down = "\x1b[B";
+    const right = "\x1b[C";
+
+    expect(applyModalKeys({ mode: "normal" }, "abcde", p(0, 0), ["2", right]).cursor).toEqual(
+      p(0, 2),
+    );
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc\nd", p(0, 0), ["2", down]).cursor).toEqual(
+      p(2, 0),
+    );
+  });
+
+  test("visual mode arrow keys extend selection", () => {
+    const right = "\x1b[C";
+    const down = "\x1b[B";
+
+    const selected = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "abc\ndef",
+      p(0, 0),
+      [right, right, down],
+    );
+    expect(selected.cursor).toEqual(p(1, 2));
+    expect(selected.state.visualAnchor).toEqual(p(0, 0));
+  });
+
+  test("normal operators support arrow-key motions", () => {
+    const right = "\x1b[C";
+    const down = "\x1b[B";
+
+    const deleted = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["d", right]);
+    expect(deleted.text).toBe("bc");
+    expect(deleted.state.register).toEqual({ type: "char", text: "a" });
+
+    const changed = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(0, 0), ["c", "2", down]);
+    expect(changed.text).toBe("");
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "line", text: "a\nb\nc" });
+  });
+
   test("normal operators support line, buffer, and matching-pair motions", () => {
     const deletedDown = applyModalKeys({ mode: "normal" }, "one\ntwo\nthree", p(0, 0), ["d", "j"]);
     expect(deletedDown.text).toBe("three");

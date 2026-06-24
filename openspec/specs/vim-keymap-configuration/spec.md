@@ -8,12 +8,17 @@ TBD - created by archiving change make-vimmode-configurable. Update Purpose afte
 
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
-The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
+The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided. Directional motion defaults SHALL include physical arrow-key aliases for the same semantic left/down/up/right actions as `h`, `j`, `k`, and `l`.
 
 #### Scenario: Default keymap preserved
 
 - **WHEN** Pi starts with no `piVimMode.keymap` setting
 - **THEN** the resolved keymap binds the currently documented normal, visual, operator, motion, paste, open-line, join, and undo commands to their existing default keys
+
+#### Scenario: Default directional arrow aliases available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting
+- **THEN** the resolved motion keymap binds `left`, `down`, `up`, and `right` as aliases for the existing left/down/up/right motion actions
 
 #### Scenario: Operator binding configured
 

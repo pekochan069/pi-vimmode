@@ -36,10 +36,10 @@ export const KEYMAP_OPERATOR_DESCRIPTORS = {
 } as const satisfies Record<VimOperatorAction, OperatorDescriptor>;
 
 export const KEYMAP_MOTION_DESCRIPTORS = {
-  left: { defaults: ["h"], legacy: "h" },
-  down: { defaults: ["j"], legacy: "j" },
-  up: { defaults: ["k"], legacy: "k" },
-  right: { defaults: ["l"], legacy: "l" },
+  left: { defaults: ["h", "left"], legacy: "h" },
+  down: { defaults: ["j", "down"], legacy: "j" },
+  up: { defaults: ["k", "up"], legacy: "k" },
+  right: { defaults: ["l", "right"], legacy: "l" },
   wordForward: { defaults: ["w"], legacy: "w" },
   wordBackward: { defaults: ["b"], legacy: "b" },
   wordEnd: { defaults: ["e"], legacy: "e" },

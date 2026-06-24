@@ -1869,6 +1869,15 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
       if (second.sequence.length <= first.sequence.length) continue;
       if (second.sequence.includes("+")) continue;
       if (!second.sequence.startsWith(first.sequence)) continue;
+      // Arrow-key aliases are atomic terminal sequences, never typed character-by-character.
+      // Suppress shadow warnings when the longer binding is an atomic alias.
+      if (
+        second.sequence === "left" ||
+        second.sequence === "down" ||
+        second.sequence === "up" ||
+        second.sequence === "right"
+      )
+        continue;
       warnings.push(
         `resolved settings: piVimMode.keymap binding ${first.sequence} for ${first.label} is shadowed by longer binding ${second.sequence} for ${second.label}`,
       );

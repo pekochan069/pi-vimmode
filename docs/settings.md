@@ -245,30 +245,30 @@ Rules:
 
 ### Motions
 
-| Path                                          | Default      | Effect                                                                                                      |
-| --------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------- |
-| `piVimMode.keymap.motions.left`               | `["h"]`      | Move left. Count repeats movement.                                                                          |
-| `piVimMode.keymap.motions.down`               | `["j"]`      | Move down. Count repeats movement.                                                                          |
-| `piVimMode.keymap.motions.up`                 | `["k"]`      | Move up. Count repeats movement.                                                                            |
-| `piVimMode.keymap.motions.right`              | `["l"]`      | Move right. Count repeats movement.                                                                         |
-| `piVimMode.keymap.motions.wordForward`        | `["w"]`      | Move to next word.                                                                                          |
-| `piVimMode.keymap.motions.wordBackward`       | `["b"]`      | Move to previous word.                                                                                      |
-| `piVimMode.keymap.motions.wordEnd`            | `["e"]`      | Move to word end.                                                                                           |
-| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`      | Move to next whitespace-delimited WORD.                                                                     |
-| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`      | Move to previous whitespace-delimited WORD.                                                                 |
-| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`      | Move to end of current or next whitespace-delimited WORD.                                                   |
-| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`     | Move to previous word end.                                                                                  |
-| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`     | Move to previous whitespace-delimited WORD end.                                                             |
-| `piVimMode.keymap.motions.lineStart`          | `["0"]`      | Move to start of current line.                                                                              |
-| `piVimMode.keymap.motions.lineEnd`            | `["$"]`      | Move to end of current line.                                                                                |
-| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]` | Move to first non-blank character on current line.                                                          |
-| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                                                       |
-| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                                                         |
-| `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line.                               |
-| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]` | Move down by half the visible prompt page; count multiplies the distance.                                   |
-| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]` | Move up by half the visible prompt page; count multiplies the distance.                                     |
-| `piVimMode.keymap.motions.paragraphBackward`  | `["{"]`      | Move to current paragraph start, or previous paragraph start when already there. Blank-line-separated runs. |
-| `piVimMode.keymap.motions.paragraphForward`   | `["}"]`      | Move to next paragraph first column, or prompt end when none remain. Blank-line-separated runs.             |
+| Path                                          | Default          | Effect                                                                                                      |
+| --------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.motions.left`               | `["h", "left"]`  | Move left. Arrow key `Left` alias included. Count repeats movement.                                         |
+| `piVimMode.keymap.motions.down`               | `["j", "down"]`  | Move down. Arrow key `Down` alias included. Count repeats movement.                                         |
+| `piVimMode.keymap.motions.up`                 | `["k", "up"]`    | Move up. Arrow key `Up` alias included. Count repeats movement.                                             |
+| `piVimMode.keymap.motions.right`              | `["l", "right"]` | Move right. Arrow key `Right` alias included. Count repeats movement.                                       |
+| `piVimMode.keymap.motions.wordForward`        | `["w"]`          | Move to next word.                                                                                          |
+| `piVimMode.keymap.motions.wordBackward`       | `["b"]`          | Move to previous word.                                                                                      |
+| `piVimMode.keymap.motions.wordEnd`            | `["e"]`          | Move to word end.                                                                                           |
+| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`          | Move to next whitespace-delimited WORD.                                                                     |
+| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`          | Move to previous whitespace-delimited WORD.                                                                 |
+| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`          | Move to end of current or next whitespace-delimited WORD.                                                   |
+| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`         | Move to previous word end.                                                                                  |
+| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`         | Move to previous whitespace-delimited WORD end.                                                             |
+| `piVimMode.keymap.motions.lineStart`          | `["0"]`          | Move to start of current line.                                                                              |
+| `piVimMode.keymap.motions.lineEnd`            | `["$"]`          | Move to end of current line.                                                                                |
+| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]`     | Move to first non-blank character on current line.                                                          |
+| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`         | Move to prompt start.                                                                                       |
+| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`          | Move to prompt end.                                                                                         |
+| `piVimMode.keymap.motions.matchingPair`       | `["%"]`          | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line.                               |
+| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]`     | Move down by half the visible prompt page; count multiplies the distance.                                   |
+| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]`     | Move up by half the visible prompt page; count multiplies the distance.                                     |
+| `piVimMode.keymap.motions.paragraphBackward`  | `["{"]`          | Move to current paragraph start, or previous paragraph start when already there. Blank-line-separated runs. |
+| `piVimMode.keymap.motions.paragraphForward`   | `["}"]`          | Move to next paragraph first column, or prompt end when none remain. Blank-line-separated runs.             |
 
 ### Commands
 

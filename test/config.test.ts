@@ -101,8 +101,8 @@ describe("vim config parsing", () => {
     expect(settings.piVimMode.promptTransforms.commands.quote).toEqual(["qte"]);
     expect(settings.piVimMode.ui.status.items).toEqual(["mode", "selection"]);
     expect(settings.piVimMode.ui.mode.labels.normal).toBe("COMMAND");
-    expect(options.keymap?.motions.left).toEqual(["h"]);
-    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h"]);
+    expect(options.keymap?.motions.left).toEqual(["h", "left"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h", "left"]);
   });
 
   test("parses valid global settings", () => {
@@ -267,8 +267,8 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
     expect(result.options.keymap?.motions.down).toEqual(["J"]);
     expect(result.options.keymap?.motions.up).toEqual(["K"]);
-    expect(result.options.keymap?.motions.left).toEqual(["h"]);
-    expect(result.options.keymap?.motions.right).toEqual(["l"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h", "left"]);
+    expect(result.options.keymap?.motions.right).toEqual(["l", "right"]);
     expect(result.options.keymap?.macros.record).toEqual(["q"]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
@@ -545,7 +545,7 @@ describe("vim config parsing", () => {
 
     expect(result.options.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(result.options.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
-    expect(result.options.keymap?.motions.left).toEqual(["h"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h", "left"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([

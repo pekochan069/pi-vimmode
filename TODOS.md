@@ -12,10 +12,10 @@
   - [x] Test configured actions, rejected raw chords, autocomplete delegation, duplicate bindings, no-register writes, newline join behavior, and no-op prompt boundaries.
 - [ ] Bug - Arrow keys in normal mode doesn't move cursor
 - [ ] Separate escape keybindings (escapeInsert, escapeVisual, escapeEx, ...)
+- [ ] Keybinding presets (qwerty, dvorak, colemak, colemak-dh, etc) after finite insert actions prove useful.
 
 ## Deferred
 
-- [ ] Keybinding presets (qwerty, dvorak, colemak, etc) after finite insert actions prove useful.
 - [ ] Consider `gj` / `gk` display-line motions if prompt rendering gains stable display-line mapping.
 - [ ] Consider `zz` / `zt` / `zb` viewport recentering if prompt viewport state needs explicit cursor positioning.
 - [ ] Consider window/file keybindings only if pi-vimmode expands beyond prompt-local editing.

@@ -22,6 +22,12 @@ const options: ModalOptions = {
 const snapshot = { text: "abc", lines: ["abc"], cursor };
 const ctrlJ = "\u001b[106;5u";
 const superJ = "\u001b[106;9u";
+const ctrlW = "\u001b[119;5u";
+const altD = "\u001bd";
+const csiAltD = "\u001b[100;3u";
+const altF = "\u001bf";
+const csiAltF = "\u001b[102;3u";
+const ctrlE = "\u001b[101;5u";
 const escapeOptions = resolveVimOptions({
   piVimMode: { keymap: { escape: ["<D-j>"] } },
 }).options;
@@ -297,6 +303,91 @@ describe("modal contracts", () => {
       const result = handleModalInput({ mode: "insert" }, snapshot, insertOptions, "a");
       expect(result.state.mode).toBe("insert");
       expect(result.effects).toEqual([{ type: "delegate", input: "a" }]);
+    });
+  });
+
+  describe("insert mode edit and navigation bindings", () => {
+    const editOptions = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          insert: {
+            deleteWordBackward: ["ctrl+w"],
+            deleteWordForward: ["alt+d"],
+            deleteLineBackward: ["ctrl+u"],
+            deleteLineForward: ["ctrl+k"],
+            moveWordBackward: ["alt+b"],
+            moveWordForward: ["alt+f"],
+            moveLineStart: ["ctrl+a"],
+            moveLineEnd: ["ctrl+e"],
+          },
+        },
+      },
+    }).options;
+
+    test("configured insert deleteWordBackward deletes backward without writing registers", () => {
+      const textSnapshot = { text: "alpha beta", lines: ["alpha beta"], cursor: p(0, 6) };
+      const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, ctrlW);
+      expect(result.state.mode).toBe("insert");
+      const editEffect = result.effects.find((effect) => effect.type === "edit") as
+        | {
+            type: "edit";
+            result: { text: string; cursor: { line: number; col: number }; register?: unknown };
+          }
+        | undefined;
+      expect(editEffect).toBeDefined();
+      expect(editEffect!.result.text).toBe("beta");
+      expect(editEffect!.result.cursor).toEqual(p(0, 0));
+      expect(editEffect!.result.register).toBeUndefined();
+    });
+
+    test("configured insert deleteWordForward supports legacy and enhanced alt keys", () => {
+      const textSnapshot = { text: "hello world foo", lines: ["hello world foo"], cursor: p(0, 0) };
+      for (const input of [altD, csiAltD]) {
+        const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, input);
+        const editEffect = result.effects.find((effect) => effect.type === "edit") as
+          | {
+              type: "edit";
+              result: { text: string; cursor: { line: number; col: number }; register?: unknown };
+            }
+          | undefined;
+        expect(editEffect).toBeDefined();
+        expect(editEffect!.result.text).toBe("world foo");
+        expect(editEffect!.result.cursor).toEqual(p(0, 0));
+        expect(editEffect!.result.register).toBeUndefined();
+      }
+    });
+
+    test("configured insert moveWordForward supports legacy and enhanced alt keys", () => {
+      const textSnapshot = { text: "hello world foo", lines: ["hello world foo"], cursor: p(0, 0) };
+      for (const input of [altF, csiAltF]) {
+        const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, input);
+        expect(result.effects).toEqual([
+          { type: "restoreCursor", position: p(0, 6) },
+          { type: "invalidate" },
+        ]);
+      }
+    });
+
+    test("configured insert moveLineEnd moves cursor without editing", () => {
+      const textSnapshot = { text: "alpha beta", lines: ["alpha beta"], cursor: p(0, 0) };
+      const initial = {
+        mode: "insert" as const,
+        searchHighlight: { query: "beta", current: p(0, 0) },
+      };
+      const result = handleModalInput(initial, textSnapshot, editOptions, ctrlE);
+      expect(result.state.mode).toBe("insert");
+      expect(result.state.searchHighlight).toEqual({ query: "beta", current: p(0, 0) });
+      expect(result.effects).toEqual([
+        { type: "restoreCursor", position: p(0, 10) },
+        { type: "invalidate" },
+      ]);
+    });
+
+    test("configured insert movement preserves autocomplete delegation", () => {
+      const textSnapshot = { ...snapshot, isAutocompleteOpen: true };
+      const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, ctrlE);
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects).toEqual([{ type: "delegate", input: ctrlE }]);
     });
   });
 

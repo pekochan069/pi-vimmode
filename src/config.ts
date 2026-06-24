@@ -115,7 +115,18 @@ const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
 const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
 const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
 const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
-const INSERT_ACTION_SET = new Set<string>(["openLineBelow", "openLineAbove"]);
+const INSERT_ACTION_SET = new Set<string>([
+  "openLineBelow",
+  "openLineAbove",
+  "deleteWordBackward",
+  "deleteWordForward",
+  "deleteLineBackward",
+  "deleteLineForward",
+  "moveWordBackward",
+  "moveWordForward",
+  "moveLineStart",
+  "moveLineEnd",
+]);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTIONS = VIM_MOTION_ACTIONS.filter(
   (action) => action !== "halfPageDown" && action !== "halfPageUp",
@@ -160,6 +171,14 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
   insert: Object.freeze({
     openLineBelow: Object.freeze([]),
     openLineAbove: Object.freeze([]),
+    deleteWordBackward: Object.freeze([]),
+    deleteWordForward: Object.freeze([]),
+    deleteLineBackward: Object.freeze([]),
+    deleteLineForward: Object.freeze([]),
+    moveWordBackward: Object.freeze([]),
+    moveWordForward: Object.freeze([]),
+    moveLineStart: Object.freeze([]),
+    moveLineEnd: Object.freeze([]),
   }),
   actions: Object.freeze({
     accepted: Object.freeze([]),
@@ -380,6 +399,14 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
     insert: {
       openLineBelow: [...keymap.insert.openLineBelow],
       openLineAbove: [...keymap.insert.openLineAbove],
+      deleteWordBackward: [...keymap.insert.deleteWordBackward],
+      deleteWordForward: [...keymap.insert.deleteWordForward],
+      deleteLineBackward: [...keymap.insert.deleteLineBackward],
+      deleteLineForward: [...keymap.insert.deleteLineForward],
+      moveWordBackward: [...keymap.insert.moveWordBackward],
+      moveWordForward: [...keymap.insert.moveWordForward],
+      moveLineStart: [...keymap.insert.moveLineStart],
+      moveLineEnd: [...keymap.insert.moveLineEnd],
     },
     actions: {
       accepted: keymap.actions.accepted.map((binding) => ({

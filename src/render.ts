@@ -2,7 +2,8 @@ import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi
 
 import type { CursorStyle, Position, TextRange, VimMode } from "./types.ts";
 
-import { findSearchHighlightRanges, isVisualCellSelected, isVisualLineSelected } from "./buffer.ts";
+import { findSearchHighlightRanges } from "./buffer.ts";
+import { isVisualCellSelected, isVisualLineSelected } from "./visual-selection.ts";
 
 export const SELECTION_START = "\x1b[7m";
 export const SEARCH_START = "\x1b[43m";

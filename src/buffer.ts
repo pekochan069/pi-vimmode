@@ -1,5 +1,4 @@
 import type {
-  BlockRange as ResolvedBlockRangeValue,
   ResolvedBlockRange,
   ResolvedCharacterRange,
   ResolvedDestination,
@@ -20,12 +19,39 @@ import type {
 } from "./types.ts";
 
 import { isErrorBlockLine, resolvePromptStructureRange } from "./prompt-structures.ts";
+import {
+  blockSelectionText,
+  isVisualCellSelected,
+  isVisualLineSelected,
+  linewiseSelectionText,
+  normalizeBlockRange,
+  normalizeLineRange,
+  normalizeRange,
+  selectionText,
+  type VisualSelectionKind,
+  visualBlockSelectionSummary,
+  visualLineSelectionSummary,
+  visualSelectionSummary,
+  visualSelectionText,
+} from "./visual-selection.ts";
+
+export type { VisualSelectionKind, VisualSelectionMode } from "./visual-selection.ts";
+export {
+  blockSelectionText,
+  isVisualCellSelected,
+  isVisualLineSelected,
+  linewiseSelectionText,
+  normalizeBlockRange,
+  normalizeLineRange,
+  normalizeRange,
+  selectionText,
+  visualBlockSelectionSummary,
+  visualLineSelectionSummary,
+  visualSelectionSummary,
+  visualSelectionText,
+};
 
 export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
-export type VisualSelectionKind = "char" | "line" | "block";
-export type VisualSelectionMode = "visual" | "visualLine" | "visualBlock";
-
-type BlockRange = ResolvedBlockRangeValue;
 
 function splitText(text: string): string[] {
   const lines = text.split("\n");
@@ -1094,77 +1120,6 @@ export function navigateBuffer(
   }
 }
 
-function normalizeRange(lines: string[], anchor: Position, active: Position): TextRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return comparePositions(a, b) <= 0 ? { start: a, end: b } : { start: b, end: a };
-}
-
-function normalizeLineRange(lines: string[], anchor: Position, active: Position): LineRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return {
-    startLine: Math.min(a.line, b.line),
-    endLine: Math.max(a.line, b.line),
-  };
-}
-
-function normalizeBlockRange(lines: string[], anchor: Position, active: Position): BlockRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return {
-    startLine: Math.min(a.line, b.line),
-    endLine: Math.max(a.line, b.line),
-    startCol: Math.min(a.col, b.col),
-    endCol: Math.max(a.col, b.col),
-  };
-}
-
-function blockSelectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeBlockRange(lines, anchor, active);
-  const selected: string[] = [];
-
-  for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-    const line = lines[lineIndex] ?? "";
-    const start = Math.min(range.startCol, line.length);
-    const end = Math.min(range.endCol + 1, line.length);
-    selected.push(line.slice(start, end));
-  }
-
-  return selected.join("\n");
-}
-
-function selectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeRange(lines, anchor, active);
-  const { start, end } = range;
-
-  if (start.line === end.line) {
-    const line = lines[start.line] ?? "";
-    const endExclusive = Math.min(end.col + 1, line.length);
-    return line.slice(start.col, endExclusive);
-  }
-
-  const selected: string[] = [];
-  const first = lines[start.line] ?? "";
-  selected.push(first.slice(start.col));
-
-  for (let line = start.line + 1; line < end.line; line++) {
-    selected.push(lines[line] ?? "");
-  }
-
-  const last = lines[end.line] ?? "";
-  selected.push(last.slice(0, Math.min(end.col + 1, last.length)));
-  return selected.join("\n");
-}
-
-function linewiseSelectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeLineRange(lines, anchor, active);
-  return lines.slice(range.startLine, range.endLine + 1).join("\n");
-}
-
 export function deleteRange(text: string, anchor: Position, active: Position): EditResult {
   const lines = splitText(text);
   const range = normalizeRange(lines, anchor, active);
@@ -2109,17 +2064,6 @@ export function yankVisualSelection(
   return selected.length > 0 ? { type: "char", text: selected } : undefined;
 }
 
-export function visualSelectionText(
-  text: string,
-  anchor: Position,
-  active: Position,
-  kind: VisualSelectionKind,
-): string {
-  if (kind === "line") return linewiseSelectionText(text, anchor, active);
-  if (kind === "block") return blockSelectionText(text, anchor, active);
-  return selectionText(text, anchor, active);
-}
-
 export function deleteLine(text: string, cursor: Position, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
@@ -2386,61 +2330,6 @@ export function pasteRegisterBefore(
   };
 }
 
-export function isVisualCellSelected(
-  mode: VisualSelectionMode,
-  lines: string[],
-  anchor: Position,
-  cursor: Position,
-  lineIndex: number,
-  col: number,
-): boolean {
-  if (mode === "visualLine") return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
-  if (mode === "visualBlock") {
-    const range = normalizeBlockRange(lines, anchor, cursor);
-    return (
-      lineIndex >= range.startLine &&
-      lineIndex <= range.endLine &&
-      col >= range.startCol &&
-      col <= range.endCol
-    );
-  }
-
-  const range = normalizeRange(lines, anchor, cursor);
-  const pos = { line: lineIndex, col };
-  return comparePositions(pos, range.start) >= 0 && comparePositions(pos, range.end) <= 0;
-}
-
-export function isVisualLineSelected(
-  mode: VisualSelectionMode,
-  lines: string[],
-  anchor: Position,
-  cursor: Position,
-  lineIndex: number,
-): boolean {
-  if (mode !== "visualLine") return false;
-  const range = normalizeLineRange(lines, anchor, cursor);
-  return lineIndex >= range.startLine && lineIndex <= range.endLine;
-}
-
-export function visualSelectionSummary(text: string, anchor: Position, active: Position): string {
-  const selected = selectionText(text, anchor, active);
-  if (selected.length === 0) return "0 chars";
-  const lines = selected.split("\n");
-  if (lines.length > 1) return `${lines.length} lines`;
-  return `${selected.length} chars`;
-}
-
-export function visualLineSelectionSummary(
-  text: string,
-  anchor: Position,
-  active: Position,
-): string {
-  const lines = splitText(text);
-  const range = normalizeLineRange(lines, anchor, active);
-  const count = range.endLine - range.startLine + 1;
-  return `${count} ${count === 1 ? "line" : "lines"}`;
-}
-
 function wordRangeAtOffset(
   text: string,
   offset: number,
@@ -2695,16 +2584,4 @@ export function transformCaseTextObject(
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
   return transformCaseVisualRange(text, range.start, range.end, "char", action);
-}
-
-export function visualBlockSelectionSummary(
-  text: string,
-  anchor: Position,
-  active: Position,
-): string {
-  const lines = splitText(text);
-  const range = normalizeBlockRange(lines, anchor, active);
-  const lineCount = range.endLine - range.startLine + 1;
-  const colCount = range.endCol - range.startCol + 1;
-  return `${lineCount}x${colCount} block`;
 }

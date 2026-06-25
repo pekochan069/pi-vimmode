@@ -35,8 +35,6 @@ import {
   deleteRange,
   exactMarkPosition,
   firstNonBlankPosition,
-  isVisualCellSelected,
-  isVisualLineSelected,
   joinLineWithNext,
   matchingPairPosition,
   lineMarkPosition,
@@ -65,10 +63,6 @@ import {
   toggleCaseAt,
   toggleCaseVisualRange,
   transformCaseVisualRange,
-  visualBlockSelectionSummary,
-  visualLineSelectionSummary,
-  visualSelectionSummary,
-  visualSelectionText,
   wordBackwardPosition,
   wordEndPosition,
   wordEndBigPosition,
@@ -91,6 +85,14 @@ import {
   yankVisualSelection,
   wordUnderCursor,
 } from "../src/buffer.ts";
+import {
+  isVisualCellSelected,
+  isVisualLineSelected,
+  visualBlockSelectionSummary,
+  visualLineSelectionSummary,
+  visualSelectionSummary,
+  visualSelectionText,
+} from "../src/visual-selection.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 

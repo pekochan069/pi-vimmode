@@ -210,22 +210,25 @@ describe("runtime help registry", () => {
         },
       },
     }).options;
-    expect(runtimeFeaturesMessage("reflow", { ...context, options: transforms })).toContain(
-      "reflow disabled",
+    const reflowMessage = runtimeFeaturesMessage("reflow", { ...context, options: transforms });
+    expect(reflowMessage).toContain("prompt.transform.reflow");
+    expect(reflowMessage).toContain("disabled");
+    expect(reflowMessage).toContain("width?:integer");
+    expect(runtimeFeaturesMessage("quote", { ...context, options: transforms })).toContain(
+      "ex=qte",
     );
-    expect(runtimeFeaturesMessage("quote", { ...context, options: transforms })).toContain(":qte");
   });
 
-  test("registry entries keep only runtime help fields", () => {
+  test("registry entries carry drift anchors", () => {
     for (const entry of runtimeHelpEntries(context)) {
       expect(entry.id.length).toBeGreaterThan(0);
       expect(entry.topics.length).toBeGreaterThan(0);
       expect(entry.summary.length).toBeGreaterThan(0);
       expect(entry.examples.length).toBeGreaterThan(0);
       expect(entry.limits.length).toBeGreaterThan(0);
-      expect("docsAnchor" in entry).toBe(false);
-      expect("specAnchor" in entry).toBe(false);
-      expect("testAnchors" in entry).toBe(false);
+      expect(entry.docsAnchor.length).toBeGreaterThan(0);
+      expect(entry.specAnchor.length).toBeGreaterThan(0);
+      expect(entry.testAnchors.length).toBeGreaterThanOrEqual(1);
     }
   });
 });

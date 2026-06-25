@@ -2,13 +2,13 @@ import { truncateToWidth } from "@earendil-works/pi-tui";
 
 import type { Position, ResolvedVimUi, VimMode } from "../types.ts";
 
+import { DEFAULT_VIM_UI } from "../config.ts";
 import {
   visualBlockSelectionSummary,
   visualLineSelectionSummary,
   visualSelectionSummary,
   visualSelectionText,
-} from "../buffer.ts";
-import { DEFAULT_VIM_UI } from "../config.ts";
+} from "../visual-selection.ts";
 
 export type ModalVisualStatusInput = {
   mode: VimMode;

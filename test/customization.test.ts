@@ -110,6 +110,26 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(options.keymap!, "gg", warnings)).toContain("rejected");
   });
 
+  test("reports disabled prompt transforms as disabled registry entries", () => {
+    const { options, warnings } = resolveVimOptions({
+      piVimMode: {
+        promptTransforms: { actions: { reflow: false } },
+        keymap: { actions: { "prompt.transform.reflow": ["gq"] } },
+      },
+    });
+
+    const actions = actionsMessage(options.keymap!, "reflow", options.promptTransforms);
+    expect(actions).toContain("prompt.transform.reflow");
+    expect(actions).toContain("disabled");
+    expect(actions).toContain("width?:integer");
+    expect(actions).not.toContain("promptTransform");
+    expect(keymapMessage(options.keymap!, "reflow", options.promptTransforms)).toContain(
+      "disabled",
+    );
+    expect(mapcheckMessage(options.keymap!, "gq", warnings)).toContain("prompt.transform.reflow");
+    expect(doctorMessage(options, { warnings })).toContain("prompt.transform.reflow");
+  });
+
   test("formats keybinding catalog from effective resolved bindings", () => {
     const { options } = resolveVimOptions({
       piVimMode: {

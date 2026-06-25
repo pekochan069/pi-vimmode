@@ -1,5 +1,4 @@
 import type {
-  PromptTransformAction,
   ResolvedVimEditorOptions,
   ResolvedVimKeymap,
   ResolvedVimMacros,
@@ -17,7 +16,10 @@ import {
   diagnosticActionMessage,
   type DiagnosticActionEntry,
 } from "./diagnostic-actions.ts";
-import { canonicalPromptTransformActionIdForShortName } from "./prompt-transform-actions.ts";
+import {
+  PROMPT_TRANSFORM_ACTIONS,
+  canonicalPromptTransformActionIdForShortName,
+} from "./prompt-transform-actions.ts";
 
 export type VimActionKind =
   | "command"
@@ -39,6 +41,8 @@ export type VimActionEntry = {
   keys: readonly string[];
   aliases?: readonly string[];
   exCommands?: readonly string[];
+  argSummary?: string;
+  disabledReason?: string;
   bindable?: false;
 };
 
@@ -152,16 +156,6 @@ const SEARCH_COMMANDS = new Set<VimCommandAction>([
   "searchWordForward",
   "searchWordBackward",
 ]);
-
-const TRANSFORM_DESCRIPTIONS: Record<PromptTransformAction, string> = {
-  quote: "quote addressed prompt lines",
-  unquote: "remove quote markers from addressed prompt lines",
-  bulletize: "turn addressed prompt lines into bullets",
-  fence: "wrap addressed prompt lines in a code fence",
-  indent: "indent addressed prompt lines",
-  dedent: "dedent addressed prompt lines",
-  reflow: "reflow addressed prose paragraphs",
-};
 
 const OPERATOR_DESCRIPTIONS: Record<VimOperatorAction, string> = {
   delete: "delete by motion or text object",
@@ -367,22 +361,26 @@ export function actionEntriesForKeymap(
       keys,
     });
   }
-  if (promptTransforms?.enabled !== false) {
-    for (const [id, exCommands] of Object.entries(promptTransforms?.commands ?? {}) as [
-      PromptTransformAction,
-      readonly string[],
-    ][]) {
-      if (promptTransforms?.actions[id] === false) continue;
-      const actionId = canonicalPromptTransformActionIdForShortName(id);
+  if (promptTransforms) {
+    for (const registryEntry of PROMPT_TRANSFORM_ACTIONS) {
+      const actionId = canonicalPromptTransformActionIdForShortName(registryEntry.action);
       const actionKeys = keymap.actions.accepted
         .filter((binding) => binding.actionId === actionId)
         .map((binding) => binding.key);
+      const disabledReason =
+        promptTransforms.enabled === false
+          ? "prompt transform suite disabled"
+          : promptTransforms.actions[registryEntry.action] === false
+            ? "prompt transform action disabled"
+            : undefined;
       entries.push({
         id: actionId,
         kind: "promptTransform",
-        description: TRANSFORM_DESCRIPTIONS[id],
+        description: registryEntry.description,
         keys: actionKeys,
-        exCommands,
+        exCommands: promptTransforms.commands[registryEntry.action],
+        argSummary: promptTransformArgSummary(registryEntry.args),
+        disabledReason,
       });
     }
   }
@@ -407,6 +405,8 @@ export function searchActions(
       entry.description,
       ...(entry.aliases ?? []),
       ...(entry.exCommands ?? []),
+      entry.argSummary ?? "",
+      entry.disabledReason ?? "",
       ...entry.keys,
     ]
       .join(" ")
@@ -415,13 +415,40 @@ export function searchActions(
   });
 }
 
+function promptTransformArgSummary(
+  args: (typeof PROMPT_TRANSFORM_ACTIONS)[number]["args"],
+): string | undefined {
+  if (args.length === 0) return undefined;
+  return args.map((arg) => `${arg.name}${arg.required ? "" : "?"}:${arg.type}`).join(",");
+}
+
 function summarizeEntry(entry: VimActionEntry): string {
   const diagnostic = diagnosticActionEntries().find((action) => action.id === entry.id);
   if (diagnostic) return diagnosticActionMessage(diagnostic);
   const keys = entry.keys.length > 0 ? entry.keys.join(",") : "unbound";
   const ex = entry.exCommands?.length ? ` ex=${entry.exCommands.join(",")}` : "";
+  const args = entry.argSummary ? ` args=${entry.argSummary}` : "";
+  const disabled = entry.disabledReason ? ` disabled (${entry.disabledReason})` : "";
   const id = entry.kind === "promptTransform" ? entry.id : `${entry.kind}.${entry.id}`;
-  return `${id} ${keys}${ex} — ${entry.description}`;
+  return `${id} ${keys}${ex}${args}${disabled} — ${entry.description}`;
+}
+
+function preferredActionMatch(
+  matches: readonly VimActionEntry[],
+  query: string,
+): VimActionEntry | undefined {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return matches[0];
+  return (
+    matches.find((entry) => entry.id.toLowerCase() === needle) ??
+    matches.find(
+      (entry) =>
+        entry.kind === "promptTransform" &&
+        (entry.id.toLowerCase() === `prompt.transform.${needle}` ||
+          entry.exCommands?.some((command) => command.toLowerCase() === needle)),
+    ) ??
+    matches[0]
+  );
 }
 
 export function actionsMessage(
@@ -432,8 +459,10 @@ export function actionsMessage(
   marks?: ResolvedVimMarks,
 ): string {
   const matches = searchActions(keymap, query, promptTransforms, macros, marks);
-  if (query.trim())
-    return matches[0] ? summarizeEntry(matches[0]) : `actions: no match for ${query.trim()}`;
+  if (query.trim()) {
+    const match = preferredActionMatch(matches, query);
+    return match ? summarizeEntry(match) : `actions: no match for ${query.trim()}`;
+  }
   const counts = new Map<VimActionKind, number>();
   for (const entry of matches) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
   return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("escape") ?? 0} escape aliases, ${counts.get("promptTransform") ?? 0} transforms, ${counts.get("diagnostic") ?? 0} diagnostic metadata, ${counts.get("runtimeHelp") ?? 0} runtime-help metadata; :actions <query>`;
@@ -453,7 +482,8 @@ export function keymapMessage(
     );
     return `keymap: ${bindingEntries.length} entries; :keymap <action>`;
   }
-  return matches[0] ? summarizeEntry(matches[0]) : `keymap: no match for ${query.trim()}`;
+  const match = preferredActionMatch(matches, query);
+  return match ? summarizeEntry(match) : `keymap: no match for ${query.trim()}`;
 }
 
 export function keybindingCatalogLines(context: KeybindingCatalogContext): string[] {

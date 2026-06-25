@@ -25,6 +25,7 @@ import {
   KEYMAP_MOTION_DESCRIPTORS,
   KEYMAP_OPERATOR_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
+import { grammarEntriesForKeymap } from "./keymap-grammar.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(
   Object.keys(deriveLegacyKeyToAction(KEYMAP_OPERATOR_DESCRIPTORS)),
@@ -317,40 +318,42 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
   >();
   const repeatCharSearchLongerPrefixes = new Set<string>();
 
-  for (const [operator, sequences] of Object.entries(keymap.operators) as [
-    VimOperatorAction,
-    readonly string[],
-  ][]) {
-    const operatorLookup = { exact: new Set<string>(), longerPrefixes: new Set<string>() };
-    for (const sequence of sequences) {
-      setFirstBinding(exactBindings, { sequence, kind: "operator", operator });
-      addLongerPrefixes(longerPrefixes, sequence);
-      operatorLookup.exact.add(sequence);
-      addLongerPrefixes(operatorLookup.longerPrefixes, sequence);
-    }
-    operators.set(operator, operatorLookup);
-  }
-
-  for (const [motion, sequences] of Object.entries(keymap.motions) as [
-    VimMotionAction,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences) {
-      setFirstBinding(exactBindings, { sequence, kind: "motion", motion });
-      if (!isAtomicKeySequence(sequence)) {
-        addLongerPrefixes(longerPrefixes, sequence);
-        addLongerPrefixes(motionLongerPrefixes, sequence);
+  for (const entry of grammarEntriesForKeymap(keymap)) {
+    if (entry.family === "operator") {
+      const operatorLookup = operators.get(entry.id) ?? {
+        exact: new Set<string>(),
+        longerPrefixes: new Set<string>(),
+      };
+      setFirstBinding(exactBindings, {
+        sequence: entry.sequence,
+        kind: "operator",
+        operator: entry.id,
+      });
+      addLongerPrefixes(longerPrefixes, entry.sequence);
+      operatorLookup.exact.add(entry.sequence);
+      addLongerPrefixes(operatorLookup.longerPrefixes, entry.sequence);
+      operators.set(entry.id, operatorLookup);
+    } else if (entry.family === "motion") {
+      setFirstBinding(exactBindings, {
+        sequence: entry.sequence,
+        kind: "motion",
+        motion: entry.id,
+      });
+      if (!isAtomicKeySequence(entry.sequence)) {
+        addLongerPrefixes(longerPrefixes, entry.sequence);
+        addLongerPrefixes(motionLongerPrefixes, entry.sequence);
       }
-    }
-  }
-
-  for (const [command, sequences] of Object.entries(keymap.commands) as [
-    VimCommandAction,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences) {
-      setFirstBinding(exactBindings, { sequence, kind: "command", command });
-      addLongerPrefixes(longerPrefixes, sequence);
+    } else if (entry.family === "command") {
+      setFirstBinding(exactBindings, {
+        sequence: entry.sequence,
+        kind: "command",
+        command: entry.id,
+      });
+      addLongerPrefixes(longerPrefixes, entry.sequence);
+    } else if (entry.family === "textObjectKind") {
+      setFirstValue(textObjectKinds, entry.sequence, entry.id);
+    } else if (entry.family === "textObjectTarget") {
+      setFirstValue(textObjectTargets, entry.sequence, entry.id);
     }
   }
 
@@ -366,19 +369,6 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
 
   for (const [sequence, binding] of exactBindings) {
     if (binding.kind === "motion") motionExact.set(sequence, binding.motion);
-  }
-
-  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds) as [
-    VimTextObjectKind,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences) setFirstValue(textObjectKinds, sequence, kind);
-  }
-  for (const [target, sequences] of Object.entries(keymap.textObjects.targets) as [
-    VimTextObjectTarget,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences) setFirstValue(textObjectTargets, sequence, target);
   }
 
   compileCommandFamily(

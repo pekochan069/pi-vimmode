@@ -18,7 +18,6 @@ import {
   ACTION_RECIPE_DOCS_METADATA,
   DIAGNOSTIC_ACTION_DOCS_METADATA,
   POPUP_COMMAND_DOCS_METADATA,
-  RUNTIME_HELP_DOCS_METADATA,
 } from "./support/runtime-docs-metadata.ts";
 
 const featuresDoc = readFileSync("docs/features.md", "utf8");
@@ -32,16 +31,17 @@ function expectSameIds(actual: readonly string[], expected: readonly string[]) {
 }
 
 describe("documentation drift guard", () => {
-  test("runtime help registry metadata covers every runtime entry both directions", () => {
-    const runtimeIds = runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS }).map(
-      (entry) => entry.id,
-    );
-    const metadataIds = RUNTIME_HELP_DOCS_METADATA.map((entry) => entry.id);
-    expectSameIds(runtimeIds, metadataIds);
+  test("runtime help registry entries carry drift anchors", () => {
+    const entries = runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS });
+    for (const entry of entries) {
+      expect(entry.docsAnchor).toBeTruthy();
+      expect(entry.specAnchor).toBeTruthy();
+      expect(entry.testAnchors.length).toBeGreaterThanOrEqual(1);
+    }
   });
 
   test("runtime help registry anchors exist in feature docs, specs, and tests", () => {
-    for (const entry of RUNTIME_HELP_DOCS_METADATA) {
+    for (const entry of runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS })) {
       expect(featuresDoc).toContain(`<!-- ${entry.docsAnchor} -->`);
       expect(existsSync(entry.specAnchor)).toBe(true);
       for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);

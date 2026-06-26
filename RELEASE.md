@@ -39,3 +39,4 @@
 - Fixed legacy terminal Alt input for insert-mode bindings: `ESC+d` and `ESC+f` now normalize to `alt+d` and `alt+f`.
 - Kept legacy Alt decoding insert-scoped so normal-mode and Ex command parsing behavior does not change.
 - Fixed normal-mode arrow keys so Left/Down/Up/Right move like `h`/`j`/`k`/`l`, including counts, visual selections, and operator motions.
+- Fixed long-prompt viewport jumps when entering visual mode or editing in insert mode after scrolling down.

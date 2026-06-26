@@ -869,7 +869,7 @@ Rendering behavior:
 - Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row by default.
 - `piVimMode.ui.workbench.reservedRows` can reserve 0-5 width-safe workbench rows; active feedback uses the first reserved row and blank reserved rows keep the prompt viewport height stable.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.
-- Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators.
+- Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators; normal/visual mode transitions keep the current visible prompt rows stable while the cursor remains visible.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
 - Terminal cursor-shape hints use best-effort DECSCUSR escapes.
 - `bar` cursor enables Pi TUI hardware cursor visibility while interactive, suppresses it while Pi agent work is active, and restores original visibility on reset.

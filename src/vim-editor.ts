@@ -230,6 +230,7 @@ export class VimEditor extends CustomEditor {
   private helpOverlay: OverlayHandle | undefined;
   private agentBusy = false;
   private isMacroReplaying = false;
+  private promptViewportOffset: number | undefined;
   private readonly onShutdown?: () => void;
 
   constructor(
@@ -399,6 +400,10 @@ export class VimEditor extends CustomEditor {
           width,
           terminalRows,
           focused: this.focused,
+          offset: this.promptViewportOffset,
+          onOffset: (offset) => {
+            this.promptViewportOffset = offset;
+          },
         },
         search: this.searchRenderInput(),
         display: {
@@ -416,7 +421,9 @@ export class VimEditor extends CustomEditor {
       this.modalState.pendingSearch ||
       this.modalState.pendingEx ||
       this.modalState.exMessage ||
-      forcePromptRender
+      forcePromptRender ||
+      this.promptViewportOffset !== undefined ||
+      this.modalState.mode !== "insert"
     ) {
       return renderPromptEditor({
         snapshot: {
@@ -429,6 +436,10 @@ export class VimEditor extends CustomEditor {
           width,
           terminalRows,
           focused: this.focused,
+          offset: this.promptViewportOffset,
+          onOffset: (offset) => {
+            this.promptViewportOffset = offset;
+          },
         },
         search: this.searchRenderInput(),
         display: {

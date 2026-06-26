@@ -7,6 +7,7 @@ import {
   CURSOR_BAR_START,
   CURSOR_BLOCK_START,
   CURSOR_UNDERLINE_START,
+  ANSI_RESET,
   renderCursorCell,
   renderPromptEditor,
   renderVisualEditor,
@@ -27,6 +28,8 @@ type VisualFixture = {
   width?: number;
   terminalRows?: number;
   focused?: boolean;
+  offset?: number;
+  onOffset?: (offset: number) => void;
 };
 
 function renderVisual(fixture: VisualFixture): string[] {
@@ -44,12 +47,25 @@ function renderVisual(fixture: VisualFixture): string[] {
       width: fixture.width ?? 20,
       terminalRows: fixture.terminalRows,
       focused: fixture.focused,
+      offset: fixture.offset,
+      onOffset: fixture.onOffset,
     },
   });
 }
 
 function expectWidthSafe(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+}
+
+function stripAnsi(text: string): string {
+  return text
+    .replaceAll(SELECTION_START, "")
+    .replaceAll(CURSOR_BLOCK_START, "")
+    .replaceAll(CURSOR_UNDERLINE_START, "")
+    .replaceAll(CURSOR_BAR_START, "")
+    .replaceAll(SEARCH_CURRENT_START, "")
+    .replaceAll(SEARCH_START, "")
+    .replaceAll(ANSI_RESET, "");
 }
 
 describe("search highlight render helper", () => {
@@ -203,6 +219,48 @@ describe("visual render helper", () => {
     const output = lines.join("\n");
     expect(output).toContain("↑");
     expect(output).toContain("↓");
+    expectWidthSafe(lines, 12);
+  });
+
+  test("keeps previous viewport offset while cursor remains visible", () => {
+    let offset: number | undefined;
+    const lines = renderVisual({
+      lines: ["one", "two", "three", "four", "five", "six", "seven", "eight"],
+      cursor: p(3, 0),
+      visualAnchor: p(3, 0),
+      mode: "visualLine",
+      width: 12,
+      terminalRows: 20,
+      offset: 2,
+      onOffset: (value) => {
+        offset = value;
+      },
+    });
+
+    expect(offset).toBe(2);
+    expect(lines[1]).toContain("three");
+    expectWidthSafe(lines, 12);
+  });
+
+  test("scrolls minimally when cursor moves below visible viewport", () => {
+    let offset: number | undefined;
+    const lines = renderVisual({
+      lines: ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"],
+      cursor: p(8, 0),
+      visualAnchor: p(3, 0),
+      mode: "visualLine",
+      width: 12,
+      terminalRows: 20,
+      offset: 2,
+      onOffset: (value) => {
+        offset = value;
+      },
+    });
+
+    const output = stripAnsi(lines.join("\n"));
+    expect(offset).toBe(3);
+    expect(output).toContain("four");
+    expect(output).toContain("nine");
     expectWidthSafe(lines, 12);
   });
 });

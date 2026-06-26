@@ -22,6 +22,12 @@ const options: ModalOptions = {
 const snapshot = { text: "abc", lines: ["abc"], cursor };
 const ctrlJ = "\u001b[106;5u";
 const superJ = "\u001b[106;9u";
+const ctrlW = "\u001b[119;5u";
+const altD = "\u001bd";
+const csiAltD = "\u001b[100;3u";
+const altF = "\u001bf";
+const csiAltF = "\u001b[102;3u";
+const ctrlE = "\u001b[101;5u";
 const escapeOptions = resolveVimOptions({
   piVimMode: { keymap: { escape: ["<D-j>"] } },
 }).options;
@@ -297,6 +303,91 @@ describe("modal contracts", () => {
       const result = handleModalInput({ mode: "insert" }, snapshot, insertOptions, "a");
       expect(result.state.mode).toBe("insert");
       expect(result.effects).toEqual([{ type: "delegate", input: "a" }]);
+    });
+  });
+
+  describe("insert mode edit and navigation bindings", () => {
+    const editOptions = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          insert: {
+            deleteWordBackward: ["ctrl+w"],
+            deleteWordForward: ["alt+d"],
+            deleteLineBackward: ["ctrl+u"],
+            deleteLineForward: ["ctrl+k"],
+            moveWordBackward: ["alt+b"],
+            moveWordForward: ["alt+f"],
+            moveLineStart: ["ctrl+a"],
+            moveLineEnd: ["ctrl+e"],
+          },
+        },
+      },
+    }).options;
+
+    test("configured insert deleteWordBackward deletes backward without writing registers", () => {
+      const textSnapshot = { text: "alpha beta", lines: ["alpha beta"], cursor: p(0, 6) };
+      const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, ctrlW);
+      expect(result.state.mode).toBe("insert");
+      const editEffect = result.effects.find((effect) => effect.type === "edit") as
+        | {
+            type: "edit";
+            result: { text: string; cursor: { line: number; col: number }; register?: unknown };
+          }
+        | undefined;
+      expect(editEffect).toBeDefined();
+      expect(editEffect!.result.text).toBe("beta");
+      expect(editEffect!.result.cursor).toEqual(p(0, 0));
+      expect(editEffect!.result.register).toBeUndefined();
+    });
+
+    test("configured insert deleteWordForward supports legacy and enhanced alt keys", () => {
+      const textSnapshot = { text: "hello world foo", lines: ["hello world foo"], cursor: p(0, 0) };
+      for (const input of [altD, csiAltD]) {
+        const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, input);
+        const editEffect = result.effects.find((effect) => effect.type === "edit") as
+          | {
+              type: "edit";
+              result: { text: string; cursor: { line: number; col: number }; register?: unknown };
+            }
+          | undefined;
+        expect(editEffect).toBeDefined();
+        expect(editEffect!.result.text).toBe("world foo");
+        expect(editEffect!.result.cursor).toEqual(p(0, 0));
+        expect(editEffect!.result.register).toBeUndefined();
+      }
+    });
+
+    test("configured insert moveWordForward supports legacy and enhanced alt keys", () => {
+      const textSnapshot = { text: "hello world foo", lines: ["hello world foo"], cursor: p(0, 0) };
+      for (const input of [altF, csiAltF]) {
+        const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, input);
+        expect(result.effects).toEqual([
+          { type: "restoreCursor", position: p(0, 6) },
+          { type: "invalidate" },
+        ]);
+      }
+    });
+
+    test("configured insert moveLineEnd moves cursor without editing", () => {
+      const textSnapshot = { text: "alpha beta", lines: ["alpha beta"], cursor: p(0, 0) };
+      const initial = {
+        mode: "insert" as const,
+        searchHighlight: { query: "beta", current: p(0, 0) },
+      };
+      const result = handleModalInput(initial, textSnapshot, editOptions, ctrlE);
+      expect(result.state.mode).toBe("insert");
+      expect(result.state.searchHighlight).toEqual({ query: "beta", current: p(0, 0) });
+      expect(result.effects).toEqual([
+        { type: "restoreCursor", position: p(0, 10) },
+        { type: "invalidate" },
+      ]);
+    });
+
+    test("configured insert movement preserves autocomplete delegation", () => {
+      const textSnapshot = { ...snapshot, isAutocompleteOpen: true };
+      const result = handleModalInput({ mode: "insert" }, textSnapshot, editOptions, ctrlE);
+      expect(result.state.mode).toBe("insert");
+      expect(result.effects).toEqual([{ type: "delegate", input: ctrlE }]);
     });
   });
 
@@ -3014,6 +3105,67 @@ describe("modal engine", () => {
     expect(repeatedChange.text).toBe("run ");
     expect(repeatedChange.state.mode).toBe("insert");
     expect(repeatedChange.state.register).toEqual({ type: "char", text: "next-token" });
+  });
+
+  test("normal mode arrow keys move cursor like h/j/k/l", () => {
+    const left = "\x1b[D";
+    const down = "\x1b[B";
+    const up = "\x1b[A";
+    const right = "\x1b[C";
+
+    // Single-line navigation
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 1), [right]).cursor).toEqual(p(0, 2));
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 1), [left]).cursor).toEqual(p(0, 0));
+
+    // Multi-line navigation
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc", p(0, 0), [down]).cursor).toEqual(p(1, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc", p(1, 0), [up]).cursor).toEqual(p(0, 0));
+
+    // Boundary clamping
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 2), [right]).cursor).toEqual(p(0, 3));
+    expect(applyModalKeys({ mode: "normal" }, "abc", p(0, 0), [left]).cursor).toEqual(p(0, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb", p(0, 0), [up]).cursor).toEqual(p(0, 0));
+    expect(applyModalKeys({ mode: "normal" }, "a\nb", p(1, 0), [down]).cursor).toEqual(p(1, 0));
+  });
+
+  test("normal mode counted arrow keys move by count", () => {
+    const down = "\x1b[B";
+    const right = "\x1b[C";
+
+    expect(applyModalKeys({ mode: "normal" }, "abcde", p(0, 0), ["2", right]).cursor).toEqual(
+      p(0, 2),
+    );
+    expect(applyModalKeys({ mode: "normal" }, "a\nb\nc\nd", p(0, 0), ["2", down]).cursor).toEqual(
+      p(2, 0),
+    );
+  });
+
+  test("visual mode arrow keys extend selection", () => {
+    const right = "\x1b[C";
+    const down = "\x1b[B";
+
+    const selected = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "abc\ndef",
+      p(0, 0),
+      [right, right, down],
+    );
+    expect(selected.cursor).toEqual(p(1, 2));
+    expect(selected.state.visualAnchor).toEqual(p(0, 0));
+  });
+
+  test("normal operators support arrow-key motions", () => {
+    const right = "\x1b[C";
+    const down = "\x1b[B";
+
+    const deleted = applyModalKeys({ mode: "normal" }, "abc", p(0, 0), ["d", right]);
+    expect(deleted.text).toBe("bc");
+    expect(deleted.state.register).toEqual({ type: "char", text: "a" });
+
+    const changed = applyModalKeys({ mode: "normal" }, "a\nb\nc", p(0, 0), ["c", "2", down]);
+    expect(changed.text).toBe("");
+    expect(changed.state.mode).toBe("insert");
+    expect(changed.state.register).toEqual({ type: "line", text: "a\nb\nc" });
   });
 
   test("normal operators support line, buffer, and matching-pair motions", () => {

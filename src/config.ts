@@ -51,6 +51,7 @@ import {
   KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
   KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
+import { grammarBindingsForKeymap, grammarConflictForActionKey } from "./keymap-grammar.ts";
 import {
   bindablePromptTransformActionIds,
   normalizePromptTransformActionArgs,
@@ -115,7 +116,18 @@ const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
 const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
 const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
 const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
-const INSERT_ACTION_SET = new Set<string>(["openLineBelow", "openLineAbove"]);
+const INSERT_ACTION_SET = new Set<string>([
+  "openLineBelow",
+  "openLineAbove",
+  "deleteWordBackward",
+  "deleteWordForward",
+  "deleteLineBackward",
+  "deleteLineForward",
+  "moveWordBackward",
+  "moveWordForward",
+  "moveLineStart",
+  "moveLineEnd",
+]);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTIONS = VIM_MOTION_ACTIONS.filter(
   (action) => action !== "halfPageDown" && action !== "halfPageUp",
@@ -160,6 +172,14 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
   insert: Object.freeze({
     openLineBelow: Object.freeze([]),
     openLineAbove: Object.freeze([]),
+    deleteWordBackward: Object.freeze([]),
+    deleteWordForward: Object.freeze([]),
+    deleteLineBackward: Object.freeze([]),
+    deleteLineForward: Object.freeze([]),
+    moveWordBackward: Object.freeze([]),
+    moveWordForward: Object.freeze([]),
+    moveLineStart: Object.freeze([]),
+    moveLineEnd: Object.freeze([]),
   }),
   actions: Object.freeze({
     accepted: Object.freeze([]),
@@ -380,6 +400,14 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
     insert: {
       openLineBelow: [...keymap.insert.openLineBelow],
       openLineAbove: [...keymap.insert.openLineAbove],
+      deleteWordBackward: [...keymap.insert.deleteWordBackward],
+      deleteWordForward: [...keymap.insert.deleteWordForward],
+      deleteLineBackward: [...keymap.insert.deleteLineBackward],
+      deleteLineForward: [...keymap.insert.deleteLineForward],
+      moveWordBackward: [...keymap.insert.moveWordBackward],
+      moveWordForward: [...keymap.insert.moveWordForward],
+      moveLineStart: [...keymap.insert.moveLineStart],
+      moveLineEnd: [...keymap.insert.moveLineEnd],
     },
     actions: {
       accepted: keymap.actions.accepted.map((binding) => ({
@@ -1637,49 +1665,7 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
   if (partial.workbench) target.workbench = { ...target.workbench, ...partial.workbench };
 }
 
-type GrammarBinding = { sequence: string; label: string };
-
 type ActionBindingConflict = { rejected: boolean; reason?: string };
-
-function grammarBindingsForKeymap(keymap: ResolvedVimKeymap): GrammarBinding[] {
-  const bindings: GrammarBinding[] = [];
-  const add = (sequence: string, label: string) => bindings.push({ sequence, label });
-  for (const [operator, sequences] of Object.entries(keymap.operators)) {
-    for (const sequence of sequences) add(sequence, `operators.${operator}`);
-  }
-  for (const [motion, sequences] of Object.entries(keymap.motions)) {
-    for (const sequence of sequences) add(sequence, `motions.${motion}`);
-  }
-  for (const [command, sequences] of Object.entries(keymap.commands)) {
-    for (const sequence of sequences) add(sequence, `commands.${command}`);
-  }
-  for (const [macro, sequences] of Object.entries(keymap.macros)) {
-    for (const sequence of sequences) add(sequence, `macros.${macro}`);
-  }
-  for (const [mark, sequences] of Object.entries(keymap.marks)) {
-    for (const sequence of sequences) add(sequence, `marks.${mark}`);
-  }
-  for (const [kind, sequences] of Object.entries(keymap.textObjects.kinds)) {
-    for (const sequence of sequences) add(sequence, `textObjects.kinds.${kind}`);
-  }
-  for (const [target, sequences] of Object.entries(keymap.textObjects.targets)) {
-    for (const sequence of sequences) add(sequence, `textObjects.targets.${target}`);
-  }
-  return bindings;
-}
-
-function grammarConflictForActionKey(
-  key: string,
-  grammarBindings: readonly GrammarBinding[],
-): string | undefined {
-  const exact = grammarBindings.find((binding) => binding.sequence === key);
-  if (exact) return `conflicts with ${exact.label}`;
-  const prefix = grammarBindings.find((binding) => {
-    if (key.includes("+") || binding.sequence.includes("+")) return false;
-    return key.startsWith(binding.sequence) || binding.sequence.startsWith(key);
-  });
-  return prefix ? `prefix-shadow conflict with ${prefix.label}` : undefined;
-}
 
 function disabledActionReason(
   actionId: BindablePromptTransformActionId,
@@ -1771,33 +1757,18 @@ function rejectShowKeybindingsConflicts(keymap: ResolvedVimKeymap): string[] {
 function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
   const warnings: string[] = [];
   const seen = new Map<string, string>();
-  const bindings: Array<{ sequence: string; label: string }> = [];
-  const add = (sequence: string, label: string) => {
-    bindings.push({ sequence, label });
-    const previous = seen.get(sequence);
-    if (previous && previous !== label) {
+  const bindings = grammarBindingsForKeymap(keymap).filter(
+    (binding) => !binding.label.startsWith("textObjects."),
+  );
+  for (const binding of bindings) {
+    const previous = seen.get(binding.sequence);
+    if (previous && previous !== binding.label) {
       warnings.push(
-        `resolved settings: duplicate piVimMode.keymap binding ${sequence} for ${previous} and ${label}`,
+        `resolved settings: duplicate piVimMode.keymap binding ${binding.sequence} for ${previous} and ${binding.label}`,
       );
     } else {
-      seen.set(sequence, label);
+      seen.set(binding.sequence, binding.label);
     }
-  };
-
-  for (const [operator, sequences] of Object.entries(keymap.operators)) {
-    for (const sequence of sequences) add(sequence, `operators.${operator}`);
-  }
-  for (const [motion, sequences] of Object.entries(keymap.motions)) {
-    for (const sequence of sequences) add(sequence, `motions.${motion}`);
-  }
-  for (const [command, sequences] of Object.entries(keymap.commands)) {
-    for (const sequence of sequences) add(sequence, `commands.${command}`);
-  }
-  for (const [macro, sequences] of Object.entries(keymap.macros)) {
-    for (const sequence of sequences) add(sequence, `macros.${macro}`);
-  }
-  for (const [mark, sequences] of Object.entries(keymap.marks)) {
-    for (const sequence of sequences) add(sequence, `marks.${mark}`);
   }
   const primaryBindings = bindings.filter(
     (binding) =>
@@ -1842,6 +1813,15 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
       if (second.sequence.length <= first.sequence.length) continue;
       if (second.sequence.includes("+")) continue;
       if (!second.sequence.startsWith(first.sequence)) continue;
+      // Arrow-key aliases are atomic terminal sequences, never typed character-by-character.
+      // Suppress shadow warnings when the longer binding is an atomic alias.
+      if (
+        second.sequence === "left" ||
+        second.sequence === "down" ||
+        second.sequence === "up" ||
+        second.sequence === "right"
+      )
+        continue;
       warnings.push(
         `resolved settings: piVimMode.keymap binding ${first.sequence} for ${first.label} is shadowed by longer binding ${second.sequence} for ${second.label}`,
       );

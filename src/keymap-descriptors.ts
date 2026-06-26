@@ -36,10 +36,10 @@ export const KEYMAP_OPERATOR_DESCRIPTORS = {
 } as const satisfies Record<VimOperatorAction, OperatorDescriptor>;
 
 export const KEYMAP_MOTION_DESCRIPTORS = {
-  left: { defaults: ["h"], legacy: "h" },
-  down: { defaults: ["j"], legacy: "j" },
-  up: { defaults: ["k"], legacy: "k" },
-  right: { defaults: ["l"], legacy: "l" },
+  left: { defaults: ["h", "left"], legacy: "h" },
+  down: { defaults: ["j", "down"], legacy: "j" },
+  up: { defaults: ["k", "up"], legacy: "k" },
+  right: { defaults: ["l", "right"], legacy: "l" },
   wordForward: { defaults: ["w"], legacy: "w" },
   wordBackward: { defaults: ["b"], legacy: "b" },
   wordEnd: { defaults: ["e"], legacy: "e" },
@@ -74,6 +74,14 @@ export const KEYMAP_MARK_DESCRIPTORS = {
 export const KEYMAP_INSERT_DESCRIPTORS = {
   openLineBelow: { defaults: [] },
   openLineAbove: { defaults: [] },
+  deleteWordBackward: { defaults: [] },
+  deleteWordForward: { defaults: [] },
+  deleteLineBackward: { defaults: [] },
+  deleteLineForward: { defaults: [] },
+  moveWordBackward: { defaults: [] },
+  moveWordForward: { defaults: [] },
+  moveLineStart: { defaults: [] },
+  moveLineEnd: { defaults: [] },
 } as const satisfies Record<string, KeymapDescriptor>;
 
 export const KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS = {

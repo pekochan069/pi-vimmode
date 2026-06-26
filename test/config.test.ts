@@ -101,8 +101,8 @@ describe("vim config parsing", () => {
     expect(settings.piVimMode.promptTransforms.commands.quote).toEqual(["qte"]);
     expect(settings.piVimMode.ui.status.items).toEqual(["mode", "selection"]);
     expect(settings.piVimMode.ui.mode.labels.normal).toBe("COMMAND");
-    expect(options.keymap?.motions.left).toEqual(["h"]);
-    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h"]);
+    expect(options.keymap?.motions.left).toEqual(["h", "left"]);
+    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h", "left"]);
   });
 
   test("parses valid global settings", () => {
@@ -267,8 +267,8 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.escape).toEqual(["ctrl+j", "super+j"]);
     expect(result.options.keymap?.motions.down).toEqual(["J"]);
     expect(result.options.keymap?.motions.up).toEqual(["K"]);
-    expect(result.options.keymap?.motions.left).toEqual(["h"]);
-    expect(result.options.keymap?.motions.right).toEqual(["l"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h", "left"]);
+    expect(result.options.keymap?.motions.right).toEqual(["l", "right"]);
     expect(result.options.keymap?.macros.record).toEqual(["q"]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
@@ -326,6 +326,14 @@ describe("vim config parsing", () => {
       const result = resolveVimOptions(undefined);
       expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
       expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineStart).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineEnd).toEqual([]);
     });
 
     test("accepts configured insert open line below", () => {
@@ -428,6 +436,15 @@ describe("vim config parsing", () => {
         },
       });
       expect(result.options.keymap?.insert.openLineBelow).toEqual(["ctrl+j"]);
+      expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineStart).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineEnd).toEqual([]);
       expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
       expect(result.warnings).toEqual(
         expect.arrayContaining([
@@ -444,6 +461,14 @@ describe("vim config parsing", () => {
       });
       expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
       expect(result.options.keymap?.insert.openLineAbove).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineBackward).toEqual([]);
+      expect(result.options.keymap?.insert.deleteLineForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordBackward).toEqual([]);
+      expect(result.options.keymap?.insert.moveWordForward).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineStart).toEqual([]);
+      expect(result.options.keymap?.insert.moveLineEnd).toEqual([]);
       expect(result.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("keymap.insert must be an object")]),
       );
@@ -457,6 +482,35 @@ describe("vim config parsing", () => {
       });
       (result.options.keymap!.insert.openLineBelow as unknown as string[]).push("ctrl+k");
       expect(DEFAULT_VIM_OPTIONS.keymap?.insert.openLineBelow).toEqual([]);
+    });
+
+    test("accepts configured insert edit and movement bindings", () => {
+      const result = resolveVimOptions({
+        piVimMode: {
+          keymap: {
+            insert: {
+              deleteWordBackward: ["ctrl+w"],
+              deleteWordForward: ["alt+d"],
+              deleteLineBackward: ["ctrl+u"],
+              deleteLineForward: ["ctrl+k"],
+              moveWordBackward: ["alt+b"],
+              moveWordForward: ["alt+f"],
+              moveLineStart: ["ctrl+a"],
+              moveLineEnd: ["ctrl+e"],
+            },
+            allowProtectedOverrides: ["ctrl+u"],
+          },
+        },
+      });
+      expect(result.warnings).toEqual([]);
+      expect(result.options.keymap?.insert.deleteWordBackward).toEqual(["ctrl+w"]);
+      expect(result.options.keymap?.insert.deleteWordForward).toEqual(["alt+d"]);
+      expect(result.options.keymap?.insert.deleteLineBackward).toEqual(["ctrl+u"]);
+      expect(result.options.keymap?.insert.deleteLineForward).toEqual(["ctrl+k"]);
+      expect(result.options.keymap?.insert.moveWordBackward).toEqual(["alt+b"]);
+      expect(result.options.keymap?.insert.moveWordForward).toEqual(["alt+f"]);
+      expect(result.options.keymap?.insert.moveLineStart).toEqual(["ctrl+a"]);
+      expect(result.options.keymap?.insert.moveLineEnd).toEqual(["ctrl+e"]);
     });
   });
 
@@ -491,7 +545,7 @@ describe("vim config parsing", () => {
 
     expect(result.options.keymap?.motions.halfPageDown).toEqual(["ctrl+d"]);
     expect(result.options.keymap?.motions.halfPageUp).toEqual(["ctrl+u"]);
-    expect(result.options.keymap?.motions.left).toEqual(["h"]);
+    expect(result.options.keymap?.motions.left).toEqual(["h", "left"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["o"]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([

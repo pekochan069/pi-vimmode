@@ -1,7 +1,7 @@
 ---
 title: Preserve explicit pi-vimmode keymap precedence
 date: 2026-06-17
-last_updated: 2026-06-18
+last_updated: 2026-06-24
 category: docs/solutions/logic-errors
 module: pi-vimmode
 problem_type: logic_error
@@ -11,6 +11,7 @@ symptoms:
   - "A configured `q` prefix can enter macro recording instead of the intended prompt transform or motion path"
   - "A configured single-key `g` binding can remain shadowed by default longer prefixes such as `gg`, `ge`, and `gE`"
   - "Config-only tests can pass while live editor option cloning misses newly added nested option branches"
+  - "Normal-mode arrow keys can fail when terminal-derived semantic key names are missing from default motion bindings"
 root_cause: config_error
 resolution_type: code_fix
 severity: medium
@@ -19,7 +20,7 @@ related_components:
   - "vim-editor-adapter"
   - "keymap-parser"
   - "openspec"
-tags: [pi-vimmode, config, keymap, precedence, clone-helpers, typescript]
+tags: [pi-vimmode, config, keymap, precedence, clone-helpers, typescript, arrow-keys]
 ---
 
 # Preserve explicit pi-vimmode keymap precedence
@@ -161,6 +162,25 @@ next[action] = record[action].filter(
 
 The `+` guard is intentional. Chords such as `ctrl+c`, `alt+x`, and `ctrl+v` are atomic normalized key names, not multi-key prefix sequences. Treating those as plain strings would create false prefix conflicts.
 
+A later arrow-key regression showed the same distinction matters for terminal-derived semantic key names. The parser normalizes arrow escape sequences into `left`, `down`, `up`, and `right`, but the default motion descriptors only bound printable Vim keys. Adding semantic aliases fixes normal-mode arrows without adding a modal-engine special case:
+
+```ts
+left: { defaults: ["h", "left"], legacy: "h" },
+down: { defaults: ["j", "down"], legacy: "j" },
+up: { defaults: ["k", "up"], legacy: "k" },
+right: { defaults: ["l", "right"], legacy: "l" },
+```
+
+Those aliases are atomic: users cannot type arrow-key terminal events character-by-character. Normal-parser prefix generation skips them:
+
+```ts
+function isAtomicKeySequence(sequence: string): boolean {
+  return sequence === "left" || sequence === "down" || sequence === "up" || sequence === "right";
+}
+```
+
+Config shadow validation has a matching inline skip for longer `left`/`down`/`up`/`right` bindings. This keeps `l` and `left` from producing a bogus shadow warning while still letting `resolveNormalCommand("left", undefined, DEFAULT_VIM_KEYMAP)` dispatch the `left` motion.
+
 The defaults and validation sets are now descriptor-derived from `src/keymap-descriptors.ts`, so command, motion, macro, mark, and text-object defaults have one descriptor module instead of duplicated literal arrays. Descriptor-derived exported action arrays keep readonly API shape in `src/config.ts`:
 
 ```ts
@@ -191,6 +211,7 @@ export function cloneResolvedVimOptions(
     macros: options.macros ? cloneMacros(options.macros) : undefined,
     marks: options.marks ? cloneMarks(options.marks) : undefined,
     search: options.search ? cloneSearch(options.search) : undefined,
+    exCommand: options.exCommand ? cloneExCommand(options.exCommand) : undefined,
     feedback: options.feedback ? cloneFeedback(options.feedback) : undefined,
     promptStructures: options.promptStructures
       ? clonePromptStructures(options.promptStructures)
@@ -217,6 +238,8 @@ Regression coverage was added at both resolver and runtime boundaries:
 - `test/commands.test.ts` verifies an explicit motion binding wins over default macro record binding.
 - `test/commands.test.ts` verifies `resolveNormalCommand("g", undefined, keymap)` dispatches the configured motion rather than entering pending-prefix state.
 - `test/vim-editor.test.ts` verifies live editor option cloning propagates configured keymap and prompt transform branches.
+- `test/commands.test.ts` verifies default arrow-key aliases and counted arrow-key motions resolve through the normal command path.
+- `test/modal.test.ts` verifies normal-mode arrows move like `h/j/k/l`, counts work, visual selections extend, and operator motions accept arrows.
 
 ## Why This Works
 
@@ -230,7 +253,7 @@ The resolver now matches the intended priority model:
 
 So a sequence cannot remain both a default macro and a configured motion or command. A lower-priority conflict also cannot permanently remove a default that should be restored when a higher-priority layer moves away from that key. `q` correctly returns to macro recording when no final effective binding claims `q`.
 
-For prefix bindings, the parser only sees the final resolved keymap. Removing lower-priority plain-key prefix conflicts during resolution means the parser no longer has two plausible interpretations for `g`: it resolves the configured single-key action instead of waiting for default `g*` continuations. Modifier chords stay safe because they are excluded from string-prefix comparisons.
+For prefix bindings, the parser only sees the final resolved keymap. Removing lower-priority plain-key prefix conflicts during resolution means the parser no longer has two plausible interpretations for `g`: it resolves the configured single-key action instead of waiting for default `g*` continuations. Modifier chords stay safe because they are excluded from config prefix-conflict removal, and terminal arrow aliases stay safe because parser prefix generation and resolved-keymap shadow warnings treat them as atomic.
 
 Centralizing cloning also means config resolution and live editor construction use the same nested-field semantics. New option branches only need to be added to `cloneResolvedVimOptions`, not to separate adapter-local clone lists.
 
@@ -239,7 +262,7 @@ Centralizing cloning also means config resolution and live editor construction u
 - When adding a new top-level keymap group, update `mergeKeymapOverlay`, `configuredTopLevelKeymapSequences`, and `removeTopLevelKeymapSequences` together.
 - Prefer descriptor-derived defaults and validation sets over duplicated literal action arrays. Add descriptor tests when introducing a new keymap family.
 - Add regression tests for any default single-key binding that can also be used as a configured prefix (`q`, `g`, `z`, `@`). Include both “configured binding wins” and “higher-priority override restores default” cases.
-- When removing lower-priority prefix conflicts, distinguish plain multi-key sequences from normalized modifier chords containing `+`.
+- When removing lower-priority prefix conflicts, distinguish plain multi-key sequences from atomic normalized inputs such as modifier chords containing `+` and terminal arrow aliases (`left`, `down`, `up`, `right`).
 - Test both resolved config shape and runtime input parsing. Config shape proves precedence; runtime tests prove parser branches obey it.
 - Preserve readonly exported action-list API shapes when deriving arrays from descriptors; type-level API drift can be caught by `tsgo --noEmit`.
 - Keep resolved option cloning centralized in `cloneResolvedVimOptions`; do not reintroduce adapter-local field-by-field clone lists.
@@ -251,3 +274,4 @@ Centralizing cloning also means config resolution and live editor construction u
 - `docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md` — parser precedence failures around keybinding dispatch.
 - `docs/solutions/tooling-decisions/pi-vimmode-ui-config-single-source-of-truth-2026-05-27.md` — config surface source-of-truth guidance.
 - `docs/solutions/architecture-patterns/pi-vimmode-typed-action-registry-keybindings-2026-06-09.md` — prompt transform/action keybinding registry context.
+- `docs/solutions/developer-experience/pi-vimmode-ctrl-d-ctrl-u-half-page-scroll-2026-06-18.md` — semantic motion binding pattern for terminal-owned keys.

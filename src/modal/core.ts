@@ -22,10 +22,25 @@ import { clearMarkTarget } from "./marks.ts";
 import { applyRegisterWrite, clearRegisterTarget } from "./registers.ts";
 import { resetTransientState, transitionMode } from "./state.ts";
 
+function legacyAltPrintable(data: string): string | undefined {
+  if (data.length !== 2 || data.charCodeAt(0) !== 0x1b) return undefined;
+  const char = data[1];
+  return char && char.charCodeAt(0) >= 32 ? `alt+${char}` : undefined;
+}
+
 export function keySequence(data: string): string | undefined {
   return (
     decodeKittyPrintable(data) ??
     (data.length === 1 && data.charCodeAt(0) >= 32 ? data : undefined) ??
+    parseKey(data)
+  );
+}
+
+export function insertKeySequence(data: string): string | undefined {
+  return (
+    decodeKittyPrintable(data) ??
+    (data.length === 1 && data.charCodeAt(0) >= 32 ? data : undefined) ??
+    legacyAltPrintable(data) ??
     parseKey(data)
   );
 }

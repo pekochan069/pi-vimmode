@@ -8,12 +8,17 @@ TBD - created by archiving change make-vimmode-configurable. Update Purpose afte
 
 ### Requirement: Semantic keymap configuration resolves supported Vim actions
 
-The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided.
+The Vim editor SHALL read `piVimMode.keymap` as a semantic mapping for supported operators, motions, and commands while preserving the existing default keymap when no keymap config is provided. Directional motion defaults SHALL include physical arrow-key aliases for the same semantic left/down/up/right actions as `h`, `j`, `k`, and `l`.
 
 #### Scenario: Default keymap preserved
 
 - **WHEN** Pi starts with no `piVimMode.keymap` setting
 - **THEN** the resolved keymap binds the currently documented normal, visual, operator, motion, paste, open-line, join, and undo commands to their existing default keys
+
+#### Scenario: Default directional arrow aliases available
+
+- **WHEN** Pi starts with no `piVimMode.keymap` setting
+- **THEN** the resolved motion keymap binds `left`, `down`, `up`, and `right` as aliases for the existing left/down/up/right motion actions
 
 #### Scenario: Operator binding configured
 
@@ -1214,22 +1219,22 @@ The Vim keymap configuration SHALL accept opt-in insert-mode newline bindings fo
 
 ### Requirement: Insert newline configuration is documented and validated
 
-The change SHALL include automated validation and user-facing documentation for insert-mode newline keybindings.
+The change SHALL include automated validation and user-facing documentation for insert-mode line-opening, edit, and navigation keybindings.
 
-#### Scenario: Automated validation covers insert newline config
+#### Scenario: Automated validation covers insert keymap config
 
 - **WHEN** `bun test` is executed
-- **THEN** tests cover default empty insert bindings, accepted modified keys, raw printable rejection, protected-key allow-list behavior, invalid config fallback, live editor option cloning, and insert-mode dispatch
+- **THEN** tests cover default empty insert bindings, accepted modified keys for line-opening/edit/navigation actions, raw printable rejection, protected-key allow-list behavior, duplicate insert binding diagnostics, invalid config fallback, live editor option cloning, insert-mode dispatch, autocomplete delegation, and preserved Pi delegation for unconfigured input
 
-#### Scenario: Settings reference documents insert newline bindings
+#### Scenario: Settings reference documents insert bindings
 
 - **WHEN** the user opens `docs/settings.md`
-- **THEN** it documents `piVimMode.keymap.insert.openLineBelow`, `piVimMode.keymap.insert.openLineAbove`, empty defaults, valid key forms, protected-key allow-list requirements, and non-goals for full insert-mode mappings
+- **THEN** it documents `piVimMode.keymap.insert.openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, and `moveLineEnd`, including empty defaults, valid key forms, protected-key allow-list requirements, duplicate binding behavior, and non-goals for full insert-mode mappings
 
-#### Scenario: Feature guide documents insert newline behavior
+#### Scenario: Feature guide documents insert behavior
 
 - **WHEN** the user opens `docs/features.md`
-- **THEN** it documents that insert mode delegates to Pi by default and only configured insert newline bindings are handled by pi-vimmode while autocomplete is inactive
+- **THEN** it documents that insert mode delegates to Pi by default and only configured insert line-opening, edit, or movement bindings are handled by pi-vimmode while autocomplete is inactive
 
 ### Requirement: Visual reselection participates in semantic keymap configuration
 
@@ -1254,3 +1259,81 @@ The Vim keymap configuration SHALL expose visual reselection as a finite semanti
 
 - **WHEN** the editor is in insert mode or an active visual mode
 - **THEN** the `reselectVisual` command binding does not steal ordinary insert input or replace existing visual-mode key handling
+
+### Requirement: Insert edit and navigation bindings are configurable
+
+The Vim keymap configuration SHALL accept opt-in insert-mode edit and navigation bindings for finite supported actions while preserving insert-mode Pi delegation by default.
+
+#### Scenario: Default insert edit keymap is empty
+
+- **WHEN** Pi starts with no `piVimMode.keymap.insert` setting
+- **THEN** the resolved keymap has no insert-mode edit, navigation, or line-opening bindings and ordinary insert-mode input continues to delegate to Pi
+
+#### Scenario: Insert edit bindings are accepted
+
+- **WHEN** `piVimMode.keymap.insert.deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, or `deleteLineForward` contains a valid modified key such as `ctrl+w`, `alt+d`, `ctrl+u`, or `ctrl+k`
+- **THEN** the resolved keymap records that key for the configured insert edit action without changing normal-mode command, motion, operator, or prompt-transform bindings
+
+#### Scenario: Insert movement bindings are accepted
+
+- **WHEN** `piVimMode.keymap.insert.moveWordBackward`, `moveWordForward`, `moveLineStart`, or `moveLineEnd` contains a valid modified key such as `alt+b`, `alt+f`, `ctrl+a`, or `ctrl+e`
+- **THEN** the resolved keymap records that key for the configured insert movement action without changing normal-mode command, motion, operator, or prompt-transform bindings
+
+#### Scenario: Raw printable insert bindings are rejected
+
+- **WHEN** `piVimMode.keymap.insert.deleteWordBackward` or another insert action contains raw printable text such as `j`, `jk`, `jj`, or `oo`
+- **THEN** that binding is ignored with a warning and valid sibling insert and normal/visual keymap fields remain usable
+
+#### Scenario: Protected insert binding requires same-layer allow-list
+
+- **WHEN** `piVimMode.keymap.insert.deleteLineForward` contains a protected Pi shortcut such as `enter` and the same settings layer does not include it in `piVimMode.keymap.allowProtectedOverrides`
+- **THEN** the binding is rejected with a protected-key warning and that shortcut continues to delegate to Pi behavior
+
+#### Scenario: Duplicate insert binding is diagnosed
+
+- **WHEN** two different `piVimMode.keymap.insert` actions claim the same normalized key sequence
+- **THEN** the resolved keymap remains deterministic, a warning names both insert actions, and session startup continues
+
+#### Scenario: Configured insert action dispatches only in insert mode
+
+- **WHEN** an accepted insert edit or movement binding is pressed in insert mode while autocomplete is inactive
+- **THEN** pi-vimmode performs the configured prompt-local insert action instead of delegating that key to Pi
+
+#### Scenario: Autocomplete keeps ownership
+
+- **WHEN** autocomplete is active and the user presses a key sequence configured under `piVimMode.keymap.insert`
+- **THEN** input delegates to Pi autocomplete behavior rather than executing the insert action
+
+#### Scenario: Prompt transform keybindings remain separate
+
+- **WHEN** `piVimMode.keymap.insert` configures safe insert actions and `piVimMode.keymap.actions` configures prompt transform actions
+- **THEN** insert actions perform only physical prompt edits or cursor movement, and prompt transforms continue to dispatch only through `piVimMode.keymap.actions` in supported modal contexts
+
+### Requirement: Keymap grammar diagnostics share resolver semantics
+
+The Vim keymap configuration SHALL keep runtime command resolution and settings diagnostics aligned for finite key sequence enumeration, exact conflicts, and prefix-shadow conflicts.
+
+#### Scenario: Runtime and diagnostics enumerate the same grammar bindings
+
+- **WHEN** the default resolved keymap is inspected by runtime command resolution and by settings diagnostics
+- **THEN** both paths see the same finite operator, motion, command, macro, mark, text-object, character-search, search, and prompt-transform action key sequences
+
+#### Scenario: Exact conflicts are diagnosed before dispatch
+
+- **WHEN** settings configure an action key sequence that exactly matches an existing resolved grammar binding
+- **THEN** settings resolution rejects the action binding with a warning and runtime dispatch keeps the existing grammar binding behavior
+
+#### Scenario: Prefix shadows are diagnosed before dispatch
+
+- **WHEN** settings configure a binding that is a strict prefix of an existing executable grammar sequence or has an existing executable grammar sequence as its strict prefix
+- **THEN** settings resolution rejects the shadowing binding with a warning and runtime dispatch keeps finite deterministic key sequence behavior
+
+#### Scenario: Shared non-executable prefixes remain valid
+
+- **WHEN** two bindings share a common prefix that is not itself executable, such as two `g`-prefixed sequences
+- **THEN** settings diagnostics accepts both non-conflicting bindings and runtime resolution waits for the full configured sequence before dispatch
+
+#### Scenario: Refactor preserves default command behavior
+
+- **WHEN** `bun test` is executed after grammar helper extraction
+- **THEN** existing default keymap command resolution, pending-prefix invalidation, protected shortcut handling, and action keybinding conflict tests continue to pass without changed user-facing expectations

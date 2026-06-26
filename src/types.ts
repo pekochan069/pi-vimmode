@@ -149,7 +149,17 @@ export type VimActionKeymapOptions = Partial<
 export type VimInsertKeymapOptions = {
   openLineBelow?: readonly string[];
   openLineAbove?: readonly string[];
+  deleteWordBackward?: readonly string[];
+  deleteWordForward?: readonly string[];
+  deleteLineBackward?: readonly string[];
+  deleteLineForward?: readonly string[];
+  moveWordBackward?: readonly string[];
+  moveWordForward?: readonly string[];
+  moveLineStart?: readonly string[];
+  moveLineEnd?: readonly string[];
 };
+
+export type VimInsertAction = keyof VimInsertKeymapOptions;
 
 export type VimActionKeybindingPreset = "paragraph-editing" | "markdown-wrapping";
 
@@ -188,6 +198,14 @@ export type ResolvedVimActionKeymap = {
 export type ResolvedVimInsertKeymap = {
   openLineBelow: readonly string[];
   openLineAbove: readonly string[];
+  deleteWordBackward: readonly string[];
+  deleteWordForward: readonly string[];
+  deleteLineBackward: readonly string[];
+  deleteLineForward: readonly string[];
+  moveWordBackward: readonly string[];
+  moveWordForward: readonly string[];
+  moveLineStart: readonly string[];
+  moveLineEnd: readonly string[];
 };
 
 export type ResolvedVimKeymap = {

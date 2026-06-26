@@ -97,8 +97,53 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 - Visual modes: `Esc` and configured escape aliases cancel selection and return to normal mode.
 - In normal/visual prompt editing, `Enter`, `Ctrl-C`, and `Ctrl-G` reset Vim transient state, return to configured startup mode, and delegate to Pi.
 - While `/` search or `:` Ex command-line is pending, `Enter` completes or executes that pending operation instead; `Ctrl-C` and `Ctrl-G` reset/delegate.
-- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling or configured `piVimMode.keymap.insert` newline bindings.
+- In insert mode, non-`Esc` keys delegate to Pi unless they are part of configured `piVimMode.keymap.escape` handling or configured `piVimMode.keymap.insert` newline, edit, or movement bindings.
 - Configured insert newline bindings (`piVimMode.keymap.insert.openLineBelow` / `openLineAbove`) open a blank line above or below the current prompt line while staying in insert mode. They only work when Pi autocomplete is inactive; autocomplete-active input keeps Pi ownership.
+- Configured insert edit bindings (`piVimMode.keymap.insert.deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`) edit prompt text in insert mode without writing Vim registers, marks, macros, dot-repeat state, or prompt transforms.
+- Configured insert movement bindings (`piVimMode.keymap.insert.moveWordBackward`, `moveWordForward`, `moveLineStart`, `moveLineEnd`) move the cursor in insert mode without changing prompt text.
+- Insert word movement and deletion reuse pi-vimmode lowercase small-word semantics, where keyword runs, punctuation runs, and whitespace are separate groups.
+- `piVimMode.keymap.insert` owns only physical insert edits and movement. Semantic prompt transforms remain under `piVimMode.keymap.actions`.
+- Insert bindings are not Vim mappings: no raw printable chords such as `jk`, `jj`, or `oo`, no multi-key insert sequences, no insert abbreviations, no recursive mappings, no `.vimrc`, no Vimscript, no Neovim Lua, no default insert presets, no runtime `:map`, and no runtime `:action`.
+
+### Readline-style and home-row-mod insert binding examples
+
+Readline-style example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "insert": {
+        "deleteWordBackward": ["ctrl+w"],
+        "deleteLineBackward": ["ctrl+u"],
+        "deleteLineForward": ["ctrl+k"],
+        "moveWordBackward": ["alt+b"],
+        "moveWordForward": ["alt+f"],
+        "moveLineStart": ["ctrl+a"],
+        "moveLineEnd": ["ctrl+e"]
+      }
+    }
+  }
+}
+```
+
+Home-row-mod example:
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "insert": {
+        "openLineBelow": ["ctrl+o"],
+        "openLineAbove": ["ctrl+k"]
+      }
+    }
+  }
+}
+```
+
+`ctrl+k` cannot be assigned to both readline-style `deleteLineForward` and home-row-style `openLineAbove` in the same insert keymap.
+
 - Unknown control/non-printable keys delegate to Pi. Unmapped printable keys in normal/visual mode are ignored.
 - `Ctrl-D` and `Ctrl-U` are Vim-owned half-page scroll motions in normal/visual modes, but insert mode still delegates them to Pi/default editing.
 
@@ -116,21 +161,21 @@ Enter        -> submit through Pi
 
 <!-- runtime-help:motions -->
 
-| Key                   | Action                                  | Notes                                                                          |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
-| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`.                                     |
-| `0` / `$`             | line start / line end                   | Current prompt line.                                                           |
-| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                       |
-| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                |
-| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                  |
-| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                     |
-| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                 |
-| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.              |
-| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.               |
-| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds. |
-| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                             |
-| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                             |
-| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                       |
+| Key                   | Action                                  | Notes                                                                                                                       |
+| --------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `h` / `j` / `k` / `l` | left / down / up / right                | Counts repeat adapter movement, e.g. `5l`. Arrow keys (Left, Down, Up, Right) are aliases for the same directional motions. |
+| `0` / `$`             | line start / line end                   | Current prompt line.                                                                                                        |
+| `^` / `_`             | first non-blank on line                 | Both map to same action.                                                                                                    |
+| `w` / `b` / `e`       | word forward / word backward / word end | Prompt-local word movement; current behavior remains unchanged.                                                             |
+| `W` / `B` / `E`       | WORD forward / backward / end           | Whitespace-delimited WORD tokens, useful for flags and paths.                                                               |
+| `ge` / `gE`           | previous word / WORD end                | Move backward to previous word-end or whitespace WORD-end.                                                                  |
+| `gg` / `G`            | prompt start / prompt end               | `G` moves to end of last line.                                                                                              |
+| `Ctrl-D` / `Ctrl-U`   | half-page down / up                     | Prompt-local line movement; counts multiply the half-page amount.                                                           |
+| `%`                   | matching pair                           | Supports `()`, `[]`, `{}` under or after cursor on current line.                                                            |
+| `{` / `}`             | paragraph backward / forward            | Blank-line-separated paragraph runs; counts repeat and clamp at prompt bounds.                                              |
+| `f{char}` / `F{char}` | find char forward/backward              | Current line only.                                                                                                          |
+| `t{char}` / `T{char}` | move until before/after char            | Current line only.                                                                                                          |
+| `;` / `,`             | repeat char search                      | Same/opposite direction.                                                                                                    |
 
 Counts work for supported motions: `3w`, `2e`, `2W`, `2gE`, `4j`, `2fx`, `2<C-d>`, `2}`. `Ctrl-D` and `Ctrl-U` clamp safely at prompt bounds and move the cursor so existing rendering reveals the new location.
 
@@ -213,7 +258,7 @@ Line-only shift examples:
 
 Supported operator targets:
 
-- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
+- motions: `h`, `j`, `k`, `l`, arrow keys `Left`/`Down`/`Up`/`Right`, `w`, `b`, `e`, `W`, `B`, `E`, `ge`, `gE`, `0`, `^`, `$`, `gg`, `G`, `%`, `{`, `}`
 - character search: `f{char}`, `F{char}`, `t{char}`, `T{char}`, `;`, `,` on the current line
 - mark jumps: `` `{mark}`` and `'{mark}`
 - prompt search: `/query<Enter>`
@@ -824,7 +869,7 @@ Rendering behavior:
 - Pending `/`, `?`, and `:` workbench input plus search/Ex errors, info diagnostics, optional no-op feedback, and substitution match previews render in a dedicated row below the prompt and shrink prompt viewport by one row by default.
 - `piVimMode.ui.workbench.reservedRows` can reserve 0-5 width-safe workbench rows; active feedback uses the first reserved row and blank reserved rows keep the prompt viewport height stable.
 - Pending workbench input also appears in status with an ellipsis when the pending-status item is enabled.
-- Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators.
+- Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators; normal/visual mode transitions keep the current visible prompt rows stable while the cursor remains visible.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
 - Terminal cursor-shape hints use best-effort DECSCUSR escapes.
 - `bar` cursor enables Pi TUI hardware cursor visibility while interactive, suppresses it while Pi agent work is active, and restores original visibility on reset.

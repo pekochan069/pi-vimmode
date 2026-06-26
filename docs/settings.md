@@ -177,12 +177,20 @@ Rules:
 - Protected shortcuts such as `enter`, `tab`, `ctrl+c`, and `escape` are rejected.
 - These are not Vim mappings: no runtime `:map`, recursive mappings, insert abbreviations, `.vimrc`, Vimscript, or `timeoutlen`.
 
-### Insert mode newline bindings
+### Insert mode newline, edit, and movement bindings
 
-| Path                                    | Default | Effect                                                                                                                    |
-| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `piVimMode.keymap.insert.openLineBelow` | `[]`    | Insert a blank line below the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
-| `piVimMode.keymap.insert.openLineAbove` | `[]`    | Insert a blank line above the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+| Path                                         | Default | Effect                                                                                                                    |
+| -------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.insert.openLineBelow`      | `[]`    | Insert a blank line below the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+| `piVimMode.keymap.insert.openLineAbove`      | `[]`    | Insert a blank line above the current line and stay in insert mode. Accepts only modified or protected single-key chords. |
+| `piVimMode.keymap.insert.deleteWordBackward` | `[]`    | Delete backward to the previous small-word start in insert mode.                                                          |
+| `piVimMode.keymap.insert.deleteWordForward`  | `[]`    | Delete forward to the next small-word start in insert mode.                                                               |
+| `piVimMode.keymap.insert.deleteLineBackward` | `[]`    | Delete backward to current line start without joining the previous line.                                                  |
+| `piVimMode.keymap.insert.deleteLineForward`  | `[]`    | Delete forward to current line end. At EOL, delete exactly one newline without trimming spaces.                           |
+| `piVimMode.keymap.insert.moveWordBackward`   | `[]`    | Move backward to the previous small-word start in insert mode.                                                            |
+| `piVimMode.keymap.insert.moveWordForward`    | `[]`    | Move forward to the next small-word start in insert mode.                                                                 |
+| `piVimMode.keymap.insert.moveLineStart`      | `[]`    | Move to current line start in insert mode.                                                                                |
+| `piVimMode.keymap.insert.moveLineEnd`        | `[]`    | Move to current line end in insert mode.                                                                                  |
 
 Example:
 
@@ -192,7 +200,14 @@ Example:
     "keymap": {
       "insert": {
         "openLineBelow": ["ctrl+j"],
-        "openLineAbove": ["ctrl+k"]
+        "openLineAbove": ["super+k"],
+        "deleteWordBackward": ["ctrl+w"],
+        "deleteLineBackward": ["ctrl+u"],
+        "deleteLineForward": ["ctrl+k"],
+        "moveWordBackward": ["alt+b"],
+        "moveWordForward": ["alt+f"],
+        "moveLineStart": ["ctrl+a"],
+        "moveLineEnd": ["ctrl+e"]
       }
     }
   }
@@ -203,9 +218,12 @@ Rules:
 
 - Only modified or protected single-key chords are accepted. Raw printable text such as `"j"` or `"oo"` is rejected so normal typing stays normal.
 - Protected keys such as `"enter"` require same-layer `piVimMode.keymap.allowProtectedOverrides` before they are accepted.
-- Insert newline bindings only work in insert mode when Pi autocomplete is inactive. Normal and visual modes use the existing `openLineBelow` / `openLineAbove` commands under `piVimMode.keymap.commands`.
-- No registers, marks, visual state, macro slots, or dot-repeat state are affected by insert-mode line opening.
-- Autocomplete-active input keeps Pi ownership and does not open new lines.
+- Insert bindings only work in insert mode when Pi autocomplete is inactive. Normal and visual modes use the existing `openLineBelow` / `openLineAbove` commands under `piVimMode.keymap.commands`.
+- Insert delete bindings do not write Vim registers, marks, visual state, macro slots, or dot-repeat state.
+- Insert movement bindings preserve prompt text, search highlights, and registers.
+- Insert word movement and deletion reuse pi-vimmode lowercase small-word semantics where keyword runs, punctuation runs, and whitespace are separate groups.
+- `piVimMode.keymap.insert` owns only physical insert edits and movement. Semantic prompt transforms remain under `piVimMode.keymap.actions`.
+- Autocomplete-active input keeps Pi ownership and does not run insert bindings.
 - These are opt-in: with no `piVimMode.keymap.insert` config, every insert-mode key delegates to Pi default behavior.
 
 ### Operators
@@ -227,30 +245,30 @@ Rules:
 
 ### Motions
 
-| Path                                          | Default      | Effect                                                                                                      |
-| --------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------- |
-| `piVimMode.keymap.motions.left`               | `["h"]`      | Move left. Count repeats movement.                                                                          |
-| `piVimMode.keymap.motions.down`               | `["j"]`      | Move down. Count repeats movement.                                                                          |
-| `piVimMode.keymap.motions.up`                 | `["k"]`      | Move up. Count repeats movement.                                                                            |
-| `piVimMode.keymap.motions.right`              | `["l"]`      | Move right. Count repeats movement.                                                                         |
-| `piVimMode.keymap.motions.wordForward`        | `["w"]`      | Move to next word.                                                                                          |
-| `piVimMode.keymap.motions.wordBackward`       | `["b"]`      | Move to previous word.                                                                                      |
-| `piVimMode.keymap.motions.wordEnd`            | `["e"]`      | Move to word end.                                                                                           |
-| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`      | Move to next whitespace-delimited WORD.                                                                     |
-| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`      | Move to previous whitespace-delimited WORD.                                                                 |
-| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`      | Move to end of current or next whitespace-delimited WORD.                                                   |
-| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`     | Move to previous word end.                                                                                  |
-| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`     | Move to previous whitespace-delimited WORD end.                                                             |
-| `piVimMode.keymap.motions.lineStart`          | `["0"]`      | Move to start of current line.                                                                              |
-| `piVimMode.keymap.motions.lineEnd`            | `["$"]`      | Move to end of current line.                                                                                |
-| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]` | Move to first non-blank character on current line.                                                          |
-| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`     | Move to prompt start.                                                                                       |
-| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`      | Move to prompt end.                                                                                         |
-| `piVimMode.keymap.motions.matchingPair`       | `["%"]`      | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line.                               |
-| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]` | Move down by half the visible prompt page; count multiplies the distance.                                   |
-| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]` | Move up by half the visible prompt page; count multiplies the distance.                                     |
-| `piVimMode.keymap.motions.paragraphBackward`  | `["{"]`      | Move to current paragraph start, or previous paragraph start when already there. Blank-line-separated runs. |
-| `piVimMode.keymap.motions.paragraphForward`   | `["}"]`      | Move to next paragraph first column, or prompt end when none remain. Blank-line-separated runs.             |
+| Path                                          | Default          | Effect                                                                                                      |
+| --------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `piVimMode.keymap.motions.left`               | `["h", "left"]`  | Move left. Arrow key `Left` alias included. Count repeats movement.                                         |
+| `piVimMode.keymap.motions.down`               | `["j", "down"]`  | Move down. Arrow key `Down` alias included. Count repeats movement.                                         |
+| `piVimMode.keymap.motions.up`                 | `["k", "up"]`    | Move up. Arrow key `Up` alias included. Count repeats movement.                                             |
+| `piVimMode.keymap.motions.right`              | `["l", "right"]` | Move right. Arrow key `Right` alias included. Count repeats movement.                                       |
+| `piVimMode.keymap.motions.wordForward`        | `["w"]`          | Move to next word.                                                                                          |
+| `piVimMode.keymap.motions.wordBackward`       | `["b"]`          | Move to previous word.                                                                                      |
+| `piVimMode.keymap.motions.wordEnd`            | `["e"]`          | Move to word end.                                                                                           |
+| `piVimMode.keymap.motions.wordForwardBig`     | `["W"]`          | Move to next whitespace-delimited WORD.                                                                     |
+| `piVimMode.keymap.motions.wordBackwardBig`    | `["B"]`          | Move to previous whitespace-delimited WORD.                                                                 |
+| `piVimMode.keymap.motions.wordEndBig`         | `["E"]`          | Move to end of current or next whitespace-delimited WORD.                                                   |
+| `piVimMode.keymap.motions.wordPreviousEnd`    | `["ge"]`         | Move to previous word end.                                                                                  |
+| `piVimMode.keymap.motions.wordPreviousEndBig` | `["gE"]`         | Move to previous whitespace-delimited WORD end.                                                             |
+| `piVimMode.keymap.motions.lineStart`          | `["0"]`          | Move to start of current line.                                                                              |
+| `piVimMode.keymap.motions.lineEnd`            | `["$"]`          | Move to end of current line.                                                                                |
+| `piVimMode.keymap.motions.firstNonBlank`      | `["^", "_"]`     | Move to first non-blank character on current line.                                                          |
+| `piVimMode.keymap.motions.bufferStart`        | `["gg"]`         | Move to prompt start.                                                                                       |
+| `piVimMode.keymap.motions.bufferEnd`          | `["G"]`          | Move to prompt end.                                                                                         |
+| `piVimMode.keymap.motions.matchingPair`       | `["%"]`          | Jump to matching `()`, `[]`, or `{}` pair under/after cursor on current line.                               |
+| `piVimMode.keymap.motions.halfPageDown`       | `["ctrl+d"]`     | Move down by half the visible prompt page; count multiplies the distance.                                   |
+| `piVimMode.keymap.motions.halfPageUp`         | `["ctrl+u"]`     | Move up by half the visible prompt page; count multiplies the distance.                                     |
+| `piVimMode.keymap.motions.paragraphBackward`  | `["{"]`          | Move to current paragraph start, or previous paragraph start when already there. Blank-line-separated runs. |
+| `piVimMode.keymap.motions.paragraphForward`   | `["}"]`          | Move to next paragraph first column, or prompt end when none remain. Blank-line-separated runs.             |
 
 ### Commands
 

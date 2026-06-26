@@ -1,5 +1,4 @@
 import type {
-  BlockRange as ResolvedBlockRangeValue,
   ResolvedBlockRange,
   ResolvedCharacterRange,
   ResolvedDestination,
@@ -20,12 +19,39 @@ import type {
 } from "./types.ts";
 
 import { isErrorBlockLine, resolvePromptStructureRange } from "./prompt-structures.ts";
+import {
+  blockSelectionText,
+  isVisualCellSelected,
+  isVisualLineSelected,
+  linewiseSelectionText,
+  normalizeBlockRange,
+  normalizeLineRange,
+  normalizeRange,
+  selectionText,
+  type VisualSelectionKind,
+  visualBlockSelectionSummary,
+  visualLineSelectionSummary,
+  visualSelectionSummary,
+  visualSelectionText,
+} from "./visual-selection.ts";
+
+export type { VisualSelectionKind, VisualSelectionMode } from "./visual-selection.ts";
+export {
+  blockSelectionText,
+  isVisualCellSelected,
+  isVisualLineSelected,
+  linewiseSelectionText,
+  normalizeBlockRange,
+  normalizeLineRange,
+  normalizeRange,
+  selectionText,
+  visualBlockSelectionSummary,
+  visualLineSelectionSummary,
+  visualSelectionSummary,
+  visualSelectionText,
+};
 
 export type BufferNavigationTarget = "start" | "end" | "firstNonBlank" | "matchingPair";
-export type VisualSelectionKind = "char" | "line" | "block";
-export type VisualSelectionMode = "visual" | "visualLine" | "visualBlock";
-
-type BlockRange = ResolvedBlockRangeValue;
 
 function splitText(text: string): string[] {
   const lines = text.split("\n");
@@ -1094,77 +1120,6 @@ export function navigateBuffer(
   }
 }
 
-function normalizeRange(lines: string[], anchor: Position, active: Position): TextRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return comparePositions(a, b) <= 0 ? { start: a, end: b } : { start: b, end: a };
-}
-
-function normalizeLineRange(lines: string[], anchor: Position, active: Position): LineRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return {
-    startLine: Math.min(a.line, b.line),
-    endLine: Math.max(a.line, b.line),
-  };
-}
-
-function normalizeBlockRange(lines: string[], anchor: Position, active: Position): BlockRange {
-  const a = clampPosition(lines, anchor);
-  const b = clampPosition(lines, active);
-  return {
-    startLine: Math.min(a.line, b.line),
-    endLine: Math.max(a.line, b.line),
-    startCol: Math.min(a.col, b.col),
-    endCol: Math.max(a.col, b.col),
-  };
-}
-
-function blockSelectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeBlockRange(lines, anchor, active);
-  const selected: string[] = [];
-
-  for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-    const line = lines[lineIndex] ?? "";
-    const start = Math.min(range.startCol, line.length);
-    const end = Math.min(range.endCol + 1, line.length);
-    selected.push(line.slice(start, end));
-  }
-
-  return selected.join("\n");
-}
-
-function selectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeRange(lines, anchor, active);
-  const { start, end } = range;
-
-  if (start.line === end.line) {
-    const line = lines[start.line] ?? "";
-    const endExclusive = Math.min(end.col + 1, line.length);
-    return line.slice(start.col, endExclusive);
-  }
-
-  const selected: string[] = [];
-  const first = lines[start.line] ?? "";
-  selected.push(first.slice(start.col));
-
-  for (let line = start.line + 1; line < end.line; line++) {
-    selected.push(lines[line] ?? "");
-  }
-
-  const last = lines[end.line] ?? "";
-  selected.push(last.slice(0, Math.min(end.col + 1, last.length)));
-  return selected.join("\n");
-}
-
-function linewiseSelectionText(text: string, anchor: Position, active: Position): string {
-  const lines = splitText(text);
-  const range = normalizeLineRange(lines, anchor, active);
-  return lines.slice(range.startLine, range.endLine + 1).join("\n");
-}
-
 export function deleteRange(text: string, anchor: Position, active: Position): EditResult {
   const lines = splitText(text);
   const range = normalizeRange(lines, anchor, active);
@@ -2109,17 +2064,6 @@ export function yankVisualSelection(
   return selected.length > 0 ? { type: "char", text: selected } : undefined;
 }
 
-export function visualSelectionText(
-  text: string,
-  anchor: Position,
-  active: Position,
-  kind: VisualSelectionKind,
-): string {
-  if (kind === "line") return linewiseSelectionText(text, anchor, active);
-  if (kind === "block") return blockSelectionText(text, anchor, active);
-  return selectionText(text, anchor, active);
-}
-
 export function deleteLine(text: string, cursor: Position, count = 1): EditResult {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
@@ -2147,6 +2091,85 @@ export function yankLineCount(text: string, cursor: Position, count = 1): VimReg
   const pos = clampPosition(lines, cursor);
   const endLine = Math.min(lines.length - 1, pos.line + Math.max(1, count) - 1);
   return { type: "line", text: lines.slice(pos.line, endLine + 1).join("\n") };
+}
+
+export function insertWordBackwardPosition(text: string, cursor: Position): Position {
+  return wordBackwardPosition(text, cursor);
+}
+
+export function insertWordForwardPosition(text: string, cursor: Position): Position {
+  return wordForwardPosition(text, cursor);
+}
+
+export function insertLineStartPosition(text: string, cursor: Position): Position {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  return { line: pos.line, col: 0 };
+}
+
+export function insertLineEndPosition(text: string, cursor: Position): Position {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  return { line: pos.line, col: lines[pos.line]?.length ?? 0 };
+}
+
+export function insertDeleteWordBackward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const start = wordBackwardPosition(text, pos);
+  if (comparePositions(start, pos) === 0) return { text, cursor: pos, changed: false };
+  const startOffset = positionToOffset(text, start);
+  const endOffset = positionToOffset(text, pos);
+  const nextText = text.slice(0, startOffset) + text.slice(endOffset);
+  const nextLines = splitText(nextText);
+  return { text: nextText, cursor: clampPosition(nextLines, start), changed: nextText !== text };
+}
+
+export function insertDeleteWordForward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const target = wordForwardPosition(text, pos);
+  if (comparePositions(target, pos) === 0) return { text, cursor: pos, changed: false };
+  const startOffset = positionToOffset(text, pos);
+  const endOffset = positionToOffset(text, target);
+  const nextText = text.slice(0, startOffset) + text.slice(endOffset);
+  const nextLines = splitText(nextText);
+  return { text: nextText, cursor: clampPosition(nextLines, pos), changed: nextText !== text };
+}
+
+export function insertDeleteLineBackward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  if (pos.col === 0) return { text, cursor: pos, changed: false };
+  const line = lines[pos.line] ?? "";
+  const nextLine = line.slice(pos.col);
+  const nextLines = [...lines.slice(0, pos.line), nextLine, ...lines.slice(pos.line + 1)];
+  const nextText = joinLines(nextLines);
+  return { text: nextText, cursor: { line: pos.line, col: 0 }, changed: nextText !== text };
+}
+
+export function insertDeleteLineForward(text: string, cursor: Position): EditResult {
+  const lines = splitText(text);
+  const pos = clampPosition(lines, cursor);
+  const line = lines[pos.line] ?? "";
+  if (pos.col < line.length) {
+    const nextLine = line.slice(0, pos.col);
+    const nextLines = [...lines.slice(0, pos.line), nextLine, ...lines.slice(pos.line + 1)];
+    const nextText = joinLines(nextLines);
+    return { text: nextText, cursor: { line: pos.line, col: pos.col }, changed: nextText !== text };
+  }
+  if (pos.line >= lines.length - 1) return { text, cursor: pos, changed: false };
+  const nextLines = [
+    ...lines.slice(0, pos.line),
+    line + (lines[pos.line + 1] ?? ""),
+    ...lines.slice(pos.line + 2),
+  ];
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: { line: pos.line, col: line.length },
+    changed: nextText !== text,
+  };
 }
 
 export function openLineBelow(text: string, cursor: Position): EditResult {
@@ -2305,61 +2328,6 @@ export function pasteRegisterBefore(
     cursor: { line: pos.line, col: insertCol },
     changed: true,
   };
-}
-
-export function isVisualCellSelected(
-  mode: VisualSelectionMode,
-  lines: string[],
-  anchor: Position,
-  cursor: Position,
-  lineIndex: number,
-  col: number,
-): boolean {
-  if (mode === "visualLine") return isVisualLineSelected(mode, lines, anchor, cursor, lineIndex);
-  if (mode === "visualBlock") {
-    const range = normalizeBlockRange(lines, anchor, cursor);
-    return (
-      lineIndex >= range.startLine &&
-      lineIndex <= range.endLine &&
-      col >= range.startCol &&
-      col <= range.endCol
-    );
-  }
-
-  const range = normalizeRange(lines, anchor, cursor);
-  const pos = { line: lineIndex, col };
-  return comparePositions(pos, range.start) >= 0 && comparePositions(pos, range.end) <= 0;
-}
-
-export function isVisualLineSelected(
-  mode: VisualSelectionMode,
-  lines: string[],
-  anchor: Position,
-  cursor: Position,
-  lineIndex: number,
-): boolean {
-  if (mode !== "visualLine") return false;
-  const range = normalizeLineRange(lines, anchor, cursor);
-  return lineIndex >= range.startLine && lineIndex <= range.endLine;
-}
-
-export function visualSelectionSummary(text: string, anchor: Position, active: Position): string {
-  const selected = selectionText(text, anchor, active);
-  if (selected.length === 0) return "0 chars";
-  const lines = selected.split("\n");
-  if (lines.length > 1) return `${lines.length} lines`;
-  return `${selected.length} chars`;
-}
-
-export function visualLineSelectionSummary(
-  text: string,
-  anchor: Position,
-  active: Position,
-): string {
-  const lines = splitText(text);
-  const range = normalizeLineRange(lines, anchor, active);
-  const count = range.endLine - range.startLine + 1;
-  return `${count} ${count === 1 ? "line" : "lines"}`;
 }
 
 function wordRangeAtOffset(
@@ -2616,16 +2584,4 @@ export function transformCaseTextObject(
   const range = textObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return { text, cursor: normalizeBufferPosition(text, cursor), changed: false };
   return transformCaseVisualRange(text, range.start, range.end, "char", action);
-}
-
-export function visualBlockSelectionSummary(
-  text: string,
-  anchor: Position,
-  active: Position,
-): string {
-  const lines = splitText(text);
-  const range = normalizeBlockRange(lines, anchor, active);
-  const lineCount = range.endLine - range.startLine + 1;
-  const colCount = range.endCol - range.startCol + 1;
-  return `${lineCount}x${colCount} block`;
 }

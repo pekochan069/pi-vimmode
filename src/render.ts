@@ -2,7 +2,8 @@ import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi
 
 import type { CursorStyle, Position, TextRange, VimMode } from "./types.ts";
 
-import { findSearchHighlightRanges, isVisualCellSelected, isVisualLineSelected } from "./buffer.ts";
+import { findSearchHighlightRanges } from "./buffer.ts";
+import { isVisualCellSelected, isVisualLineSelected } from "./visual-selection.ts";
 
 export const SELECTION_START = "\x1b[7m";
 export const SEARCH_START = "\x1b[43m";
@@ -46,6 +47,8 @@ export type PromptRenderInput = {
     width: number;
     terminalRows?: number;
     focused?: boolean;
+    offset?: number;
+    onOffset?: (offset: number) => void;
   };
   search?: SearchHighlightRenderInput;
   display?: {
@@ -68,6 +71,8 @@ export type ActiveVisualRenderInput = {
     width: number;
     terminalRows?: number;
     focused?: boolean;
+    offset?: number;
+    onOffset?: (offset: number) => void;
   };
   search?: SearchHighlightRenderInput;
   display?: {
@@ -84,6 +89,8 @@ type VisualRenderView = {
   width: number;
   terminalRows?: number;
   focused?: boolean;
+  offset?: number;
+  onOffset?: (offset: number) => void;
   borderColor?: (text: string) => string;
   search?: SearchHighlightRenderInput;
   searchRanges: TextRange[];
@@ -309,15 +316,29 @@ function renderLayoutLine(
   return { text: output, width: renderedWidth };
 }
 
+function resolveViewportOffset(
+  layout: LayoutLine[],
+  cursor: Position,
+  maxVisible: number,
+  previousOffset: number | undefined,
+): number {
+  let cursorIndex = layout.findIndex((line) => chunkHasCursor(line, cursor));
+  if (cursorIndex === -1) cursorIndex = 0;
+  const maxOffset = Math.max(0, layout.length - maxVisible);
+  const offset = Math.max(0, Math.min(previousOffset ?? cursorIndex, maxOffset));
+  if (cursorIndex < offset) return cursorIndex;
+  if (cursorIndex >= offset + maxVisible) return Math.min(cursorIndex - maxVisible + 1, maxOffset);
+  return offset;
+}
+
 function scrollWindow(
   layout: LayoutLine[],
   cursor: Position,
   terminalRows: number,
+  previousOffset?: number,
 ): { visible: LayoutLine[]; offset: number } {
   const maxVisible = Math.max(5, Math.floor(terminalRows * 0.3));
-  let cursorIndex = layout.findIndex((line) => chunkHasCursor(line, cursor));
-  if (cursorIndex === -1) cursorIndex = 0;
-  const offset = Math.max(0, Math.min(cursorIndex, Math.max(0, layout.length - maxVisible)));
+  const offset = resolveViewportOffset(layout, cursor, maxVisible, previousOffset);
   return { visible: layout.slice(offset, offset + maxVisible), offset };
 }
 
@@ -338,6 +359,8 @@ function createPromptRenderView(input: PromptRenderInput): VisualRenderView {
     width: input.viewport.width,
     terminalRows: input.viewport.terminalRows,
     focused: input.viewport.focused,
+    offset: input.viewport.offset,
+    onOffset: input.viewport.onOffset,
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(input.snapshot.text, input.search),
@@ -355,6 +378,8 @@ function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderVie
     width: input.viewport.width,
     terminalRows: input.viewport.terminalRows,
     focused: input.viewport.focused,
+    offset: input.viewport.offset,
+    onOffset: input.viewport.onOffset,
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(text, input.search),
@@ -368,7 +393,13 @@ function renderEditorView(options: VisualRenderView): string[] {
   const horizontal = borderColor("─".repeat(options.width));
   const contentWidth = Math.max(1, options.width - 1);
   const layout = layoutLines(options.lines, contentWidth);
-  const { visible, offset } = scrollWindow(layout, options.cursor, options.terminalRows ?? 24);
+  const { visible, offset } = scrollWindow(
+    layout,
+    options.cursor,
+    options.terminalRows ?? 24,
+    options.offset,
+  );
+  options.onOffset?.(offset);
   const result: string[] = [];
 
   if (offset > 0) {

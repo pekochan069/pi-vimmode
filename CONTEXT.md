@@ -32,6 +32,14 @@ _Avoid_: Prompt transform command, generic Vim action, plugin action
 A configured normal/visual-mode key sequence that invokes a prompt transform action. It is not a command alias and does not imply runtime mapping support.
 _Avoid_: Ex command name, `:map`, recursive mapping
 
+**Keymap grammar**:
+The finite set of modal key sequences and prefix/exact matching rules that decide whether prompt input is complete, pending more keys, or invalid. It is not recursive mapping or Vimscript.
+_Avoid_: Runtime mapping, `.vimrc`, keybinding parser
+
+**Visual selection**:
+The highlighted prompt-buffer range controlled by visual, visual line, or visual block mode. It may be character-, line-, or block-shaped; Ex command-line mode captures only selected lines from it as a visual range marker.
+_Avoid_: Ex range, visual range marker, file selection
+
 **Ex range**:
 A set of prompt-buffer lines addressed by an Ex command. It may refer to the current prompt line, all prompt lines, selected visual lines, or numeric prompt line ranges; visual mode supplies selected lines, not selected characters or block cells.
 _Avoid_: Visual selection, text object

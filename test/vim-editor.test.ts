@@ -91,6 +91,10 @@ function expectRenderedWidth(lines: string[], width: number) {
   for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 }
 
+function firstRenderedPromptRow(lines: string[]): string | undefined {
+  return lines.find((line) => line.includes("row-"));
+}
+
 async function flushAutocomplete() {
   await Promise.resolve();
   await Promise.resolve();
@@ -157,6 +161,88 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("ab");
     editor.handleInput("\x1b");
     expect(editor.getVimMode()).toBe("normal");
+  });
+
+  test("entering visual mode keeps long-prompt viewport stable", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      {
+        rows: 20,
+      },
+    );
+    editor.setText(Array.from({ length: 10 }, (_, index) => `row-${index + 1}`).join("\n"));
+    editor.render(20);
+    typeKeys(editor, ["g", "g"]);
+    editor.render(20);
+    for (const key of ["j", "j", "j"]) {
+      editor.handleInput(key);
+      editor.render(20);
+    }
+    const normalTop = firstRenderedPromptRow(editor.render(20));
+
+    editor.handleInput("v");
+    const visualLines = editor.render(20);
+
+    expect(editor.getVimMode()).toBe("visual");
+    expect(firstRenderedPromptRow(visualLines)).toBe(normalTop);
+    expectRenderedWidth(visualLines, 20);
+  });
+
+  test("visual down movement inside viewport does not scroll long prompt", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      {
+        rows: 20,
+      },
+    );
+    editor.setText(Array.from({ length: 10 }, (_, index) => `row-${index + 1}`).join("\n"));
+    editor.render(20);
+    typeKeys(editor, ["g", "g"]);
+    editor.render(20);
+    for (const key of ["j", "j"]) {
+      editor.handleInput(key);
+      editor.render(20);
+    }
+    editor.handleInput("v");
+    const visualTop = firstRenderedPromptRow(editor.render(20));
+
+    editor.handleInput("j");
+    const movedLines = editor.render(20);
+
+    expect(editor.getCursor()).toEqual({ line: 3, col: 0 });
+    expect(firstRenderedPromptRow(movedLines)).toBe(visualTop);
+    expectRenderedWidth(movedLines, 20);
+  });
+
+  test("insert mode edits keep long-prompt viewport stable", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      {
+        rows: 20,
+      },
+    );
+    editor.setText(Array.from({ length: 10 }, (_, index) => `row-${index + 1}`).join("\n"));
+    editor.render(20);
+    typeKeys(editor, ["g", "g", "j", "j", "j"]);
+    const normalTop = firstRenderedPromptRow(editor.render(20));
+
+    editor.handleInput("i");
+    const insertLines = editor.render(20);
+
+    expect(editor.getVimMode()).toBe("insert");
+    expect(firstRenderedPromptRow(insertLines)).toBe(normalTop);
+    expectRenderedWidth(insertLines, 20);
+
+    editor.handleInput("x");
+    expect(editor.getText()).toContain("xrow-4");
+    const changedLines = editor.render(20);
+    expect(firstRenderedPromptRow(changedLines)).toBe(normalTop);
   });
 
   test("constructor clones caller-owned nested keymap options", () => {

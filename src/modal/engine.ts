@@ -14,6 +14,14 @@ import {
   deleteLineMarkRange,
   deleteMarkRange,
   exactMarkPosition,
+  insertDeleteLineBackward,
+  insertDeleteLineForward,
+  insertDeleteWordBackward,
+  insertDeleteWordForward,
+  insertLineEndPosition,
+  insertLineStartPosition,
+  insertWordBackwardPosition,
+  insertWordForwardPosition,
   lineMarkPosition,
   openLineAbove,
   openLineBelow,
@@ -39,6 +47,7 @@ import {
   delegate,
   editState,
   invalidate,
+  insertKeySequence,
   isDelegatedResetKey,
   isProtectedPiDelegateKey,
   keymapHasBinding,
@@ -221,7 +230,7 @@ function handleInsertInput(
   }
   if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
 
-  const key = keySequence(data);
+  const key = insertKeySequence(data);
   if (key) {
     const insert = keymapForOptions(options).insert;
     if (insert.openLineBelow.includes(key)) {
@@ -237,6 +246,50 @@ function handleInsertInput(
         { type: "edit", result },
         { type: "invalidate" },
       ]);
+    }
+    if (insert.deleteWordBackward.includes(key)) {
+      const result = insertDeleteWordBackward(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.deleteWordForward.includes(key)) {
+      const result = insertDeleteWordForward(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.deleteLineBackward.includes(key)) {
+      const result = insertDeleteLineBackward(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.deleteLineForward.includes(key)) {
+      const result = insertDeleteLineForward(snapshot.text, snapshot.cursor);
+      return withEffects(editState(state, result), [
+        { type: "edit", result },
+        { type: "invalidate" },
+      ]);
+    }
+    if (insert.moveWordBackward.includes(key)) {
+      const position = insertWordBackwardPosition(snapshot.text, snapshot.cursor);
+      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
+    }
+    if (insert.moveWordForward.includes(key)) {
+      const position = insertWordForwardPosition(snapshot.text, snapshot.cursor);
+      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
+    }
+    if (insert.moveLineStart.includes(key)) {
+      const position = insertLineStartPosition(snapshot.text, snapshot.cursor);
+      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
+    }
+    if (insert.moveLineEnd.includes(key)) {
+      const position = insertLineEndPosition(snapshot.text, snapshot.cursor);
+      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
     }
   }
 

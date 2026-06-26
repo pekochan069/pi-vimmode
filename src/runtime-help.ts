@@ -37,7 +37,16 @@ export type RuntimeHelpEntry = {
   summary: string;
   examples: readonly string[];
   limits: readonly string[];
+  /** Mirrored doc anchor in docs/features.md: `<!-- runtime-help:<id> -->` */
+  docsAnchor?: string;
+  /** Required OpenSpec spec file path backing this entry. */
+  specAnchor?: string;
+  /** Required test file paths backing this entry. */
+  testAnchors?: readonly string[];
 };
+
+type RuntimeHelpRegistryEntry = RuntimeHelpEntry &
+  Required<Pick<RuntimeHelpEntry, "docsAnchor" | "specAnchor" | "testAnchors">>;
 
 export type RuntimeHelpContext = {
   options: ResolvedVimEditorOptions;
@@ -53,6 +62,9 @@ const ENTRIES = [
       ":help, :features, and :keybindings show compact source-backed pi-vimmode help; :vimmode inspect summarizes current prompt-local state; :messages shows recent runtime messages",
     examples: [":help search", ":features redo", ":keybindings", ":vimmode inspect", ":messages"],
     limits: ["finite topics only", "no pager", "no Vim help tags"],
+    docsAnchor: "runtime-help:runtime-help",
+    specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
+    testAnchors: ["test/runtime-help.test.ts", "test/ex.test.ts", "test/modal.test.ts"],
   },
   {
     id: "search",
@@ -62,6 +74,9 @@ const ENTRIES = [
       "prompt search uses /, ?, n, and N; :noh/:nohlsearch clear visible highlights while keeping repeat-search state",
     examples: ["/term", "?term", ":nohlsearch"],
     limits: ["prompt-local", "literal by default", "no cross-prompt history"],
+    docsAnchor: "runtime-help:search",
+    specAnchor: "openspec/specs/vim-search/spec.md",
+    testAnchors: ["test/modal.test.ts", "test/vim-editor.test.ts"],
   },
   {
     id: "ex",
@@ -76,6 +91,9 @@ const ENTRIES = [
       "no shell/file/window commands",
       ":q!/:wq/:x/:qa unsupported",
     ],
+    docsAnchor: "runtime-help:ex",
+    specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
+    testAnchors: ["test/ex.test.ts", "test/modal.test.ts"],
   },
   {
     id: "actions",
@@ -85,6 +103,9 @@ const ENTRIES = [
       ":actions, :keybindings, :keymap, :mapcheck, and :vimdoctor explain finite actions, bindings, protected shortcuts, and settings warnings",
     examples: [":actions redo", ":keybindings redo", ":mapcheck ctrl+p", ":vimdoctor"],
     limits: ["no full command palette", "no .vimrc", "no Vimscript"],
+    docsAnchor: "runtime-help:customization-diagnostics",
+    specAnchor: "openspec/specs/vim-customization-diagnostics/spec.md",
+    testAnchors: ["test/customization.test.ts", "test/modal.test.ts"],
   },
   {
     id: "motions",
@@ -94,6 +115,9 @@ const ENTRIES = [
       "normal and visual modes support prompt-local motions including word/WORD movement, previous word end, line, buffer, pair, search, mark, and character-search targets",
     examples: ["W", "gE", "dW", "cE", "dge"],
     limits: ["prompt-local", "no subword/camelCase motions", "no display-line motions"],
+    docsAnchor: "runtime-help:motions",
+    specAnchor: "openspec/specs/extended-vim-keybindings/spec.md",
+    testAnchors: ["test/commands.test.ts", "test/buffer.test.ts", "test/modal.test.ts"],
   },
   {
     id: "transforms",
@@ -103,6 +127,9 @@ const ENTRIES = [
       "prompt transforms are finite Ex commands for quoting, bulletizing, fencing, indenting, dedenting, and prose reflow",
     examples: [":quote", ":fence ts", ":reflow 72"],
     limits: ["prompt-local", "configurable command names only", "no arbitrary Ex grammar"],
+    docsAnchor: "runtime-help:prompt-transforms",
+    specAnchor: "openspec/specs/vim-ex-command-line/spec.md",
+    testAnchors: ["test/modal.test.ts", "test/config.test.ts"],
   },
   {
     id: "registers",
@@ -116,6 +143,9 @@ const ENTRIES = [
       "normal-mode clipboard reads depend on platform tools",
       "no numbered/expression/read-only registers",
     ],
+    docsAnchor: "runtime-help:registers",
+    specAnchor: "openspec/specs/vim-named-registers/spec.md",
+    testAnchors: ["test/registers.test.ts", "test/modal.test.ts", "test/vim-editor.test.ts"],
   },
   {
     id: "marks",
@@ -125,6 +155,9 @@ const ENTRIES = [
       "marks are prompt-local in-memory slots set and jumped inside the current editor session",
     examples: ["ma", "`a", "'a"],
     limits: ["no persistent marks", "no file marks", "slots are configurable"],
+    docsAnchor: "runtime-help:marks",
+    specAnchor: "openspec/specs/vim-marks/spec.md",
+    testAnchors: ["test/modal.test.ts", "test/config.test.ts"],
   },
   {
     id: "macros",
@@ -133,6 +166,9 @@ const ENTRIES = [
     summary: "macros record and replay prompt-local input sequences with bounded replay steps",
     examples: ["qa...q", "@a"],
     limits: ["in-memory only", "bounded replay", "slots are configurable"],
+    docsAnchor: "runtime-help:macros",
+    specAnchor: "openspec/specs/vim-macro-recording/spec.md",
+    testAnchors: ["test/modal.test.ts", "test/config.test.ts"],
   },
   {
     id: "settings",
@@ -142,10 +178,15 @@ const ENTRIES = [
       "piVimMode settings control start mode, cursor, keymap, UI including workbench rows, search, feedback, macros, marks, structures, and transforms",
     examples: ["piVimMode.preset", "piVimMode.keymap", "piVimMode.ui.workbench.reservedRows"],
     limits: ["field-by-field validation", "invalid fields warn", "valid siblings are preserved"],
+    docsAnchor: "runtime-help:settings",
+    specAnchor: "openspec/specs/pi-vimmode-documentation/spec.md",
+    testAnchors: ["test/config.test.ts"],
   },
-] as const satisfies readonly RuntimeHelpEntry[];
+] as const satisfies readonly RuntimeHelpRegistryEntry[];
 
-export function runtimeHelpEntries(_context?: RuntimeHelpContext): readonly RuntimeHelpEntry[] {
+export function runtimeHelpEntries(
+  _context?: RuntimeHelpContext,
+): readonly RuntimeHelpRegistryEntry[] {
   return ENTRIES;
 }
 
@@ -229,7 +270,6 @@ function effectiveStateMessage(query: string, context: RuntimeHelpContext): stri
   const options = context.options;
   const macros = macrosForOptions(options);
   const marks = marksForOptions(options);
-  const transforms = promptTransformsForOptions(options);
   if (needle.includes("nohlsearch") || needle === "noh") {
     return ":noh/:nohlsearch supported; clears visible prompt search highlights; preserves n/N repeat-search state";
   }
@@ -241,10 +281,6 @@ function effectiveStateMessage(query: string, context: RuntimeHelpContext): stri
   }
   if (needle.includes("workbench") || needle.includes("reservedrows")) {
     return `workbench reservedRows=${options.ui?.workbench.reservedRows ?? 0}`;
-  }
-  if (needle === "reflow" && transforms.actions.reflow === false) return "reflow disabled";
-  if (needle === "quote" && transforms.actions.quote !== false) {
-    return `prompt.transform.quote ${transforms.commands.quote.map((name) => `:${name}`).join(",")}`;
   }
   return undefined;
 }

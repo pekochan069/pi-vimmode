@@ -60,7 +60,24 @@ describe("vim customization helpers", () => {
 
   test("explains protected shortcuts and resolved bindings", () => {
     expect(protectedShortcutForKey("ctrl+shift+p")?.reason).toContain("palette");
+    expect(protectedShortcutForKey("ctrl+v")?.reason).toContain("image/clipboard paste");
+    expect(protectedShortcutForKey("alt+v")?.reason).toContain("image/clipboard paste");
+    expect(protectedShortcutForKey("ctrl+alt+v")?.reason).toContain("image/clipboard paste");
     expect(mapcheckMessage(keymap, "ctrl+p")).toContain("protected for Pi command/model palette");
+    expect(mapcheckMessage(keymap, "ctrl+v")).toContain("protected for image/clipboard paste");
+    expect(mapcheckMessage(keymap, "alt+v")).toContain("protected for image/clipboard paste");
+    expect(mapcheckMessage(keymap, "ctrl+alt+v")).toContain("protected for image/clipboard paste");
+    const { options: ctrlVOptions } = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          commands: { visualBlock: ["ctrl+v"] },
+          allowProtectedOverrides: ["ctrl+v"],
+        },
+      },
+    });
+    expect(mapcheckMessage(ctrlVOptions.keymap!, "ctrl+v")).toBe(
+      "mapcheck: ctrl+v -> command.visualBlock",
+    );
     expect(mapcheckMessage(keymap, "ctrl+r")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-r>")).toBe("mapcheck: ctrl+r -> command.redo");
     expect(mapcheckMessage(keymap, "<C-d>")).toBe("mapcheck: ctrl+d -> motion.halfPageDown");
@@ -169,6 +186,9 @@ describe("vim customization helpers", () => {
     expect(lines).not.toContain("vimmode.help metadata-only not bindable");
     expect(lines).toContain("ctrl+p");
     expect(lines).toContain("protected for Pi command/model palette");
+    expect(lines).toContain("ctrl+v");
+    expect(lines).toContain("alt+v");
+    expect(lines).toContain("protected for image/clipboard paste");
   });
 
   test("catalog reports disabled effective feature families", () => {
@@ -212,6 +232,15 @@ describe("vim customization helpers", () => {
     );
     expect(keybindingDetailLines(context, "ctrl+p").join("\n")).toContain(
       "protected for Pi command/model palette",
+    );
+    expect(keybindingDetailLines(context, "ctrl+v").join("\n")).toContain(
+      "protected for image/clipboard paste",
+    );
+    expect(keybindingDetailLines(context, "alt+v").join("\n")).toContain(
+      "protected for image/clipboard paste",
+    );
+    expect(keybindingDetailLines(context, "ctrl+alt+v").join("\n")).toContain(
+      "protected for image/clipboard paste",
     );
     expect(keybindingDetailLines(context, "gq").join("\n")).toContain("prompt.transform.reflow");
     expect(keybindingDetailLines(context, "help").join("\n")).toContain(

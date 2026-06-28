@@ -239,7 +239,7 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.motions.wordForward).toEqual(["e"]);
     expect(result.options.keymap?.commands.openLineBelow).toEqual(["n"]);
     expect(result.options.keymap?.commands.toggleCase).toEqual(["~"]);
-    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+x"]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["alt+x"]);
     expect(result.options.keymap?.commands.startExCommand).toEqual(["alt+;"]);
     expect(result.options.keymap?.commands.startSearchBackward).toEqual(["alt+?"]);
     expect(result.options.keymap?.commands.redo).toEqual(["ctrl+r"]);
@@ -951,11 +951,18 @@ describe("vim config parsing", () => {
   });
 
   test("resolves presets before explicit settings", () => {
+    const heavy = resolveVimOptions({ piVimMode: { preset: "vim-heavy" } });
+    expect(heavy.warnings).toEqual([]);
+    expect(heavy.options.keymap?.commands.visualBlock).toEqual([]);
+
     const result = resolveVimOptions({
       piVimMode: {
         preset: "vim-heavy",
         startMode: "insert",
-        keymap: { commands: { visualBlock: ["ctrl+v"] } },
+        keymap: {
+          commands: { visualBlock: ["ctrl+v"] },
+          allowProtectedOverrides: ["ctrl+v"],
+        },
         ui: { cursorPosition: { enabled: true } },
       },
     });
@@ -1200,6 +1207,7 @@ describe("vim config parsing", () => {
           "prompt.transform.quote": [{ key: "g>" }],
         },
         commands: { visualBlock: ["ctrl+v"] },
+        allowProtectedOverrides: ["ctrl+v"],
       },
     } satisfies VimEditorOptions;
     expect(options.keymap?.actions?.["prompt.transform.reflow"]?.length).toBe(2);
@@ -1300,15 +1308,21 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          commands: { showKeybindings: ["ctrl+p"] },
+          commands: { showKeybindings: ["ctrl+p"], visualBlock: ["ctrl+v", "alt+v", "ctrl+alt+v"] },
           allowProtectedOverrides: undefined,
         },
       },
     });
 
     expect(result.options.keymap?.commands.showKeybindings).toEqual([]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual([]);
     expect(result.warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
+      expect.arrayContaining([
+        expect.stringContaining("protected key ctrl+p"),
+        expect.stringContaining("protected key ctrl+v"),
+        expect.stringContaining("protected key alt+v"),
+        expect.stringContaining("protected key ctrl+alt+v"),
+      ]),
     );
   });
 
@@ -1316,13 +1330,14 @@ describe("vim config parsing", () => {
     const result = resolveVimOptions({
       piVimMode: {
         keymap: {
-          commands: { showKeybindings: ["ctrl+p"] },
-          allowProtectedOverrides: ["ctrl+p"],
+          commands: { showKeybindings: ["ctrl+p"], visualBlock: ["ctrl+v", "alt+v", "ctrl+alt+v"] },
+          allowProtectedOverrides: ["ctrl+p", "ctrl+v", "alt+v", "ctrl+alt+v"],
         },
       },
     });
 
     expect(result.options.keymap?.commands.showKeybindings).toEqual(["ctrl+p"]);
+    expect(result.options.keymap?.commands.visualBlock).toEqual(["ctrl+v", "alt+v", "ctrl+alt+v"]);
     expect(result.warnings).toEqual([]);
   });
 

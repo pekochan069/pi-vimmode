@@ -1845,7 +1845,7 @@ function presetOptions(preset: VimPreset): PartialVimOptions {
     return {
       preset,
       startMode: "normal",
-      keymap: { commands: { visualBlock: ["ctrl+v"] } },
+      keymap: { commands: { visualBlock: [] } },
       ui: { status: { items: ["mode", "pendingOperator", "selection", "cursorPosition"] } },
     };
   }

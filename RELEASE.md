@@ -1,42 +1,15 @@
-# v0.6.0
+# v0.7.0
+
+## Breaking changes
+
+- `Ctrl-v` no longer enters visual block mode by default. `Ctrl-v`, Windows `Alt-v`, and `Ctrl-Alt-v` now delegate to Pi for image/clipboard paste in normal and visual modes unless explicitly rebound.
+- Visual block mode now has an empty default keybinding. Configure `piVimMode.keymap.commands.visualBlock` with a non-protected key such as `<A-b>`, or explicitly allow and bind `<C-v>` with `piVimMode.keymap.allowProtectedOverrides`.
 
 ## What's new
 
-### Insert-mode edit and movement keybindings
-
-- Added configurable insert-mode editing and movement actions:
-  - `deleteWordBackward`
-  - `deleteWordForward`
-  - `deleteLineBackward`
-  - `deleteLineForward`
-  - `moveWordBackward`
-  - `moveWordForward`
-  - `moveLineStart`
-  - `moveLineEnd`
-- Insert-mode bindings stay opt-in and preserve default insert typing behavior.
-
-```json
-{
-  "piVimMode": {
-    "keymap": {
-      "insert": {
-        "deleteWordBackward": [],
-        "deleteWordForward": [],
-        "deleteLineBackward": [],
-        "deleteLineForward": [],
-        "moveWordBackward": [],
-        "moveWordForward": [],
-        "moveLineStart": [],
-        "moveLineEnd": []
-      }
-    }
-  }
-}
-```
+- Added protected-shortcut diagnostics/help for Pi-owned image/clipboard paste shortcuts.
+- Visual block entry now goes through the configurable `commands.visualBlock` keymap path instead of hidden hard-coded `Ctrl-v` handling.
 
 ## Bug fixes
 
-- Fixed legacy terminal Alt input for insert-mode bindings: `ESC+d` and `ESC+f` now normalize to `alt+d` and `alt+f`.
-- Kept legacy Alt decoding insert-scoped so normal-mode and Ex command parsing behavior does not change.
-- Fixed normal-mode arrow keys so Left/Down/Up/Right move like `h`/`j`/`k`/`l`, including counts, visual selections, and operator motions.
-- Fixed long-prompt viewport jumps when entering visual mode or editing in insert mode after scrolling down.
+- Fixed normal/visual mode image paste being swallowed by pi-vimmode visual-block handling.

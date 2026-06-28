@@ -18,6 +18,8 @@ Rules:
 
 `docs/solutions/` contains documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
 
+`CONCEPTS.md` contains shared project vocabulary for domain-specific terms and ownership concepts. Relevant when orienting to the codebase or discussing modal/editor behavior.
+
 ## Bun
 
 Default to using Bun instead of Node.js.

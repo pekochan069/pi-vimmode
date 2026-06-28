@@ -205,6 +205,13 @@ export const PROTECTED_SHORTCUTS = [
     behavior: "resets Vim state and delegates to Pi",
   },
   {
+    key: "ctrl+v",
+    aliases: ["alt+v", "ctrl+alt+v"],
+    owner: "pi",
+    reason: "image/clipboard paste",
+    behavior: "delegates to Pi unless explicitly bound by pi-vimmode",
+  },
+  {
     key: "ctrl+d",
     aliases: [],
     owner: "pi-vimmode",
@@ -567,12 +574,12 @@ function featureWhichKeyCategoryLines(
 function protectedShortcutTableLines(): string[] {
   return [
     sectionHeader("Protected Pi shortcuts", PROTECTED_SHORTCUTS.length),
-    "  Key            Mode        Behavior",
-    "  ────────────── ─────────── ──────────────────────────────────────",
-    ...PROTECTED_SHORTCUTS.map(
-      (shortcut) =>
-        `  ${padCell(shortcut.key, 14)} ${padCell("delegated", 11)} protected for ${shortcut.reason}; ${shortcut.behavior}`,
-    ),
+    "  Key                    Mode        Behavior",
+    "  ────────────────────── ─────────── ──────────────────────────────────────",
+    ...PROTECTED_SHORTCUTS.map((shortcut) => {
+      const keys = [shortcut.key, ...shortcut.aliases].join(",");
+      return `  ${padCell(keys, 22)} ${padCell("delegated", 11)} protected for ${shortcut.reason}; ${shortcut.behavior}`;
+    }),
   ];
 }
 
@@ -620,10 +627,6 @@ function detailEntryLine(entry: VimActionEntry): string {
 
 function keyOwnershipLine(context: KeybindingCatalogContext, query: string): string | undefined {
   const normalized = normalizeShortcutKey(query);
-  const protectedShortcut = protectedShortcutForKey(normalized);
-  if (protectedShortcut && !protectedShortcut.normalModeOwned) {
-    return mapcheckMessage(context.keymap, normalized, context.warnings ?? []);
-  }
   const binding = context.keymap.actions.accepted.find((entry) => entry.key === normalized);
   if (binding) return `${normalized} -> ${binding.actionId}`;
   const conflict = (context.warnings ?? []).find((warning) => warning.includes(normalized));
@@ -635,6 +638,10 @@ function keyOwnershipLine(context: KeybindingCatalogContext, query: string): str
     context.marks,
   ).filter((entry) => entry.keys.includes(normalized));
   if (matches.length > 0) return `${normalized} -> ${matches.map(detailEntryLine).join(" | ")}`;
+  const protectedShortcut = protectedShortcutForKey(normalized);
+  if (protectedShortcut && !protectedShortcut.normalModeOwned) {
+    return mapcheckMessage(context.keymap, normalized, context.warnings ?? []);
+  }
   return isKeyLikeQuery(normalized) ? `mapcheck: ${normalized} is unmapped` : undefined;
 }
 
@@ -648,9 +655,6 @@ export function mapcheckMessage(
   warnings: readonly string[] = [],
 ): string {
   const key = normalizeShortcutKey(query);
-  const protectedShortcut = protectedShortcutForKey(key);
-  if (protectedShortcut && !protectedShortcut.normalModeOwned)
-    return `mapcheck: ${key} protected for ${protectedShortcut.reason}; ${protectedShortcut.behavior}`;
   const actionBinding = keymap.actions.accepted.find((binding) => binding.key === key);
   if (actionBinding) return `mapcheck: ${key} -> ${actionBinding.actionId}`;
   const conflict = warnings.find((warning) => warning.includes(key));
@@ -661,6 +665,9 @@ export function mapcheckMessage(
       matches[0].kind === "promptTransform" ? matches[0].id : `${matches[0].kind}.${matches[0].id}`;
     return `mapcheck: ${key} -> ${target}`;
   }
+  const protectedShortcut = protectedShortcutForKey(key);
+  if (protectedShortcut && !protectedShortcut.normalModeOwned)
+    return `mapcheck: ${key} protected for ${protectedShortcut.reason}; ${protectedShortcut.behavior}`;
   return `mapcheck: ${key} is unmapped`;
 }
 

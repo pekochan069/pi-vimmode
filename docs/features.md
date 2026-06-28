@@ -61,16 +61,16 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 
 pi-vimmode has a finite prompt-local surface. This quickref classifies what is supported; it is not a Vim/Neovim quickref clone.
 
-| Category                             | Examples                                                               | Classification                                                                                      |
-| ------------------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                              | Prompt editing actions; configurable only through supported semantic keymap fields.                 |
-| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/` | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                          |
-| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                    | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
-| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                    | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
-| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`       | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                  | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
-| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Tab`                           | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
-| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                         | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
+| Category                             | Examples                                                                      | Classification                                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                                     | Prompt editing actions; configurable only through supported semantic keymap fields.                 |
+| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/`        | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                          |
+| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                           | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
+| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                           | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`              | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                         | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
+| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, `Tab` | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
+| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                                | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
 
 <!-- diagnostic-actions:vimmode.doctor -->
 <!-- diagnostic-actions:vimmode.actions -->
@@ -420,7 +420,7 @@ Supported actions:
 
 - Motions extend selection: `h`, `j`, `k`, `l`, `0`, `$`, `^`, `_`, `w`, `b`, `e`, `gg`, `G`, `%`, search, and mark jumps.
 - `V` switches to visual line mode without resetting anchor.
-- `Ctrl-v` switches to visual block mode without resetting anchor.
+- A configured `piVimMode.keymap.commands.visualBlock` binding switches to visual block mode without resetting anchor.
 - `y` yanks selection and returns normal.
 - `d` / `x` deletes selection and returns normal.
 - `c` deletes selection and enters insert.
@@ -445,7 +445,7 @@ Supported actions:
 
 - Motions extend selected line range.
 - `v` switches to visual char mode without resetting anchor.
-- `Ctrl-v` switches to visual block mode without resetting anchor.
+- A configured `piVimMode.keymap.commands.visualBlock` binding switches to visual block mode without resetting anchor.
 - `y`, `d`, `x`, `c`, `r{char}`, `u`, `U`, `~`, `>` / `<`, mark jumps, named register targeting, and `:` work linewise.
 - Linewise `p` in visual line mode replaces selected lines with the register content.
 
@@ -458,7 +458,7 @@ Vjp     replace selected lines with unnamed register
 
 ## Visual block mode
 
-Enter with built-in `Ctrl-v` from normal/visual mode. `piVimMode.keymap.commands.visualBlock` can add more bindings; default setting is empty because `Ctrl-v` is handled directly.
+Enter visual block mode with `piVimMode.keymap.commands.visualBlock`. The default setting is empty because `Ctrl-v`, Windows-style `Alt-v`, and `Ctrl-Alt-v` delegate to Pi for image/clipboard paste in normal and visual modes. Use a non-protected binding such as `<A-b>`, or explicitly allow and bind a paste shortcut if Vim-style visual block is more important than Pi image paste in your workflow.
 
 Supported actions:
 
@@ -478,7 +478,7 @@ Supported actions:
 Example:
 
 ```text
-Ctrl-v jj I- Esc
+Alt-b jj I- Esc
 ```
 
 Adds `-` before the selected block column on three lines.
@@ -886,7 +886,7 @@ Limitations:
 Pi remains owner of app-level shortcuts.
 
 - `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
-- `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned.
+- `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned unless a shortcut is explicitly implemented or explicitly bound by pi-vimmode.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
 - Protected key rejection can be explicitly overridden per settings layer through `piVimMode.keymap.allowProtectedOverrides`. See `docs/settings.md` for allow-list rules, scope, and limits.
 - Overrides are not OS or terminal guarantees. pi-vimmode can only handle keys Pi delivers distinctly. Chorded shortcuts such as `ctrl+j` may arrive as `enter` depending on terminal configuration.
@@ -952,7 +952,7 @@ Manual smoke checklist:
 
 1. Load extension in Pi and confirm `pi-vimmode` status shows `vim`.
 2. Type in insert mode, press `Esc`, move with normal motions.
-3. Use `v`, `V`, and `Ctrl-v`; confirm highlighting and yank/delete/change behavior.
+3. Use `v`, `V`, and a configured visual-block binding such as `Alt-b`; confirm highlighting and yank/delete/change behavior.
 4. Use `/query`, `n`, and `N`; confirm literal wraparound search and highlighting.
 5. Use `:%s/old/new/g` and visual `:'<,'>s/old/new/`; confirm Ex row messages.
 6. Use named registers, marks, and macros.

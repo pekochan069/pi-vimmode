@@ -9,6 +9,18 @@ import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
+function ctrlVVisualBlockOptions(startMode: "insert" | "normal" = "insert") {
+  return resolveVimOptions({
+    piVimMode: {
+      startMode,
+      keymap: {
+        commands: { visualBlock: ["ctrl+v"] },
+        allowProtectedOverrides: ["ctrl+v"],
+      },
+    },
+  }).options;
+}
+
 function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
@@ -1901,7 +1913,7 @@ describe("vim editor integration", () => {
   });
 
   test("visual modes switch kind without dropping mode state", () => {
-    const { editor } = createEditor();
+    const { editor } = createEditor(ctrlVVisualBlockOptions());
     editor.setText("abc\ndef");
     editor.handleInput("\x1b");
     editor.handleInput("v");
@@ -1915,7 +1927,7 @@ describe("vim editor integration", () => {
   });
 
   test("visual block delete changes rectangular text and renders V-BLOCK status", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const { editor } = createEditor(ctrlVVisualBlockOptions("normal"));
     editor.setText("abcd\nefgh");
     editor.handleInput("g");
     editor.handleInput("g");
@@ -1932,7 +1944,7 @@ describe("vim editor integration", () => {
   });
 
   test("visual block I inserts typed text across selected lines on escape", () => {
-    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const { editor } = createEditor(ctrlVVisualBlockOptions("normal"));
     editor.setText("abcd\nefgh");
     editor.handleInput("g");
     editor.handleInput("g");

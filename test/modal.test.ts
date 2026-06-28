@@ -28,6 +28,8 @@ const csiAltD = "\u001b[100;3u";
 const altF = "\u001bf";
 const csiAltF = "\u001b[102;3u";
 const ctrlE = "\u001b[101;5u";
+const altV = "\u001bv";
+const ctrlAltV = "\u001b[118;7u";
 const escapeOptions = resolveVimOptions({
   piVimMode: { keymap: { escape: ["<D-j>"] } },
 }).options;
@@ -241,6 +243,18 @@ describe("modal contracts", () => {
       const result = handleModalInput({ mode: "insert" }, snapshot, options, ctrlJ);
       expect(result.state.mode).toBe("insert");
       expect(result.effects).toEqual([{ type: "delegate", input: ctrlJ }]);
+
+      const imagePaste = handleModalInput({ mode: "insert" }, snapshot, options, "\x16");
+      expect(imagePaste.state.mode).toBe("insert");
+      expect(imagePaste.effects).toEqual([{ type: "delegate", input: "\x16" }]);
+
+      const windowsImagePaste = handleModalInput({ mode: "insert" }, snapshot, options, altV);
+      expect(windowsImagePaste.state.mode).toBe("insert");
+      expect(windowsImagePaste.effects).toEqual([{ type: "delegate", input: altV }]);
+
+      const modifiedImagePaste = handleModalInput({ mode: "insert" }, snapshot, options, ctrlAltV);
+      expect(modifiedImagePaste.state.mode).toBe("insert");
+      expect(modifiedImagePaste.effects).toEqual([{ type: "delegate", input: ctrlAltV }]);
     });
 
     test("configured insert open-line-below opens line and stays in insert", () => {
@@ -4078,6 +4092,23 @@ describe("modal engine", () => {
     expect(ctrlShiftP.state).toEqual({ mode: "normal" });
     expect(ctrlShiftP.effects).toContainEqual({ type: "delegate", input: "ctrl+shift+p" });
 
+    const ctrlV = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "\x16");
+    expect(ctrlV.state).toEqual({ mode: "normal" });
+    expect(ctrlV.effects).toContainEqual({ type: "delegate", input: "\x16" });
+
+    const altVUpdate = handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, altV);
+    expect(altVUpdate.state).toEqual({ mode: "normal" });
+    expect(altVUpdate.effects).toContainEqual({ type: "delegate", input: altV });
+
+    const ctrlAltVUpdate = handleModalInput(
+      { mode: "normal", pending: "d" },
+      snapshot,
+      options,
+      ctrlAltV,
+    );
+    expect(ctrlAltVUpdate.state).toEqual({ mode: "normal" });
+    expect(ctrlAltVUpdate.effects).toContainEqual({ type: "delegate", input: ctrlAltV });
+
     const visual = handleModalInput(
       { mode: "visual", pending: "d", visualAnchor: cursor },
       snapshot,
@@ -4086,6 +4117,33 @@ describe("modal engine", () => {
     );
     expect(visual.state).toEqual({ mode: "visual", visualAnchor: cursor });
     expect(visual.effects).toContainEqual({ type: "delegate", input: "\x14" });
+
+    const visualCtrlV = handleModalInput(
+      { mode: "visual", pending: "d", visualAnchor: cursor },
+      snapshot,
+      options,
+      "\x16",
+    );
+    expect(visualCtrlV.state).toEqual({ mode: "visual", visualAnchor: cursor });
+    expect(visualCtrlV.effects).toContainEqual({ type: "delegate", input: "\x16" });
+
+    const visualAltV = handleModalInput(
+      { mode: "visual", pending: "d", visualAnchor: cursor },
+      snapshot,
+      options,
+      altV,
+    );
+    expect(visualAltV.state).toEqual({ mode: "visual", visualAnchor: cursor });
+    expect(visualAltV.effects).toContainEqual({ type: "delegate", input: altV });
+
+    const visualCtrlAltV = handleModalInput(
+      { mode: "visual", pending: "d", visualAnchor: cursor },
+      snapshot,
+      options,
+      ctrlAltV,
+    );
+    expect(visualCtrlAltV.state).toEqual({ mode: "visual", visualAnchor: cursor });
+    expect(visualCtrlAltV.effects).toContainEqual({ type: "delegate", input: ctrlAltV });
   });
 
   test("configured startSearch key starts operator search", () => {
@@ -4480,8 +4538,19 @@ describe("modal engine", () => {
     ]);
   });
 
-  test("normal ctrl-v enters visual block mode", () => {
-    const result = handleModalInput({ mode: "normal" }, snapshot, options, "\x16");
+  test("normal ctrl-v delegates by default and explicit visualBlock binding enters visual block", () => {
+    const delegated = handleModalInput({ mode: "normal" }, snapshot, options, "\x16");
+    expect(delegated.state).toEqual({ mode: "normal" });
+    expect(delegated.effects).toContainEqual({ type: "delegate", input: "\x16" });
+
+    const configuredOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, visualBlock: ["ctrl+v"] },
+      },
+    };
+    const result = handleModalInput({ mode: "normal" }, snapshot, configuredOptions, "\x16");
 
     expect(result.state).toEqual({ mode: "visualBlock", visualAnchor: cursor });
     expect(result.effects).toEqual([
@@ -4678,6 +4747,27 @@ describe("modal engine", () => {
     const submitted = handleModalInput(state, snapshot, options, "\r");
     expect(submitted.state.macros?.a).toEqual([]);
     expect(submitted.state.register).toEqual({ type: "char", text: "keep" });
+
+    const imagePaste = handleModalInput(
+      {
+        ...state,
+        pending: "d",
+        searchHighlight: { query: "keep", current: cursor },
+        lastRepeatableChange: { type: "command", command: "deleteChar", count: 1 },
+      },
+      snapshot,
+      options,
+      "\x16",
+    );
+    expect(imagePaste.state).toEqual({
+      mode: "normal",
+      recordingSlot: "a",
+      macros: { a: [] },
+      register: { type: "char", text: "keep" },
+      searchHighlight: { query: "keep", current: cursor },
+      lastRepeatableChange: { type: "command", command: "deleteChar", count: 1 },
+    });
+    expect(imagePaste.effects).toContainEqual({ type: "delegate", input: "\x16" });
   });
 
   test("macro playback emits replay effects and repeat-last no-ops safely", () => {
@@ -5033,13 +5123,21 @@ describe("gv visual reselection", () => {
   });
 
   test("visual block gv preserves blockwise selection kind", () => {
+    const visualBlockOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        commands: { ...DEFAULT_VIM_KEYMAP.commands, visualBlock: ["ctrl+v"] },
+      },
+    };
     // Enter visual block mode, move, escape
-    const entered = applyModalKeys({ mode: "normal" }, "abcd\nefgh", p(0, 0), [
-      "\x16",
-      "l",
-      "j",
-      "\x1b",
-    ]);
+    const entered = applyModalKeys(
+      { mode: "normal" },
+      "abcd\nefgh",
+      p(0, 0),
+      ["\x16", "l", "j", "\x1b"],
+      visualBlockOptions,
+    );
     expect(entered.state.lastVisualSelection).toEqual({
       mode: "visualBlock",
       anchor: p(0, 0),

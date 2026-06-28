@@ -194,6 +194,11 @@ The Vim editor MUST preserve Pi application-level shortcuts and safety behavior.
 - **WHEN** the user presses Pi control shortcuts such as `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model selection shortcuts, thinking shortcuts, or image paste shortcuts
 - **THEN** the editor delegates the shortcut to Pi unless the shortcut is explicitly implemented by this extension
 
+#### Scenario: Normal-mode image paste shortcut delegates
+
+- **WHEN** the editor is in normal mode with default keymap settings and the user presses `Ctrl-v`, `Alt-v`, or `Ctrl-Alt-v`
+- **THEN** the editor delegates the shortcut to Pi so image or clipboard paste handlers can run instead of entering visual block mode
+
 #### Scenario: Prompt submission remains available
 
 - **WHEN** the editor is in insert mode and the user presses Pi's configured submit key

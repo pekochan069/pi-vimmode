@@ -404,13 +404,6 @@ function handleNormalInput(
   }
 
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
-  if (matchesKey(data, "ctrl+v")) {
-    return modeUpdate(
-      { ...clearPending(state), visualAnchor: snapshot.cursor },
-      "visualBlock",
-      options,
-    );
-  }
   const key = keySequence(data);
   if (!key) {
     const nextState = clearPending(state);
@@ -575,11 +568,6 @@ function handleVisualInput(
   if (matchInsertEscapeInput(state, data, keymapForOptions(options).escape).kind === "matched")
     return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
-  if (matchesKey(data, "ctrl+v")) {
-    return state.mode === "visualBlock"
-      ? invalidate(state)
-      : modeUpdate(state, "visualBlock", options);
-  }
   const key = keySequence(data);
   if (!key) return delegate(state, data);
 

@@ -171,6 +171,15 @@ describe("runtime help registry", () => {
     expect(runtimeFeaturesMessage("ctrl+p", context)).toContain(
       "protected for Pi command/model palette",
     );
+    expect(runtimeFeaturesMessage("ctrl+v", context)).toContain(
+      "protected for image/clipboard paste",
+    );
+    expect(runtimeFeaturesMessage("alt+v", context)).toContain(
+      "protected for image/clipboard paste",
+    );
+    expect(runtimeFeaturesMessage("ctrl+alt+v", context)).toContain(
+      "protected for image/clipboard paste",
+    );
     expect(runtimeFeaturesMessage("vimmode.doctor", context)).toContain("vimmode.doctor");
     expect(runtimeFeaturesMessage("vimdoctor", context)).toContain("metadata-only not bindable");
     expect(runtimeFeaturesMessage("vimmode.dump", context)).toBe(

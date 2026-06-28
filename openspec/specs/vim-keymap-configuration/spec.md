@@ -92,6 +92,16 @@ The Vim keymap configuration MUST NOT steal Pi app-owned shortcuts by default.
 - **WHEN** `piVimMode.keymap` attempts to bind a protected key such as submit, interrupt, external editor, model selection, thinking controls, image paste, or autocomplete control
 - **THEN** the binding is ignored or rejected with a warning and the key continues to delegate to Pi behavior
 
+#### Scenario: Image paste shortcuts are protected by default
+
+- **WHEN** `piVimMode.keymap.commands.visualBlock` attempts to bind `Ctrl-v`, `Alt-v`, or `Ctrl-Alt-v` without listing that shortcut in the same settings layer's `piVimMode.keymap.allowProtectedOverrides`
+- **THEN** the binding is rejected with a warning and the shortcut continues to delegate to Pi image or clipboard paste behavior
+
+#### Scenario: Image paste shortcuts can be explicitly owned for visual block
+
+- **WHEN** `piVimMode.keymap.commands.visualBlock` binds `Ctrl-v`, `Alt-v`, or `Ctrl-Alt-v` and the same settings layer lists that shortcut in `piVimMode.keymap.allowProtectedOverrides`
+- **THEN** normal and visual mode use that shortcut for visual block entry or switching through the semantic visualBlock command
+
 #### Scenario: Insert mode remains Pi-owned
 
 - **WHEN** the editor is in insert mode and the user presses ordinary text input, autocomplete keys, submit, or Pi app shortcuts

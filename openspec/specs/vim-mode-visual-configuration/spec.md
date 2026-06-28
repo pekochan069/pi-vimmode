@@ -183,9 +183,9 @@ The change SHALL include tests and documentation for visual highlighting, visual
 
 The Vim editor SHALL support a visual block mode that selects a rectangular region bounded by the visual anchor and cursor across prompt lines.
 
-#### Scenario: Enter visual block mode
+#### Scenario: Enter visual block mode with configured command binding
 
-- **WHEN** the editor is in normal mode and the user presses `Ctrl-v`
+- **WHEN** `piVimMode.keymap.commands.visualBlock` maps a key sequence and the editor receives that sequence in normal mode
 - **THEN** the editor enters visual block mode with the visual anchor at the current cursor position
 
 #### Scenario: Block selection covers rectangular cells
@@ -257,12 +257,12 @@ The Vim editor SHALL allow switching between characterwise, linewise, and blockw
 
 #### Scenario: Switch from characterwise visual to visual block
 
-- **WHEN** the editor is in characterwise visual mode and the user presses `Ctrl-v`
+- **WHEN** `piVimMode.keymap.commands.visualBlock` maps a key sequence and the editor receives that sequence in characterwise visual mode
 - **THEN** the editor switches to visual block mode, keeps the existing visual anchor, and keeps the current cursor position
 
 #### Scenario: Switch from visual line to visual block
 
-- **WHEN** the editor is in visual line mode and the user presses `Ctrl-v`
+- **WHEN** `piVimMode.keymap.commands.visualBlock` maps a key sequence and the editor receives that sequence in visual line mode
 - **THEN** the editor switches to visual block mode, keeps the existing visual anchor, and keeps the current cursor position
 
 #### Scenario: Enter visual block mode with configured command binding

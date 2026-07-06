@@ -2060,6 +2060,31 @@ describe("Ex command-line modal behavior", () => {
     expect(visualBlock.text).toBe("> one\n> two\n> three");
   });
 
+  test("mode-scoped action prefixes do not shadow other modes", () => {
+    const actionOptions = resolveVimOptions(undefined, undefined, {
+      appendKeymap: true,
+      warnings: [],
+      partial: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }],
+            "prompt.transform.unquote": [{ key: "z", modes: ["visual"] }],
+          },
+        },
+      },
+    }).options;
+
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "> one",
+      p(0, 4),
+      ["z"],
+      actionOptions,
+    );
+    expect(visual.text).toBe("one");
+    expect(visual.state.pending).toBeUndefined();
+  });
+
   test("keybound prompt transform actions report no-op feedback and skip dot-repeat", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: {
@@ -4798,6 +4823,24 @@ describe("modal engine", () => {
     expect(
       handleModalInput({ mode: "normal", pendingMacro: "play" }, snapshot, options, "@").effects,
     ).toEqual([{ type: "invalidate" }]);
+  });
+
+  test("normal string remap emits replay effect", () => {
+    const remapOptions: ModalOptions = {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        remaps: { accepted: [{ key: "zz", inputs: ["l", "l", "l", "l"], modes: ["normal"] }] },
+      },
+    };
+
+    const pending = handleModalInput({ mode: "normal" }, snapshot, remapOptions, "z");
+    expect(pending.state.pending).toBe("z");
+
+    const played = handleModalInput(pending.state, snapshot, remapOptions, "z");
+    expect(played.effects).toEqual([
+      { type: "playMacro", slot: "remap", inputs: ["l", "l", "l", "l"] },
+    ]);
   });
 
   test("macro playback is ignored while recording or replaying", () => {

@@ -1,7 +1,7 @@
 ---
 title: Pi vimmode typed action registry keybindings
 date: 2026-06-09
-last_updated: 2026-06-11
+last_updated: 2026-07-01
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -12,6 +12,7 @@ applies_when:
   - "Keeping action metadata typed across resolver, modal execution, Ex validation, docs, and package checks"
   - "Preventing drift between OpenSpec, implementation, tests, and published docs"
   - "Supporting both Ex positional args and keymap object args for the same action"
+  - "Adding trusted JS config bindings that must respect protected Pi shortcuts, mode scopes, and project overrides"
 related_components:
   - development_workflow
   - testing_framework
@@ -36,6 +37,8 @@ tags:
 The completed `typed-action-registry-keybindings` OpenSpec change used a typed finite registry as the source of truth for bindable prompt transform actions. The implementation added canonical `prompt.transform.*` IDs, `piVimMode.keymap.actions`, shared Ex/keymap argument validation, runtime help and diagnostics alignment, docs drift tests, and package dry-run verification.
 
 Prior session history confirmed the main product decision: center this on bindable prompt actions/transforms, not Vim or Neovim parity. It also identified the main pitfalls: existing `promptTransforms.actions`, diagnostics `:actions`, and new `keymap.actions` all use action language but mean different things; parameterized keybindings need an explicit resolved binding shape; and package output inspection needed to be part of verification (session history).
+
+The 2026-07-01 `trusted-js-prompt-keybindings` follow-up extended the same pattern to trusted global JS config. Review fixes made JS remaps respect protected Pi shortcuts, project JSON overrides, mode-scoped conflicts, valid remap modes, `/vimmode reload`, and Ex-command macro replay such as `:vimdoctor<CR>`.
 
 ## Guidance
 
@@ -126,7 +129,29 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
 
    That generic rejection is intentional. Keeping canonical-specific hints after alias removal keeps the old surface alive in diagnostics and tests.
 
-4. **Route through the existing command resolver.** `src/commands.ts` returns an action result from the same finite parser that already owns counts, pending prefixes, operator state, macro recording, and invalid-key behavior.
+4. **Treat trusted JS config as another typed keymap layer, not a privileged bypass.** `src/config-js.ts` may accept ergonomic builder calls such as `vim.keymap.set("n", "ZE", "i<Esc><Tab>")`, but it still feeds the same resolved keymap shape and protection rules as JSON config.
+
+   Required guardrails:
+   - reject protected Pi shortcut lhs values with `protectedShortcutForKey(...)`, even from trusted JS config;
+   - validate JS remap modes against the same normal/visual/visualLine/visualBlock set used by modal dispatch;
+   - remove global JS remaps when project JSON binds the same key;
+   - dedupe action bindings by action ID, key, mode set, and args instead of key alone;
+   - reject duplicate action keys only when their configured modes overlap;
+   - make `keymapHasBinding(key, mode)` check action and remap mode ownership before deciding whether a protected shortcut should delegate to Pi.
+
+   ```ts
+   const protectedShortcut = protectedShortcutForKey(normalizedLhs);
+   if (protectedShortcut) {
+     state.warnings.push(
+       warning(`keymap lhs contains protected key ${normalizedLhs} (${protectedShortcut.reason})`),
+     );
+     return;
+   }
+   ```
+
+   Mode-aware conflict behavior should allow the same lhs in disjoint modes and reject it in overlapping modes. This prevents both false conflicts and silent shadowing.
+
+5. **Route through the existing command resolver.** `src/commands.ts` returns an action result from the same finite parser that already owns counts, pending prefixes, operator state, macro recording, and invalid-key behavior.
 
    ```ts
    | {
@@ -139,7 +164,7 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
 
    Avoid a second resolver inside `src/modal/engine.ts`. That would split prefix handling and make `g`-prefix behavior, counts, macros, and conflict rules drift.
 
-5. **Dispatch actions by reusing prompt transform primitives.** `src/modal/actions.ts` computes normal or visual touched-line ranges, then calls existing `applyPromptTransform(...)`. Normal counts extend the line range; visual counts are ignored; visual-block transforms touched lines linewise rather than rectangular cells.
+6. **Dispatch actions by reusing prompt transform primitives.** `src/modal/actions.ts` computes normal or visual touched-line ranges, then calls existing `applyPromptTransform(...)`. Normal counts extend the line range; visual counts are ignored; visual-block transforms touched lines linewise rather than rectangular cells.
 
    ```txt
    key input
@@ -150,7 +175,7 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
      -> applyPromptTransform(...)
    ```
 
-6. **Share Ex and keymap arg validation.** `normalizePromptTransformActionArgs(...)` accepts both Ex positional input and keymap object input, so `:reflow 72` and `{ "width": 72 }` pass or fail the same way.
+7. **Share Ex and keymap arg validation.** `normalizePromptTransformActionArgs(...)` accepts both Ex positional input and keymap object input, so `:reflow 72` and `{ "width": 72 }` pass or fail the same way.
 
    ```ts
    normalizePromptTransformActionArgs({
@@ -166,7 +191,7 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
    });
    ```
 
-7. **Test the right surface for each action family.** Manual QA for bindable `prompt.transform.*` actions should exercise normal/visual keybindings and prompt edits. Manual QA for diagnostic/help `vimmode.*` metadata should exercise discovery, help, real Ex commands, and rejection from keymap config.
+8. **Test the right surface for each action family.** Manual QA for bindable `prompt.transform.*` actions should exercise normal/visual keybindings and prompt edits. Manual QA for diagnostic/help `vimmode.*` metadata should exercise discovery, help, real Ex commands, and rejection from keymap config.
 
    Diagnostic quickref smoke test:
 
@@ -186,17 +211,18 @@ Use a typed metadata registry plus the existing resolver and edit primitive. Do 
    - `:vimdoctor` is the real executable diagnostic command.
    - `:vimmode doctor` is invalid; only `:vimmode inspect` exists under the `vimmode` Ex command.
 
-8. **Keep M1 deliberately finite.** This change intentionally did not add Vimscript, recursive mappings, a plugin API, runtime `:map`, runtime `:action`, quickref parity, or dot-repeat for keybound prompt transform actions. Keybound prompt transform edits are not dot-repeatable in M1.
+9. **Keep M1 deliberately finite.** This change intentionally did not add Vimscript, recursive mappings, a plugin API, runtime `:map`, runtime `:action`, quickref parity, or dot-repeat for keybound prompt transform actions. Keybound prompt transform edits are not dot-repeatable in M1.
 
-9. **Retire compatibility aliases completely once the transition window ends.** Alias removal must cover every user-facing and source-backed surface together:
-   - delete alias helper exports from `src/prompt-transform-actions.ts`,
-   - remove config parser special-cases in `src/config.ts`,
-   - remove diagnostic aliases from `src/customization.ts`,
-   - update `docs/features.md` and `docs/settings.md` to say canonical-only,
-   - add drift guards so user docs cannot reintroduce `promptTransform.*` support claims,
-   - keep canonical dispatch behavior covered by existing normal/visual, macro, and dot-repeat tests.
+10. **Retire compatibility aliases completely once the transition window ends.** Alias removal must cover every user-facing and source-backed surface together:
 
-10. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
+- delete alias helper exports from `src/prompt-transform-actions.ts`,
+- remove config parser special-cases in `src/config.ts`,
+- remove diagnostic aliases from `src/customization.ts`,
+- update `docs/features.md` and `docs/settings.md` to say canonical-only,
+- add drift guards so user docs cannot reintroduce `promptTransform.*` support claims,
+- keep canonical dispatch behavior covered by existing normal/visual, macro, and dot-repeat tests.
+
+11. **Verify package contents, not only tests.** The registry is runtime source, so release verification must include `bun run build` and `bun pm pack --dry-run`. The package should include `index.ts`, `src/index.ts`, `src/prompt-transform-actions.ts`, `dist/index.js`, README, and docs.
 
 ## Why This Matters
 
@@ -215,7 +241,7 @@ The result is user-configurable prompt transform keybindings without implying fu
 - Adding configurable keybindings for finite prompt-local actions.
 - Adding action metadata that must appear in config validation, diagnostics, runtime help, docs, and drift tests.
 - Explaining or testing the boundary between bindable `prompt.transform.*` actions and metadata-only `vimmode.*` diagnostic/help actions.
-- Supporting one behavior through multiple surfaces such as Ex commands and normal/visual keybindings.
+- Supporting one behavior through multiple surfaces such as Ex commands, trusted JS remaps, project JSON overlays, and normal/visual keybindings.
 - Extending `pi-vimmode` without accepting full Vimscript, recursive mapping, or plugin API scope.
 - Adding parameterized keybindings where validation must reject unknown keys and invalid values.
 - Removing a retired compatibility alias from config, diagnostics, docs, and tests without changing canonical behavior.
@@ -268,6 +294,11 @@ The important invariant is that canonical accepted bindings still dispatch throu
 
 ### Good conflict behavior
 
+- JS `vim.keymap.set("n", "<C-p>", "j")` rejects because `<C-p>` is a protected Pi shortcut.
+- A JS remap on `z` is removed when project JSON binds `z` to a command, so project config can override trusted global defaults.
+- `prompt.transform.quote` on `zq` in normal mode and `prompt.transform.unquote` on `zq` in visual mode can coexist because their modes do not overlap.
+- A visual action on `z` is not shadowed by a normal-mode `zq` prefix because protected-delegation checks are mode-aware.
+- Remaps with invalid modes such as `insert` reject during config resolution.
 - `prompt.transform.reflow: ["gq"]` can share non-executable prefix `g` with existing `gg`.
 - `prompt.transform.quote: ["gg"]` rejects because `gg` is an existing grammar command.
 - `prompt.transform.quote: ["g"]` rejects because it prefix-shadows longer grammar/action sequences.
@@ -300,7 +331,21 @@ Use tests at each boundary instead of one broad integration test:
 
 ## Validation
 
-The implementation and documentation were verified with:
+The 2026-07-01 trusted JS keybinding follow-up was verified with:
+
+```bash
+bun test
+bun run check-types
+bun run lint
+bun run format:check
+openspec validate trusted-js-prompt-keybindings --strict
+openspec validate --specs --strict
+graphify update . --force
+```
+
+Final result: 732 tests passed; OpenSpec strict validation passed for the active change and all 20 specs; the graph was updated after code changes.
+
+The original implementation and documentation were verified with:
 
 ```bash
 bun test

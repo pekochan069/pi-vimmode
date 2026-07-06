@@ -1,6 +1,6 @@
 # pi-vimmode settings reference
 
-pi-vimmode reads one `piVimMode` object from Pi settings. This document lists every supported setting, default, accepted value, and effect.
+pi-vimmode reads one `piVimMode` object from Pi settings plus an optional trusted global JS config. This document lists every supported setting, default, accepted value, and effect.
 
 Source of truth:
 
@@ -13,9 +13,10 @@ Source of truth:
 pi-vimmode loads settings from:
 
 1. Global settings: `~/.pi/agent/settings.json`
-2. Project settings: `.pi/settings.json` in the current project
+2. Trusted global JS config: `~/.pi/agent/pi-vimmode.config.js`
+3. Project settings: `.pi/settings.json` in the current project
 
-Project settings apply after global settings. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply.
+Global JS config applies after global settings and before project settings. Project settings apply last. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply. JS `vim.keymap.set(...)` calls add keybindings to inherited global settings instead of replacing preset or JSON bindings for the same built-in action; project JSON can still clear an action with an explicit empty array.
 
 Example:
 
@@ -31,7 +32,7 @@ Example:
 }
 ```
 
-Warnings are non-fatal. When settings produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor. Run `:help settings` or `:features settings` for compact runtime reminders, but this file remains the complete settings reference.
+Warnings are non-fatal. When settings or JS config produce warnings, Pi status shows `pi-vimmode: vim ⚠`. Run `:vimdoctor` in normal mode to see the retained warning count and first actionable warning for the live editor. Run `:help settings` or `:features settings` for compact runtime reminders, but this file remains the complete settings reference.
 
 Common warning causes:
 
@@ -45,6 +46,32 @@ Common warning causes:
 - Invalid UI/search/macro/mark/feedback field type.
 - Invalid `piVimMode.ui.workbench.reservedRows` value outside `0` through `5`.
 - Legacy `piVimMode.vimOptions` present.
+- Invalid global JS config import, export shape, mode, key string, or RHS.
+
+## Global JS config
+
+`~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
+
+Use `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` for built-ins or `vim.keymap.set(mode, key, "keys")` for a literal key replay. The key is a string using the same key syntax as JSON settings. Built-in pi-vimmode actions are accessed through `vim.prompt.*`, not string action IDs.
+
+```js
+export default (vim) => {
+  vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
+  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("v", "z>", vim.prompt.quote());
+  vim.keymap.set("n", "zz", "llll");
+};
+```
+
+Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"` for all visual modes, or exact `"visual"`, `"visualLine"`, `"visualBlock"`. Arrays of modes are accepted.
+
+Prompt transform built-ins: `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, `reflow({ width })`.
+
+Insert-mode built-ins: `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, `moveLineEnd`.
+
+JS config boundaries: no raw object export, no string RHS that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String RHS is replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit.
+
+Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results.
 
 ## Key sequence syntax
 

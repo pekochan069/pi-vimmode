@@ -138,13 +138,32 @@ export type VimTextObjectKeymapOptions = {
   targets?: Partial<Record<VimTextObjectTarget, readonly string[]>>;
 };
 
+export type VimActionBindingMode = Extract<
+  VimMode,
+  "normal" | "visual" | "visualLine" | "visualBlock"
+>;
+
 export type VimActionKeyBindingEntry =
   | string
-  | { key: string; args?: Readonly<Record<string, unknown>> };
+  | {
+      key: string;
+      args?: Readonly<Record<string, unknown>>;
+      modes?: readonly VimActionBindingMode[];
+    };
 
 export type VimActionKeymapOptions = Partial<
   Record<BindablePromptTransformActionId, readonly VimActionKeyBindingEntry[]>
 >;
+
+export type VimKeySequenceRemap = {
+  key: string;
+  inputs: readonly string[];
+  modes?: readonly VimActionBindingMode[];
+};
+
+export type VimKeySequenceRemapOptions = {
+  accepted: readonly VimKeySequenceRemap[];
+};
 
 export type VimInsertKeymapOptions = {
   openLineBelow?: readonly string[];
@@ -175,6 +194,7 @@ export type VimKeymapOptions = {
   insert?: VimInsertKeymapOptions;
   actionPresets?: readonly VimActionKeybindingPreset[];
   actions?: VimActionKeymapOptions;
+  remaps?: VimKeySequenceRemapOptions;
   allowProtectedOverrides?: readonly string[];
 };
 
@@ -189,6 +209,7 @@ export type ResolvedVimActionBinding = {
   key: string;
   actionId: BindablePromptTransformActionId;
   args: PromptTransform;
+  modes?: readonly VimActionBindingMode[];
 };
 
 export type ResolvedVimActionKeymap = {
@@ -219,6 +240,7 @@ export type ResolvedVimKeymap = {
   operatorMotions: Record<VimMotionOperatorAction, readonly VimMotionAction[]>;
   insert: ResolvedVimInsertKeymap;
   actions: ResolvedVimActionKeymap;
+  remaps: VimKeySequenceRemapOptions;
 };
 
 export type VimSearchOptions = {

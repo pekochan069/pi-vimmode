@@ -228,14 +228,8 @@ describe("golden modal effects", () => {
     const allowOptions: ModalOptions = {
       ...options,
       keymap: {
-        escape: DEFAULT_VIM_KEYMAP.escape,
-        operators: DEFAULT_VIM_KEYMAP.operators,
-        motions: DEFAULT_VIM_KEYMAP.motions,
+        ...DEFAULT_VIM_KEYMAP,
         commands: { ...DEFAULT_VIM_KEYMAP.commands, showKeybindings: ["ctrl+p"] },
-        macros: DEFAULT_VIM_KEYMAP.macros,
-        marks: DEFAULT_VIM_KEYMAP.marks,
-        textObjects: DEFAULT_VIM_KEYMAP.textObjects,
-        operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
         insert: {
           openLineBelow: [],
           openLineAbove: [],
@@ -261,14 +255,8 @@ describe("golden modal effects", () => {
     const allowOptions: ModalOptions = {
       ...options,
       keymap: {
-        escape: DEFAULT_VIM_KEYMAP.escape,
-        operators: DEFAULT_VIM_KEYMAP.operators,
-        motions: DEFAULT_VIM_KEYMAP.motions,
+        ...DEFAULT_VIM_KEYMAP,
         commands: { ...DEFAULT_VIM_KEYMAP.commands, showKeybindings: ["ctrl+p"] },
-        macros: DEFAULT_VIM_KEYMAP.macros,
-        marks: DEFAULT_VIM_KEYMAP.marks,
-        textObjects: DEFAULT_VIM_KEYMAP.textObjects,
-        operatorMotions: DEFAULT_VIM_KEYMAP.operatorMotions,
         insert: {
           openLineBelow: [],
           openLineAbove: [],

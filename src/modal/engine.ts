@@ -392,6 +392,27 @@ function markPendingForKey(
   return undefined;
 }
 
+function remapUpdate(
+  state: ModalState,
+  options: ModalOptions,
+  mode: "normal" | "visual" | "visualLine" | "visualBlock",
+  key: string,
+): ModalUpdate | undefined {
+  const sequence = `${state.pending ?? ""}${key}`;
+  const remaps = keymapForOptions(options).remaps.accepted.filter(
+    (remap) => !remap.modes || remap.modes.includes(mode),
+  );
+  const exact = remaps.find((remap) => remap.key === sequence);
+  if (exact) {
+    const inputs = exact.inputs.slice(0, macrosForOptions(options).maxReplaySteps);
+    return withEffects(clearPending(state), [{ type: "playMacro", slot: "remap", inputs }]);
+  }
+  if (remaps.some((remap) => remap.key.startsWith(sequence))) {
+    return invalidate({ ...state, pending: sequence });
+  }
+  return undefined;
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -412,7 +433,7 @@ function handleNormalInput(
 
   if (isProtectedPiDelegateKey(data)) {
     const keymap = keymapForOptions(options);
-    if (!keymapHasBinding(keymap, key)) {
+    if (!keymapHasBinding(keymap, key, "normal")) {
       return delegateProtectedShortcut(state, options, data);
     }
   }
@@ -464,9 +485,12 @@ function handleNormalInput(
     if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
   }
 
+  const remapped = remapUpdate(state, options, "normal", key);
+  if (remapped) return remapped;
+
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   if (pendingOperator) {
-    const searchCommand = resolveNormalCommand(key, undefined, keymap);
+    const searchCommand = resolveNormalCommand(key, undefined, keymap, "normal");
     if (searchCommand.type === "command" && searchCommand.command === "startSearch") {
       return startSearchUpdate(state, "forward", pendingOperator);
     }
@@ -477,7 +501,7 @@ function handleNormalInput(
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
 
-  const pendingResult = resolveNormalCommand(key, state.pending, keymap);
+  const pendingResult = resolveNormalCommand(key, state.pending, keymap, "normal");
   if (pendingResult.type === "pending") {
     const operator = operatorActionForSequence(pendingResult.pending, keymap);
     if (state.pendingRegister && !operator) return invalidate(clearPending(state));
@@ -573,7 +597,7 @@ function handleVisualInput(
 
   if (isProtectedPiDelegateKey(data)) {
     const keymap = keymapForOptions(options);
-    if (!keymapHasBinding(keymap, key)) {
+    if (!keymapHasBinding(keymap, key, state.mode)) {
       return delegateProtectedShortcut(state, options, data);
     }
   }
@@ -613,8 +637,21 @@ function handleVisualInput(
     }
   }
 
+  const remapped = remapUpdate(
+    state,
+    options,
+    state.mode as "visual" | "visualLine" | "visualBlock",
+    key,
+  );
+  if (remapped) return remapped;
+
   const keymap = keymapForOptions(options);
-  const result = resolveNormalCommand(key, state.pending, keymap);
+  const result = resolveNormalCommand(
+    key,
+    state.pending,
+    keymap,
+    state.mode as "visual" | "visualLine" | "visualBlock",
+  );
   if (result.type === "motion") {
     if (state.pendingRegister) return invalidate(clearPending(state));
     return moveUpdate(state, result.motion, snapshot, result.count);

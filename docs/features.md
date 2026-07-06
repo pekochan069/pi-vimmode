@@ -896,7 +896,7 @@ Pi remains owner of app-level shortcuts.
 
 ## Configuration features
 
-Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar.
+Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
 
 Examples of configurable features:
 
@@ -904,6 +904,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- trusted global JS keybinding additions via `vim.prompt.*` built-ins
 - opt-in protected shortcut override list per settings layer
 - text object kind/target keys
 - allowed operator motions
@@ -926,6 +927,7 @@ Useful files when verifying feature behavior:
 
 - `src/lifecycle.ts`: extension activation, settings refresh, status, shutdown cursor reset.
 - `src/config.ts`: settings defaults, parser, validation, merge precedence, warnings.
+- `src/config-js.ts`: trusted global JS config loader and `vim.prompt.*` keymap builder.
 - `src/types.ts`: public option and behavior types.
 - `src/commands.ts`: finite semantic key parser, counts, text objects, macro control parser.
 - `src/buffer.ts`: pure prompt-buffer navigation, edit, search, visual, mark, register, and substitution operations.

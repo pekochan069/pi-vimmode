@@ -341,6 +341,23 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors.map((editor) => editor.resetCount)).toEqual([1, 1]);
   });
 
+  test("vimmode command reloads options without toggling", async () => {
+    const { hooks, commands, createdEditors, loadCalls } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("session_start")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+
+    await commands.get("vimmode")?.handler("reload", ctx);
+    factory({}, {}, {});
+
+    expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
+    expect(ctx.ui.component).toBe(factory);
+    expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode reloaded", "info"]);
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+  });
+
   test("vimmode command toggles editor off and on", async () => {
     const { hooks, commands, createdEditors } = createLifecycleHarness();
     const ctx = createContext("/repo");

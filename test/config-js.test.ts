@@ -1,0 +1,265 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { loadVimJsConfig } from "../src/config-js.ts";
+import { loadVimOptions, resolveVimOptions } from "../src/config.ts";
+
+function fixture() {
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-config-"));
+  const path = join(dir, "pi-vimmode.config.js");
+  return {
+    path,
+    write: (content: string) => writeFileSync(path, content),
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+  };
+}
+
+describe("vim JS config loading", () => {
+  test("missing JS config is quiet", async () => {
+    const result = await loadVimJsConfig(join(tmpdir(), "missing-pi-vimmode.config.js"));
+    expect(result).toEqual({ warnings: [] });
+  });
+
+  test("loads vim.prompt builtins through string keybindings", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
+  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("v", "z>", vim.prompt.quote());
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([]);
+      expect(result.appendKeymap).toBe(true);
+      expect(result.partial).toEqual({
+        keymap: {
+          insert: { deleteWordBackward: ["alt+w"] },
+          actions: {
+            "prompt.transform.reflow": [{ key: "zq", args: { width: 88 }, modes: ["normal"] }],
+            "prompt.transform.quote": [
+              { key: "z>", args: undefined, modes: ["visual", "visualLine", "visualBlock"] },
+            ],
+          },
+        },
+      });
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("builder mappings add to existing preset bindings instead of replacing them", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
+      undefined,
+      {
+        appendKeymap: true,
+        warnings: [],
+        partial: {
+          keymap: {
+            actions: {
+              "prompt.transform.reflow": [{ key: "zq" }],
+            },
+          },
+        },
+      },
+    );
+
+    const reflowKeys = result.options.keymap?.actions.accepted
+      .filter((binding) => binding.actionId === "prompt.transform.reflow")
+      .map((binding) => binding.key);
+    expect(result.warnings).toEqual([]);
+    expect(reflowKeys).toEqual(["gq", "zq"]);
+  });
+
+  test("project JSON can override JS string remaps", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { commands: { insertBefore: ["z"] } } } },
+      {
+        appendKeymap: true,
+        warnings: [],
+        partial: {
+          keymap: {
+            remaps: { accepted: [{ key: "z", inputs: ["l"], modes: ["normal"] }] },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.options.keymap?.commands.insertBefore).toEqual(["z"]);
+  });
+
+  test("action bindings on same key survive in disjoint modes", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      appendKeymap: true,
+      warnings: [],
+      partial: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }],
+            "prompt.transform.unquote": [{ key: "zq", modes: ["visual"] }],
+          },
+        },
+      },
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        actionId: "prompt.transform.quote",
+        key: "zq",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+      {
+        actionId: "prompt.transform.unquote",
+        key: "zq",
+        args: { action: "unquote" },
+        modes: ["visual"],
+      },
+    ]);
+  });
+
+  test("invalid remap modes are dropped", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      appendKeymap: true,
+      warnings: [],
+      partial: {
+        keymap: {
+          remaps: {
+            accepted: [{ key: "zz", inputs: ["l"], modes: ["insert" as never] }],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+  });
+
+  test("project JSON can still clear JS-added bindings", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { actions: { "prompt.transform.reflow": [] } } } },
+      {
+        appendKeymap: true,
+        warnings: [],
+        partial: {
+          keymap: {
+            actions: {
+              "prompt.transform.reflow": [{ key: "zq" }],
+            },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("string rhs maps to replayed key inputs", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "zz", "llll");
+  vim.keymap.set("n", "ZD", ":vimdoctor<CR>");
+  vim.keymap.set("n", "ZE", "i<Esc><Tab>");
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.partial).toEqual({
+        keymap: {
+          remaps: {
+            accepted: [
+              { key: "zz", inputs: ["l", "l", "l", "l"], modes: ["normal"] },
+              {
+                key: "ZD",
+                inputs: [":", "v", "i", "m", "d", "o", "c", "t", "o", "r", "\r"],
+                modes: ["normal"],
+              },
+              { key: "ZE", inputs: ["i", "\x1b", "\t"], modes: ["normal"] },
+            ],
+          },
+        },
+      });
+      expect(result.warnings).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("protected lhs warns without registering", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => vim.keymap.set("n", "<C-p>", "j");`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.partial).toEqual({});
+      expect(result.warnings).toEqual([
+        expect.stringContaining("keymap lhs contains protected key ctrl+p"),
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("invalid default export and rhs warn without throwing", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => vim.keymap.set("i", "aa", "bb");`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.partial).toEqual({});
+      expect(result.warnings).toEqual([
+        "global JS config: string rhs keymaps only support normal and visual modes",
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("loadVimOptions includes JS string remaps", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-remap-load-"));
+    try {
+      const jsConfigPath = join(dir, "pi-vimmode.config.js");
+      writeFileSync(jsConfigPath, `export default (vim) => vim.keymap.set("n", "zz", "llll");`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(dir, "missing-settings.json"),
+        projectSettingsPath: join(dir, "project-settings.json"),
+        jsConfigPath,
+      });
+      expect(result.options.keymap?.remaps.accepted).toEqual([
+        { key: "zz", inputs: ["l", "l", "l", "l"], modes: ["normal"] },
+      ]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("loadVimOptions includes the trusted global JS config layer", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-config-load-"));
+    try {
+      const globalPath = join(dir, "settings.json");
+      const jsConfigPath = join(dir, "pi-vimmode.config.js");
+      writeFileSync(globalPath, JSON.stringify({ piVimMode: { startMode: "normal" } }));
+      writeFileSync(
+        jsConfigPath,
+        `export default (vim) => vim.keymap.set("n", "zq", vim.prompt.reflow());`,
+      );
+      const result = await loadVimOptions({
+        globalSettingsPath: globalPath,
+        projectSettingsPath: join(dir, "project-settings.json"),
+        jsConfigPath,
+      });
+      expect(result.options.startMode).toBe("normal");
+      expect(result.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual(["zq"]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

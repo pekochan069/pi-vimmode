@@ -2026,7 +2026,7 @@ describe("vim editor integration", () => {
     expect(hardwareCursorChanges).toEqual([true, false, true, false]);
   });
 
-  test("agent busy suppresses bar hardware cursor without changing editor state", () => {
+  test("agent busy preserves bar hardware cursor without changing editor state", () => {
     const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
       cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
@@ -2041,11 +2041,11 @@ describe("vim editor integration", () => {
     expectEditorState(editor, { text: "a", cursor: { line: 0, col: 1 }, mode: "insert" });
     expect(editor.getCurrentCursorStyle()).toBe("bar");
     expect(writes.at(-1)).toBe("\x1b[6 q");
-    expect(getHardwareCursorVisible()).toBe(false);
-    expect(hardwareCursorChanges).toEqual([true, false]);
+    expect(getHardwareCursorVisible()).toBe(true);
+    expect(hardwareCursorChanges).toEqual([true]);
   });
 
-  test("agent idle restores cursor policy and preserves original hardware visibility", () => {
+  test("agent busy suppresses non-bar cursor and idle preserves original hardware visibility", () => {
     const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor(
       {
         startMode: "insert",
@@ -2065,6 +2065,7 @@ describe("vim editor integration", () => {
 
     editor.setAgentBusy(true);
     expect(getHardwareCursorVisible()).toBe(false);
+    expect(writes.at(-1)).toBe("\x1b[4 q");
     editor.setAgentBusy(false);
 
     expect(editor.getVimMode()).toBe("normal");
@@ -2086,7 +2087,7 @@ describe("vim editor integration", () => {
 
     expect(writes.at(-1)).toBe("\x1b[0 q");
     expect(getHardwareCursorVisible()).toBe(false);
-    expect(hardwareCursorChanges).toEqual([true, false, true, false]);
+    expect(hardwareCursorChanges).toEqual([true, false]);
   });
 });
 

@@ -17,7 +17,7 @@ Runtime behavior:
 - Shows status key `pi-vimmode` as `vim` when settings parse cleanly.
 - Shows `vim ⚠` when settings load with warnings.
 - Shows `vim off` when disabled through `/vimmode off`.
-- Suppresses hardware cursor visibility while Pi agent work is active and resets terminal cursor hints on `session_shutdown` or `/vimmode off`.
+- Keeps `bar` hardware cursors visible while Pi agent work is active, suppresses non-bar hardware cursors, and resets terminal cursor hints on `session_shutdown` or `/vimmode off`.
 
 Example install from Git:
 
@@ -872,7 +872,7 @@ Rendering behavior:
 - Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators; normal/visual mode transitions keep the current visible prompt rows stable while the cursor remains visible.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
 - Terminal cursor-shape hints use best-effort DECSCUSR escapes.
-- `bar` cursor enables Pi TUI hardware cursor visibility while interactive, suppresses it while Pi agent work is active, and restores original visibility on reset.
+- `bar` cursor enables Pi TUI hardware cursor visibility while interactive and while Pi agent work is active; non-bar cursors suppress hardware cursor visibility while busy. Reset restores original visibility.
 
 Limitations:
 
@@ -896,7 +896,7 @@ Pi remains owner of app-level shortcuts.
 
 ## Configuration features
 
-Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar.
+Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
 
 Examples of configurable features:
 
@@ -904,6 +904,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- trusted global JS keybinding additions via `vim.prompt.*` built-ins
 - opt-in protected shortcut override list per settings layer
 - text object kind/target keys
 - allowed operator motions
@@ -926,6 +927,7 @@ Useful files when verifying feature behavior:
 
 - `src/lifecycle.ts`: extension activation, settings refresh, status, shutdown cursor reset.
 - `src/config.ts`: settings defaults, parser, validation, merge precedence, warnings.
+- `src/config-js.ts`: trusted global JS config loader and `vim.prompt.*` keymap builder.
 - `src/types.ts`: public option and behavior types.
 - `src/commands.ts`: finite semantic key parser, counts, text objects, macro control parser.
 - `src/buffer.ts`: pure prompt-buffer navigation, edit, search, visual, mark, register, and substitution operations.

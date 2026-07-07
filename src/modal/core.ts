@@ -79,7 +79,7 @@ function hasKeyInMap(map: Record<string, readonly string[]>, key: string): boole
   return Object.values(map).some((bindings) => bindings.includes(key));
 }
 
-export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string): boolean {
+export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string, mode?: VimMode): boolean {
   if (keymap.escape.includes(key)) return true;
   if (hasKeyInMap(keymap.operators as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.motions as Record<string, readonly string[]>, key)) return true;
@@ -89,7 +89,21 @@ export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string): boolea
   if (hasKeyInMap(keymap.textObjects.kinds as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.textObjects.targets as Record<string, readonly string[]>, key))
     return true;
-  if (keymap.actions.accepted.some((binding) => binding.key === key)) return true;
+  if (
+    keymap.actions.accepted.some(
+      (binding) => binding.key === key && (!binding.modes || binding.modes.includes(mode as never)),
+    )
+  )
+    return true;
+  if (
+    keymap.remaps.accepted.some(
+      (binding) =>
+        (binding.key === key || binding.key.startsWith(key)) &&
+        (!binding.modes || binding.modes.includes(mode as never)),
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 

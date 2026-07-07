@@ -1032,12 +1032,12 @@ describe("vim config parsing", () => {
     expect(result.warnings).toHaveLength(2);
   });
 
-  test("malformed settings files fall back safely", () => {
+  test("malformed settings files fall back safely", async () => {
     const paths = tempSettings();
     try {
       writeFileSync(paths.globalPath, "{ nope");
       writeFileSync(paths.projectPath, JSON.stringify({ piVimMode: { startMode: "normal" } }));
-      const result = loadVimOptions({
+      const result = await loadVimOptions({
         globalSettingsPath: paths.globalPath,
         projectSettingsPath: paths.projectPath,
       });

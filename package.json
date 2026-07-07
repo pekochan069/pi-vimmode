@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [

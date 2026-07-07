@@ -698,7 +698,7 @@ export class VimEditor extends CustomEditor {
 
   private syncHardwareCursorVisibility(style: CursorStyle): void {
     if (this.agentBusy) {
-      this.setHardwareCursorVisibility(false);
+      this.setHardwareCursorVisibility(style === "bar");
       return;
     }
     this.setHardwareCursorVisibility(

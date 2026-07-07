@@ -17,7 +17,7 @@ Runtime behavior:
 - Shows status key `pi-vimmode` as `vim` when settings parse cleanly.
 - Shows `vim ⚠` when settings load with warnings.
 - Shows `vim off` when disabled through `/vimmode off`.
-- Suppresses hardware cursor visibility while Pi agent work is active and resets terminal cursor hints on `session_shutdown` or `/vimmode off`.
+- Keeps `bar` hardware cursors visible while Pi agent work is active, suppresses non-bar hardware cursors, and resets terminal cursor hints on `session_shutdown` or `/vimmode off`.
 
 Example install from Git:
 
@@ -872,7 +872,7 @@ Rendering behavior:
 - Long prompt content wraps and scrolls around cursor with `↑ more` / `↓ more` indicators; normal/visual mode transitions keep the current visible prompt rows stable while the cursor remains visible.
 - Cursor styles support `block`, `bar`, and `underline` by mode.
 - Terminal cursor-shape hints use best-effort DECSCUSR escapes.
-- `bar` cursor enables Pi TUI hardware cursor visibility while interactive, suppresses it while Pi agent work is active, and restores original visibility on reset.
+- `bar` cursor enables Pi TUI hardware cursor visibility while interactive and while Pi agent work is active; non-bar cursors suppress hardware cursor visibility while busy. Reset restores original visibility.
 
 Limitations:
 

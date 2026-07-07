@@ -129,7 +129,17 @@ Example keymap/UI override:
 }
 ```
 
-See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for the full default reference and all settings.
+Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as local code with Pi process privileges:
+
+```js
+export default (vim) => {
+  vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
+  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "ZD", ":vimdoctor<CR>");
+};
+```
+
+Run `/vimmode reload` after editing JS config. See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for the full default reference, JS config boundaries, and all settings.
 
 ## Recover or disable
 
@@ -145,7 +155,7 @@ If the extension blocks editing or configuration goes wrong:
 
 ## Architecture
 
-`VimEditor` is the Pi adapter shell. It owns `CustomEditor` integration, snapshots, effect application, rendering bridge, public cursor restoration, and best-effort terminal cursor writes.
+`VimEditor` is the Pi adapter shell. It owns `CustomEditor` integration, snapshots, effect application, rendering bridge, public cursor restoration, and best-effort terminal cursor writes. Insert-mode `bar` hardware cursors stay visible while Pi agent work is active; non-bar cursors are suppressed during busy output.
 
 Modal editing behavior lives under `src/modal/`:
 

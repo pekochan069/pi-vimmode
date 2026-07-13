@@ -51,6 +51,7 @@ export function registerVimLifecycle(
   let enabled = true;
   let agentBusy = false;
   let previousEditorFactory: EditorComponentFactory;
+  let hasInstalledFactory = false;
   const editors = new Set<TrackedEditor>();
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
   const createEditor =
@@ -95,22 +96,37 @@ export function registerVimLifecycle(
     }
   };
 
-  const finishInstall = (ctx: ExtensionContext) => {
+  const finishInstall = (ctx: ExtensionContext, force = false) => {
     currentShutdown = () => ctx.shutdown();
-    if (ctx.ui.getEditorComponent() !== editorFactory) {
-      previousEditorFactory = ctx.ui.getEditorComponent();
-      ctx.ui.setEditorComponent(editorFactory);
+    const current = ctx.ui.getEditorComponent();
+    if (current === editorFactory) {
+      hasInstalledFactory = true;
+      return;
     }
+
+    // Preserve a foreign factory that took ownership after Vim installed.
+    if (
+      !force &&
+      hasInstalledFactory &&
+      current !== undefined &&
+      current !== previousEditorFactory
+    ) {
+      return;
+    }
+
+    previousEditorFactory = current;
+    ctx.ui.setEditorComponent(editorFactory);
+    hasInstalledFactory = true;
   };
 
-  const installEditor = (ctx: ExtensionContext): void | Promise<void> => {
+  const installEditor = (ctx: ExtensionContext, force = false): void | Promise<void> => {
     if (!enabled) {
       ctx.ui.setStatus("pi-vimmode", "vim off");
       return;
     }
     const refreshed = refreshOptions(ctx);
-    if (refreshed instanceof Promise) return refreshed.then(() => finishInstall(ctx));
-    finishInstall(ctx);
+    if (refreshed instanceof Promise) return refreshed.then(() => finishInstall(ctx, force));
+    finishInstall(ctx, force);
   };
 
   const installEditorSoon = (ctx: ExtensionContext) => {
@@ -138,15 +154,17 @@ export function registerVimLifecycle(
     enabled = false;
     agentBusy = false;
     resetKnownEditors();
-    if (ctx.ui.getEditorComponent() === editorFactory) {
+    const current = ctx.ui.getEditorComponent();
+    if (current === editorFactory) {
       ctx.ui.setEditorComponent(previousEditorFactory);
+      hasInstalledFactory = false;
     }
     ctx.ui.setStatus("pi-vimmode", "vim off");
   };
 
   const enableEditor = (ctx: ExtensionContext): void | Promise<void> => {
     enabled = true;
-    return installEditor(ctx);
+    return installEditor(ctx, true);
   };
 
   pi.registerCommand("vimmode", {

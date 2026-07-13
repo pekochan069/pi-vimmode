@@ -66,6 +66,26 @@ Pi discovers the extension through `package.json`:
 
 For local testing, load this package as a Pi extension using Pi's normal extension loading flow.
 
+### Compatibility with extensions that modifies editor
+
+Pi currently exposes a single custom-editor factory which makes last extension could overrides previous editor factories.\
+Currently, `pi-vimmode` is implemented with `CustomEditor` which cannot decorate an arbitrary editor instances provided by other extensions.
+This means editor extensions that maintain per-instance state, such as history or additional editor behavior, may lose that state when their factory is replaced.
+
+Until pi supports composable order independant editor extension api, you should load pi-vimmode in front of other extensions that set editor component, like `@zigai/pi-prompt-history`.
+Load `pi-vimmode` before other extensions in `settings.json`:
+
+```json
+{
+  "packages": [
+    "pi-vimmode",
+    "another-editor-extension"
+  ]
+}
+```
+
+See issue #16 for more information.
+
 ## Quick start
 
 1. Start Pi with the extension loaded.

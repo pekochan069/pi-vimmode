@@ -913,13 +913,32 @@ describe("vim editor integration", () => {
     expect(editor.render(8).join("\n")).toContain("C");
   });
 
+  test("renders and clones a right-positioned status group", () => {
+    const options = resolveVimOptions({
+      piVimMode: {
+        startMode: "normal",
+        ui: {
+          status: { position: "right" },
+          mode: { labels: { normal: "COMMAND" } },
+        },
+      },
+    }).options;
+    const { editor } = createEditor(options);
+    options.ui!.status.position = "left";
+
+    const status = editor.render(30).at(-1) ?? "";
+    expect(status.startsWith("──")).toBe(true);
+    expect(status.endsWith(" COMMAND 1:1 ─")).toBe(true);
+    expect(visibleWidth(status)).toBe(30);
+  });
+
   test("renders configured cursor position status", () => {
     const { editor } = createEditor({
       ...DEFAULT_VIM_OPTIONS,
       startMode: "normal",
       ui: {
         ...DEFAULT_VIM_OPTIONS.ui!,
-        status: { enabled: true, items: ["mode", "cursorPosition"] },
+        status: { enabled: true, position: "left", items: ["mode", "cursorPosition"] },
         cursorPosition: { enabled: true, base: 1, format: "L{line}:C{column}" },
       },
     });
@@ -2098,15 +2117,23 @@ describe("status border fitting", () => {
     expect(line).toContain("NORMAL");
   });
 
-  test("truncates right side before primary mode", () => {
-    const line = fitStatusBorder(" N ", " very long visual selection preview ", 10);
-    expect(visibleWidth(line)).toBeLessThanOrEqual(10);
-    expect(line).toContain("N");
+  test("places right status at the far edge", () => {
+    const line = fitStatusBorder(" 1:1 ", " N ", 20);
+    expect(line.endsWith(" N ─")).toBe(true);
+    expect(visibleWidth(line)).toBe(20);
   });
 
-  test("handles extremely narrow widths", () => {
-    expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 1))).toBe(1);
-    expect(visibleWidth(fitStatusBorder(" NORMAL ", "", 0))).toBe(0);
+  test("truncates right content before left content", () => {
+    const line = fitStatusBorder(" LEFT ", " MODE ", 8);
+    expect(visibleWidth(line)).toBe(8);
+    expect(line).toContain("LEFT");
+    expect(line).not.toContain("MODE");
+  });
+
+  test("handles zero and narrow widths without overflow", () => {
+    for (let width = 0; width <= 12; width += 1) {
+      expect(visibleWidth(fitStatusBorder(" LEFT ", " RIGHT ", width))).toBe(width);
+    }
   });
 });
 

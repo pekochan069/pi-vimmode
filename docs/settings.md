@@ -710,19 +710,22 @@ Example:
 
 ### Status
 
-| Path                          | Default                                                      | Accepted values                                                   | Effect                                                                |
-| ----------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `piVimMode.ui.status.enabled` | `true`                                                       | boolean                                                           | Enables/disables all status text in the editor border.                |
-| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
+| Path                           | Default                                                      | Accepted values                                                   | Effect                                                                |
+| ------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `piVimMode.ui.status.enabled`  | `true`                                                       | boolean                                                           | Enables/disables all status text in the editor border.                |
+| `piVimMode.ui.status.position` | `"left"`                                                     | `"left"`, `"right"`                                               | Aligns the complete ordered status group at the selected border edge. |
+| `piVimMode.ui.status.items`    | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
 
 Status item meanings:
 
-| Item              | Shows                                                                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | Mode label when enabled. Active macro recording shows `REC {slot}` whenever status is enabled, next to mode when present and prepended otherwise. |
-| `pendingOperator` | Pending prefixes with an ellipsis, such as `d…`, `g…`, `/query…`, `m…`, or `:command…`.                                                           |
-| `selection`       | Visual selection summary and preview when enabled.                                                                                                |
-| `cursorPosition`  | Cursor position when `ui.cursorPosition.enabled` is true.                                                                                         |
+| Item              | Shows                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`            | Mode label when enabled. Active macro recording shows `REC {slot}` at the mode item's order position when present and prepended otherwise. |
+| `pendingOperator` | Pending prefixes with an ellipsis, such as `d…`, `g…`, `/query…`, `m…`, or `:command…`.                                                    |
+| `selection`       | Visual selection summary and preview when enabled.                                                                                         |
+| `cursorPosition`  | Cursor position when `ui.cursorPosition.enabled` is true.                                                                                  |
+
+`position` aligns the complete status sequence, so mode, pending state, selection, cursor position, and macro recording always move together. The aligned group is truncated as needed to preserve terminal width.
 
 ### Mode labels
 
@@ -1018,6 +1021,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
     "ui": {
       "status": {
         "enabled": true,
+        "position": "left",
         "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
       },
       "mode": {
@@ -1177,12 +1181,15 @@ Now delete only accepts `d{wordForward}` and `d{lineEnd}` among finite operator 
 }
 ```
 
-### Custom mode labels
+### Custom right-aligned mode labels
 
 ```json
 {
   "piVimMode": {
     "ui": {
+      "status": {
+        "position": "right"
+      },
       "mode": {
         "labels": {
           "normal": "COMMAND",

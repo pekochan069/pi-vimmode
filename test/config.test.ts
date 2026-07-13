@@ -39,12 +39,29 @@ describe("vim config parsing", () => {
     const redoOptions = {
       keymap: { escape: ["<D-j>"], commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
     } satisfies VimEditorOptions;
+    const preChangeUiOptions = {
+      ui: {
+        status: { enabled: true, items: ["mode"] },
+        mode: {
+          enabled: true,
+          labels: { insert: "I", normal: "N", visual: "V", visualLine: "VL", visualBlock: "VB" },
+          narrowLabels: {
+            insert: "I",
+            normal: "N",
+            visual: "V",
+            visualLine: "VL",
+            visualBlock: "VB",
+          },
+        },
+      },
+    } satisfies VimEditorOptions;
     expect(options.keymap?.motions?.halfPageDown).toEqual(["<C-d>"]);
     expect(options.keymap?.commands?.replaceChar).toEqual(["R"]);
     expect(options.keymap?.commands?.toggleCase).toEqual(["~"]);
     expect(redoOptions.keymap?.escape).toEqual(["<D-j>"]);
     expect(redoOptions.keymap?.commands?.redo).toEqual(["ctrl+r"]);
     expect(redoOptions.keymap?.commands?.showKeybindings).toEqual(["gk"]);
+    expect(preChangeUiOptions.ui.mode.enabled).toBe(true);
     const backwardSearchOptions = {
       keymap: { commands: { startSearchBackward: ["?"] } },
     } satisfies VimEditorOptions;
@@ -55,7 +72,9 @@ describe("vim config parsing", () => {
   });
 
   test("uses defaults when settings are absent", () => {
-    expect(resolveVimOptions(undefined).options).toEqual(DEFAULT_VIM_OPTIONS);
+    const options = resolveVimOptions(undefined).options;
+    expect(options).toEqual(DEFAULT_VIM_OPTIONS);
+    expect(options.ui?.status.position).toBe("left");
   });
 
   test("resolved defaults do not share mutable nested config fields", () => {
@@ -155,17 +174,62 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.macros.record).toEqual(["q"]);
   });
 
-  test("parses configured mode labels", () => {
+  test("parses configured status position and mode labels", () => {
     const result = resolveVimOptions({
       piVimMode: {
-        ui: { mode: { labels: { normal: "COMMAND" }, narrowLabels: { normal: "C" } } },
+        ui: {
+          status: { position: "right" },
+          mode: {
+            labels: { normal: "COMMAND" },
+            narrowLabels: { normal: "C" },
+          },
+        },
       },
     });
 
     expect(result.warnings).toEqual([]);
+    expect(result.options.ui?.status.position).toBe("right");
     expect(result.options.ui?.mode.labels.normal).toBe("COMMAND");
     expect(result.options.ui?.mode.narrowLabels.normal).toBe("C");
     expect(result.options.ui?.mode.labels.insert).toBe("INSERT");
+  });
+
+  test("retains inherited status position when a later value is invalid", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { ui: { status: { position: "right" } } } },
+      {
+        piVimMode: {
+          ui: {
+            status: { position: "center" },
+            mode: { enabled: false, labels: { normal: "COMMAND" } },
+          },
+        },
+      },
+    );
+
+    expect(result.options.ui?.status.position).toBe("right");
+    expect(result.options.ui?.mode.enabled).toBe(false);
+    expect(result.options.ui?.mode.labels.normal).toBe("COMMAND");
+    expect(result.warnings).toEqual([
+      'project settings: piVimMode.ui.status.position must be "left" or "right"',
+    ]);
+  });
+
+  test("merges status position across global, JS, and project fields", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { ui: { status: { position: "right" } } } },
+      { piVimMode: { ui: { mode: { narrowLabels: { normal: "P" } } } } },
+      {
+        partial: {
+          ui: { status: { position: "left" }, mode: { labels: { normal: "JS" } } },
+        },
+      },
+    );
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.ui?.status.position).toBe("left");
+    expect(result.options.ui?.mode.labels.normal).toBe("JS");
+    expect(result.options.ui?.mode.narrowLabels.normal).toBe("P");
   });
 
   test("parses workbench reserved rows field-by-field", () => {

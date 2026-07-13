@@ -44,6 +44,21 @@ The Vim editor SHALL support configured labels for insert, normal, characterwise
 - **WHEN** `piVimMode.ui.mode.narrowLabels.visualLine` is set to a non-empty string and available status width is narrow
 - **THEN** the rendered visual-line mode status uses the configured narrow label
 
+#### Scenario: Status position defaults left
+
+- **WHEN** no `piVimMode.ui.status.position` setting is configured
+- **THEN** the complete ordered status group remains left-aligned
+
+#### Scenario: Status position configured right
+
+- **WHEN** `piVimMode.ui.status.position` is set to `"right"`
+- **THEN** the complete ordered status group, including mode, pending state, selection, cursor position, and macro recording, renders in the right border slot
+
+#### Scenario: Invalid status position falls back
+
+- **WHEN** `piVimMode.ui.status.position` is neither `"left"` nor `"right"`
+- **THEN** settings resolution records a warning, retains the inherited status position, and preserves valid sibling UI fields
+
 #### Scenario: Mode status disabled
 
 - **WHEN** `piVimMode.ui.mode.enabled` is set to `false`
@@ -107,8 +122,13 @@ The Vim editor MUST keep rendered output width-safe for every supported UI confi
 
 #### Scenario: Width safety preserved
 
-- **WHEN** Pi renders the editor at any supported terminal width with configured status items, labels, selection preview, and cursor position
+- **WHEN** Pi renders the editor at any supported terminal width with configured status items, labels, selection preview, cursor position, and status position
 - **THEN** every rendered line from the Vim editor fits within the provided width
+
+#### Scenario: Aligned status group fits narrow widths
+
+- **WHEN** the configured status group cannot fit within the provided width
+- **THEN** the aligned group is truncated and the rendered border never exceeds the provided width
 
 #### Scenario: Automated validation runs
 

@@ -230,6 +230,39 @@ describe("vim extension lifecycle", () => {
     expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
   });
 
+  test("uses public editor factory API without inspecting foreign wrappers", async () => {
+    const { hooks, commands } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+    const foreignFactory = (() => ({
+      resetTerminalCursorStyle: () => {},
+      setAgentBusy: () => {},
+    })) as unknown as FakeEditorComponent;
+    ctx.ui.component = foreignFactory;
+
+    hooks.get("session_start")?.({}, ctx);
+    expect(ctx.ui.component).not.toBe(foreignFactory);
+
+    await commands.get("vimmode")?.handler("off", ctx);
+    expect(ctx.ui.component).toBe(foreignFactory);
+  });
+
+  test("does not overwrite a foreign factory installed after Vim", async () => {
+    const { hooks, commands } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+    const foreignFactory = (() => ({
+      resetTerminalCursorStyle: () => {},
+      setAgentBusy: () => {},
+    })) as unknown as FakeEditorComponent;
+
+    hooks.get("session_start")?.({}, ctx);
+    ctx.ui.component = foreignFactory;
+    hooks.get("agent_end")?.({}, ctx);
+
+    expect(ctx.ui.component).toBe(foreignFactory);
+    await commands.get("vimmode")?.handler("off", ctx);
+    expect(ctx.ui.component).toBe(foreignFactory);
+  });
+
   test("stable factory avoids component churn", () => {
     const { hooks } = createLifecycleHarness();
     const ctx = createContext("/repo");

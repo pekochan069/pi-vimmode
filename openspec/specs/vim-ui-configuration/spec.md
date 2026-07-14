@@ -30,20 +30,6 @@ The Vim editor SHALL read `piVimMode.ui.status` to determine which status items 
 - **WHEN** `piVimMode.ui.status.items` contains an unsupported item name
 - **THEN** the unsupported item is ignored, a warning is recorded, and supported status items remain usable
 
-### Requirement: Mode labels are configurable
-
-The Vim editor SHALL support configured labels for insert, normal, characterwise visual, and visual line modes.
-
-#### Scenario: Mode labels configured
-
-- **WHEN** `piVimMode.ui.mode.labels.normal` is set to a non-empty string and the editor is in normal mode
-- **THEN** the rendered mode status uses the configured normal-mode label when width permits
-
-#### Scenario: Narrow mode labels configured
-
-- **WHEN** `piVimMode.ui.mode.narrowLabels.visualLine` is set to a non-empty string and available status width is narrow
-- **THEN** the rendered visual-line mode status uses the configured narrow label
-
 #### Scenario: Status position defaults left
 
 - **WHEN** no `piVimMode.ui.status.position` setting is configured
@@ -58,6 +44,20 @@ The Vim editor SHALL support configured labels for insert, normal, characterwise
 
 - **WHEN** `piVimMode.ui.status.position` is neither `"left"` nor `"right"`
 - **THEN** settings resolution records a warning, retains the inherited status position, and preserves valid sibling UI fields
+
+### Requirement: Mode labels are configurable
+
+The Vim editor SHALL support configured labels for insert, normal, characterwise visual, and visual line modes.
+
+#### Scenario: Mode labels configured
+
+- **WHEN** `piVimMode.ui.mode.labels.normal` is set to a non-empty string and the editor is in normal mode
+- **THEN** the rendered mode status uses the configured normal-mode label when width permits
+
+#### Scenario: Narrow mode labels configured
+
+- **WHEN** `piVimMode.ui.mode.narrowLabels.visualLine` is set to a non-empty string and available status width is narrow
+- **THEN** the rendered visual-line mode status uses the configured narrow label
 
 #### Scenario: Mode status disabled
 

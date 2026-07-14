@@ -861,8 +861,9 @@ Optional status item:
 
 Rendering behavior:
 
-- Narrow widths use narrow labels: `I`, `N`, `V`, `VL`, `VB`.
-- Active macro recording shows `REC {slot}`.
+- Status items are left-aligned by default; `piVimMode.ui.status.position: "right"` moves the complete ordered status group to the far-right border slot.
+- Mode, pending state, selection, cursor position, and active macro recording (`REC {slot}`) always move together.
+- Narrow widths use narrow labels: `I`, `N`, `V`, `VL`, `VB`, and truncate the aligned status group to fit.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
 - Insert-mode autocomplete rows remain Pi-owned and visible; Vim status feedback renders on a separate row while completion UI is open.

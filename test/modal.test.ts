@@ -2437,7 +2437,11 @@ describe("modal view state", () => {
       width: 40,
       pending: "d",
       ui: {
-        status: { enabled: true, items: ["cursorPosition", "mode", "pendingOperator"] },
+        status: {
+          enabled: true,
+          position: "left",
+          items: ["cursorPosition", "mode", "pendingOperator"],
+        },
         mode: {
           enabled: true,
           labels: {
@@ -2465,6 +2469,90 @@ describe("modal view state", () => {
     expect(status.right).toBe("");
   });
 
+  test("modal status moves the complete status group to the right", () => {
+    const ui = resolveVimOptions({
+      piVimMode: {
+        ui: {
+          status: {
+            position: "right",
+            items: ["cursorPosition", "mode", "pendingOperator"],
+          },
+        },
+      },
+    }).options.ui;
+    const status = modalStatus({
+      mode: "normal",
+      text: "abc",
+      cursor,
+      width: 40,
+      pending: "d",
+      recordingSlot: "a",
+      ui,
+    });
+    const visual = modalStatus({
+      mode: "visual",
+      text: "abc",
+      cursor: { line: 0, col: 1 },
+      visualAnchor: cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: {
+          ui: { status: { position: "right", items: ["selection", "mode"] } },
+        },
+      }).options.ui,
+    });
+
+    expect(status).toEqual({ left: "", right: " 1:1 NORMAL REC a d… " });
+    expect(visual).toEqual({ left: "", right: " 2 chars · ab VISUAL " });
+  });
+
+  test("right-positioned status honors mode visibility and narrow labels", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        ui: {
+          status: { position: "right", items: ["mode"] },
+          mode: {
+            labels: { normal: "COMMAND" },
+            narrowLabels: { normal: "C" },
+          },
+        },
+      },
+    }).options.ui;
+    const narrow = modalStatus({ mode: "normal", text: "", cursor, width: 5, ui: configured });
+    const hidden = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { position: "right" }, mode: { enabled: false } } },
+      }).options.ui,
+    });
+    const omitted = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { position: "right", items: ["cursorPosition"] } } },
+      }).options.ui,
+    });
+    const disabled = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { enabled: false, position: "right" } } },
+      }).options.ui,
+    });
+
+    expect(narrow.right).toBe(" C ");
+    expect(hidden.right).toBe(" 1:1 ");
+    expect(omitted.right).toBe(" 1:1 ");
+    expect(disabled).toEqual({ left: "", right: "" });
+  });
+
   test("modal status shows active macro recording", () => {
     const status = modalStatus({
       mode: "normal",
@@ -2483,7 +2571,7 @@ describe("modal view state", () => {
       width: 10,
       recordingSlot: "a",
       ui: {
-        status: { enabled: true, items: ["selection"] },
+        status: { enabled: true, position: "right", items: ["selection"] },
         mode: {
           enabled: false,
           labels: {
@@ -2506,7 +2594,7 @@ describe("modal view state", () => {
         workbench: { reservedRows: 0 },
       },
     });
-    expect(modeHidden.left.trim()).toBe("REC a");
+    expect(modeHidden).toEqual({ left: "", right: " REC a " });
   });
 });
 

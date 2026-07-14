@@ -150,10 +150,15 @@ The Vim editor SHALL render Vim status feedback according to the resolved UI con
 - **WHEN** the editor switches modes and `piVimMode.ui.mode.labels` configures labels for those modes
 - **THEN** the rendered editor shows the configured active-mode label where the mode status item is enabled and width permits
 
+#### Scenario: Status group can be right-aligned
+
+- **WHEN** `piVimMode.ui.status.position` is set to `"right"`
+- **THEN** the complete ordered status group, including mode, pending state, visual selection status, cursor position, and macro recording, renders at the right edge
+
 #### Scenario: Mode status can be hidden by config
 
 - **WHEN** `piVimMode.ui.mode.enabled` is set to `false` or the status item list omits `mode`
-- **THEN** the rendered editor omits mode feedback while preserving prompt editing behavior
+- **THEN** the rendered editor omits mode feedback from both border slots while preserving prompt editing behavior
 
 #### Scenario: Render width respected
 

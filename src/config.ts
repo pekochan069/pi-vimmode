@@ -32,6 +32,7 @@ import type {
   VimStatusItem,
   VimTextObjectKind,
   VimTextObjectTarget,
+  VimUiEditorOptions,
 } from "./types.ts";
 
 import {
@@ -200,6 +201,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
 export const DEFAULT_VIM_UI = Object.freeze({
   status: Object.freeze({
     enabled: true,
+    position: "left",
     items: Object.freeze(["mode", "pendingOperator", "selection", "cursorPosition"]),
   }),
   mode: Object.freeze({
@@ -361,17 +363,7 @@ type PartialPromptTransformOptions = {
   commands?: Partial<Record<PromptTransformAction, string[]>>;
 };
 
-type PartialUiOptions = {
-  status?: Partial<ResolvedVimUi["status"]>;
-  mode?: {
-    enabled?: boolean;
-    labels?: Partial<Record<VimMode, string>>;
-    narrowLabels?: Partial<Record<VimMode, string>>;
-  };
-  selection?: Partial<ResolvedVimUi["selection"]>;
-  cursorPosition?: Partial<ResolvedVimUi["cursorPosition"]>;
-  workbench?: Partial<ResolvedVimUi["workbench"]>;
-};
+type PartialUiOptions = VimUiEditorOptions;
 
 export type VimConfigLoadResult = {
   options: ResolvedVimEditorOptions;
@@ -485,7 +477,11 @@ function clonePromptTransforms(
 
 function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   return {
-    status: { enabled: ui.status.enabled, items: [...ui.status.items] },
+    status: {
+      enabled: ui.status.enabled,
+      position: ui.status.position,
+      items: [...ui.status.items],
+    },
     mode: {
       enabled: ui.mode.enabled,
       labels: clonePlainRecord(ui.mode.labels),
@@ -1099,6 +1095,11 @@ function parseUi(
       if (typeof value.status.enabled === "boolean") status.enabled = value.status.enabled;
       else if (value.status.enabled !== undefined)
         warnings.push(`${sourceLabel}: piVimMode.ui.status.enabled must be a boolean`);
+      if (value.status.position === "left" || value.status.position === "right") {
+        status.position = value.status.position;
+      } else if (value.status.position !== undefined) {
+        warnings.push(`${sourceLabel}: piVimMode.ui.status.position must be "left" or "right"`);
+      }
       if (value.status.items !== undefined) {
         const items = parseActionStringArray<VimStatusItem>(
           value.status.items,

@@ -121,6 +121,7 @@ export type VimTextObject = {
 };
 
 export type VimStatusItem = "mode" | "pendingOperator" | "selection" | "cursorPosition";
+export type VimStatusPosition = "left" | "right";
 
 export type VimMacroKeymapOptions = {
   record?: readonly string[];
@@ -256,6 +257,7 @@ export type ResolvedVimSearch = VimSearchOptions;
 export type VimUiOptions = {
   status: {
     enabled: boolean;
+    position: VimStatusPosition;
     items: readonly VimStatusItem[];
   };
   mode: {
@@ -275,6 +277,18 @@ export type VimUiOptions = {
   workbench: {
     reservedRows: number;
   };
+};
+
+export type VimUiEditorOptions = {
+  status?: Partial<VimUiOptions["status"]>;
+  mode?: {
+    enabled?: boolean;
+    labels?: Partial<Record<VimMode, string>>;
+    narrowLabels?: Partial<Record<VimMode, string>>;
+  };
+  selection?: Partial<VimUiOptions["selection"]>;
+  cursorPosition?: Partial<VimUiOptions["cursorPosition"]>;
+  workbench?: Partial<VimUiOptions["workbench"]>;
 };
 
 export type ResolvedVimUi = VimUiOptions;
@@ -331,7 +345,7 @@ export type VimEditorOptions = {
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: VimKeymapOptions;
-  ui?: Partial<ResolvedVimUi>;
+  ui?: VimUiEditorOptions;
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;

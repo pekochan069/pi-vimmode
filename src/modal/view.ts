@@ -70,10 +70,8 @@ export function modalStatus(input: ModalStatusInput): ModalStatus {
 
   if (input.recordingSlot && !recordingAdded) parts.unshift(`REC ${input.recordingSlot}`);
 
-  return {
-    left: parts.length > 0 ? ` ${parts.join(" ")} ` : "",
-    right: "",
-  };
+  const status = parts.length > 0 ? ` ${parts.join(" ")} ` : "";
+  return ui.status.position === "right" ? { left: "", right: status } : { left: status, right: "" };
 }
 
 function cursorPositionStatus(cursor: Position, ui: ResolvedVimUi): string {

@@ -174,7 +174,7 @@ export function fitStatusBorder(
   border: (text: string) => string = (text) => text,
 ): string {
   if (width <= 0) return "";
-  if (width === 1) return border("─");
+  if (width <= 2) return border("─".repeat(width));
 
   let leftText = left;
   let rightText = right;

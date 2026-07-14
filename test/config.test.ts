@@ -174,6 +174,177 @@ describe("vim config parsing", () => {
     expect(result.options.keymap?.macros.record).toEqual(["q"]);
   });
 
+  test("leader defaults unset and resolves printable, invalid, and null layers", () => {
+    expect(resolveVimOptions(undefined).options.leader).toBeUndefined();
+
+    const invalidProject = resolveVimOptions(
+      { piVimMode: { leader: "," } },
+      { piVimMode: { leader: "too-long", startMode: "normal" } },
+    );
+    expect(invalidProject.options.leader).toBe(",");
+    expect(invalidProject.options.startMode).toBe("normal");
+    expect(invalidProject.warnings).toEqual([
+      "project settings: piVimMode.leader must be one printable character or null",
+    ]);
+
+    const cleared = resolveVimOptions(
+      { piVimMode: { leader: "," } },
+      { piVimMode: { leader: null } },
+    );
+    expect(cleared.options.leader).toBeUndefined();
+  });
+
+  test("expands retained leader mappings with final project leader", () => {
+    const result = resolveVimOptions(
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: {
+            commands: { undo: ["<Leader>u"] },
+            actions: { "prompt.transform.reflow": ["<leader><Leader>"] },
+          },
+        },
+      },
+      { piVimMode: { leader: " " } },
+    );
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.leader).toBe(" ");
+    expect(result.options.keymap?.leader).toBe(" ");
+    expect(result.options.keymap?.commands.undo).toEqual([" u"]);
+    expect(result.options.keymap?.actions.accepted[0]?.key).toBe("  ");
+  });
+
+  test("leader mapping warnings drop only affected keys", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: { commands: { undo: ["<leader>", "g<leader>x", "<leader>u"] } },
+      },
+    });
+    expect(configured.options.keymap?.commands.undo).toEqual([",u"]);
+    expect(configured.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("contains unsupported key"),
+        expect.stringContaining("cannot bind a lone <leader>"),
+      ]),
+    );
+
+    const missing = resolveVimOptions({
+      piVimMode: { keymap: { motions: { wordForward: ["<leader>w"] } } },
+    });
+    expect(missing.options.keymap?.motions.wordForward).toEqual(["w"]);
+    expect(missing.options.keymap?.leader).toBeUndefined();
+    expect(missing.warnings).toEqual([
+      expect.stringContaining("uses <leader> but piVimMode.leader is unset"),
+    ]);
+  });
+
+  test("invalid higher-layer leader mappings preserve lower valid bindings", () => {
+    const classic = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["U"] } } } },
+      { piVimMode: { keymap: { commands: { undo: ["<leader>u"] } } } },
+    );
+    expect(classic.options.keymap?.commands.undo).toEqual(["U"]);
+
+    const mixed = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["U"] } } } },
+      { piVimMode: { keymap: { commands: { undo: ["<leader>u", "Z"] } } } },
+    );
+    expect(mixed.options.keymap?.commands.undo).toEqual(["Z"]);
+
+    const action = resolveVimOptions(
+      {
+        piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+      },
+      {
+        piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["<leader>q"] } } },
+      },
+    );
+    expect(action.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual(["gq"]);
+
+    const cleared = resolveVimOptions(
+      {
+        piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } },
+      },
+      {
+        piVimMode: { keymap: { actions: { "prompt.transform.reflow": [] } } },
+      },
+    );
+    expect(cleared.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("protected leader suffixes are rejected without dropping valid siblings", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": ["<leader>ctrl+p", "<leader><C-p>", "<leader>q"],
+          },
+        },
+      },
+    });
+    expect(result.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual([",q"]);
+    expect(
+      result.warnings.filter((warning) => warning.includes("contains protected key ctrl+p")),
+    ).toHaveLength(2);
+  });
+
+  test("rejected leader actions do not reserve their prefix", () => {
+    const disabled = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        promptTransforms: { actions: { quote: false } },
+        keymap: { actions: { "prompt.transform.quote": ["<leader>x"] } },
+      },
+    });
+    expect(disabled.options.keymap?.leader).toBeUndefined();
+    expect(disabled.options.keymap?.commands.repeatCharSearchReverse).toEqual([","]);
+    expect(disabled.options.keymap?.actions.accepted).toEqual([]);
+
+    const duplicate = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": ["<leader>x"],
+            "prompt.transform.unquote": ["<leader>x"],
+          },
+        },
+      },
+    });
+    expect(duplicate.options.keymap?.leader).toBeUndefined();
+    expect(duplicate.options.keymap?.commands.repeatCharSearchReverse).toEqual([","]);
+    expect(duplicate.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("rejected insert and text-object leader keys do not reserve normal grammar", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: {
+          escape: ["<leader>q"],
+          insert: { openLineBelow: ["<leader>o"] },
+          textObjects: { targets: { word: ["<leader>w"] } },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.leader).toBeUndefined();
+    expect(result.options.keymap?.commands.repeatCharSearchReverse).toEqual([","]);
+    expect(result.options.keymap?.escape).toEqual([]);
+    expect(result.options.keymap?.insert.openLineBelow).toEqual([]);
+    expect(result.options.keymap?.textObjects.targets.word).toEqual(["w"]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("unsupported printable text sequence <leader>q"),
+        expect.stringContaining("unsupported printable text sequence <leader>o"),
+        expect.stringContaining("unsupported multi-key text object binding <leader>w"),
+      ]),
+    );
+  });
+
   test("parses configured status position and mode labels", () => {
     const result = resolveVimOptions({
       piVimMode: {

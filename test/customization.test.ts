@@ -150,10 +150,11 @@ describe("vim customization helpers", () => {
   test("formats keybinding catalog from effective resolved bindings", () => {
     const { options } = resolveVimOptions({
       piVimMode: {
+        leader: ",",
         keymap: {
           escape: ["<D-j>"],
           commands: { redo: ["U"] },
-          actions: { "prompt.transform.reflow": ["gq"] },
+          actions: { "prompt.transform.reflow": ["<leader>q"] },
         },
       },
     });
@@ -180,7 +181,8 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("Key            Mode        Action");
     expect(lines).toContain("U              normal      command.redo");
     expect(lines).toContain("super+j        modal       escape.alias");
-    expect(lines).toContain("gq             n/v         prompt.transform.reflow");
+    expect(lines).toContain(",q             n/v         prompt.transform.reflow");
+    expect(lines).not.toContain("<leader>");
     expect(lines).not.toContain("promptTransform");
     expect(lines).not.toContain(" → ");
     expect(lines).not.toContain("vimmode.help metadata-only not bindable");

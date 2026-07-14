@@ -261,15 +261,18 @@ describe("vim editor integration", () => {
     const options = resolveVimOptions({
       piVimMode: {
         startMode: "normal",
-        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["K"] } },
+        leader: ",",
+        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["<leader>k"] } },
       },
     }).options;
     const { editor } = createEditor(options);
+    options.leader = ";";
+    options.keymap!.leader = ";";
     (options.keymap!.escape as unknown as string[]).splice(0, 1, "ctrl+x");
-    (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, "Z");
+    (options.keymap!.commands.openLineBelow as unknown as string[]).splice(0, 1, ";k");
 
     editor.setText("one\ntwo");
-    typeKeys(editor, ["g", "g", "K"]);
+    typeKeys(editor, ["g", "g", ",", "k"]);
 
     expect(editor.getText()).toBe("one\n\ntwo");
     expect(editor.getVimMode()).toBe("insert");

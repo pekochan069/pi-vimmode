@@ -77,10 +77,7 @@ Load `pi-vimmode` before other extensions in `settings.json`:
 
 ```json
 {
-  "packages": [
-    "pi-vimmode",
-    "another-editor-extension"
-  ]
+  "packages": ["pi-vimmode", "another-editor-extension"]
 }
 ```
 
@@ -131,13 +128,15 @@ Example keymap/UI override:
 ```json
 {
   "piVimMode": {
+    "leader": " ",
     "cursor": {
       "normal": "block",
       "insert": "bar"
     },
     "keymap": {
       "commands": {
-        "startSearch": ["/"]
+        "startSearch": ["/"],
+        "showKeybindings": ["<leader>k"]
       }
     },
     "ui": {
@@ -153,8 +152,9 @@ Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run
 
 ```js
 export default (vim) => {
+  vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
-  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
   vim.keymap.set("n", "ZD", ":vimdoctor<CR>");
 };
 ```

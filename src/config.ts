@@ -39,7 +39,7 @@ import {
   actionKeybindingPresetActions,
   isActionKeybindingPreset,
 } from "./action-keybinding-recipes.ts";
-import { DEFAULT_JS_CONFIG_PATH, loadVimJsConfig } from "./config-js.ts";
+import { DEFAULT_JS_CONFIG_PATH, isPrintableLeader, loadVimJsConfig } from "./config-js.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   deriveActionKeys,
@@ -317,6 +317,7 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
 
 type PartialVimOptions = {
   preset?: VimPreset;
+  leader?: string | null;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: PartialKeymapOptions;
@@ -391,6 +392,7 @@ function clonePlainRecord<T extends Record<string, unknown>>(record: T): T {
 
 function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVimKeymap {
   return {
+    leader: keymap.leader,
     escape: [...keymap.escape],
     operators: cloneArrayRecord(keymap.operators),
     motions: cloneArrayRecord(keymap.motions),
@@ -498,6 +500,7 @@ export function cloneResolvedVimOptions(
 ): ResolvedVimEditorOptions {
   return {
     preset: options.preset,
+    leader: options.leader,
     startMode: options.startMode,
     cursor: { ...options.cursor },
     keymap: options.keymap ? cloneKeymap(options.keymap) : undefined,
@@ -524,8 +527,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const LEADER_TOKEN = "<leader>";
+const LEADER_TOKEN_PATTERN = /<leader>/gi;
+
 function normalizeVimKeySequence(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0) return undefined;
+  if (/<leader>/i.test(value)) {
+    const normalized = value.replace(LEADER_TOKEN_PATTERN, LEADER_TOKEN);
+    if (!normalized.startsWith(LEADER_TOKEN)) return undefined;
+    const prefix = normalized.match(/^(?:<leader>)+/)?.[0] ?? "";
+    const suffix = normalized.slice(prefix.length);
+    if (!suffix.startsWith("<")) return normalized;
+    if (!/^<[^>]+>$/.test(suffix)) return undefined;
+    const normalizedSuffix = normalizeVimKeySequence(suffix);
+    return normalizedSuffix ? `${prefix}${normalizedSuffix}` : undefined;
+  }
 
   const angleMatch = value.match(/^<(.+)>$/);
   if (!angleMatch) return value;
@@ -1486,6 +1502,14 @@ function parsePiVimMode(
     return { partial, warnings };
   }
 
+  if (value.leader !== undefined) {
+    if (value.leader === null || isPrintableLeader(value.leader)) {
+      partial.leader = value.leader;
+    } else {
+      warnings.push(`${sourceLabel}: piVimMode.leader must be one printable character or null`);
+    }
+  }
+
   const preset = value.preset;
   if (preset !== undefined) {
     if (typeof preset === "string" && VIM_PRESETS.has(preset as VimPreset)) {
@@ -1645,25 +1669,21 @@ function additiveKeymapLayer(
   layers: readonly PartialKeymapOptions[],
   partial: PartialKeymapOptions,
 ): PartialKeymapOptions {
-  const base = resolveKeymapFromLayers([...layers]);
+  const base = keymapOverlayFromLayers(layers);
   const next: PartialKeymapOptions = { ...partial };
   if (partial.insert) {
     const insert: Partial<ResolvedVimInsertKeymap> = {};
     for (const [action, keys] of Object.entries(partial.insert)) {
       const typedAction = action as keyof ResolvedVimInsertKeymap;
-      insert[typedAction] = [...base.insert[typedAction], ...keys];
+      insert[typedAction] = [...(base.insert?.[typedAction] ?? []), ...keys];
     }
     next.insert = insert;
   }
   if (partial.actions) {
-    const byAction = new Map<BindablePromptTransformActionId, ResolvedVimActionBinding[]>();
-    for (const binding of base.actions.accepted) {
-      byAction.set(binding.actionId, [...(byAction.get(binding.actionId) ?? []), binding]);
-    }
     const actions: NonNullable<PartialKeymapOptions["actions"]> = {};
     for (const [actionId, bindings] of Object.entries(partial.actions)) {
       const typedAction = actionId as BindablePromptTransformActionId;
-      actions[typedAction] = [...(byAction.get(typedAction) ?? []), ...bindings];
+      actions[typedAction] = [...(base.actions?.[typedAction] ?? []), ...bindings];
     }
     next.actions = actions;
   }
@@ -1712,13 +1732,227 @@ function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymap
   }
 }
 
-function resolveKeymapFromLayers(layers: PartialKeymapOptions[]): ResolvedVimKeymap {
+function keymapOverlayFromLayers(layers: readonly PartialKeymapOptions[]): PartialKeymapOptions {
   const overlay: PartialKeymapOptions = {};
   for (const layer of layers) mergeKeymapOverlay(overlay, layer);
+  return overlay;
+}
 
+type ExpandedLeaderSequence = { sequence?: string; usesLeader: boolean };
+type LeaderExpansionContext = {
+  leader: string | undefined;
+  warnings: string[];
+  expand: boolean;
+};
+
+function expandLeaderSequence(
+  sequence: string,
+  label: string,
+  context: LeaderExpansionContext,
+): ExpandedLeaderSequence {
+  if (!/<leader>/i.test(sequence)) return { sequence, usesLeader: false };
+  if (!sequence.toLowerCase().startsWith(LEADER_TOKEN)) {
+    context.warnings.push(`${label} contains <leader> after another key`);
+    return { usesLeader: false };
+  }
+  if (!context.leader) {
+    context.warnings.push(`${label} uses <leader> but piVimMode.leader is unset`);
+    return { usesLeader: false };
+  }
+  const suffix = sequence.replace(/^(?:<leader>)+/i, "");
+  const protectedShortcut = protectedShortcutForKey(suffix);
+  if (protectedShortcut) {
+    context.warnings.push(
+      `${label} contains protected key ${suffix} (${protectedShortcut.reason})`,
+    );
+    return { usesLeader: false };
+  }
+  if (sequence.toLowerCase() === LEADER_TOKEN) {
+    context.warnings.push(`${label} cannot bind a lone <leader>`);
+    return { usesLeader: false };
+  }
+  return {
+    sequence: context.expand ? sequence.replace(LEADER_TOKEN_PATTERN, context.leader) : sequence,
+    usesLeader: true,
+  };
+}
+
+function expandBindingArray(
+  bindings: string[],
+  label: string,
+  context: LeaderExpansionContext,
+): { bindings?: string[]; usesLeader: boolean } {
+  if (bindings.length === 0) return { bindings: [], usesLeader: false };
+  const expanded: string[] = [];
+  let usesLeader = false;
+  for (const binding of bindings) {
+    const result = expandLeaderSequence(binding, label, context);
+    if (result.sequence) expanded.push(result.sequence);
+    usesLeader ||= result.usesLeader;
+  }
+  return { bindings: expanded.length > 0 ? expanded : undefined, usesLeader };
+}
+
+function expandBindingRecord(
+  record: Partial<Record<string, string[]>> | undefined,
+  label: string,
+  context: LeaderExpansionContext,
+): boolean {
+  if (!record) return false;
+  let usesLeader = false;
+  for (const [action, bindings] of Object.entries(record)) {
+    if (!bindings) continue;
+    const expanded = expandBindingArray(bindings, `${label}.${action}`, context);
+    if (expanded.bindings) record[action] = expanded.bindings;
+    else delete record[action];
+    usesLeader ||= expanded.usesLeader;
+  }
+  return usesLeader;
+}
+
+function expandLeaderMappings(
+  overlay: PartialKeymapOptions,
+  leader: string | undefined,
+  expand = true,
+): {
+  usesLeader: boolean;
+  usesNonActionLeader: boolean;
+  leaderActionBindings: Set<ResolvedVimActionBinding>;
+  warnings: string[];
+} {
+  const context: LeaderExpansionContext = { leader, warnings: [], expand };
+  const expandRecord = (record: object | undefined, label: string): boolean =>
+    expandBindingRecord(record as Partial<Record<string, string[]>> | undefined, label, context);
+
+  if (overlay.escape) {
+    const expanded = expandBindingArray(
+      overlay.escape,
+      "resolved settings: piVimMode.keymap.escape",
+      context,
+    );
+    overlay.escape = expanded.bindings;
+  }
+
+  let usesNonActionLeader = false;
+  for (const [record, label] of [
+    [overlay.operators, "operators"],
+    [overlay.motions, "motions"],
+    [overlay.commands, "commands"],
+    [overlay.macros, "macros"],
+    [overlay.marks, "marks"],
+  ] as const) {
+    if (expandRecord(record, `resolved settings: piVimMode.keymap.${label}`)) {
+      usesNonActionLeader = true;
+    }
+  }
+  expandRecord(overlay.textObjects?.kinds, "resolved settings: piVimMode.keymap.textObjects.kinds");
+  expandRecord(
+    overlay.textObjects?.targets,
+    "resolved settings: piVimMode.keymap.textObjects.targets",
+  );
+  expandRecord(overlay.insert, "resolved settings: piVimMode.keymap.insert");
+
+  const leaderActionBindings = new Set<ResolvedVimActionBinding>();
+  for (const [actionId, bindings] of Object.entries(overlay.actions ?? {})) {
+    if (!bindings) continue;
+    const expanded: ResolvedVimActionBinding[] = [];
+    for (const binding of bindings) {
+      const result = expandLeaderSequence(
+        binding.key,
+        `resolved settings: piVimMode.keymap.actions.${actionId}`,
+        context,
+      );
+      if (result.sequence) {
+        const expandedBinding = { ...binding, key: result.sequence };
+        expanded.push(expandedBinding);
+        if (result.usesLeader && (!binding.modes || binding.modes.length > 0)) {
+          leaderActionBindings.add(expandedBinding);
+        }
+      }
+    }
+    const typedActionId = actionId as BindablePromptTransformActionId;
+    if (expanded.length > 0 || bindings.length === 0) overlay.actions![typedActionId] = expanded;
+    else delete overlay.actions![typedActionId];
+  }
+
+  if (overlay.remaps) {
+    const remaps: Array<ResolvedVimKeymap["remaps"]["accepted"][number]> = [];
+    for (const remap of overlay.remaps.accepted) {
+      const result = expandLeaderSequence(
+        remap.key,
+        "resolved settings: piVimMode.keymap.remaps",
+        context,
+      );
+      if (result.sequence) remaps.push({ ...remap, key: result.sequence });
+      usesNonActionLeader ||= result.usesLeader;
+    }
+    overlay.remaps = { accepted: remaps };
+  }
+
+  return {
+    usesLeader: usesNonActionLeader || leaderActionBindings.size > 0,
+    usesNonActionLeader,
+    leaderActionBindings,
+    warnings: context.warnings,
+  };
+}
+
+function reserveLeaderPrefix(target: ResolvedVimKeymap, leader: string): void {
+  const remove = <K extends string>(record: Record<K, readonly string[]>): Record<K, string[]> =>
+    Object.fromEntries(
+      Object.entries(record).map(([action, bindings]) => [
+        action,
+        (bindings as readonly string[]).filter(
+          (binding) => binding !== leader && !binding.startsWith(leader),
+        ),
+      ]),
+    ) as Record<K, string[]>;
+
+  target.operators = remove(target.operators);
+  target.motions = remove(target.motions);
+  target.commands = remove(target.commands);
+  target.macros = remove(target.macros);
+  target.marks = remove(target.marks);
+  target.textObjects = {
+    kinds: remove(target.textObjects.kinds),
+    targets: remove(target.textObjects.targets),
+  };
+  target.remaps = {
+    accepted: target.remaps.accepted.filter(
+      (remap) => remap.key !== leader && !remap.key.startsWith(leader),
+    ),
+  };
+}
+
+function resolveKeymapFromLayers(
+  layers: readonly PartialKeymapOptions[],
+  leader?: string,
+  reserveLeader = true,
+): {
+  keymap: ResolvedVimKeymap;
+  usesNonActionLeader: boolean;
+  leaderActionBindings: Set<ResolvedVimActionBinding>;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  for (const layer of layers) {
+    warnings.push(...expandLeaderMappings(layer, leader, false).warnings);
+  }
+  const overlay = keymapOverlayFromLayers(layers);
+  const expanded = expandLeaderMappings(overlay, leader);
+  warnings.push(...expanded.warnings);
   const keymap = cloneKeymap();
+  if (reserveLeader && expanded.usesLeader && leader) {
+    reserveLeaderPrefix(keymap, leader);
+    keymap.leader = leader;
+  }
   mergeKeymap(keymap, overlay);
-  return keymap;
+  return {
+    keymap,
+    usesNonActionLeader: expanded.usesNonActionLeader,
+    leaderActionBindings: expanded.leaderActionBindings,
+    warnings,
+  };
 }
 
 function mergeMacros(target: ResolvedVimMacros, partial: PartialMacroOptions): void {
@@ -2003,6 +2237,10 @@ function presetOptions(preset: VimPreset): PartialVimOptions {
 
 function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialVimOptions): void {
   if (partial.preset) target.preset = partial.preset;
+  if (partial.leader !== undefined) {
+    if (partial.leader === null) delete target.leader;
+    else target.leader = partial.leader;
+  }
   if (partial.startMode) target.startMode = partial.startMode;
   if (partial.cursor) target.cursor = { ...target.cursor, ...partial.cursor };
   if (partial.keymap) mergeKeymap(target.keymap ?? cloneKeymap(), partial.keymap);
@@ -2065,16 +2303,40 @@ export function resolveVimOptions(
   }
   mergePartialOptions(options, parsedProject.partial);
   if (parsedProject.partial.keymap) keymapLayers.push(parsedProject.partial.keymap);
-  if (keymapLayers.length > 0) options.keymap = resolveKeymapFromLayers(keymapLayers);
+  let keymapResolution: ReturnType<typeof resolveKeymapFromLayers> | undefined;
+  if (keymapLayers.length > 0) {
+    keymapResolution = resolveKeymapFromLayers(keymapLayers, options.leader);
+    options.keymap = keymapResolution.keymap;
+    warnings.push(...keymapResolution.warnings);
+  }
   warnings.push(...parsedProject.warnings);
-  warnings.push(...rejectShowKeybindingsConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
-  const actionBindings = resolveActionBindings(
-    options.keymap ?? DEFAULT_VIM_KEYMAP,
+
+  let keymap = options.keymap ?? DEFAULT_VIM_KEYMAP;
+  let keymapWarnings = rejectShowKeybindingsConflicts(keymap);
+  let actionBindings = resolveActionBindings(
+    keymap,
     options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
   );
+  const acceptedLeaderAction = actionBindings.accepted.some((binding) =>
+    keymapResolution?.leaderActionBindings.has(binding),
+  );
+  if (
+    keymapResolution &&
+    keymap.leader &&
+    !keymapResolution.usesNonActionLeader &&
+    !acceptedLeaderAction
+  ) {
+    keymap = resolveKeymapFromLayers(keymapLayers, options.leader, false).keymap;
+    options.keymap = keymap;
+    keymapWarnings = rejectShowKeybindingsConflicts(keymap);
+    actionBindings = resolveActionBindings(
+      keymap,
+      options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+    );
+  }
   if (options.keymap) options.keymap.actions = { accepted: actionBindings.accepted };
-  warnings.push(...actionBindings.warnings);
-  warnings.push(...detectKeymapConflicts(options.keymap ?? DEFAULT_VIM_KEYMAP));
+  warnings.push(...keymapWarnings, ...actionBindings.warnings);
+  warnings.push(...detectKeymapConflicts(keymap));
 
   return { options, warnings };
 }

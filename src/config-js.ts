@@ -130,6 +130,14 @@ function tokenizeKeys(value: string): string[] | undefined {
   return normalized.every((key) => key !== undefined) ? (normalized as string[]) : undefined;
 }
 
+function tokenizeLhsKeys(value: string): string[] | undefined {
+  const tokens = value.match(/<[^>]+>|./g) ?? [];
+  const normalized = tokens.map((token) =>
+    /^<leader>$/i.test(token) ? "<leader>" : normalizeKey(token),
+  );
+  return normalized.every((key) => key !== undefined) ? (normalized as string[]) : undefined;
+}
+
 function tokenizeReplayInputs(value: string): string[] | undefined {
   const keys = tokenizeKeys(value);
   if (!keys) return undefined;
@@ -165,16 +173,17 @@ function compileMapping(state: BuilderState, mode: unknown, lhs: unknown, rhs: u
     state.warnings.push(warning("keymap lhs must be a non-empty string"));
     return;
   }
-  const lhsKeys = tokenizeKeys(lhs);
+  const lhsKeys = tokenizeLhsKeys(lhs);
   if (!lhsKeys || lhsKeys.length === 0) {
     state.warnings.push(warning("keymap lhs must contain supported key syntax"));
     return;
   }
   const normalizedLhs = lhsKeys.join("");
-  const protectedShortcut = protectedShortcutForKey(normalizedLhs);
-  if (protectedShortcut) {
+  const protectedKey = lhsKeys.find((key) => protectedShortcutForKey(key));
+  const protectedShortcut = protectedKey ? protectedShortcutForKey(protectedKey) : undefined;
+  if (protectedKey && protectedShortcut) {
     state.warnings.push(
-      warning(`keymap lhs contains protected key ${normalizedLhs} (${protectedShortcut.reason})`),
+      warning(`keymap lhs contains protected key ${protectedKey} (${protectedShortcut.reason})`),
     );
     return;
   }
@@ -222,6 +231,23 @@ function addStringRemap(
   remaps.accepted = [...remaps.accepted, { key: lhs, inputs, modes: actionModes }];
 }
 
+export function isPrintableLeader(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length === 1 &&
+    value.charCodeAt(0) >= 32 &&
+    value.charCodeAt(0) !== 127
+  );
+}
+
+function setMapleader(state: BuilderState, value: unknown): void {
+  if (value === null || isPrintableLeader(value)) {
+    state.partial.leader = value;
+    return;
+  }
+  state.warnings.push(warning("vim.g.mapleader must be one printable character or null"));
+}
+
 function buildVim() {
   const state: BuilderState = { partial: {}, warnings: [] };
   const prompt = {
@@ -246,6 +272,14 @@ function buildVim() {
   return {
     state,
     vim: {
+      g: {
+        get mapleader() {
+          return state.partial.leader;
+        },
+        set mapleader(value: unknown) {
+          setMapleader(state, value);
+        },
+      },
       prompt,
       keymap: {
         set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(state, mode, lhs, rhs),

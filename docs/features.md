@@ -897,7 +897,7 @@ Pi remains owner of app-level shortcuts.
 
 ## Configuration features
 
-Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
+Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Optional `piVimMode.leader` and trusted `vim.g.mapleader` settings expand leading `<leader>` mapping keys with one final global/JS/project value. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
 
 Examples of configurable features:
 
@@ -905,6 +905,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- optional leader prefix for JSON and trusted JS normal/visual mappings
 - trusted global JS keybinding additions via `vim.prompt.*` built-ins
 - opt-in protected shortcut override list per settings layer
 - text object kind/target keys

@@ -1,7 +1,19 @@
-# v0.8.1
+# v0.9.0
 
 ## What's new
 
-## Bug fixes
+- Added `piVimMode.ui.status.position` to place the complete editor-border status group on the left or right side of the editor. #21 @alanpog
 
-- Improved compatibility with other Pi editor extensions by preserving their editor behavior during Vim lifecycle changes. #16 @lucidfrontier45
+```json
+{
+  "piVimMode": {
+    "ui": {
+      "status": {
+        "position": "right"
+      }
+    }
+  }
+}
+```
+
+## Bug fixes

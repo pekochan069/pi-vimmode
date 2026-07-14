@@ -431,8 +431,8 @@ function handleNormalInput(
     return withEffects(nextState, [{ type: "delegate", input: data }, { type: "invalidate" }]);
   }
 
+  const keymap = keymapForOptions(options);
   if (isProtectedPiDelegateKey(data)) {
-    const keymap = keymapForOptions(options);
     if (!keymapHasBinding(keymap, key, "normal")) {
       return delegateProtectedShortcut(state, options, data);
     }
@@ -445,12 +445,13 @@ function handleNormalInput(
     );
   }
   if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
-  if (!state.pending && isRegisterPrefixKey(key)) {
+  const startsLeader =
+    !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
   }
 
-  const keymap = keymapForOptions(options);
-  if (!state.pending && !state.pendingRegister) {
+  if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macros = macrosForOptions(options);
     if (
       snapshot.isMacroReplaying &&
@@ -574,6 +575,9 @@ function handleNormalInput(
     );
   }
   if (pendingResult.type === "invalid") {
+    if (keymap.leader && state.pending?.startsWith(keymap.leader)) {
+      return invalidate(clearPending(state));
+    }
     return invalidate(withNoopFeedback(clearPending(state), options, "invalid Vim key sequence"));
   }
 
@@ -595,8 +599,8 @@ function handleVisualInput(
   const key = keySequence(data);
   if (!key) return delegate(state, data);
 
+  const keymap = keymapForOptions(options);
   if (isProtectedPiDelegateKey(data)) {
-    const keymap = keymapForOptions(options);
     if (!keymapHasBinding(keymap, key, state.mode)) {
       return delegateProtectedShortcut(state, options, data);
     }
@@ -609,10 +613,12 @@ function handleVisualInput(
     );
   }
   if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
-  if (!state.pending && isRegisterPrefixKey(key)) {
+  const startsLeader =
+    !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
     return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
   }
-  if (!state.pending && !state.pendingRegister && key === "u") {
+  if (!state.pending && !state.pendingRegister && !startsLeader && key === "u") {
     return transformVisualSelection(
       state,
       snapshot,
@@ -621,7 +627,7 @@ function handleVisualInput(
       "lowercase",
     );
   }
-  if (!state.pending && !state.pendingRegister && key === "U") {
+  if (!state.pending && !state.pendingRegister && !startsLeader && key === "U") {
     return transformVisualSelection(
       state,
       snapshot,
@@ -630,7 +636,7 @@ function handleVisualInput(
       "uppercase",
     );
   }
-  if (!state.pending && !state.pendingRegister) {
+  if (!state.pending && !state.pendingRegister && !startsLeader) {
     const markTarget = markPendingForKey(key, options);
     if (markTarget?.kind === "jumpExact" || markTarget?.kind === "jumpLine") {
       return invalidate({ ...clearPending(state), pendingMark: markTarget });
@@ -645,7 +651,6 @@ function handleVisualInput(
   );
   if (remapped) return remapped;
 
-  const keymap = keymapForOptions(options);
   const result = resolveNormalCommand(
     key,
     state.pending,

@@ -231,6 +231,7 @@ export type ResolvedVimInsertKeymap = {
 };
 
 export type ResolvedVimKeymap = {
+  leader?: string;
   escape: readonly string[];
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
@@ -342,6 +343,7 @@ export type VimPromptTransformEditorOptions = {
 
 export type VimEditorOptions = {
   preset?: VimPreset;
+  leader?: string | null;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: VimKeymapOptions;
@@ -356,6 +358,7 @@ export type VimEditorOptions = {
 
 export type ResolvedVimEditorOptions = {
   preset?: VimPreset;
+  leader?: string;
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;

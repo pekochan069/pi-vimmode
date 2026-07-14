@@ -16,7 +16,7 @@ pi-vimmode loads settings from:
 2. Trusted global JS config: `~/.pi/agent/pi-vimmode.config.js`
 3. Project settings: `.pi/settings.json` in the current project
 
-Global JS config applies after global settings and before project settings. Project settings apply last. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply. JS `vim.keymap.set(...)` calls add keybindings to inherited global settings instead of replacing preset or JSON bindings for the same built-in action; project JSON can still clear an action with an explicit empty array.
+Global JS config applies after global settings and before project settings. Project settings apply last. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply. JS `vim.keymap.set(...)` calls add keybindings to inherited global settings instead of replacing preset or JSON bindings for the same built-in action; project JSON can still clear an action with an explicit empty array. Leader mappings use one final effective leader after all three layers resolve.
 
 Example:
 
@@ -39,6 +39,7 @@ Common warning causes:
 - Invalid JSON in a settings file.
 - `piVimMode` is not an object.
 - Unsupported startup mode or cursor style.
+- Invalid leader value or `<leader>` mapping without an effective leader.
 - Unknown keymap action name.
 - Protected Pi shortcut used in keymap.
 - Unsupported operator motion.
@@ -56,8 +57,9 @@ Use `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` for built-ins or `v
 
 ```js
 export default (vim) => {
+  vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
-  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
   vim.keymap.set("v", "z>", vim.prompt.quote());
   vim.keymap.set("n", "zz", "llll");
 };
@@ -69,7 +71,9 @@ Prompt transform built-ins: `quote`, `unquote`, `bulletize`, `fence({ language }
 
 Insert-mode built-ins: `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, `moveLineEnd`.
 
-JS config boundaries: no raw object export, no string RHS that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String RHS is replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit.
+Set `vim.g.mapleader` to one printable character or `null`. Assignment affects every retained `<leader>` mapping after project settings apply, regardless of assignment order inside the JS file. Invalid assignments warn and preserve the last valid value.
+
+JS config boundaries: no raw object export, no string RHS that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String RHS is replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping LHS keys, never in replay RHS strings.
 
 Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results.
 
@@ -103,6 +107,7 @@ Rules:
   - `<S-tab>` / `<Shift-tab>` -> `shift+tab`
   - `<D-x>` / `<Cmd-x>` / `<Super-x>` -> `super+x`
 - Prefer lowercase normalized names such as `ctrl+a` for raw modifier strings.
+- A mapping may begin with case-insensitive `<leader>` when `piVimMode.leader` is configured. `<leader><leader>` is valid; a lone `<leader>` or `g<leader>x` is rejected.
 - Empty arrays do not override existing/default bindings for classic keymap groups. In `piVimMode.keymap.actions`, an empty array unbinds that action in the current settings scope.
 - `piVimMode.keymap.escape` defaults to `[]` and replaces the inherited escape alias list when set.
 - Escape aliases are key aliases such as `<D-j>` or `<C-j>`, not raw text chords such as `jk` or `jj`.
@@ -132,6 +137,7 @@ Protected keys can be overridden by listing them in `piVimMode.keymap.allowProte
 | ---------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
 | `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                |
+| `piVimMode.leader`     | absent      | one printable character or `null`           | Replaces leading `<leader>` tokens after all settings layers resolve. `null` clears an inherited leader.                                                           |
 | `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
 | `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
 
@@ -156,6 +162,36 @@ Example explicit override:
 ```
 
 Here `vim-heavy` supplies its baseline, then `startMode` and `visualBlock` override those fields.
+
+### Leader key
+
+Leader is optional and has no default. Global JSON, trusted JS, and project JSON resolve in that order; the final value expands every retained mapping key beginning with `<leader>`. Omit the field to inherit, or use `null` to clear an inherited leader.
+
+```json
+{
+  "piVimMode": {
+    "leader": " ",
+    "keymap": {
+      "actions": {
+        "prompt.transform.reflow": ["<leader>q"]
+      },
+      "commands": {
+        "showKeybindings": ["<leader>k"]
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+- Value must be exactly one printable character, including space, comma, or backslash. Empty, multi-character, control, and non-string values warn and are ignored.
+- `<leader>` is case-insensitive but must start mapping key. A lone `<leader>` warns and is ignored; repeated leading tokens such as `<leader><leader>` are valid.
+- Missing or cleared leader drops affected mappings with warnings while valid sibling mappings remain.
+- Any retained normal/visual leader mapping reserves selected prefix across normal and all visual modes. Existing grammar on that prefix becomes unavailable, including counts for digit leaders, named-register entry for `"`, macro/mark keys, and direct visual `u`/`U` transforms.
+- Leader setting alone changes no key behavior. Insert escape/action and multi-key text-object bindings retain existing validation and do not activate normal/visual prefix reservation.
+- Runtime keybinding views show expanded physical keys, not `<leader>` source notation.
+- No timeout fallback, recursive expansion, runtime `:map`, RHS substitution, Vimscript, or Neovim Lua support.
 
 ## Cursor settings
 

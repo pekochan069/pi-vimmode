@@ -51,6 +51,108 @@ export default (vim) => {
     }
   });
 
+  test("vim.g.mapleader uses final assignment for leader lhs without expanding rhs", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "<Leader>q", vim.prompt.quote());
+  vim.g.mapleader = " ";
+  vim.keymap.set("n", "<leader>r", vim.prompt.reflow());
+  vim.keymap.set("n", "<leader>x", "<leader>");
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(loaded.warnings).toEqual([]);
+      expect(loaded.partial?.leader).toBe(" ");
+      expect(loaded.partial?.keymap?.actions?.["prompt.transform.quote"]?.[0]).toEqual({
+        key: "<leader>q",
+        args: undefined,
+        modes: ["normal"],
+      });
+
+      const resolved = resolveVimOptions(undefined, undefined, loaded);
+      expect(resolved.options.leader).toBe(" ");
+      expect(resolved.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual([
+        " q",
+        " r",
+      ]);
+      expect(resolved.options.keymap?.remaps.accepted).toEqual([
+        { key: " x", inputs: ["leader"], modes: ["normal"] },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("invalid and null vim.g.mapleader assignments are field-local", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.g.mapleader = "too-long";
+  vim.keymap.set("n", "<leader>q", vim.prompt.quote());
+  vim.g.mapleader = null;
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(loaded.partial?.leader).toBeNull();
+      expect(loaded.warnings).toEqual([
+        "global JS config: vim.g.mapleader must be one printable character or null",
+      ]);
+      const resolved = resolveVimOptions(undefined, undefined, loaded);
+      expect(resolved.options.leader).toBeUndefined();
+      expect(resolved.options.keymap?.leader).toBeUndefined();
+      expect(resolved.options.keymap?.actions.accepted).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("JS leader additions stay raw through project override and clear", () => {
+    const jsConfig = {
+      appendKeymap: true,
+      warnings: [],
+      partial: {
+        leader: ",",
+        keymap: {
+          actions: {
+            "prompt.transform.reflow": [{ key: "<leader>j" }],
+          },
+        },
+      },
+    };
+    const moved = resolveVimOptions(
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: { actions: { "prompt.transform.reflow": ["<leader>g"] } },
+        },
+      },
+      { piVimMode: { leader: " " } },
+      jsConfig,
+    );
+    expect(moved.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual([
+      " g",
+      " j",
+    ]);
+
+    const cleared = resolveVimOptions(
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: { actions: { "prompt.transform.reflow": ["<leader>g"] } },
+        },
+      },
+      { piVimMode: { leader: null, keymap: { actions: { "prompt.transform.reflow": [] } } } },
+      jsConfig,
+    );
+    expect(cleared.options.keymap?.actions.accepted).toEqual([]);
+    expect(cleared.options.keymap?.leader).toBeUndefined();
+  });
+
   test("builder mappings add to existing preset bindings instead of replacing them", () => {
     const result = resolveVimOptions(
       { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
@@ -196,10 +298,17 @@ export default (vim) => {
   test("protected lhs warns without registering", async () => {
     const f = fixture();
     try {
-      f.write(`export default (vim) => vim.keymap.set("n", "<C-p>", "j");`);
+      f.write(`
+export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "<C-p>", "j");
+  vim.keymap.set("n", "<leader><C-p>", vim.prompt.quote());
+};
+`);
       const result = await loadVimJsConfig(f.path);
-      expect(result.partial).toEqual({});
+      expect(result.partial).toEqual({ leader: "," });
       expect(result.warnings).toEqual([
+        expect.stringContaining("keymap lhs contains protected key ctrl+p"),
         expect.stringContaining("keymap lhs contains protected key ctrl+p"),
       ]);
     } finally {

@@ -207,6 +207,19 @@ describe("normal command parser", () => {
     });
   });
 
+  test("active digit leader takes precedence over count parsing", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { leader: "1", keymap: { commands: { undo: ["<leader>u"] } } },
+    }).options.keymap;
+
+    expect(resolveNormalCommand("1", undefined, keymap)).toEqual({ type: "pending", pending: "1" });
+    expect(resolveNormalCommand("u", "1", keymap)).toEqual({ type: "command", command: "undo" });
+    expect(resolveNormalCommand("2", undefined, keymap)).toEqual({
+      type: "pending",
+      pending: "2\u0000count\u0000",
+    });
+  });
+
   test("resolves macro prefixes and targets separately from operator state", () => {
     expect(isMacroSlot("a")).toBe(true);
     expect(isMacroSlot("z")).toBe(true);

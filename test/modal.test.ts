@@ -2622,6 +2622,93 @@ describe("modal engine", () => {
     });
   });
 
+  test("active leader overrides normal structural prefixes", () => {
+    for (const leader of ['"', "q", "m"]) {
+      const configured = resolveVimOptions({
+        piVimMode: {
+          leader,
+          keymap: { actions: { "prompt.transform.quote": ["<leader>x"] } },
+        },
+      }).options;
+      const result = handleModalInput({ mode: "normal" }, snapshot, configured, leader);
+      expect(result.state.pending).toBe(leader);
+      expect(result.state.pendingRegister).toBeUndefined();
+      expect(result.state.pendingMacro).toBeUndefined();
+      expect(result.state.pendingMark).toBeUndefined();
+    }
+  });
+
+  test("visual leader overrides direct case transform across visual modes", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: "u",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "<leader>x", modes: ["visual"] }],
+          },
+        },
+      },
+    }).options;
+
+    for (const mode of ["visual", "visualLine", "visualBlock"] as const) {
+      const state: ModalState = { mode, visualAnchor: p(0, 0) };
+      const result = handleModalInput(state, snapshot, configured, "u");
+      expect(result.state).toEqual({ ...state, pending: "u" });
+      expect(result.effects).toEqual([{ type: "invalidate" }]);
+    }
+    expect(handleModalInput({ mode: "normal" }, snapshot, configured, "u").state.pending).toBe("u");
+  });
+
+  test("invalid leader continuation preserves durable modal state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: '"',
+        feedback: { noop: "status" },
+        keymap: { actions: { "prompt.transform.quote": ["<leader>q"] } },
+      },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: p(0, 0),
+        cursor: p(0, 1),
+        text: "abc",
+      },
+    };
+
+    const result = applyModalKeys(initial, "abc", p(0, 1), ['"', "z"], configured);
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state).toEqual(initial);
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.effects.every((effect) => effect.type === "invalidate")).toBe(true);
+  });
+
+  test("pending register keeps ownership of leader character", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: "w",
+        keymap: { actions: { "prompt.transform.quote": ["<leader>x"] } },
+      },
+    }).options;
+    const result = handleModalInput(
+      { mode: "normal", pendingRegister: "awaitingSlot" },
+      snapshot,
+      configured,
+      "w",
+    );
+    expect(result.state.pendingRegister).toEqual({ kind: "named", slot: "w", append: false });
+    expect(result.state.pending).toBeUndefined();
+  });
+
   test("insert after moves only when cursor points before logical line end", () => {
     expect(
       handleModalInput(

@@ -1114,6 +1114,7 @@ function resolveWithoutPending(
   count?: number,
   mode?: VimActionBindingMode,
 ): SemanticCommandResult {
+  if (!count && keymap.leader === key) return { type: "pending", pending: key };
   if (!count && /^[1-9]$/.test(key)) return { type: "pending", pending: encodeCountPending(key) };
   if (hasLongerPrefix(key, keymap, mode))
     return { type: "pending", pending: count ? encodeCountPending(String(count), key) : key };

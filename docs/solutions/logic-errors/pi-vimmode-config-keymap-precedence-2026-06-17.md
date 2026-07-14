@@ -1,7 +1,7 @@
 ---
 title: Preserve explicit pi-vimmode keymap precedence
 date: 2026-06-17
-last_updated: 2026-06-24
+last_updated: 2026-07-14
 category: docs/solutions/logic-errors
 module: pi-vimmode
 problem_type: logic_error
@@ -275,3 +275,4 @@ Centralizing cloning also means config resolution and live editor construction u
 - `docs/solutions/tooling-decisions/pi-vimmode-ui-config-single-source-of-truth-2026-05-27.md` — config surface source-of-truth guidance.
 - `docs/solutions/architecture-patterns/pi-vimmode-typed-action-registry-keybindings-2026-06-09.md` — prompt transform/action keybinding registry context.
 - `docs/solutions/developer-experience/pi-vimmode-ctrl-d-ctrl-u-half-page-scroll-2026-06-18.md` — semantic motion binding pattern for terminal-owned keys.
+- `docs/solutions/architecture-patterns/pi-vimmode-final-leader-resolution-2026-07-14.md` — extends final-overlay precedence with symbolic leader expansion and accepted-prefix ownership.

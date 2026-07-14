@@ -1,6 +1,7 @@
 ---
 title: Ctrl-P showKeybindings only works from normal mode
 date: 2026-06-22
+last_updated: 2026-07-14
 category: docs/solutions/developer-experience
 module: pi-vimmode
 problem_type: developer_experience
@@ -114,3 +115,4 @@ If Ctrl-P while typing cycles model, this is current insert-mode delegation.
 - `docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md` — useful when a binding fails in normal mode too.
 - `docs/solutions/design-patterns/pi-vimmode-actionable-keybinding-catalog-2026-06-10.md` — catalog rows should make mode ownership obvious.
 - `docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md` — adapter/modal boundary and delegation architecture.
+- `docs/solutions/architecture-patterns/pi-vimmode-final-leader-resolution-2026-07-14.md` — protected leader suffix validation and accepted normal/visual prefix ownership.

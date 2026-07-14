@@ -2622,6 +2622,53 @@ describe("modal engine", () => {
     });
   });
 
+  test("insert after moves only when cursor points before logical line end", () => {
+    expect(
+      handleModalInput(
+        { mode: "normal" },
+        { text: "abc\n", lines: ["abc", ""], cursor: p(0, 2) },
+        options,
+        "a",
+      ).effects,
+    ).toContainEqual({ type: "adapterCommand", command: "right" });
+
+    for (const atBoundary of [
+      { text: "abc\n", lines: ["abc", ""], cursor: p(0, 3) },
+      { text: "\n", lines: ["", ""], cursor: p(0, 0) },
+    ]) {
+      expect(
+        handleModalInput({ mode: "normal" }, atBoundary, options, "a").effects,
+      ).not.toContainEqual({ type: "adapterCommand", command: "right" });
+    }
+  });
+
+  test("insert after at line end preserves persistent modal state", () => {
+    const state: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      exMessage: { kind: "info", text: "clear me" },
+    };
+
+    expect(
+      handleModalInput(state, { text: "abc\n", lines: ["abc", ""], cursor: p(0, 3) }, options, "a"),
+    ).toEqual({
+      state: {
+        mode: "insert",
+        register: state.register,
+        namedRegisters: state.namedRegisters,
+        marks: state.marks,
+        macros: state.macros,
+        lastRepeatableChange: state.lastRepeatableChange,
+      },
+      effects: [{ type: "terminalCursor", style: "bar" }, { type: "invalidate" }],
+    });
+  });
+
   test("normal showKeybindings semantic command opens popup without modal side effects", () => {
     const configured = resolveVimOptions({
       piVimMode: { keymap: { commands: { showKeybindings: ["gk"] } } },

@@ -17,3 +17,5 @@
 ```
 
 ## Bug fixes
+
+- Fixed normal-mode `a` crossing into the next logical line when invoked at end of line, including on wrapped prompts followed by a blank line.

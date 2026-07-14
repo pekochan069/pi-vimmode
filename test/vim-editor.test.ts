@@ -958,6 +958,32 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("a");
   });
 
+  test("insert after keeps wrapped logical line before following blank line", () => {
+    const { editor } = createEditor(
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      { warnings: [] },
+      false,
+      { rows: 10 },
+    );
+    const line = "a".repeat(200);
+    editor.setText(`${line}\n`);
+    editor.render(20);
+    editor.handleInput("k");
+    editor.handleInput("$");
+    editor.render(20);
+
+    expect(editor.getCursor()).toEqual({ line: 0, col: line.length });
+
+    editor.handleInput("a");
+    editor.handleInput("X");
+
+    expectEditorState(editor, {
+      text: `${line}X\n`,
+      cursor: { line: 0, col: line.length + 1 },
+      mode: "insert",
+    });
+  });
+
   test("insert render avoids combining bar overlay at wrap boundary", () => {
     const { editor } = createEditor();
     editor.focused = true;

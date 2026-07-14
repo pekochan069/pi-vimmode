@@ -390,10 +390,14 @@ export function applyCommand(
     case "insertBefore":
       return modeUpdate(nextState, "insert", options);
     case "insertAfter":
-      return modeUpdate(nextState, "insert", options, [
-        { type: "adapterCommand", command: "right" },
-        { type: "invalidate" },
-      ]);
+      return modeUpdate(
+        nextState,
+        "insert",
+        options,
+        snapshot.cursor.col < (snapshot.lines[snapshot.cursor.line] ?? "").length
+          ? [{ type: "adapterCommand", command: "right" }, { type: "invalidate" }]
+          : [],
+      );
     case "insertLineStart":
       return modeUpdate(nextState, "insert", options, [
         { type: "adapterCommand", command: "lineStart" },

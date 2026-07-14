@@ -1,6 +1,7 @@
 ---
 title: Prompt buffer operation API for Vim editor adapters
 date: 2026-05-27
+last_updated: 2026-07-14
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -165,3 +166,4 @@ Cover operation contracts, not helper internals:
 ## Related
 
 - [Finite Vim keybinding parser with pure buffer helpers](./finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md) — earlier architecture pattern for parser, buffer helper, modal engine, and adapter separation. This doc deepens the buffer boundary into operation-level public APIs.
+- [Vim behavior contracts drifted from live adapter behavior](../logic-errors/vim-behavior-contract-drift-2026-05-28.md) — concrete boundary failures, including gating `a` movement from logical line state before emitting native Right.

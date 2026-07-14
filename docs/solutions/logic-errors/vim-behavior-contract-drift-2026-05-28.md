@@ -1,7 +1,7 @@
 ---
 title: Vim behavior contracts drifted from live adapter behavior
 date: 2026-05-28
-last_updated: 2026-06-02
+last_updated: 2026-07-14
 category: docs/solutions/logic-errors
 module: pi-vimmode
 problem_type: logic_error
@@ -11,6 +11,7 @@ symptoms:
   - "Configured prompt-native structure and transform behavior was not preserved through live `VimEditor` construction"
   - "Line edits and prompt-native text objects had edge-case drift from Vim-style contracts"
   - "README and settings docs drifted from actual supported Vim behavior"
+  - "Normal-mode `a` crossed a logical line boundary when invoked at end of line"
 root_cause: logic_error
 resolution_type: code_fix
 severity: medium
@@ -36,6 +37,8 @@ tags:
 
 The same change set also exposed smaller behavior-contract drifts: `dil` on list items could join unrelated lines, `:reflow` could rewrite code when the visual range started inside an existing fence, text-object key config allowed impossible multi-key bindings, and docs still listed supported commands as unsupported.
 
+A later behavior-contract regression affected normal-mode `a`: `insertAfter` always delegated one native Right movement. At logical EOL, Pi correctly moved to the next logical line, but Vim append semantics must enter insert mode without leaving the current logical line.
+
 ## Symptoms
 
 - `piVimMode.marks.enabled: false` was not honored by live `VimEditor` instances.
@@ -48,6 +51,7 @@ The same change set also exposed smaller behavior-contract drifts: `dil` on list
 - `dil` on a single-line list item deleted the item content plus the following newline, joining the next line onto the list marker.
 - Visual `:reflow` inside an existing Markdown code fence treated the selected code line as prose when the selected range did not include the fence delimiters.
 - README or settings limitations described some now-supported behavior, such as `:nohlsearch`, as unsupported.
+- At any non-final logical EOL, pressing `a` could move into the next line before inserted text was applied; a wrapped line followed by a blank line exposed the regression.
 
 ## What Didn't Work
 
@@ -57,8 +61,27 @@ The same change set also exposed smaller behavior-contract drifts: `dil` on list
 - Treating every prompt-structure delete like a whole-line delete was too broad. Inner list item content starts after the list marker, so consuming a following newline changes unrelated text.
 - Reflowing only the selected slice lost lexical context. Fence preservation depends on whether the selected range starts inside a fence opened on an earlier line.
 - Allowing multi-key text-object kind/target bindings contradicted the implemented grammar (`operator + kind key + target key`). Without prefix states, multi-key bindings parse but cannot execute predictably.
+- Treating `a` as unconditional native Right movement was too broad. Native Right may cross a logical line boundary; Vim `a` may not.
 
 ## Solution
+
+### Keep insert-after movement inside the logical line
+
+Decide whether `a` may move from the modal snapshot before emitting an adapter command. Terminal wrapping is irrelevant; compare the cursor column with the current logical line length.
+
+```ts
+case "insertAfter":
+  return modeUpdate(
+    nextState,
+    "insert",
+    options,
+    snapshot.cursor.col < (snapshot.lines[snapshot.cursor.line] ?? "").length
+      ? [{ type: "adapterCommand", command: "right" }, { type: "invalidate" }]
+      : [],
+  );
+```
+
+This preserves ordinary append-after-character behavior while entering insert mode directly at EOL and on empty lines.
 
 ### Preserve every live option branch
 
@@ -232,6 +255,8 @@ When Ex support changes, update both feature docs and settings limitations. In t
 
 ## Why This Works
 
+Keeping the guard at the `insertAfter` command seam preserves shared native Right behavior while enforcing Vim append semantics from logical buffer state.
+
 `VimEditor` now passes the full resolved behavior configuration into modal state decisions and Ex command parsing. `marksForOptions(options)`, `promptStructuresForOptions(options)`, and `promptTransformsForOptions(options)` see the caller-provided branches, so disabled features, restricted slots, renamed commands, and disabled transforms affect live behavior.
 
 Line commands now remain semantic across record and replay. `dd` and `cc` are stored as `lineCommand` repeatable changes, then replayed through `applyLineCommand()`. That preserves linewise register behavior, cursor placement, count handling, and insert-mode transition for `cc`.
@@ -251,6 +276,7 @@ Text-object config validation now matches the implemented grammar. Unsupported m
 - For range transforms such as reflow, decide whether behavior depends on context outside the selected lines. If it does, pass enough full-buffer context into the pure helper.
 - Keep keymap config validation aligned with parser grammar. If the parser has no prefix state for a binding class, reject multi-key bindings for that class.
 - Update README and `docs/settings.md` limitations during behavior-contract changes so docs describe the prompt buffer contract, not stale roadmap assumptions.
+- Gate command-specific native movement from the logical buffer snapshot. Do not weaken shared Right semantics to repair one Vim command.
 
 Regression tests to keep:
 
@@ -263,14 +289,15 @@ Regression tests to keep:
 - Text-object keymap rejects multi-key kind/target bindings.
 - Cross-group keymap conflict warnings include text-object bindings.
 - Documented nested prompt config examples typecheck.
+- Cover `a` before EOL, at EOL, and on an empty line at the modal level, plus one wrapped non-final line through a real `VimEditor`.
 
-Validation used for the latest fix:
+Validation used for the insert-after boundary fix:
 
-- `bun test` — 259 pass
+- `bun test` — 743 pass
 - `bun run check-types`
 - `bun run lint`
-- `bun run format:check`
-- `openspec validate prompt-native-structure-editing --strict`
+- `bunx oxfmt --check docs/features.md src/modal/normal.ts test/modal.test.ts test/vim-editor.test.ts openspec/changes/fix-insert-after-line-boundary`
+- `openspec validate --specs --strict`
 
 ## Related Issues
 
@@ -279,3 +306,4 @@ Validation used for the latest fix:
 - `docs/solutions/architecture-patterns/pi-vimmode-finite-ex-line-commands-architecture-2026-06-01.md` — related finite Ex parser / buffer / modal architecture; relevant to prompt transforms and `:nohlsearch` docs.
 - `docs/solutions/architecture-patterns/finite-vim-keybinding-parser-buffer-helpers-2026-05-26.md` — broader modal parser / buffer / adapter architecture pattern.
 - `docs/solutions/logic-errors/visual-line-paste-swallowed-by-modal-handler-2026-05-27.md` — related modal-routing bug pattern for commands swallowed by mode-specific handlers.
+- `docs/solutions/logic-errors/pi-vimmode-lowercase-small-word-motion-2026-06-15.md` — related case where native editor movement did not match Vim-specific logical boundaries.

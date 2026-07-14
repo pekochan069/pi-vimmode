@@ -201,7 +201,7 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 | Key                 | Action                                                                  |
 | ------------------- | ----------------------------------------------------------------------- |
 | `i`                 | enter insert at cursor                                                  |
-| `a`                 | move right, then insert                                                 |
+| `a`                 | insert after cursor without crossing current logical line               |
 | `I` / `A`           | move to line start/end, then insert                                     |
 | `o` / `O`           | open blank line below/above, then insert                                |
 | `x` / `X`           | delete character under/before cursor                                    |

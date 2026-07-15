@@ -2,6 +2,16 @@
 
 ## What's new
 
+- Added trusted JavaScript configuration via `~/.pi/agent/pi-vimmode.config.js`. Configure presets, leader, prompt actions, insert actions, replay mappings, and scoped unmaps with a small `vim` API. Configuration writes are staged atomically, so failed config files leave existing settings unchanged.
+
+```js
+export default (vim) => {
+  vim.g.mapleader = " ";
+  vim.keymap.set("n", "<leader>q", vim.prompt.quote());
+  vim.keymap.set("n", "zq", null);
+};
+```
+
 - Added configurable Vim leader mappings. Set `piVimMode.leader` in JSON or `vim.g.mapleader` in trusted JavaScript, then use `<leader>` at the start of mapping keys. Project settings can override or clear inherited leaders.
 
 ```json

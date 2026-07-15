@@ -22,6 +22,7 @@ import type {
   VimActionBindingMode,
   VimActionKeybindingPreset,
   VimCommandAction,
+  VimEditorOptions,
   ResolvedVimEditorOptions,
   VimFeedbackOptions,
   VimMode,
@@ -39,7 +40,12 @@ import {
   actionKeybindingPresetActions,
   isActionKeybindingPreset,
 } from "./action-keybinding-recipes.ts";
-import { DEFAULT_JS_CONFIG_PATH, isPrintableLeader, loadVimJsConfig } from "./config-js.ts";
+import {
+  DEFAULT_JS_CONFIG_PATH,
+  isPrintableLeader,
+  loadVimJsConfig,
+  type VimJsConfigOperation,
+} from "./config-js.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   deriveActionKeys,
@@ -2238,10 +2244,52 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   }
 }
 
+function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): VimEditorOptions {
+  const partial: VimEditorOptions = {};
+  for (const operation of operations) {
+    if (operation.kind === "preset") {
+      partial.preset = operation.preset;
+      continue;
+    }
+    if (operation.kind === "leaf") {
+      partial.leader = operation.value;
+      continue;
+    }
+    if (operation.kind !== "map") continue;
+    const keymap = (partial.keymap ??= {});
+    const mapping = operation.mapping;
+    if (mapping.kind === "insert") {
+      const insert = (keymap.insert ??= {});
+      insert[mapping.action] = [...(insert[mapping.action] ?? []), mapping.key];
+      continue;
+    }
+    if (mapping.kind === "action") {
+      const actions = (keymap.actions ??= {});
+      actions[mapping.actionId] = [
+        ...(actions[mapping.actionId] ?? []),
+        { key: mapping.key, args: mapping.args, modes: mapping.modes },
+      ];
+      continue;
+    }
+    const remaps = (keymap.remaps ??= { accepted: [] });
+    remaps.accepted = [
+      ...remaps.accepted,
+      { key: mapping.key, inputs: mapping.inputs, modes: mapping.modes },
+    ];
+  }
+  return partial;
+}
+
 export function resolveVimOptions(
   globalSettings: unknown,
   projectSettings?: unknown,
-  jsConfig?: { partial?: unknown; warnings?: readonly string[]; appendKeymap?: boolean },
+  jsConfig?: {
+    kind?: "success" | "fatal" | "missing";
+    operations?: readonly VimJsConfigOperation[];
+    partial?: unknown;
+    warnings?: readonly string[];
+    appendKeymap?: boolean;
+  },
 ): VimConfigLoadResult {
   const options = cloneDefaultOptions();
   const warnings: string[] = [];
@@ -2259,9 +2307,13 @@ export function resolveVimOptions(
   if (parsedGlobal.partial.keymap) keymapLayers.push(parsedGlobal.partial.keymap);
   warnings.push(...parsedGlobal.warnings);
 
-  const parsedJs = parsePiVimMode(jsConfig?.partial, "global JS config");
+  const jsPartialSource = jsConfig?.operations
+    ? partialFromJsOperations(jsConfig.operations)
+    : jsConfig?.partial;
+  const parsedJs = parsePiVimMode(jsPartialSource, "global JS config");
+  const appendJsKeymap = jsConfig?.kind === "success" || jsConfig?.appendKeymap;
   const jsPartial =
-    jsConfig?.appendKeymap && parsedJs.partial.keymap
+    appendJsKeymap && parsedJs.partial.keymap
       ? { ...parsedJs.partial, keymap: additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap) }
       : parsedJs.partial;
   mergePartialOptions(options, jsPartial);
@@ -2348,7 +2400,8 @@ export async function loadVimOptions(paths: VimConfigPaths = {}): Promise<VimCon
 
   const globalRead = readJsonFile(globalPath, "global settings");
   const projectRead = readJsonFile(projectPath, "project settings");
-  const jsRead = await loadVimJsConfig(jsConfigPath);
+  const globalSeed = resolveVimOptions(globalRead.settings).options;
+  const jsRead = await loadVimJsConfig(jsConfigPath, { leader: globalSeed.leader });
   const resolved = resolveVimOptions(globalRead.settings, projectRead.settings, jsRead);
 
   return {

@@ -4,17 +4,17 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
-import type { VimActionBindingMode, VimEditorOptions, VimInsertAction, VimMode } from "./types.ts";
+import type {
+  VimActionBindingMode,
+  VimEditorOptions,
+  VimInsertAction,
+  VimMode,
+  VimPreset,
+} from "./types.ts";
 
 import { protectedShortcutForKey } from "./customization.ts";
 
 export const DEFAULT_JS_CONFIG_PATH = join(homedir(), ".pi", "agent", "pi-vimmode.config.js");
-
-export type VimJsConfigLoadResult = {
-  partial?: VimEditorOptions;
-  warnings: string[];
-  appendKeymap?: boolean;
-};
 
 type BuiltinCommand =
   | { kind: "insert"; action: VimInsertAction }
@@ -24,9 +24,42 @@ type BuiltinCommand =
       args?: Record<string, unknown>;
     };
 
-type BuilderState = {
-  partial: VimEditorOptions;
-  warnings: string[];
+export type VimJsConfigMapOperation =
+  | { kind: "insert"; action: VimInsertAction; key: string }
+  | {
+      kind: "action";
+      actionId: BindablePromptTransformActionId;
+      key: string;
+      args?: Readonly<Record<string, unknown>>;
+      modes: readonly VimActionBindingMode[];
+    }
+  | {
+      kind: "remap";
+      key: string;
+      inputs: readonly string[];
+      modes: readonly VimActionBindingMode[];
+    };
+
+export type VimJsConfigOperation =
+  | { kind: "preset"; preset: VimPreset }
+  | { kind: "leaf"; path: "leader"; value: string | null }
+  | { kind: "map"; mapping: VimJsConfigMapOperation }
+  | { kind: "unmap"; target: string };
+
+export type VimJsConfigLoadResult =
+  | { kind: "missing"; warnings: readonly string[] }
+  | { kind: "success"; operations: readonly VimJsConfigOperation[]; warnings: readonly string[] }
+  | { kind: "fatal"; warnings: readonly string[] };
+
+type ConfigSession = {
+  vim: object;
+  assertOpen(): void;
+  close(): void;
+  readLeader(): string | null | undefined;
+  setMapleader(value: unknown): void;
+  warning(message: string): void;
+  recordMap(mapping: VimJsConfigMapOperation): void;
+  success(): Extract<VimJsConfigLoadResult, { kind: "success" }>;
 };
 
 const MODE_ALIASES: Record<string, readonly VimMode[]> = {
@@ -53,8 +86,27 @@ const INSERT_ACTIONS = new Set<VimInsertAction>([
   "moveLineEnd",
 ]);
 
+const RHS_INPUT_ALIASES: Record<string, string> = {
+  cr: "\r",
+  enter: "\r",
+  return: "\r",
+  esc: "\x1b",
+  escape: "\x1b",
+  tab: "\t",
+};
+
+let rootLoadId = 0;
+
 function warning(message: string): string {
   return `global JS config: ${message}`;
+}
+
+function frozenSnapshot<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map(frozenSnapshot)) as T;
+  if (!value || typeof value !== "object") return value;
+  return Object.freeze(
+    Object.fromEntries(Object.entries(value).map(([key, child]) => [key, frozenSnapshot(child)])),
+  ) as T;
 }
 
 function modesFor(rawMode: unknown): readonly VimMode[] | undefined {
@@ -83,21 +135,6 @@ function builtinPromptTransform(action: string, args?: Record<string, unknown>):
 function builtinInsert(action: VimInsertAction): BuiltinCommand {
   return { kind: "insert", action };
 }
-
-function addInsertBinding(state: BuilderState, lhs: string, action: VimInsertAction): void {
-  const keymap = (state.partial.keymap ??= {});
-  const insert = (keymap.insert ??= {});
-  insert[action] = [...(insert[action] ?? []), lhs];
-}
-
-const RHS_INPUT_ALIASES: Record<string, string> = {
-  cr: "\r",
-  enter: "\r",
-  return: "\r",
-  esc: "\x1b",
-  escape: "\x1b",
-  tab: "\t",
-};
 
 function normalizeKey(value: string): string | undefined {
   const angleMatch = value.match(/^<(.+)>$/);
@@ -144,91 +181,83 @@ function tokenizeReplayInputs(value: string): string[] | undefined {
   return keys.map((key) => RHS_INPUT_ALIASES[key] ?? key);
 }
 
-function addActionBinding(
-  state: BuilderState,
-  lhs: string,
-  command: Extract<BuiltinCommand, { kind: "promptTransform" }>,
-  modes: readonly VimMode[],
-): void {
-  const actionModes = modes.filter((mode) => mode !== "insert") as Exclude<VimMode, "insert">[];
-  if (actionModes.length === 0) {
-    state.warnings.push(warning(`${command.actionId} does not support insert mode`));
-    return;
-  }
-  const keymap = (state.partial.keymap ??= {});
-  const actions = (keymap.actions ??= {});
-  actions[command.actionId] = [
-    ...(actions[command.actionId] ?? []),
-    { key: lhs, args: command.args, modes: actionModes },
-  ];
-}
-
-function compileMapping(state: BuilderState, mode: unknown, lhs: unknown, rhs: unknown): void {
+function compileMapping(session: ConfigSession, mode: unknown, lhs: unknown, rhs: unknown): void {
+  session.assertOpen();
   const modes = modesFor(mode);
   if (!modes) {
-    state.warnings.push(warning(`unsupported mode ${String(mode)}`));
+    session.warning(`unsupported mode ${String(mode)}`);
     return;
   }
   if (typeof lhs !== "string" || lhs.length === 0) {
-    state.warnings.push(warning("keymap lhs must be a non-empty string"));
+    session.warning("keymap lhs must be a non-empty string");
     return;
   }
   const lhsKeys = tokenizeLhsKeys(lhs);
   if (!lhsKeys || lhsKeys.length === 0) {
-    state.warnings.push(warning("keymap lhs must contain supported key syntax"));
+    session.warning("keymap lhs must contain supported key syntax");
     return;
   }
-  const normalizedLhs = lhsKeys.join("");
-  const protectedKey = lhsKeys.find((key) => protectedShortcutForKey(key));
+  const key = lhsKeys.join("");
+  const protectedKey = lhsKeys.find((candidate) => protectedShortcutForKey(candidate));
   const protectedShortcut = protectedKey ? protectedShortcutForKey(protectedKey) : undefined;
   if (protectedKey && protectedShortcut) {
-    state.warnings.push(
-      warning(`keymap lhs contains protected key ${protectedKey} (${protectedShortcut.reason})`),
+    session.warning(
+      `keymap lhs contains protected key ${protectedKey} (${protectedShortcut.reason})`,
     );
     return;
   }
   if (typeof rhs === "string") {
-    addStringRemap(state, normalizedLhs, rhs, modes);
+    recordStringRemap(session, key, rhs, modes);
     return;
   }
   if (!isBuiltinCommand(rhs)) {
-    state.warnings.push(warning("keymap rhs must be a vim.prompt.* builtin command or key string"));
+    session.warning("keymap rhs must be a vim.prompt.* builtin command or key string");
     return;
   }
   if (rhs.kind === "insert") {
     if (!modes.includes("insert") || modes.length !== 1) {
-      state.warnings.push(warning(`vim.prompt.${rhs.action}() only supports insert mode`));
+      session.warning(`vim.prompt.${rhs.action}() only supports insert mode`);
       return;
     }
     if (!INSERT_ACTIONS.has(rhs.action)) {
-      state.warnings.push(warning(`unsupported insert action ${rhs.action}`));
+      session.warning(`unsupported insert action ${rhs.action}`);
       return;
     }
-    addInsertBinding(state, normalizedLhs, rhs.action);
+    session.recordMap({ kind: "insert", action: rhs.action, key });
     return;
   }
-  addActionBinding(state, normalizedLhs, rhs, modes);
+
+  const actionModes = modes.filter((candidate) => candidate !== "insert") as VimActionBindingMode[];
+  if (actionModes.length === 0) {
+    session.warning(`${rhs.actionId} does not support insert mode`);
+    return;
+  }
+  session.recordMap({
+    kind: "action",
+    actionId: rhs.actionId,
+    key,
+    args: rhs.args,
+    modes: actionModes,
+  });
 }
 
-function addStringRemap(
-  state: BuilderState,
-  lhs: string,
+function recordStringRemap(
+  session: ConfigSession,
+  key: string,
   rhs: string,
   modes: readonly VimMode[],
 ): void {
   const actionModes = modes.filter((mode) => mode !== "insert") as VimActionBindingMode[];
   if (actionModes.length === 0) {
-    state.warnings.push(warning("string rhs keymaps only support normal and visual modes"));
+    session.warning("string rhs keymaps only support normal and visual modes");
     return;
   }
   const inputs = tokenizeReplayInputs(rhs);
   if (!inputs || inputs.length === 0) {
-    state.warnings.push(warning("string rhs must contain supported key syntax"));
+    session.warning("string rhs must contain supported key syntax");
     return;
   }
-  const keymap = (state.partial.keymap ??= {});
-  const remaps = (keymap.remaps ??= { accepted: [] });
-  remaps.accepted = [...remaps.accepted, { key: lhs, inputs, modes: actionModes }];
+  session.recordMap({ kind: "remap", key, inputs, modes: actionModes });
 }
 
 export function isPrintableLeader(value: unknown): value is string {
@@ -240,16 +269,47 @@ export function isPrintableLeader(value: unknown): value is string {
   );
 }
 
-function setMapleader(state: BuilderState, value: unknown): void {
-  if (value === null || isPrintableLeader(value)) {
-    state.partial.leader = value;
-    return;
-  }
-  state.warnings.push(warning("vim.g.mapleader must be one printable character or null"));
-}
-
-function buildVim() {
-  const state: BuilderState = { partial: {}, warnings: [] };
+function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSession {
+  let closed = false;
+  let leader = seed.leader;
+  const warnings: string[] = [];
+  const operations: VimJsConfigOperation[] = [];
+  const assertOpen = () => {
+    if (closed) throw new Error("config session closed");
+  };
+  const session: ConfigSession = {
+    vim: {},
+    assertOpen,
+    close: () => {
+      closed = true;
+    },
+    readLeader: () => {
+      assertOpen();
+      return leader;
+    },
+    setMapleader: (value) => {
+      assertOpen();
+      if (value === null || isPrintableLeader(value)) {
+        leader = value;
+        operations.push({ kind: "leaf", path: "leader", value });
+        return;
+      }
+      warnings.push(warning("vim.g.mapleader must be one printable character or null"));
+    },
+    warning: (message) => {
+      assertOpen();
+      warnings.push(warning(message));
+    },
+    recordMap: (mapping) => {
+      assertOpen();
+      operations.push({ kind: "map", mapping: frozenSnapshot(mapping) });
+    },
+    success: () => ({
+      kind: "success",
+      operations: frozenSnapshot(operations),
+      warnings: frozenSnapshot(warnings),
+    }),
+  };
   const prompt = {
     quote: () => builtinPromptTransform("quote"),
     unquote: () => builtinPromptTransform("unquote"),
@@ -269,43 +329,79 @@ function buildVim() {
     moveLineStart: () => builtinInsert("moveLineStart"),
     moveLineEnd: () => builtinInsert("moveLineEnd"),
   };
-  return {
-    state,
-    vim: {
-      g: {
-        get mapleader() {
-          return state.partial.leader;
-        },
-        set mapleader(value: unknown) {
-          setMapleader(state, value);
-        },
+  const g = new Proxy(
+    {
+      get mapleader() {
+        return session.readLeader();
       },
-      prompt,
-      keymap: {
-        set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(state, mode, lhs, rhs),
+      set mapleader(value: unknown) {
+        session.setMapleader(value);
       },
     },
-  };
+    {
+      set(target, property, value, receiver) {
+        if (property === "mapleader") return Reflect.set(target, property, value, receiver);
+        session.warning(`unknown vim.g property ${String(property)}`);
+        return true;
+      },
+    },
+  );
+  session.vim = new Proxy(
+    {
+      g,
+      prompt: Object.freeze(prompt),
+      keymap: Object.freeze({
+        set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(session, mode, lhs, rhs),
+      }),
+    },
+    {
+      set(_target, property) {
+        session.warning(`unknown vim property ${String(property)}`);
+        return true;
+      },
+    },
+  );
+  return session;
+}
+
+function fatal(error: unknown): Extract<VimJsConfigLoadResult, { kind: "fatal" }> {
+  const message = error instanceof Error ? error.message : String(error);
+  return { kind: "fatal", warnings: frozenSnapshot([warning(`failed to load (${message})`)]) };
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as PromiseLike<unknown>).then === "function"
+  );
 }
 
 export async function loadVimJsConfig(
   configPath = DEFAULT_JS_CONFIG_PATH,
+  seed: Pick<VimEditorOptions, "leader"> = {},
 ): Promise<VimJsConfigLoadResult> {
-  if (!existsSync(configPath)) return { warnings: [] };
+  if (!existsSync(configPath)) return { kind: "missing", warnings: [] };
 
+  let exported: unknown;
   try {
     const mtime = statSync(configPath).mtimeMs;
-    const moduleUrl = `${pathToFileURL(configPath).href}?mtime=${mtime}`;
+    const moduleUrl = `${pathToFileURL(configPath).href}?mtime=${mtime}&load=${++rootLoadId}`;
     const module = (await import(moduleUrl)) as { default?: unknown };
-    const exported = module.default;
-    if (typeof exported !== "function") {
-      return { warnings: [warning("default export must be a function")] };
-    }
-    const { state, vim } = buildVim();
-    await exported(vim);
-    return { partial: state.partial, warnings: state.warnings, appendKeymap: true };
+    exported = module.default;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { warnings: [warning(`failed to load (${message})`)] };
+    return fatal(error);
+  }
+  if (typeof exported !== "function") return fatal(new Error("default export must be a function"));
+
+  const session = createSession(seed);
+  try {
+    const result = exported(session.vim);
+    if (isThenable(result)) await result;
+    return session.success();
+  } catch (error) {
+    return fatal(error);
+  } finally {
+    session.close();
   }
 }

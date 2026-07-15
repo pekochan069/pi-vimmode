@@ -13,6 +13,7 @@ import type {
 } from "./types.ts";
 
 import { protectedShortcutForKey } from "./customization.ts";
+import { VIM_PRESETS } from "./types.ts";
 
 export const DEFAULT_JS_CONFIG_PATH = join(homedir(), ".pi", "agent", "pi-vimmode.config.js");
 
@@ -88,7 +89,7 @@ const INSERT_ACTIONS = new Set<VimInsertAction>([
   "moveLineEnd",
 ]);
 
-const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
+const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
 
 const RHS_INPUT_ALIASES: Record<string, string> = {
   cr: "\r",
@@ -315,6 +316,10 @@ function createGlobalApi(session: ConfigSession): object {
         session.warning(`unknown vim.g property ${String(property)}`);
         return true;
       },
+      defineProperty(target, property, descriptor) {
+        session.assertOpen();
+        return Reflect.defineProperty(target, property, descriptor);
+      },
     },
   );
 }
@@ -339,6 +344,10 @@ function createVimApi(session: ConfigSession, g: object): object {
         if (property === "preset") return Reflect.set(target, property, value, receiver);
         session.warning(`unknown vim property ${String(property)}`);
         return true;
+      },
+      defineProperty(target, property, descriptor) {
+        session.assertOpen();
+        return Reflect.defineProperty(target, property, descriptor);
       },
     },
   );
@@ -373,7 +382,7 @@ function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSessi
     },
     setPreset: (value) => {
       assertOpen();
-      if (typeof value === "string" && VIM_PRESETS.has(value as VimPreset)) {
+      if (typeof value === "string" && VIM_PRESET_SET.has(value as VimPreset)) {
         operations.push({ kind: "preset", preset: value as VimPreset });
         return;
       }

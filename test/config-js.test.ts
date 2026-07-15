@@ -466,13 +466,41 @@ export default (vim) => {
       const resolved = resolveVimOptions(
         {
           piVimMode: {
-            keymap: { actions: { "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }] } },
+            keymap: { actions: { "prompt.transform.quote": [{ key: "zq" }] } },
           },
         },
         undefined,
         loaded,
       );
-      expect(resolved.options.keymap?.actions.accepted).toEqual([]);
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.quote",
+          key: "zq",
+          args: { action: "quote" },
+          modes: ["visual", "visualLine", "visualBlock"],
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("keeps mappings declared after an unmap", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.keymap.set("n", "zq", null);
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+};`);
+      const resolved = resolveVimOptions(undefined, undefined, await loadVimJsConfig(f.path));
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.quote",
+          key: "zq",
+          args: { action: "quote" },
+          modes: ["normal"],
+        },
+      ]);
     } finally {
       f.cleanup();
     }
@@ -562,6 +590,9 @@ export default ${asyncExport ? "async " : ""}(vim) => {
           retained.g.mapleader = " ";
         }).toThrow("config session closed");
         expect(() => retained.keymap.set("n", "zq", "q")).toThrow("config session closed");
+        expect(() => Object.defineProperty(retained.g, "mapleader", { value: " " })).toThrow(
+          "config session closed",
+        );
         expect(operations(loaded)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
       } finally {
         Reflect.deleteProperty(globalThis, retainedKey);

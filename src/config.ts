@@ -68,6 +68,7 @@ import {
   normalizePromptTransformActionArgs,
   promptTransformActionForId,
 } from "./prompt-transform-actions.ts";
+import { VIM_PRESETS } from "./types.ts";
 
 const VIM_MODES = [
   "insert",
@@ -139,7 +140,13 @@ const TEXT_OBJECT_TARGET_SET = deriveSet(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
 const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
 const BINDABLE_PROMPT_TRANSFORM_ACTION_SET = new Set<string>(bindablePromptTransformActionIds());
-const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
+const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
+const ACTION_BINDING_MODES: readonly VimActionBindingMode[] = [
+  "normal",
+  "visual",
+  "visualLine",
+  "visualBlock",
+];
 const NOOP_FEEDBACK_VALUES = new Set<VimFeedbackOptions["noop"]>(["off", "status"]);
 const WORKBENCH_RESERVED_ROWS_MAX = 5;
 
@@ -1493,7 +1500,7 @@ function parsePiVimMode(
 
   const preset = value.preset;
   if (preset !== undefined) {
-    if (typeof preset === "string" && VIM_PRESETS.has(preset as VimPreset)) {
+    if (typeof preset === "string" && VIM_PRESET_SET.has(preset as VimPreset)) {
       partial.preset = preset as VimPreset;
     } else {
       warnings.push(`${sourceLabel}: unsupported piVimMode.preset`);
@@ -1620,6 +1627,29 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
   };
 }
 
+function remainingScopedModes(
+  modes: readonly VimActionBindingMode[] | undefined,
+  removedModes: readonly VimMode[],
+): readonly VimActionBindingMode[] {
+  return (modes ?? ACTION_BINDING_MODES).filter((mode) => !removedModes.includes(mode));
+}
+
+function removeScopedKeymapBindings(
+  target: ResolvedVimKeymap,
+  unmap: { key: string; modes: readonly VimMode[] },
+): void {
+  target.actions.accepted = target.actions.accepted.flatMap((binding) => {
+    if (binding.key !== unmap.key) return [binding];
+    const modes = remainingScopedModes(binding.modes, unmap.modes);
+    return modes.length ? [{ ...binding, modes }] : [];
+  });
+  target.remaps.accepted = target.remaps.accepted.flatMap((mapping) => {
+    if (mapping.key !== unmap.key) return [mapping];
+    const modes = remainingScopedModes(mapping.modes, unmap.modes);
+    return modes.length ? [{ ...mapping, modes }] : [];
+  });
+}
+
 function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
   for (const unmap of partial.unmaps ?? []) {
     if (unmap.modes.includes("insert")) {
@@ -1627,16 +1657,7 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
         target.insert[action] = target.insert[action].filter((key) => key !== unmap.key);
       }
     }
-    target.actions.accepted = target.actions.accepted.flatMap((binding) => {
-      if (binding.key !== unmap.key) return [binding];
-      const modes = binding.modes?.filter((mode) => !unmap.modes.includes(mode));
-      return modes?.length ? [{ ...binding, modes }] : [];
-    });
-    target.remaps.accepted = target.remaps.accepted.flatMap((mapping) => {
-      if (mapping.key !== unmap.key) return [mapping];
-      const modes = mapping.modes?.filter((mode) => !unmap.modes.includes(mode));
-      return modes?.length ? [{ ...mapping, modes }] : [];
-    });
+    removeScopedKeymapBindings(target, unmap);
   }
   removeTopLevelKeymapSequences(target, configuredTopLevelKeymapSequences(partial));
   if (partial.escape) target.escape = [...partial.escape];
@@ -1661,18 +1682,7 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.remaps) {
     target.remaps = { accepted: [...target.remaps.accepted, ...partial.remaps.accepted] };
   }
-  for (const unmap of partial.unmaps ?? []) {
-    target.actions.accepted = target.actions.accepted.flatMap((binding) => {
-      if (binding.key !== unmap.key) return [binding];
-      const modes = binding.modes?.filter((mode) => !unmap.modes.includes(mode));
-      return modes?.length ? [{ ...binding, modes }] : [];
-    });
-    target.remaps.accepted = target.remaps.accepted.flatMap((mapping) => {
-      if (mapping.key !== unmap.key) return [mapping];
-      const modes = mapping.modes?.filter((mode) => !unmap.modes.includes(mode));
-      return modes?.length ? [{ ...mapping, modes }] : [];
-    });
-  }
+  for (const unmap of partial.unmaps ?? []) removeScopedKeymapBindings(target, unmap);
 }
 
 function additiveKeymapLayer(
@@ -2291,8 +2301,8 @@ function removeJsMappings(
       keymap.actions[actionId as BindablePromptTransformActionId] = (bindings ?? []).flatMap(
         (binding) => {
           if (binding.key !== key) return [binding];
-          const remainingModes = binding.modes?.filter((mode) => !removesMode(mode));
-          return remainingModes?.length ? [{ ...binding, modes: remainingModes }] : [];
+          const remainingModes = remainingScopedModes(binding.modes, modes);
+          return remainingModes.length ? [{ ...binding, modes: remainingModes }] : [];
         },
       );
     }
@@ -2300,10 +2310,22 @@ function removeJsMappings(
   if (keymap.remaps) {
     keymap.remaps.accepted = keymap.remaps.accepted.flatMap((mapping) => {
       if (mapping.key !== key) return [mapping];
-      const remainingModes = mapping.modes?.filter((mode) => !removesMode(mode));
-      return remainingModes?.length ? [{ ...mapping, modes: remainingModes }] : [];
+      const remainingModes = remainingScopedModes(mapping.modes, modes);
+      return remainingModes.length ? [{ ...mapping, modes: remainingModes }] : [];
     });
   }
+}
+
+function restoreJsUnmaps(
+  keymap: PartialKeymapOptions,
+  key: string,
+  modes: readonly VimMode[],
+): void {
+  keymap.unmaps = keymap.unmaps?.flatMap((unmap) => {
+    if (unmap.key !== key) return [unmap];
+    const remainingModes = unmap.modes.filter((mode) => !modes.includes(mode));
+    return remainingModes.length ? [{ ...unmap, modes: remainingModes }] : [];
+  });
 }
 
 function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): VimEditorOptions {
@@ -2326,11 +2348,13 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     }
     const mapping = operation.mapping;
     if (mapping.kind === "insert") {
+      restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, ["insert"]);
       const insert = (keymap.insert ??= {});
       insert[mapping.action] = [...(insert[mapping.action] ?? []), mapping.key];
       continue;
     }
     if (mapping.kind === "action") {
+      restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
       const actions = (keymap.actions ??= {});
       actions[mapping.actionId] = [
         ...(actions[mapping.actionId] ?? []),
@@ -2338,6 +2362,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       ];
       continue;
     }
+    restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
     const remaps = (keymap.remaps ??= { accepted: [] });
     remaps.accepted = [
       ...remaps.accepted,
@@ -2345,6 +2370,17 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     ];
   }
   return partial;
+}
+
+function compileJsConfig(jsConfig: Parameters<typeof resolveVimOptions>[2]): {
+  source: unknown;
+  unmaps: PartialKeymapOptions["unmaps"] | undefined;
+} {
+  const compiled = jsConfig?.operations ? partialFromJsOperations(jsConfig.operations) : undefined;
+  return {
+    source: compiled ?? jsConfig?.partial,
+    unmaps: (compiled?.keymap as PartialKeymapOptions | undefined)?.unmaps,
+  };
 }
 
 export function resolveVimOptions(
@@ -2374,27 +2410,21 @@ export function resolveVimOptions(
   if (parsedGlobal.partial.keymap) keymapLayers.push(parsedGlobal.partial.keymap);
   warnings.push(...parsedGlobal.warnings);
 
-  const jsPartialSource = jsConfig?.operations
-    ? partialFromJsOperations(jsConfig.operations)
-    : jsConfig?.partial;
-  const parsedJs = parsePiVimMode(jsPartialSource, "global JS config");
+  const compiledJs = compileJsConfig(jsConfig);
+  const parsedJs = parsePiVimMode(compiledJs.source, "global JS config");
   const appendJsKeymap = jsConfig?.kind === "success" || jsConfig?.appendKeymap;
   if (parsedJs.partial.preset) {
     const preset = presetOptions(parsedJs.partial.preset);
     mergePartialOptions(options, preset);
     if (preset.keymap) keymapLayers.push(preset.keymap);
   }
-  const jsUnmaps = jsConfig?.operations
-    ? (partialFromJsOperations(jsConfig.operations).keymap as PartialKeymapOptions | undefined)
-        ?.unmaps
-    : undefined;
   const jsPartial =
     appendJsKeymap && parsedJs.partial.keymap
       ? {
           ...parsedJs.partial,
           keymap: {
             ...additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap),
-            unmaps: jsUnmaps,
+            unmaps: compiledJs.unmaps,
           },
         }
       : parsedJs.partial;

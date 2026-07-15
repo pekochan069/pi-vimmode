@@ -47,6 +47,7 @@ import {
   deriveDefaultKeyBindings,
   deriveSet,
   KEYMAP_COMMAND_DESCRIPTORS,
+  KEYMAP_INSERT_DESCRIPTORS,
   KEYMAP_MARK_DESCRIPTORS,
   KEYMAP_MACRO_DESCRIPTORS,
   KEYMAP_MOTION_DESCRIPTORS,
@@ -56,6 +57,7 @@ import {
 } from "./keymap-descriptors.ts";
 import { grammarBindingsForKeymap, grammarConflictForActionKey } from "./keymap-grammar.ts";
 import {
+  PROMPT_TRANSFORM_ACTIONS as PROMPT_TRANSFORM_ACTION_REGISTRY,
   bindablePromptTransformActionIds,
   normalizePromptTransformActionArgs,
   promptTransformActionForId,
@@ -111,32 +113,15 @@ export const PROMPT_STRUCTURE_TARGETS = [
   "tag",
   "errorBlock",
 ] as const satisfies readonly PromptStructureTarget[];
-export const PROMPT_TRANSFORM_ACTIONS = [
-  "quote",
-  "unquote",
-  "bulletize",
-  "fence",
-  "indent",
-  "dedent",
-  "reflow",
-] as const satisfies readonly PromptTransformAction[];
+export const PROMPT_TRANSFORM_ACTIONS = PROMPT_TRANSFORM_ACTION_REGISTRY.map(
+  ({ action }) => action,
+) as PromptTransformAction[];
 
 const MOTION_OPERATOR_ACTION_SET = new Set<string>(VIM_MOTION_OPERATOR_ACTIONS);
 const OPERATOR_ACTION_SET = deriveSet(KEYMAP_OPERATOR_DESCRIPTORS);
 const MOTION_ACTION_SET = deriveSet(KEYMAP_MOTION_DESCRIPTORS);
 const COMMAND_ACTION_SET = deriveSet(KEYMAP_COMMAND_DESCRIPTORS);
-const INSERT_ACTION_SET = new Set<string>([
-  "openLineBelow",
-  "openLineAbove",
-  "deleteWordBackward",
-  "deleteWordForward",
-  "deleteLineBackward",
-  "deleteLineForward",
-  "moveWordBackward",
-  "moveWordForward",
-  "moveLineStart",
-  "moveLineEnd",
-]);
+const INSERT_ACTION_SET = deriveSet(KEYMAP_INSERT_DESCRIPTORS);
 const LOWERCASE_SLOT_KEYS = "abcdefghijklmnopqrstuvwxyz".split("");
 const OPERATOR_MOTION_ACTIONS = VIM_MOTION_ACTIONS.filter(
   (action) => action !== "halfPageDown" && action !== "halfPageUp",
@@ -178,18 +163,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
       VIM_MOTION_OPERATOR_ACTIONS.map((action) => [action, OPERATOR_MOTION_ACTIONS]),
     ),
   ),
-  insert: Object.freeze({
-    openLineBelow: Object.freeze([]),
-    openLineAbove: Object.freeze([]),
-    deleteWordBackward: Object.freeze([]),
-    deleteWordForward: Object.freeze([]),
-    deleteLineBackward: Object.freeze([]),
-    deleteLineForward: Object.freeze([]),
-    moveWordBackward: Object.freeze([]),
-    moveWordForward: Object.freeze([]),
-    moveLineStart: Object.freeze([]),
-    moveLineEnd: Object.freeze([]),
-  }),
+  insert: freezeArrayRecord(deriveDefaultKeyBindings(KEYMAP_INSERT_DESCRIPTORS)),
   actions: Object.freeze({
     accepted: Object.freeze([]),
   }),

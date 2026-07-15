@@ -18,6 +18,9 @@ import {
 } from "../src/keymap-descriptors.ts";
 import { PROMPT_TRANSFORM_ACTIONS } from "../src/prompt-transform-actions.ts";
 
+type Assert<T extends true> = T;
+type OperatorPendingIsNotVimMode = Assert<"operatorPending" extends VimMode ? false : true>;
+
 const descriptorIds = (family: string, descriptors: Record<string, unknown>) =>
   Object.keys(descriptors).map((action) => `${family}.${action}`);
 
@@ -54,8 +57,29 @@ describe("canonical config metadata", () => {
       "operatorPending",
     ]);
     expect(VIM_ACTION_METADATA.flatMap(({ scopes }) => scopes)).toContain("operatorPending");
-    const stableModes: VimMode[] = ["insert", "normal", "visual", "visualLine", "visualBlock"];
-    expect(stableModes).not.toContain("operatorPending");
+    const operatorPendingIsNotVimMode: OperatorPendingIsNotVimMode = true;
+    expect(operatorPendingIsNotVimMode).toBe(true);
+  });
+
+  test("scopes mark setting separately from operator mark jumps", () => {
+    const scopesFor = (id: string) =>
+      VIM_ACTION_METADATA.find((action) => action.id === id)?.scopes;
+
+    expect(scopesFor("mark.set")).toEqual(["normal", "visual", "visualLine", "visualBlock"]);
+    expect(scopesFor("mark.jumpExact")).toEqual([
+      "normal",
+      "visual",
+      "visualLine",
+      "visualBlock",
+      "operatorPending",
+    ]);
+    expect(scopesFor("mark.jumpLine")).toEqual([
+      "normal",
+      "visual",
+      "visualLine",
+      "visualBlock",
+      "operatorPending",
+    ]);
   });
 
   test("has one source-backed default for every catalogued config leaf", () => {

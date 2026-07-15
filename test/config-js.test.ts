@@ -458,6 +458,26 @@ export default (vim) => {
     }
   });
 
+  test("unmaps inherited mappings in only selected scopes", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => vim.keymap.set("n", "zq", null);`);
+      const loaded = await loadVimJsConfig(f.path);
+      const resolved = resolveVimOptions(
+        {
+          piVimMode: {
+            keymap: { actions: { "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }] } },
+          },
+        },
+        undefined,
+        loaded,
+      );
+      expect(resolved.options.keymap?.actions.accepted).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("re-evaluates root config on every load", async () => {
     const f = fixture();
     const loadKey = "__piVimModeRootLoadCount";

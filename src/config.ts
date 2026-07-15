@@ -327,6 +327,7 @@ type PartialKeymapOptions = {
   actionPresets?: VimActionKeybindingPreset[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
   remaps?: ResolvedVimKeymap["remaps"];
+  unmaps?: Array<{ key: string; modes: readonly VimMode[] }>;
   allowProtectedOverrides?: string[];
 };
 
@@ -1620,6 +1621,23 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
 }
 
 function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
+  for (const unmap of partial.unmaps ?? []) {
+    if (unmap.modes.includes("insert")) {
+      for (const action of Object.keys(target.insert) as Array<keyof ResolvedVimInsertKeymap>) {
+        target.insert[action] = target.insert[action].filter((key) => key !== unmap.key);
+      }
+    }
+    target.actions.accepted = target.actions.accepted.flatMap((binding) => {
+      if (binding.key !== unmap.key) return [binding];
+      const modes = binding.modes?.filter((mode) => !unmap.modes.includes(mode));
+      return modes?.length ? [{ ...binding, modes }] : [];
+    });
+    target.remaps.accepted = target.remaps.accepted.flatMap((mapping) => {
+      if (mapping.key !== unmap.key) return [mapping];
+      const modes = mapping.modes?.filter((mode) => !unmap.modes.includes(mode));
+      return modes?.length ? [{ ...mapping, modes }] : [];
+    });
+  }
   removeTopLevelKeymapSequences(target, configuredTopLevelKeymapSequences(partial));
   if (partial.escape) target.escape = [...partial.escape];
   if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
@@ -1642,6 +1660,18 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.actions) mergeActionBindings(target, partial.actions);
   if (partial.remaps) {
     target.remaps = { accepted: [...target.remaps.accepted, ...partial.remaps.accepted] };
+  }
+  for (const unmap of partial.unmaps ?? []) {
+    target.actions.accepted = target.actions.accepted.flatMap((binding) => {
+      if (binding.key !== unmap.key) return [binding];
+      const modes = binding.modes?.filter((mode) => !unmap.modes.includes(mode));
+      return modes?.length ? [{ ...binding, modes }] : [];
+    });
+    target.remaps.accepted = target.remaps.accepted.flatMap((mapping) => {
+      if (mapping.key !== unmap.key) return [mapping];
+      const modes = mapping.modes?.filter((mode) => !unmap.modes.includes(mode));
+      return modes?.length ? [{ ...mapping, modes }] : [];
+    });
   }
 }
 
@@ -1710,6 +1740,7 @@ function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymap
   if (partial.remaps) {
     target.remaps = { accepted: [...(target.remaps?.accepted ?? []), ...partial.remaps.accepted] };
   }
+  if (partial.unmaps) target.unmaps = [...(target.unmaps ?? []), ...partial.unmaps];
 }
 
 function keymapOverlayFromLayers(layers: readonly PartialKeymapOptions[]): PartialKeymapOptions {
@@ -2289,6 +2320,8 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     const keymap = (partial.keymap ??= {});
     if (operation.kind === "unmap") {
       removeJsMappings(keymap as PartialKeymapOptions, operation.key, operation.modes);
+      const unmaps = ((keymap as PartialKeymapOptions).unmaps ??= []);
+      unmaps.push({ key: operation.key, modes: operation.modes });
       continue;
     }
     const mapping = operation.mapping;
@@ -2351,9 +2384,19 @@ export function resolveVimOptions(
     mergePartialOptions(options, preset);
     if (preset.keymap) keymapLayers.push(preset.keymap);
   }
+  const jsUnmaps = jsConfig?.operations
+    ? (partialFromJsOperations(jsConfig.operations).keymap as PartialKeymapOptions | undefined)
+        ?.unmaps
+    : undefined;
   const jsPartial =
     appendJsKeymap && parsedJs.partial.keymap
-      ? { ...parsedJs.partial, keymap: additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap) }
+      ? {
+          ...parsedJs.partial,
+          keymap: {
+            ...additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap),
+            unmaps: jsUnmaps,
+          },
+        }
       : parsedJs.partial;
   mergePartialOptions(options, jsPartial);
   if (jsPartial.keymap) keymapLayers.push(jsPartial.keymap);

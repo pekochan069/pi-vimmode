@@ -44,7 +44,7 @@ export type VimJsConfigOperation =
   | { kind: "preset"; preset: VimPreset }
   | { kind: "leaf"; path: "leader"; value: string | null }
   | { kind: "map"; mapping: VimJsConfigMapOperation }
-  | { kind: "unmap"; target: string };
+  | { kind: "unmap"; key: string; modes: readonly VimMode[] };
 
 export type VimJsConfigLoadResult =
   | { kind: "missing"; warnings: readonly string[] }
@@ -57,8 +57,10 @@ type ConfigSession = {
   close(): void;
   readLeader(): string | null | undefined;
   setMapleader(value: unknown): void;
+  setPreset(value: unknown): void;
   warning(message: string): void;
   recordMap(mapping: VimJsConfigMapOperation): void;
+  recordUnmap(key: string, modes: readonly VimMode[]): void;
   success(): Extract<VimJsConfigLoadResult, { kind: "success" }>;
 };
 
@@ -85,6 +87,8 @@ const INSERT_ACTIONS = new Set<VimInsertAction>([
   "moveLineStart",
   "moveLineEnd",
 ]);
+
+const VIM_PRESETS = new Set<VimPreset>(["minimal", "prompt-safe", "vim-heavy"]);
 
 const RHS_INPUT_ALIASES: Record<string, string> = {
   cr: "\r",
@@ -206,6 +210,10 @@ function compileMapping(session: ConfigSession, mode: unknown, lhs: unknown, rhs
     );
     return;
   }
+  if (rhs === null) {
+    session.recordUnmap(key, modes);
+    return;
+  }
   if (typeof rhs === "string") {
     recordStringRemap(session, key, rhs, modes);
     return;
@@ -269,6 +277,73 @@ export function isPrintableLeader(value: unknown): value is string {
   );
 }
 
+function createPromptApi() {
+  return Object.freeze({
+    quote: () => builtinPromptTransform("quote"),
+    unquote: () => builtinPromptTransform("unquote"),
+    bulletize: () => builtinPromptTransform("bulletize"),
+    fence: (args: { language?: string } = {}) => builtinPromptTransform("fence", args),
+    indent: () => builtinPromptTransform("indent"),
+    dedent: () => builtinPromptTransform("dedent"),
+    reflow: (args: { width?: number } = {}) => builtinPromptTransform("reflow", args),
+    openLineBelow: () => builtinInsert("openLineBelow"),
+    openLineAbove: () => builtinInsert("openLineAbove"),
+    deleteWordBackward: () => builtinInsert("deleteWordBackward"),
+    deleteWordForward: () => builtinInsert("deleteWordForward"),
+    deleteLineBackward: () => builtinInsert("deleteLineBackward"),
+    deleteLineForward: () => builtinInsert("deleteLineForward"),
+    moveWordBackward: () => builtinInsert("moveWordBackward"),
+    moveWordForward: () => builtinInsert("moveWordForward"),
+    moveLineStart: () => builtinInsert("moveLineStart"),
+    moveLineEnd: () => builtinInsert("moveLineEnd"),
+  });
+}
+
+function createGlobalApi(session: ConfigSession): object {
+  return new Proxy(
+    {
+      get mapleader() {
+        return session.readLeader();
+      },
+      set mapleader(value: unknown) {
+        session.setMapleader(value);
+      },
+    },
+    {
+      set(target, property, value, receiver) {
+        if (property === "mapleader") return Reflect.set(target, property, value, receiver);
+        session.warning(`unknown vim.g property ${String(property)}`);
+        return true;
+      },
+    },
+  );
+}
+
+function createVimApi(session: ConfigSession, g: object): object {
+  return new Proxy(
+    {
+      g,
+      get preset() {
+        return undefined;
+      },
+      set preset(value: unknown) {
+        session.setPreset(value);
+      },
+      prompt: createPromptApi(),
+      keymap: Object.freeze({
+        set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(session, mode, lhs, rhs),
+      }),
+    },
+    {
+      set(target, property, value, receiver) {
+        if (property === "preset") return Reflect.set(target, property, value, receiver);
+        session.warning(`unknown vim property ${String(property)}`);
+        return true;
+      },
+    },
+  );
+}
+
 function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSession {
   let closed = false;
   let leader = seed.leader;
@@ -296,6 +371,14 @@ function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSessi
       }
       warnings.push(warning("vim.g.mapleader must be one printable character or null"));
     },
+    setPreset: (value) => {
+      assertOpen();
+      if (typeof value === "string" && VIM_PRESETS.has(value as VimPreset)) {
+        operations.push({ kind: "preset", preset: value as VimPreset });
+        return;
+      }
+      warnings.push(warning("vim.preset must be a supported preset"));
+    },
     warning: (message) => {
       assertOpen();
       warnings.push(warning(message));
@@ -304,63 +387,17 @@ function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSessi
       assertOpen();
       operations.push({ kind: "map", mapping: frozenSnapshot(mapping) });
     },
+    recordUnmap: (key, modes) => {
+      assertOpen();
+      operations.push({ kind: "unmap", key, modes: frozenSnapshot(modes) });
+    },
     success: () => ({
       kind: "success",
       operations: frozenSnapshot(operations),
       warnings: frozenSnapshot(warnings),
     }),
   };
-  const prompt = {
-    quote: () => builtinPromptTransform("quote"),
-    unquote: () => builtinPromptTransform("unquote"),
-    bulletize: () => builtinPromptTransform("bulletize"),
-    fence: (args: { language?: string } = {}) => builtinPromptTransform("fence", args),
-    indent: () => builtinPromptTransform("indent"),
-    dedent: () => builtinPromptTransform("dedent"),
-    reflow: (args: { width?: number } = {}) => builtinPromptTransform("reflow", args),
-    openLineBelow: () => builtinInsert("openLineBelow"),
-    openLineAbove: () => builtinInsert("openLineAbove"),
-    deleteWordBackward: () => builtinInsert("deleteWordBackward"),
-    deleteWordForward: () => builtinInsert("deleteWordForward"),
-    deleteLineBackward: () => builtinInsert("deleteLineBackward"),
-    deleteLineForward: () => builtinInsert("deleteLineForward"),
-    moveWordBackward: () => builtinInsert("moveWordBackward"),
-    moveWordForward: () => builtinInsert("moveWordForward"),
-    moveLineStart: () => builtinInsert("moveLineStart"),
-    moveLineEnd: () => builtinInsert("moveLineEnd"),
-  };
-  const g = new Proxy(
-    {
-      get mapleader() {
-        return session.readLeader();
-      },
-      set mapleader(value: unknown) {
-        session.setMapleader(value);
-      },
-    },
-    {
-      set(target, property, value, receiver) {
-        if (property === "mapleader") return Reflect.set(target, property, value, receiver);
-        session.warning(`unknown vim.g property ${String(property)}`);
-        return true;
-      },
-    },
-  );
-  session.vim = new Proxy(
-    {
-      g,
-      prompt: Object.freeze(prompt),
-      keymap: Object.freeze({
-        set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(session, mode, lhs, rhs),
-      }),
-    },
-    {
-      set(_target, property) {
-        session.warning(`unknown vim property ${String(property)}`);
-        return true;
-      },
-    },
-  );
+  session.vim = createVimApi(session, createGlobalApi(session));
   return session;
 }
 

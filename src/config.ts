@@ -2244,6 +2244,37 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   }
 }
 
+function removeJsMappings(
+  keymap: PartialKeymapOptions,
+  key: string,
+  modes: readonly VimMode[],
+): void {
+  const removesMode = (mode: VimMode) => modes.includes(mode);
+  if (keymap.insert && removesMode("insert")) {
+    for (const action of Object.keys(keymap.insert) as Array<keyof ResolvedVimInsertKeymap>) {
+      keymap.insert[action] = keymap.insert[action]?.filter((binding) => binding !== key);
+    }
+  }
+  if (keymap.actions) {
+    for (const [actionId, bindings] of Object.entries(keymap.actions)) {
+      keymap.actions[actionId as BindablePromptTransformActionId] = (bindings ?? []).flatMap(
+        (binding) => {
+          if (binding.key !== key) return [binding];
+          const remainingModes = binding.modes?.filter((mode) => !removesMode(mode));
+          return remainingModes?.length ? [{ ...binding, modes: remainingModes }] : [];
+        },
+      );
+    }
+  }
+  if (keymap.remaps) {
+    keymap.remaps.accepted = keymap.remaps.accepted.flatMap((mapping) => {
+      if (mapping.key !== key) return [mapping];
+      const remainingModes = mapping.modes?.filter((mode) => !removesMode(mode));
+      return remainingModes?.length ? [{ ...mapping, modes: remainingModes }] : [];
+    });
+  }
+}
+
 function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): VimEditorOptions {
   const partial: VimEditorOptions = {};
   for (const operation of operations) {
@@ -2255,8 +2286,11 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       partial.leader = operation.value;
       continue;
     }
-    if (operation.kind !== "map") continue;
     const keymap = (partial.keymap ??= {});
+    if (operation.kind === "unmap") {
+      removeJsMappings(keymap as PartialKeymapOptions, operation.key, operation.modes);
+      continue;
+    }
     const mapping = operation.mapping;
     if (mapping.kind === "insert") {
       const insert = (keymap.insert ??= {});
@@ -2312,6 +2346,11 @@ export function resolveVimOptions(
     : jsConfig?.partial;
   const parsedJs = parsePiVimMode(jsPartialSource, "global JS config");
   const appendJsKeymap = jsConfig?.kind === "success" || jsConfig?.appendKeymap;
+  if (parsedJs.partial.preset) {
+    const preset = presetOptions(parsedJs.partial.preset);
+    mergePartialOptions(options, preset);
+    if (preset.keymap) keymapLayers.push(preset.keymap);
+  }
   const jsPartial =
     appendJsKeymap && parsedJs.partial.keymap
       ? { ...parsedJs.partial, keymap: additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap) }

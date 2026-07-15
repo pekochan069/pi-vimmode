@@ -403,6 +403,61 @@ export default (vim) => {
     }
   });
 
+  test("stages preset and scoped unmap operations in source order", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.preset = "minimal";
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+  vim.keymap.set("v", "zq", vim.prompt.reflow());
+  vim.keymap.set("n", "zq", null);
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(operations(loaded)).toEqual([
+        { kind: "preset", preset: "minimal" },
+        { kind: "leaf", path: "leader", value: "," },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "zq",
+            args: undefined,
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "zq",
+            args: {},
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+        { kind: "unmap", key: "zq", modes: ["normal"] },
+      ]);
+
+      const resolved = resolveVimOptions(undefined, undefined, loaded);
+      expect(resolved.options.macros?.enabled).toBe(false);
+      expect(resolved.options.marks?.enabled).toBe(false);
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.reflow",
+          key: "zq",
+          args: { action: "reflow" },
+          modes: ["visual", "visualLine", "visualBlock"],
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("re-evaluates root config on every load", async () => {
     const f = fixture();
     const loadKey = "__piVimModeRootLoadCount";

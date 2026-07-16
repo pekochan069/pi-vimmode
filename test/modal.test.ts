@@ -2085,6 +2085,37 @@ describe("Ex command-line modal behavior", () => {
     expect(visual.state.pending).toBeUndefined();
   });
 
+  test("exact semantic actions win when a stale remap survives resolution", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }],
+          },
+        },
+      },
+    }).options;
+    const conflictingOptions: ModalOptions = {
+      ...actionOptions,
+      keymap: {
+        ...actionOptions.keymap!,
+        remaps: { accepted: [{ key: ",u", inputs: ["l"], modes: ["normal"] }] },
+      },
+    };
+
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "hello",
+      p(0, 0),
+      [",", "u"],
+      conflictingOptions,
+    );
+
+    expect(result.text).toBe("> hello");
+    expect(result.effects.some((effect) => effect.type === "playMacro")).toBe(false);
+  });
+
   test("keybound prompt transform actions report no-op feedback and skip dot-repeat", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: {

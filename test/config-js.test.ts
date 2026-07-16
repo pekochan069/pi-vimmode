@@ -352,6 +352,60 @@ export default (vim) => {
     expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.reflow");
   });
 
+  test("project leader actions override lower JS remaps after final expansion", () => {
+    const result = resolveVimOptions(
+      undefined,
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: {
+            actions: { "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }] },
+          },
+        },
+      },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: ",u", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+  });
+
+  test("project escape mappings override lower JS remaps in visual scopes", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { escape: ["<D-j>"] } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "remap",
+              key: "super+j",
+              inputs: ["l"],
+              modes: ["visual", "visualLine", "visualBlock"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    for (const scope of ["visual", "visualLine", "visualBlock"] as const) {
+      expect(result.plan.scopes[scope].exact["super+j"]?.kind).toBe("escape");
+    }
+  });
+
   test("invalid remap modes are dropped", () => {
     const result = resolveVimOptions(undefined, undefined, {
       appendKeymap: true,

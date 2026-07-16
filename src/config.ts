@@ -1792,17 +1792,25 @@ function keymapOverlayFromLayers(layers: readonly PartialKeymapOptions[]): Parti
   return overlay;
 }
 
-function projectExactMappings(keymap: PartialKeymapOptions): ProjectExactMapping[] {
+function projectExactMappings(
+  keymap: PartialKeymapOptions,
+  leader?: string | null,
+): ProjectExactMapping[] {
   const mappings: ProjectExactMapping[] = [];
+  const add = (key: string, modes: readonly VimMode[]) => {
+    const finalKey = leader === undefined ? key : resolvedLeaderKey(key, leader ?? undefined);
+    if (finalKey) mappings.push({ key: finalKey, modes });
+  };
   const addRecord = (
     record: Partial<Record<string, readonly string[]>> | undefined,
     modes: readonly VimMode[],
   ) => {
     for (const bindings of Object.values(record ?? {})) {
-      for (const key of bindings ?? []) mappings.push({ key, modes });
+      for (const key of bindings ?? []) add(key, modes);
     }
   };
 
+  for (const key of keymap.escape ?? []) add(key, ["visual", "visualLine", "visualBlock"]);
   addRecord(keymap.operators, ACTION_BINDING_MODES);
   addRecord(keymap.motions, ACTION_BINDING_MODES);
   addRecord(keymap.commands, ["normal"]);
@@ -1811,11 +1819,11 @@ function projectExactMappings(keymap: PartialKeymapOptions): ProjectExactMapping
   addRecord(keymap.insert, ["insert"]);
   for (const bindings of Object.values(keymap.actions ?? {})) {
     for (const binding of bindings ?? []) {
-      mappings.push({ key: binding.key, modes: binding.modes ?? ACTION_BINDING_MODES });
+      add(binding.key, binding.modes ?? ACTION_BINDING_MODES);
     }
   }
   for (const remap of keymap.remaps?.accepted ?? []) {
-    mappings.push({ key: remap.key, modes: remap.modes ?? ACTION_BINDING_MODES });
+    add(remap.key, remap.modes ?? ACTION_BINDING_MODES);
   }
   return mappings;
 }
@@ -1823,9 +1831,12 @@ function projectExactMappings(keymap: PartialKeymapOptions): ProjectExactMapping
 function applyProjectExactPrecedence(
   lowerLayers: readonly PartialKeymapOptions[],
   project: PartialKeymapOptions,
+  leader: string | undefined,
 ): void {
-  for (const mapping of projectExactMappings(project)) {
-    for (const layer of lowerLayers) removeJsMappings(layer, mapping.key, mapping.modes);
+  for (const mapping of projectExactMappings(project, leader ?? null)) {
+    for (const layer of lowerLayers) {
+      removeJsMappings(layer, mapping.key, mapping.modes, leader ?? null);
+    }
   }
 }
 
@@ -1866,6 +1877,14 @@ function expandLeaderSequence(
     sequence: context.expand ? sequence.replace(LEADER_TOKEN_PATTERN, context.leader) : sequence,
     usesLeader: true,
   };
+}
+
+function resolvedLeaderKey(sequence: string, leader: string | undefined): string | undefined {
+  return expandLeaderSequence(sequence, "project mapping", {
+    leader,
+    warnings: [],
+    expand: true,
+  }).sequence;
 }
 
 function expandBindingArray(
@@ -2152,23 +2171,51 @@ function rejectedActionWarning(
   return `resolved settings: rejected piVimMode.keymap.actions.${binding.actionId}.${binding.key} in ${mode}: ${reason}`;
 }
 
+type RejectedActionBindings = Map<ResolvedVimActionBinding, Map<VimActionBindingMode, string>>;
+
+function uniqueActionBindings(
+  bindings: readonly ResolvedVimActionBinding[],
+): ResolvedVimActionBinding[] {
+  const candidates: ResolvedVimActionBinding[] = [];
+  const seen = new Set<string>();
+  for (const binding of bindings) {
+    const modes = [...actionBindingModes(binding)].sort().join(",");
+    const key = `${binding.actionId}\0${binding.key}\0${modes}\0${JSON.stringify(binding.args ?? {})}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(binding);
+  }
+  return candidates;
+}
+
+function collectAcceptedActionBindings(
+  candidates: readonly ResolvedVimActionBinding[],
+  rejected: RejectedActionBindings,
+  warnings: string[],
+): ResolvedVimActionBinding[] {
+  const accepted: ResolvedVimActionBinding[] = [];
+  for (const binding of candidates) {
+    const modes = actionBindingModes(binding);
+    const acceptedModes = modes.filter((mode) => !rejected.get(binding)?.has(mode));
+    for (const [mode, reason] of rejected.get(binding) ?? []) {
+      warnings.push(rejectedActionWarning(binding, mode, reason));
+    }
+    if (acceptedModes.length === 0) continue;
+    accepted.push(
+      acceptedModes.length === modes.length ? binding : { ...binding, modes: acceptedModes },
+    );
+  }
+  return accepted;
+}
+
 function resolveActionBindings(
   keymap: ResolvedVimKeymap,
   promptTransforms: ResolvedVimPromptTransforms,
   projectExactMappings: readonly ProjectExactMapping[] = [],
 ): { accepted: ResolvedVimActionBinding[]; warnings: string[] } {
   const warnings: string[] = [];
-  const candidates: ResolvedVimActionBinding[] = [];
-  const seenSameAction = new Set<string>();
-  for (const binding of keymap.actions.accepted) {
-    const modes = [...actionBindingModes(binding)].sort().join(",");
-    const dedupeKey = `${binding.actionId}\0${binding.key}\0${modes}\0${JSON.stringify(binding.args ?? {})}`;
-    if (seenSameAction.has(dedupeKey)) continue;
-    seenSameAction.add(dedupeKey);
-    candidates.push(binding);
-  }
-
-  const rejected = new Map<ResolvedVimActionBinding, Map<VimActionBindingMode, string>>();
+  const candidates = uniqueActionBindings(keymap.actions.accepted);
+  const rejected: RejectedActionBindings = new Map();
   const reject = (
     binding: ResolvedVimActionBinding,
     mode: VimActionBindingMode,
@@ -2238,19 +2285,10 @@ function resolveActionBindings(
     }
   }
 
-  const accepted: ResolvedVimActionBinding[] = [];
-  for (const binding of candidates) {
-    const modes = actionBindingModes(binding);
-    const acceptedModes = modes.filter((mode) => !isRejected(binding, mode));
-    for (const [mode, reason] of rejected.get(binding) ?? []) {
-      warnings.push(rejectedActionWarning(binding, mode, reason));
-    }
-    if (acceptedModes.length === 0) continue;
-    accepted.push(
-      acceptedModes.length === modes.length ? binding : { ...binding, modes: acceptedModes },
-    );
-  }
-  return { accepted, warnings };
+  return {
+    accepted: collectAcceptedActionBindings(candidates, rejected, warnings),
+    warnings,
+  };
 }
 
 function rejectShowKeybindingsConflicts(keymap: ResolvedVimKeymap): string[] {
@@ -2409,18 +2447,23 @@ function removeJsMappings(
   keymap: PartialKeymapOptions,
   key: string,
   modes: readonly VimMode[],
+  leader?: string | null,
 ): void {
+  const matchesKey = (candidate: string) =>
+    leader === undefined
+      ? candidate === key
+      : resolvedLeaderKey(candidate, leader ?? undefined) === key;
   const removesMode = (mode: VimMode) => modes.includes(mode);
   if (keymap.insert && removesMode("insert")) {
     for (const action of Object.keys(keymap.insert) as Array<keyof ResolvedVimInsertKeymap>) {
-      keymap.insert[action] = keymap.insert[action]?.filter((binding) => binding !== key);
+      keymap.insert[action] = keymap.insert[action]?.filter((binding) => !matchesKey(binding));
     }
   }
   if (keymap.actions) {
     for (const [actionId, bindings] of Object.entries(keymap.actions)) {
       keymap.actions[actionId as BindablePromptTransformActionId] = (bindings ?? []).flatMap(
         (binding) => {
-          if (binding.key !== key) return [binding];
+          if (!matchesKey(binding.key)) return [binding];
           const remainingModes = remainingScopedModes(binding.modes, modes);
           return remainingModes.length ? [{ ...binding, modes: remainingModes }] : [];
         },
@@ -2429,7 +2472,7 @@ function removeJsMappings(
   }
   if (keymap.remaps) {
     keymap.remaps.accepted = keymap.remaps.accepted.flatMap((mapping) => {
-      if (mapping.key !== key) return [mapping];
+      if (!matchesKey(mapping.key)) return [mapping];
       const remainingModes = remainingScopedModes(mapping.modes, modes);
       return remainingModes.length ? [{ ...mapping, modes: remainingModes }] : [];
     });
@@ -2625,19 +2668,61 @@ function applyProjectLayer(
   if (project.preset) {
     const preset = presetOptions(project.preset);
     mergePartialOptions(options, preset);
-    if (preset.keymap) {
-      applyProjectExactPrecedence(keymapLayers, preset.keymap);
-      keymapLayers.push(preset.keymap);
-      projectLayers.push(preset.keymap);
-    }
+    if (preset.keymap) projectLayers.push(preset.keymap);
   }
-  if (project.keymap) applyProjectExactPrecedence(keymapLayers, project.keymap);
   mergePartialOptions(options, project);
-  if (project.keymap) {
-    keymapLayers.push(project.keymap);
-    projectLayers.push(project.keymap);
+  if (project.keymap) projectLayers.push(project.keymap);
+  for (const layer of projectLayers) {
+    applyProjectExactPrecedence(keymapLayers, layer, options.leader);
+    keymapLayers.push(layer);
   }
   return projectLayers;
+}
+
+function compileResolvedKeymap(
+  options: ResolvedVimEditorOptions,
+  keymapLayers: PartialKeymapOptions[],
+  projectKeymapLayers: readonly PartialKeymapOptions[],
+  warnings: string[],
+): VimConfigPlan {
+  const keymapResolution =
+    keymapLayers.length > 0 ? resolveKeymapFromLayers(keymapLayers, options.leader) : undefined;
+  if (keymapResolution) {
+    options.keymap = keymapResolution.keymap;
+    warnings.push(...keymapResolution.warnings);
+  }
+
+  const projectMappings = projectKeymapLayers.flatMap((layer) =>
+    projectExactMappings(layer, options.leader ?? null),
+  );
+  let keymap = options.keymap ?? DEFAULT_VIM_KEYMAP;
+  let keymapWarnings = rejectShowKeybindingsConflicts(keymap);
+  let actionBindings = resolveActionBindings(
+    keymap,
+    options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+    projectMappings,
+  );
+  const acceptedLeaderAction = actionBindings.accepted.some((binding) =>
+    keymapResolution?.leaderActionBindings.has(binding),
+  );
+  if (
+    keymapResolution &&
+    keymap.leader &&
+    !keymapResolution.usesNonActionLeader &&
+    !acceptedLeaderAction
+  ) {
+    keymap = resolveKeymapFromLayers(keymapLayers, options.leader, false).keymap;
+    options.keymap = keymap;
+    keymapWarnings = rejectShowKeybindingsConflicts(keymap);
+    actionBindings = resolveActionBindings(
+      keymap,
+      options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+      projectMappings,
+    );
+  }
+  if (options.keymap) options.keymap.actions = { accepted: actionBindings.accepted };
+  warnings.push(...keymapWarnings, ...actionBindings.warnings, ...detectKeymapConflicts(keymap));
+  return createVimConfigPlan(options, warnings);
 }
 
 export function resolveVimOptions(
@@ -2692,45 +2777,9 @@ export function resolveVimOptions(
   const projectPiVimMode = isRecord(projectSettings) ? projectSettings.piVimMode : undefined;
   const parsedProject = parsePiVimMode(projectPiVimMode, "project settings");
   const projectKeymapLayers = applyProjectLayer(options, keymapLayers, parsedProject.partial);
-  let keymapResolution: ReturnType<typeof resolveKeymapFromLayers> | undefined;
-  if (keymapLayers.length > 0) {
-    keymapResolution = resolveKeymapFromLayers(keymapLayers, options.leader);
-    options.keymap = keymapResolution.keymap;
-    warnings.push(...keymapResolution.warnings);
-  }
   warnings.push(...parsedProject.warnings);
 
-  const projectMappings = projectKeymapLayers.flatMap(projectExactMappings);
-  let keymap = options.keymap ?? DEFAULT_VIM_KEYMAP;
-  let keymapWarnings = rejectShowKeybindingsConflicts(keymap);
-  let actionBindings = resolveActionBindings(
-    keymap,
-    options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
-    projectMappings,
-  );
-  const acceptedLeaderAction = actionBindings.accepted.some((binding) =>
-    keymapResolution?.leaderActionBindings.has(binding),
-  );
-  if (
-    keymapResolution &&
-    keymap.leader &&
-    !keymapResolution.usesNonActionLeader &&
-    !acceptedLeaderAction
-  ) {
-    keymap = resolveKeymapFromLayers(keymapLayers, options.leader, false).keymap;
-    options.keymap = keymap;
-    keymapWarnings = rejectShowKeybindingsConflicts(keymap);
-    actionBindings = resolveActionBindings(
-      keymap,
-      options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
-      projectMappings,
-    );
-  }
-  if (options.keymap) options.keymap.actions = { accepted: actionBindings.accepted };
-  warnings.push(...keymapWarnings, ...actionBindings.warnings);
-  warnings.push(...detectKeymapConflicts(keymap));
-
-  const plan = createVimConfigPlan(options, warnings);
+  const plan = compileResolvedKeymap(options, keymapLayers, projectKeymapLayers, warnings);
   return {
     plan,
     options: plan.options,

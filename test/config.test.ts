@@ -1548,6 +1548,31 @@ describe("vim config parsing", () => {
     expect(result.warnings.join("\n")).not.toContain("conflicts with commands.undo");
   });
 
+  test("project leader actions override inherited grammar after final leader expansion", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: [",u"] } } } },
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: {
+            actions: { "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }] },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: ",u",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+    expect(result.warnings.join("\n")).not.toContain("conflicts with commands.undo");
+  });
+
   test("project action bindings replace global bindings and empty arrays unbind", () => {
     const replaced = resolveVimOptions(
       { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },

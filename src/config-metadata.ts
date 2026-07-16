@@ -11,7 +11,11 @@ import {
   KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
   KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
-import { mappingScopesForKeymapEntry, type VimMappingScope } from "./mapping-scopes.ts";
+import {
+  mappingScopesForKeymapEntry,
+  type VimMappingFamily,
+  type VimMappingScope,
+} from "./mapping-scopes.ts";
 import { PROMPT_TRANSFORM_ACTIONS } from "./prompt-transform-actions.ts";
 
 export { VIM_MAPPING_SCOPES, type VimMappingScope } from "./mapping-scopes.ts";
@@ -27,7 +31,7 @@ export type VimActionMetadata = {
 };
 
 function descriptorMetadata(
-  family: string,
+  family: VimMappingFamily,
   descriptors: Record<string, { defaults: readonly string[] }>,
 ): VimActionMetadata[] {
   return Object.entries(descriptors).map(([action, descriptor]) => ({

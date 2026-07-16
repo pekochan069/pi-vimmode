@@ -389,6 +389,7 @@ export type VimConfigLoadResult = {
   plan: VimConfigPlan;
   options: ResolvedVimEditorOptions;
   warnings: readonly string[];
+  fatal?: boolean;
 };
 
 export type VimConfigPaths = {
@@ -1791,10 +1792,8 @@ function keymapOverlayFromLayers(layers: readonly PartialKeymapOptions[]): Parti
   return overlay;
 }
 
-function projectExactMappings(
-  keymap: PartialKeymapOptions,
-): Array<{ key: string; modes: readonly VimMode[] }> {
-  const mappings: Array<{ key: string; modes: readonly VimMode[] }> = [];
+function projectExactMappings(keymap: PartialKeymapOptions): ProjectExactMapping[] {
+  const mappings: ProjectExactMapping[] = [];
   const addRecord = (
     record: Partial<Record<string, readonly string[]>> | undefined,
     modes: readonly VimMode[],
@@ -2118,14 +2117,18 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
   if (partial.workbench) target.workbench = { ...target.workbench, ...partial.workbench };
 }
 
-type ActionBindingConflict = { rejected: boolean; reason?: string };
+type ProjectExactMapping = { key: string; modes: readonly VimMode[] };
 
-function actionModesOverlap(
-  left: readonly VimActionBindingMode[] | undefined,
-  right: readonly VimActionBindingMode[] | undefined,
+function actionBindingModes(binding: ResolvedVimActionBinding): readonly VimActionBindingMode[] {
+  return binding.modes ?? ACTION_BINDING_MODES;
+}
+
+function projectClaimsExactMapping(
+  mappings: readonly ProjectExactMapping[],
+  key: string,
+  mode: VimActionBindingMode,
 ): boolean {
-  if (!left || !right) return true;
-  return left.some((mode) => right.includes(mode));
+  return mappings.some((mapping) => mapping.key === key && mapping.modes.includes(mode));
 }
 
 function disabledActionReason(
@@ -2141,83 +2144,111 @@ function disabledActionReason(
   return undefined;
 }
 
+function rejectedActionWarning(
+  binding: ResolvedVimActionBinding,
+  mode: VimActionBindingMode,
+  reason: string,
+): string {
+  return `resolved settings: rejected piVimMode.keymap.actions.${binding.actionId}.${binding.key} in ${mode}: ${reason}`;
+}
+
 function resolveActionBindings(
   keymap: ResolvedVimKeymap,
   promptTransforms: ResolvedVimPromptTransforms,
+  projectExactMappings: readonly ProjectExactMapping[] = [],
 ): { accepted: ResolvedVimActionBinding[]; warnings: string[] } {
   const warnings: string[] = [];
   const candidates: ResolvedVimActionBinding[] = [];
   const seenSameAction = new Set<string>();
   for (const binding of keymap.actions.accepted) {
-    const modes = [...(binding.modes ?? [])].sort().join(",");
+    const modes = [...actionBindingModes(binding)].sort().join(",");
     const dedupeKey = `${binding.actionId}\0${binding.key}\0${modes}\0${JSON.stringify(binding.args ?? {})}`;
     if (seenSameAction.has(dedupeKey)) continue;
     seenSameAction.add(dedupeKey);
     candidates.push(binding);
   }
 
-  const conflicts = new Map<ResolvedVimActionBinding, ActionBindingConflict>();
-  const byKey = new Map<string, ResolvedVimActionBinding[]>();
-  for (const binding of candidates) {
-    byKey.set(binding.key, [...(byKey.get(binding.key) ?? []), binding]);
-  }
+  const rejected = new Map<ResolvedVimActionBinding, Map<VimActionBindingMode, string>>();
+  const reject = (
+    binding: ResolvedVimActionBinding,
+    mode: VimActionBindingMode,
+    reason: string,
+  ) => {
+    const reasons = rejected.get(binding) ?? new Map<VimActionBindingMode, string>();
+    reasons.set(mode, reason);
+    rejected.set(binding, reasons);
+  };
+  const isRejected = (binding: ResolvedVimActionBinding, mode: VimActionBindingMode) =>
+    rejected.get(binding)?.has(mode) ?? false;
 
   for (const binding of candidates) {
     const reason = disabledActionReason(binding.actionId, promptTransforms);
-    if (reason) conflicts.set(binding, { rejected: true, reason });
+    if (reason) for (const mode of actionBindingModes(binding)) reject(binding, mode, reason);
   }
-  for (const [key, bindings] of byKey) {
-    const conflicting = bindings.filter((binding, index) =>
-      bindings.some(
-        (other, otherIndex) =>
-          otherIndex !== index &&
-          binding.actionId !== other.actionId &&
-          actionModesOverlap(binding.modes, other.modes),
-      ),
-    );
-    if (conflicting.length === 0) continue;
-    const ids = [...new Set(bindings.map((binding) => binding.actionId))].sort();
-    warnings.push(`resolved settings: duplicate action key ${key} for ${ids.join(" and ")}`);
-    for (const binding of bindings) {
-      conflicts.set(binding, { rejected: true, reason: `duplicate action key ${key}` });
+
+  for (const mode of ACTION_BINDING_MODES) {
+    const byKey = new Map<string, ResolvedVimActionBinding[]>();
+    for (const binding of candidates) {
+      if (!actionBindingModes(binding).includes(mode)) continue;
+      byKey.set(binding.key, [...(byKey.get(binding.key) ?? []), binding]);
+    }
+    for (const [key, bindings] of byKey) {
+      const ids = [...new Set(bindings.map((binding) => binding.actionId))].sort();
+      if (ids.length < 2) continue;
+      warnings.push(
+        `resolved settings: duplicate action key ${key} in ${mode} for ${ids.join(" and ")}`,
+      );
+      for (const binding of bindings) reject(binding, mode, `duplicate action key ${key}`);
     }
   }
 
-  const grammarBindings = grammarBindingsForKeymap(keymap);
+  const grammarEntries = grammarEntriesForKeymap(keymap);
   for (const binding of candidates) {
-    if (conflicts.get(binding)?.rejected) continue;
-    const reason = grammarConflictForActionKey(binding.key, grammarBindings);
-    if (reason) conflicts.set(binding, { rejected: true, reason });
+    for (const mode of actionBindingModes(binding)) {
+      if (isRejected(binding, mode)) continue;
+      const scopedGrammar = grammarEntries.filter((entry) =>
+        mappingScopesForKeymapEntry(entry.family, entry.id).includes(mode),
+      );
+      const exact = scopedGrammar.find((entry) => entry.sequence === binding.key);
+      if (exact && !projectClaimsExactMapping(projectExactMappings, binding.key, mode)) {
+        reject(binding, mode, `conflicts with ${exact.label}`);
+        continue;
+      }
+      const prefix = scopedGrammar.find((entry) =>
+        hasStrictPrefixConflict(entry.sequence, binding.key),
+      );
+      if (prefix) reject(binding, mode, `prefix-shadow conflict with ${prefix.label}`);
+    }
   }
 
-  const acceptedPrefixBindings: ResolvedVimActionBinding[] = [];
-  for (const binding of candidates) {
-    if (conflicts.get(binding)?.rejected) continue;
-    const prior = acceptedPrefixBindings.find(
-      (candidate) =>
-        actionModesOverlap(binding.modes, candidate.modes) &&
-        hasStrictPrefixConflict(binding.key, candidate.key),
-    );
-    if (prior) {
-      conflicts.set(binding, {
-        rejected: true,
-        reason: `strict-prefix conflict with ${prior.actionId}.${prior.key}`,
-      });
-    } else {
-      acceptedPrefixBindings.push(binding);
+  for (const mode of ACTION_BINDING_MODES) {
+    const acceptedInScope: ResolvedVimActionBinding[] = [];
+    for (const binding of candidates) {
+      if (!actionBindingModes(binding).includes(mode) || isRejected(binding, mode)) continue;
+      const prior = strictPrefixConflict(
+        acceptedInScope,
+        binding.key,
+        (candidate) => candidate.key,
+      );
+      if (prior) {
+        reject(binding, mode, `strict-prefix conflict with ${prior.actionId}.${prior.key}`);
+      } else {
+        acceptedInScope.push(binding);
+      }
     }
   }
 
   const accepted: ResolvedVimActionBinding[] = [];
   for (const binding of candidates) {
-    const conflict = conflicts.get(binding);
-    if (conflict?.rejected) {
-      warnings.push(
-        `resolved settings: rejected piVimMode.keymap.actions.${binding.actionId}.${binding.key}: ${conflict.reason}`,
-      );
-      continue;
+    const modes = actionBindingModes(binding);
+    const acceptedModes = modes.filter((mode) => !isRejected(binding, mode));
+    for (const [mode, reason] of rejected.get(binding) ?? []) {
+      warnings.push(rejectedActionWarning(binding, mode, reason));
     }
-    accepted.push(binding);
+    if (acceptedModes.length === 0) continue;
+    accepted.push(
+      acceptedModes.length === modes.length ? binding : { ...binding, modes: acceptedModes },
+    );
   }
   return { accepted, warnings };
 }
@@ -2494,6 +2525,14 @@ function hasStrictPrefixConflict(left: string, right: string): boolean {
   );
 }
 
+function strictPrefixConflict<T>(
+  accepted: readonly T[],
+  sequence: string,
+  getSequence: (candidate: T) => string,
+): T | undefined {
+  return accepted.find((candidate) => hasStrictPrefixConflict(getSequence(candidate), sequence));
+}
+
 export function createVimConfigPlan(
   options: ResolvedVimEditorOptions,
   warnings: readonly string[],
@@ -2544,8 +2583,10 @@ export function createVimConfigPlan(
     VIM_MAPPING_SCOPES.map((scope) => {
       const exact = Object.create(null) as Record<string, VimPlanBinding>;
       for (const candidate of candidates[scope]) {
-        const strictPrefix = Object.keys(exact).find((sequence) =>
-          hasStrictPrefixConflict(sequence, candidate.sequence),
+        const strictPrefix = strictPrefixConflict(
+          Object.keys(exact),
+          candidate.sequence,
+          (sequence) => sequence,
         );
         if (strictPrefix) {
           const warning = `resolved settings: rejected ${candidate.binding.id}.${candidate.sequence} in ${scope}: strict-prefix conflict with ${exact[strictPrefix]!.id}.${strictPrefix}`;
@@ -2579,18 +2620,24 @@ function applyProjectLayer(
   options: ResolvedVimEditorOptions,
   keymapLayers: PartialKeymapOptions[],
   project: PartialVimOptions,
-): void {
+): PartialKeymapOptions[] {
+  const projectLayers: PartialKeymapOptions[] = [];
   if (project.preset) {
     const preset = presetOptions(project.preset);
     mergePartialOptions(options, preset);
     if (preset.keymap) {
       applyProjectExactPrecedence(keymapLayers, preset.keymap);
       keymapLayers.push(preset.keymap);
+      projectLayers.push(preset.keymap);
     }
   }
   if (project.keymap) applyProjectExactPrecedence(keymapLayers, project.keymap);
   mergePartialOptions(options, project);
-  if (project.keymap) keymapLayers.push(project.keymap);
+  if (project.keymap) {
+    keymapLayers.push(project.keymap);
+    projectLayers.push(project.keymap);
+  }
+  return projectLayers;
 }
 
 export function resolveVimOptions(
@@ -2644,7 +2691,7 @@ export function resolveVimOptions(
 
   const projectPiVimMode = isRecord(projectSettings) ? projectSettings.piVimMode : undefined;
   const parsedProject = parsePiVimMode(projectPiVimMode, "project settings");
-  applyProjectLayer(options, keymapLayers, parsedProject.partial);
+  const projectKeymapLayers = applyProjectLayer(options, keymapLayers, parsedProject.partial);
   let keymapResolution: ReturnType<typeof resolveKeymapFromLayers> | undefined;
   if (keymapLayers.length > 0) {
     keymapResolution = resolveKeymapFromLayers(keymapLayers, options.leader);
@@ -2653,11 +2700,13 @@ export function resolveVimOptions(
   }
   warnings.push(...parsedProject.warnings);
 
+  const projectMappings = projectKeymapLayers.flatMap(projectExactMappings);
   let keymap = options.keymap ?? DEFAULT_VIM_KEYMAP;
   let keymapWarnings = rejectShowKeybindingsConflicts(keymap);
   let actionBindings = resolveActionBindings(
     keymap,
     options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+    projectMappings,
   );
   const acceptedLeaderAction = actionBindings.accepted.some((binding) =>
     keymapResolution?.leaderActionBindings.has(binding),
@@ -2674,6 +2723,7 @@ export function resolveVimOptions(
     actionBindings = resolveActionBindings(
       keymap,
       options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS,
+      projectMappings,
     );
   }
   if (options.keymap) options.keymap.actions = { accepted: actionBindings.accepted };
@@ -2681,7 +2731,12 @@ export function resolveVimOptions(
   warnings.push(...detectKeymapConflicts(keymap));
 
   const plan = createVimConfigPlan(options, warnings);
-  return { plan, options: plan.options, warnings: plan.diagnostics.warnings };
+  return {
+    plan,
+    options: plan.options,
+    warnings: plan.diagnostics.warnings,
+    fatal: jsConfig?.kind === "fatal",
+  };
 }
 
 function readJsonFile(
@@ -2723,7 +2778,12 @@ export async function loadVimOptions(paths: VimConfigPaths = {}): Promise<VimCon
 
   const warnings = [...globalRead.warnings, ...projectRead.warnings, ...resolved.warnings];
   const plan = createVimConfigPlan(resolved.options, warnings);
-  return { plan, options: plan.options, warnings: plan.diagnostics.warnings };
+  return {
+    plan,
+    options: plan.options,
+    warnings: plan.diagnostics.warnings,
+    fatal: resolved.fatal,
+  };
 }
 
 export function keymapForOptions(options: ResolvedVimEditorOptions): ResolvedVimKeymap {

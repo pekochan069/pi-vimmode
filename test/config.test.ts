@@ -1520,6 +1520,34 @@ describe("vim config parsing", () => {
     }
   });
 
+  test("project exact actions override inherited grammar in only claimed scopes", () => {
+    const result = resolveVimOptions(undefined, {
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "u", modes: ["normal"] }],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: "u",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact.u).toEqual({
+      kind: "action",
+      id: "prompt.transform.quote",
+      args: { action: "quote" },
+    });
+    expect(result.plan.scopes.visual.exact.u).toBeUndefined();
+    expect(result.warnings.join("\n")).not.toContain("conflicts with commands.undo");
+  });
+
   test("project action bindings replace global bindings and empty arrays unbind", () => {
     const replaced = resolveVimOptions(
       { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
@@ -1660,6 +1688,28 @@ describe("vim config parsing", () => {
     expect(result.warnings).toEqual([
       expect.stringContaining("strict-prefix conflict with prompt.transform.quote.za"),
     ]);
+  });
+
+  test("keeps non-conflicting scopes from one multi-scope action binding", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "za", modes: ["normal"] }],
+            "prompt.transform.reflow": [{ key: "zab", modes: ["normal", "visual"] }],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toContainEqual({
+      key: "zab",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+      modes: ["visual"],
+    });
+    expect(result.plan.scopes.visual.exact.zab?.id).toBe("prompt.transform.reflow");
+    expect(result.plan.scopes.normal.exact.zab).toBeUndefined();
   });
 
   test("rejects action conflicts but allows shared non-executable prefixes", () => {

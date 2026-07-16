@@ -91,6 +91,7 @@ function createLifecycleHarness(
   const createdEditors: FakeEditor[] = [];
   const shutdownCallbacks: Array<(() => void) | undefined> = [];
   const warnings: string[][] = [];
+  const fatalLoads: boolean[] = [];
   let loadIndex = 0;
 
   const pi = {
@@ -105,10 +106,17 @@ function createLifecycleHarness(
   registerVimLifecycle(pi as never, {
     loadOptions: (paths) => {
       loadCalls.push(paths);
-      const option = options[Math.min(loadIndex, options.length - 1)]!;
+      const index = Math.min(loadIndex, options.length - 1);
+      const option = options[index]!;
       const warning = warnings[Math.min(loadIndex, warnings.length - 1)] ?? [];
+      const fatal = fatalLoads[loadIndex] ?? false;
       loadIndex += 1;
-      return { plan: createVimConfigPlan(option, warning), options: option, warnings: warning };
+      return {
+        plan: createVimConfigPlan(option, warning),
+        options: option,
+        warnings: warning,
+        fatal,
+      };
     },
     createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
@@ -132,7 +140,16 @@ function createLifecycleHarness(
     },
   });
 
-  return { hooks, commands, scheduled, loadCalls, createdEditors, shutdownCallbacks, warnings };
+  return {
+    hooks,
+    commands,
+    scheduled,
+    loadCalls,
+    createdEditors,
+    shutdownCallbacks,
+    warnings,
+    fatalLoads,
+  };
 }
 
 describe("vim extension lifecycle", () => {
@@ -324,6 +341,26 @@ describe("vim extension lifecycle", () => {
       [],
       ["bad config"],
     ]);
+  });
+
+  test("fatal reload updates diagnostics but preserves last-known-good options", () => {
+    const { hooks, fatalLoads, warnings, createdEditors } = createLifecycleHarness();
+    fatalLoads.push(false, true);
+    warnings.push([], ["fatal JS config"]);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+    hooks.get("agent_end")?.({}, ctx);
+    factory({}, {}, {});
+
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "insert"]);
+    expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
+      [],
+      ["fatal JS config"],
+    ]);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 
   test("delayed reinstall refreshes settings and catches stale context failures", () => {

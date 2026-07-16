@@ -8,7 +8,8 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 export type CursorStyles = Record<VimMode, CursorStyle>;
 
-export type VimPreset = "minimal" | "prompt-safe" | "vim-heavy";
+export const VIM_PRESETS = ["minimal", "prompt-safe", "vim-heavy"] as const;
+export type VimPreset = (typeof VIM_PRESETS)[number];
 
 export type VimNoopFeedback = "off" | "status";
 

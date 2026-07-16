@@ -16,10 +16,16 @@ function fixture() {
   };
 }
 
+function operations(result: Awaited<ReturnType<typeof loadVimJsConfig>>) {
+  expect(result.kind).toBe("success");
+  if (result.kind !== "success") throw new Error("expected successful JS config");
+  return result.operations;
+}
+
 describe("vim JS config loading", () => {
   test("missing JS config is quiet", async () => {
     const result = await loadVimJsConfig(join(tmpdir(), "missing-pi-vimmode.config.js"));
-    expect(result).toEqual({ warnings: [] });
+    expect(result).toEqual({ kind: "missing", warnings: [] });
   });
 
   test("loads vim.prompt builtins through string keybindings", async () => {
@@ -34,18 +40,28 @@ export default (vim) => {
 `);
       const result = await loadVimJsConfig(f.path);
       expect(result.warnings).toEqual([]);
-      expect(result.appendKeymap).toBe(true);
-      expect(result.partial).toEqual({
-        keymap: {
-          insert: { deleteWordBackward: ["alt+w"] },
-          actions: {
-            "prompt.transform.reflow": [{ key: "zq", args: { width: 88 }, modes: ["normal"] }],
-            "prompt.transform.quote": [
-              { key: "z>", args: undefined, modes: ["visual", "visualLine", "visualBlock"] },
-            ],
+      expect(operations(result)).toEqual([
+        { kind: "map", mapping: { kind: "insert", action: "deleteWordBackward", key: "alt+w" } },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "zq",
+            args: { width: 88 },
+            modes: ["normal"],
           },
         },
-      });
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "z>",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ]);
     } finally {
       f.cleanup();
     }
@@ -65,12 +81,34 @@ export default (vim) => {
 `);
       const loaded = await loadVimJsConfig(f.path);
       expect(loaded.warnings).toEqual([]);
-      expect(loaded.partial?.leader).toBe(" ");
-      expect(loaded.partial?.keymap?.actions?.["prompt.transform.quote"]?.[0]).toEqual({
-        key: "<leader>q",
-        args: undefined,
-        modes: ["normal"],
-      });
+      expect(operations(loaded)).toEqual([
+        { kind: "leaf", path: "leader", value: "," },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "<leader>q",
+            args: undefined,
+            modes: ["normal"],
+          },
+        },
+        { kind: "leaf", path: "leader", value: " " },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "<leader>r",
+            args: {},
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: { kind: "remap", key: "<leader>x", inputs: ["leader"], modes: ["normal"] },
+        },
+      ]);
 
       const resolved = resolveVimOptions(undefined, undefined, loaded);
       expect(resolved.options.leader).toBe(" ");
@@ -93,12 +131,13 @@ export default (vim) => {
 export default (vim) => {
   vim.g.mapleader = ",";
   vim.g.mapleader = "too-long";
+  if (vim.g.mapleader !== ",") throw new Error("invalid write replaced staged leader");
   vim.keymap.set("n", "<leader>q", vim.prompt.quote());
   vim.g.mapleader = null;
 };
 `);
       const loaded = await loadVimJsConfig(f.path);
-      expect(loaded.partial?.leader).toBeNull();
+      expect(operations(loaded).at(-1)).toEqual({ kind: "leaf", path: "leader", value: null });
       expect(loaded.warnings).toEqual([
         "global JS config: vim.g.mapleader must be one printable character or null",
       ]);
@@ -274,21 +313,25 @@ export default (vim) => {
 };
 `);
       const result = await loadVimJsConfig(f.path);
-      expect(result.partial).toEqual({
-        keymap: {
-          remaps: {
-            accepted: [
-              { key: "zz", inputs: ["l", "l", "l", "l"], modes: ["normal"] },
-              {
-                key: "ZD",
-                inputs: [":", "v", "i", "m", "d", "o", "c", "t", "o", "r", "\r"],
-                modes: ["normal"],
-              },
-              { key: "ZE", inputs: ["i", "\x1b", "\t"], modes: ["normal"] },
-            ],
+      expect(operations(result)).toEqual([
+        {
+          kind: "map",
+          mapping: { kind: "remap", key: "zz", inputs: ["l", "l", "l", "l"], modes: ["normal"] },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "remap",
+            key: "ZD",
+            inputs: [":", "v", "i", "m", "d", "o", "c", "t", "o", "r", "\r"],
+            modes: ["normal"],
           },
         },
-      });
+        {
+          kind: "map",
+          mapping: { kind: "remap", key: "ZE", inputs: ["i", "\x1b", "\t"], modes: ["normal"] },
+        },
+      ]);
       expect(result.warnings).toEqual([]);
     } finally {
       f.cleanup();
@@ -306,7 +349,7 @@ export default (vim) => {
 };
 `);
       const result = await loadVimJsConfig(f.path);
-      expect(result.partial).toEqual({ leader: "," });
+      expect(operations(result)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
       expect(result.warnings).toEqual([
         expect.stringContaining("keymap lhs contains protected key ctrl+p"),
         expect.stringContaining("keymap lhs contains protected key ctrl+p"),
@@ -321,10 +364,284 @@ export default (vim) => {
     try {
       f.write(`export default (vim) => vim.keymap.set("i", "aa", "bb");`);
       const result = await loadVimJsConfig(f.path);
-      expect(result.partial).toEqual({});
+      expect(operations(result)).toEqual([]);
       expect(result.warnings).toEqual([
         "global JS config: string rhs keymaps only support normal and visual modes",
       ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("unknown leaf writes warn without discarding valid staged siblings", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.g.unknown = true;
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(loaded.warnings).toEqual(["global JS config: unknown vim.g property unknown"]);
+      expect(operations(loaded)).toEqual([
+        { kind: "leaf", path: "leader", value: "," },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "zq",
+            args: undefined,
+            modes: ["normal"],
+          },
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("stages preset and scoped unmap operations in source order", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.preset = "minimal";
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+  vim.keymap.set("v", "zq", vim.prompt.reflow());
+  vim.keymap.set("n", "zq", null);
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(operations(loaded)).toEqual([
+        { kind: "preset", preset: "minimal" },
+        { kind: "leaf", path: "leader", value: "," },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "zq",
+            args: undefined,
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "zq",
+            args: {},
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+        { kind: "unmap", key: "zq", modes: ["normal"] },
+      ]);
+
+      const resolved = resolveVimOptions(undefined, undefined, loaded);
+      expect(resolved.options.macros?.enabled).toBe(false);
+      expect(resolved.options.marks?.enabled).toBe(false);
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.reflow",
+          key: "zq",
+          args: { action: "reflow" },
+          modes: ["visual", "visualLine", "visualBlock"],
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("unmaps inherited mappings in only selected scopes", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => vim.keymap.set("n", "zq", null);`);
+      const loaded = await loadVimJsConfig(f.path);
+      const resolved = resolveVimOptions(
+        {
+          piVimMode: {
+            keymap: { actions: { "prompt.transform.quote": [{ key: "zq" }] } },
+          },
+        },
+        undefined,
+        loaded,
+      );
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.quote",
+          key: "zq",
+          args: { action: "quote" },
+          modes: ["visual", "visualLine", "visualBlock"],
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("keeps mappings declared after an unmap", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.keymap.set("n", "zq", null);
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+};`);
+      const resolved = resolveVimOptions(undefined, undefined, await loadVimJsConfig(f.path));
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.quote",
+          key: "zq",
+          args: { action: "quote" },
+          modes: ["normal"],
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("re-evaluates root config on every load", async () => {
+    const f = fixture();
+    const loadKey = "__piVimModeRootLoadCount";
+    try {
+      f.write(`
+export default (vim) => {
+  globalThis[${JSON.stringify(loadKey)}] = (globalThis[${JSON.stringify(loadKey)}] ?? 0) + 1;
+  vim.g.mapleader = globalThis[${JSON.stringify(loadKey)}] === 1 ? "," : " ";
+};
+`);
+      const first = await loadVimJsConfig(f.path);
+      const second = await loadVimJsConfig(f.path);
+      expect(operations(first)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
+      expect(operations(second)).toEqual([{ kind: "leaf", path: "leader", value: " " }]);
+    } finally {
+      Reflect.deleteProperty(globalThis, loadKey);
+      f.cleanup();
+    }
+  });
+
+  test("returns fatal results without staged operations after import or export failure", async () => {
+    const importFailure = fixture();
+    const syntaxFailure = fixture();
+    const exportFailure = fixture();
+    try {
+      importFailure.write(`import "./missing-helper.js"; export default () => {};`);
+      const failedImport = await loadVimJsConfig(importFailure.path);
+      expect(failedImport.kind).toBe("fatal");
+      expect(failedImport.warnings[0]).toContain("failed to load");
+
+      syntaxFailure.write(`export default (`);
+      const failedSyntax = await loadVimJsConfig(syntaxFailure.path);
+      expect(failedSyntax.kind).toBe("fatal");
+      expect(failedSyntax.warnings[0]).toContain("failed to load");
+
+      exportFailure.write(`
+export default async (vim) => {
+  vim.g.mapleader = ",";
+  await Promise.resolve();
+  throw new Error("export failure");
+};
+`);
+      const failedExport = await loadVimJsConfig(exportFailure.path);
+      expect(failedExport).toEqual({
+        kind: "fatal",
+        warnings: ["global JS config: failed to load (export failure)"],
+      });
+
+      const resolved = resolveVimOptions(
+        { piVimMode: { startMode: "normal" } },
+        { piVimMode: { leader: " " } },
+        failedExport,
+      );
+      expect(resolved.options.startMode).toBe("normal");
+      expect(resolved.options.leader).toBe(" ");
+      expect(resolved.options.keymap?.actions.accepted).toEqual([]);
+    } finally {
+      importFailure.cleanup();
+      syntaxFailure.cleanup();
+      exportFailure.cleanup();
+    }
+  });
+
+  test("closes retained APIs after synchronous and asynchronous exports", async () => {
+    for (const asyncExport of [false, true]) {
+      const f = fixture();
+      const retainedKey = `__piVimModeRetained${asyncExport}`;
+      try {
+        f.write(`
+export default ${asyncExport ? "async " : ""}(vim) => {
+  globalThis[${JSON.stringify(retainedKey)}] = vim;
+  vim.g.mapleader = ",";
+  ${asyncExport ? "return Promise.resolve();" : ""}
+};
+`);
+        const loaded = await loadVimJsConfig(f.path);
+        const retained = Reflect.get(globalThis, retainedKey) as {
+          g: { mapleader: string | null };
+          keymap: { set(mode: string, lhs: string, rhs: string): void };
+        };
+        expect(() => {
+          retained.g.mapleader = " ";
+        }).toThrow("config session closed");
+        expect(() => retained.keymap.set("n", "zq", "q")).toThrow("config session closed");
+        expect(() => Object.defineProperty(retained.g, "mapleader", { value: " " })).toThrow(
+          "config session closed",
+        );
+        expect(operations(loaded)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
+      } finally {
+        Reflect.deleteProperty(globalThis, retainedKey);
+        f.cleanup();
+      }
+    }
+  });
+
+  test("closes synchronous exports before queued writes run", async () => {
+    const f = fixture();
+    const errorKey = "__piVimModeQueuedWriteError";
+    try {
+      f.write(`
+export default (vim) => {
+  vim.g.mapleader = ",";
+  queueMicrotask(() => {
+    try {
+      vim.g.mapleader = " ";
+    } catch (error) {
+      globalThis[${JSON.stringify(errorKey)}] = error.message;
+    }
+  });
+};
+`);
+      const loaded = await loadVimJsConfig(f.path);
+      expect(Reflect.get(globalThis, errorKey)).toBe("config session closed");
+      expect(operations(loaded)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
+    } finally {
+      Reflect.deleteProperty(globalThis, errorKey);
+      f.cleanup();
+    }
+  });
+
+  test("uses global JSON leader as staged read seed and freezes operation snapshots", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  if (vim.g.mapleader !== ",") throw new Error("missing global seed");
+  vim.keymap.set("n", "zq", vim.prompt.quote());
+};
+`);
+      const loaded = await loadVimJsConfig(f.path, { leader: "," });
+      const stagedOperations = operations(loaded);
+      expect(Object.isFrozen(stagedOperations)).toBe(true);
+      expect(Object.isFrozen(stagedOperations[0])).toBe(true);
+      expect(
+        Object.isFrozen(stagedOperations[0]?.kind === "map" ? stagedOperations[0].mapping : {}),
+      ).toBe(true);
     } finally {
       f.cleanup();
     }

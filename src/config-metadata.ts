@@ -11,18 +11,10 @@ import {
   KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
   KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
+import { mappingScopesForKeymapEntry, type VimMappingScope } from "./mapping-scopes.ts";
 import { PROMPT_TRANSFORM_ACTIONS } from "./prompt-transform-actions.ts";
 
-export const VIM_MAPPING_SCOPES = [
-  "normal",
-  "visual",
-  "visualLine",
-  "visualBlock",
-  "insert",
-  "operatorPending",
-] as const;
-
-export type VimMappingScope = (typeof VIM_MAPPING_SCOPES)[number];
+export { VIM_MAPPING_SCOPES, type VimMappingScope } from "./mapping-scopes.ts";
 
 type ActionSource = "keymap-descriptor" | "prompt-transform-registry" | "diagnostic-registry";
 
@@ -34,41 +26,28 @@ export type VimActionMetadata = {
   bindable: boolean;
 };
 
-const VISUAL_SCOPES = ["visual", "visualLine", "visualBlock"] as const;
-const NORMAL_AND_VISUAL_SCOPES = ["normal", ...VISUAL_SCOPES] as const;
 function descriptorMetadata(
   family: string,
   descriptors: Record<string, { defaults: readonly string[] }>,
-  scopes: (action: string) => readonly VimMappingScope[],
 ): VimActionMetadata[] {
   return Object.entries(descriptors).map(([action, descriptor]) => ({
     id: `${family}.${action}`,
     source: "keymap-descriptor",
     defaults: descriptor.defaults,
-    scopes: scopes(action),
+    scopes: mappingScopesForKeymapEntry(family, action),
     bindable: true,
   }));
 }
 
 export const VIM_ACTION_METADATA: readonly VimActionMetadata[] = [
-  ...descriptorMetadata("operator", KEYMAP_OPERATOR_DESCRIPTORS, () => NORMAL_AND_VISUAL_SCOPES),
-  ...descriptorMetadata("motion", KEYMAP_MOTION_DESCRIPTORS, (action) =>
-    action === "halfPageDown" || action === "halfPageUp"
-      ? NORMAL_AND_VISUAL_SCOPES
-      : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"],
-  ),
-  ...descriptorMetadata("command", KEYMAP_COMMAND_DESCRIPTORS, () => ["normal"]),
-  ...descriptorMetadata("macro", KEYMAP_MACRO_DESCRIPTORS, () => ["normal"]),
-  ...descriptorMetadata("mark", KEYMAP_MARK_DESCRIPTORS, (action) =>
-    action === "set" ? NORMAL_AND_VISUAL_SCOPES : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"],
-  ),
-  ...descriptorMetadata("insert", KEYMAP_INSERT_DESCRIPTORS, () => ["insert"]),
-  ...descriptorMetadata("textObject.kind", KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS, () => [
-    "operatorPending",
-  ]),
-  ...descriptorMetadata("textObject.target", KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS, () => [
-    "operatorPending",
-  ]),
+  ...descriptorMetadata("operator", KEYMAP_OPERATOR_DESCRIPTORS),
+  ...descriptorMetadata("motion", KEYMAP_MOTION_DESCRIPTORS),
+  ...descriptorMetadata("command", KEYMAP_COMMAND_DESCRIPTORS),
+  ...descriptorMetadata("macro", KEYMAP_MACRO_DESCRIPTORS),
+  ...descriptorMetadata("mark", KEYMAP_MARK_DESCRIPTORS),
+  ...descriptorMetadata("insert", KEYMAP_INSERT_DESCRIPTORS),
+  ...descriptorMetadata("textObject.kind", KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS),
+  ...descriptorMetadata("textObject.target", KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS),
   ...PROMPT_TRANSFORM_ACTIONS.map(({ id, modes }) => ({
     id,
     source: "prompt-transform-registry" as const,

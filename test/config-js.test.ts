@@ -235,6 +235,30 @@ export default (vim) => {
     expect(result.options.keymap?.commands.insertBefore).toEqual(["z"]);
   });
 
+  test("project exact action replaces inherited JS remap", () => {
+    const result = resolveVimOptions(
+      undefined,
+      {
+        piVimMode: {
+          keymap: { actions: { "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }] } },
+        },
+      },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "zq", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.quote");
+  });
+
   test("action bindings on same key survive in disjoint modes", () => {
     const result = resolveVimOptions(undefined, undefined, {
       appendKeymap: true,
@@ -264,6 +288,68 @@ export default (vim) => {
         modes: ["visual"],
       },
     ]);
+  });
+
+  test("plan preflights remap strict-prefix conflicts in concrete scope", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["za"] } } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "zab", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.za?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.zab).toBeUndefined();
+    expect(result.warnings).toEqual([
+      expect.stringContaining("remap.zab in normal: strict-prefix conflict with command.undo.za"),
+    ]);
+  });
+
+  test("latest same-scope JS exact mapping wins", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "zq",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "zq",
+            args: {},
+            modes: ["normal"],
+          },
+        },
+      ],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        actionId: "prompt.transform.reflow",
+        key: "zq",
+        args: { action: "reflow" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.reflow");
   });
 
   test("invalid remap modes are dropped", () => {

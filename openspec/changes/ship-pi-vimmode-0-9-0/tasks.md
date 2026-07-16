@@ -7,7 +7,7 @@
 ## 2. Trusted Configuration Core
 
 - [ ] 2.1 Implement [#36](https://github.com/pekochan069/pi-vimmode/issues/36): stage trusted JavaScript config as closed source-ordered transaction with frozen reads, field-local warnings, fatal results, exact late-write failure, and legacy API parity. **Blocked by:** #35.
-- [ ] 2.2 Implement [#37](https://github.com/pekochan069/pi-vimmode/issues/37): compile defaults, global JSON, JavaScript operations, and project JSON into one immutable scoped plan with final leader and project authority. **Blocked by:** #35 and #36.
+- [x] 2.2 Implement [#37](https://github.com/pekochan069/pi-vimmode/issues/37): compile defaults, global JSON, JavaScript operations, and project JSON into one immutable scoped plan with final leader and project authority. **Blocked by:** #35 and #36.
 
 ## 3. Public Config Behavior and Reload
 

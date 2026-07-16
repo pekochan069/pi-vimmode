@@ -3,6 +3,7 @@ import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-cod
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "./types.ts";
 
 import {
+  createVimConfigPlan,
   DEFAULT_VIM_OPTIONS,
   loadVimOptions,
   type VimConfigLoadResult,
@@ -45,8 +46,9 @@ export function registerVimLifecycle(
   pi: ExtensionAPI,
   dependencies: VimLifecycleDependencies = {},
 ) {
-  let currentOptions = dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS;
-  let currentDiagnostics: VimDiagnostics = { warnings: [] };
+  let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
+  let currentOptions = currentPlan.options;
+  let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
   let currentShutdown: (() => void) | undefined;
   let enabled = true;
   let agentBusy = false;
@@ -70,9 +72,10 @@ export function registerVimLifecycle(
   };
 
   const applyLoadedOptions = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    currentOptions = loaded.options;
-    currentDiagnostics = { warnings: [...loaded.warnings] };
-    ctx.ui.setStatus("pi-vimmode", loaded.warnings.length > 0 ? "vim ⚠" : "vim");
+    currentPlan = loaded.plan;
+    currentOptions = currentPlan.options;
+    currentDiagnostics = currentPlan.diagnostics;
+    ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };
 
   const refreshOptions = (ctx: ExtensionContext): boolean | Promise<boolean> => {
@@ -88,9 +91,11 @@ export function registerVimLifecycle(
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const warnings = [`global JS config: failed to load (${message})`];
       applyLoadedOptions(ctx, {
+        plan: createVimConfigPlan(currentOptions, warnings),
         options: currentOptions,
-        warnings: [`global JS config: failed to load (${message})`],
+        warnings,
       });
       return true;
     }

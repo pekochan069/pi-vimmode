@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 
-import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { createVimConfigPlan, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
 type HookName =
@@ -108,7 +108,7 @@ function createLifecycleHarness(
       const option = options[Math.min(loadIndex, options.length - 1)]!;
       const warning = warnings[Math.min(loadIndex, warnings.length - 1)] ?? [];
       loadIndex += 1;
-      return { options: option, warnings: warning };
+      return { plan: createVimConfigPlan(option, warning), options: option, warnings: warning };
     },
     createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);

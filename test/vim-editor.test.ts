@@ -258,13 +258,15 @@ describe("vim editor integration", () => {
   });
 
   test("constructor clones caller-owned nested keymap options", () => {
-    const options = resolveVimOptions({
-      piVimMode: {
-        startMode: "normal",
-        leader: ",",
-        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["<leader>k"] } },
-      },
-    }).options;
+    const options = structuredClone(
+      resolveVimOptions({
+        piVimMode: {
+          startMode: "normal",
+          leader: ",",
+          keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["<leader>k"] } },
+        },
+      }).options,
+    );
     const { editor } = createEditor(options);
     options.leader = ";";
     options.keymap!.leader = ";";
@@ -917,15 +919,17 @@ describe("vim editor integration", () => {
   });
 
   test("renders and clones a right-positioned status group", () => {
-    const options = resolveVimOptions({
-      piVimMode: {
-        startMode: "normal",
-        ui: {
-          status: { position: "right" },
-          mode: { labels: { normal: "COMMAND" } },
+    const options = structuredClone(
+      resolveVimOptions({
+        piVimMode: {
+          startMode: "normal",
+          ui: {
+            status: { position: "right" },
+            mode: { labels: { normal: "COMMAND" } },
+          },
         },
-      },
-    }).options;
+      }).options,
+    );
     const { editor } = createEditor(options);
     options.ui!.status.position = "left";
 

@@ -77,26 +77,29 @@ describe("vim config parsing", () => {
     expect(options.ui?.status.position).toBe("left");
   });
 
-  test("resolved defaults do not share mutable nested config fields", () => {
-    const options = resolveVimOptions(undefined).options;
+  test("compiles resolved options and scoped lookups into one immutable plan", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: { motions: { wordForward: ["zw"] } },
+        promptTransforms: { commands: { quote: ["qte"] } },
+      },
+    });
 
-    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
-    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
-    (options.ui!.status.items as unknown as string[]).push("mode");
-    if (options.ui) options.ui.mode.labels.normal = "COMMAND";
-
-    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForward).toEqual(["w"]);
-    expect(DEFAULT_VIM_OPTIONS.promptTransforms?.commands.quote).toEqual(["quote"]);
-    expect(DEFAULT_VIM_OPTIONS.ui?.status.items).toEqual([
-      "mode",
-      "pendingOperator",
-      "selection",
-      "cursorPosition",
-    ]);
-    expect(DEFAULT_VIM_OPTIONS.ui?.mode.labels.normal).toBe("NORMAL");
+    expect(result.plan.options).toBe(result.options);
+    expect(Object.isFrozen(result.plan)).toBe(true);
+    expect(Object.isFrozen(result.plan.options)).toBe(true);
+    expect(Object.isFrozen(result.plan.options.keymap?.motions.wordForward)).toBe(true);
+    expect(Object.isFrozen(result.plan.scopes)).toBe(true);
+    expect(result.plan.scopes.normal.exact.zw?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.normal.prefixes.z).toEqual(["zw"]);
+    expect(result.plan.scopes.operatorPending.exact.zw?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.insert.exact.zw).toBeUndefined();
+    expect(() =>
+      (result.plan.options.keymap!.motions.wordForward as unknown as string[]).push("custom-word"),
+    ).toThrow();
   });
 
-  test("resolved configured options do not share mutable nested config fields", () => {
+  test("immutable plan does not share configured nested fields", () => {
     const settings = {
       piVimMode: {
         keymap: { motions: { wordForward: ["q"] }, commands: { openLineBelow: ["n"] } },
@@ -108,12 +111,6 @@ describe("vim config parsing", () => {
       },
     };
     const options = resolveVimOptions(settings).options;
-
-    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
-    (options.keymap!.commands.openLineBelow as unknown as string[]).push("custom-open");
-    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
-    (options.ui!.status.items as unknown as string[]).push("cursorPosition");
-    if (options.ui) options.ui.mode.labels.normal = "NORMAL-MUTATED";
 
     expect(settings.piVimMode.keymap.motions.wordForward).toEqual(["q"]);
     expect(settings.piVimMode.keymap.commands.openLineBelow).toEqual(["n"]);
@@ -709,13 +706,13 @@ describe("vim config parsing", () => {
       );
     });
 
-    test("insert bindings survive cloning without sharing arrays with defaults", () => {
+    test("insert bindings compile as immutable arrays without sharing defaults", () => {
       const result = resolveVimOptions({
         piVimMode: {
           keymap: { insert: { openLineBelow: ["ctrl+j"] } },
         },
       });
-      (result.options.keymap!.insert.openLineBelow as unknown as string[]).push("ctrl+k");
+      expect(Object.isFrozen(result.options.keymap!.insert.openLineBelow)).toBe(true);
       expect(DEFAULT_VIM_OPTIONS.keymap?.insert.openLineBelow).toEqual([]);
     });
 
@@ -1629,6 +1626,40 @@ describe("vim config parsing", () => {
     expect(result.warnings).not.toEqual(
       expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
     );
+  });
+
+  test("rejects later strict-prefix action overlap per scope", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "za", modes: ["normal"] }],
+            "prompt.transform.reflow": [
+              { key: "zab", modes: ["normal"] },
+              { key: "zab", modes: ["visual"] },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: "za",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+      {
+        key: "zab",
+        actionId: "prompt.transform.reflow",
+        args: { action: "reflow" },
+        modes: ["visual"],
+      },
+    ]);
+    expect(result.warnings).toEqual([
+      expect.stringContaining("strict-prefix conflict with prompt.transform.quote.za"),
+    ]);
   });
 
   test("rejects action conflicts but allows shared non-executable prefixes", () => {

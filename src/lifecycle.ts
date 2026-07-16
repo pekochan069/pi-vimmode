@@ -21,7 +21,7 @@ type VimEditorFactory = (
 export type VimShutdownCallback = () => void;
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
-type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle" | "setAgentBusy">;
+type TrackedEditor = Pick<VimEditor, "reloadConfig" | "resetTerminalCursorStyle" | "setAgentBusy">;
 type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
@@ -131,6 +131,12 @@ function finishInstall(state: EditorState, ctx: ExtensionContext, force = false)
   state.hasInstalledFactory = true;
 }
 
+function reloadKnownEditors(state: EditorState): void {
+  for (const editor of state.editors) {
+    editor.reloadConfig(state.config.options(), state.config.diagnostics());
+  }
+}
+
 function installEditor(
   state: EditorState,
   ctx: ExtensionContext,
@@ -140,11 +146,13 @@ function installEditor(
     ctx.ui.setStatus("pi-vimmode", "vim off");
     return;
   }
+  const finish = () => {
+    reloadKnownEditors(state);
+    finishInstall(state, ctx, force);
+  };
   const refreshed = state.config.refresh(ctx);
-  if (refreshed instanceof Promise) {
-    return refreshed.then(() => finishInstall(state, ctx, force));
-  }
-  finishInstall(state, ctx, force);
+  if (refreshed instanceof Promise) return refreshed.then(finish);
+  finish();
 }
 
 function resetKnownEditors(state: EditorState): void {
@@ -215,6 +223,7 @@ function registerVimCommand(pi: ExtensionAPI, state: EditorState): void {
       }
       if (action === "reload") {
         await state.config.refresh(ctx);
+        reloadKnownEditors(state);
         if (state.enabled) finishInstall(state, ctx);
         ctx.ui.notify(
           `pi-vimmode ${state.enabled ? "reloaded" : "config reloaded (disabled)"}`,

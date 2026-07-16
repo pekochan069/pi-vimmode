@@ -42,6 +42,7 @@ type FakeEditor = {
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
   resetCount: number;
+  reloadConfig: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: () => void;
   setAgentBusy: (active: boolean) => void;
 };
@@ -125,6 +126,10 @@ function createLifecycleHarness(
         diagnostics,
         busyCalls: [],
         resetCount: 0,
+        reloadConfig: (options, diagnostics) => {
+          editor.options = options;
+          editor.diagnostics = diagnostics;
+        },
         resetTerminalCursorStyle: () => {
           editor.resetCount += 1;
         },
@@ -336,9 +341,9 @@ describe("vim extension lifecycle", () => {
       ["pi-vimmode", "vim"],
       ["pi-vimmode", "vim ⚠"],
     ]);
-    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["normal", "normal"]);
     expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
-      [],
+      ["bad config"],
       ["bad config"],
     ]);
   });
@@ -357,7 +362,7 @@ describe("vim extension lifecycle", () => {
 
     expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "insert"]);
     expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
-      [],
+      ["fatal JS config"],
       ["fatal JS config"],
     ]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
@@ -425,7 +430,7 @@ describe("vim extension lifecycle", () => {
     expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
     expect(ctx.ui.component).toBe(factory);
     expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode reloaded", "info"]);
-    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["normal", "normal"]);
   });
 
   test("vimmode command toggles editor off and on", async () => {

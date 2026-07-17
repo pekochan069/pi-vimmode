@@ -461,11 +461,10 @@ function exactBinding(
   mode?: VimActionBindingMode,
 ): Binding | undefined {
   const compiled = compiledKeymapFor(keymap);
-  const binding = compiled.exactBindings.get(sequence);
-  if (binding) return binding;
-  return compiled.actionBindings
+  const action = compiled.actionBindings
     .get(sequence)
-    ?.find((action) => actionBindingMatchesMode(action, mode));
+    ?.find((binding) => actionBindingMatchesMode(binding, mode));
+  return action ?? compiled.exactBindings.get(sequence);
 }
 
 function hasLongerPrefix(

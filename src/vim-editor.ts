@@ -221,8 +221,8 @@ export type VimEditorOptions = {
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private options: ResolvedVimEditorOptions;
-  private diagnostics: VimDiagnostics;
+  private readonly options: ResolvedVimEditorOptions;
+  private readonly diagnostics: VimDiagnostics;
   private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
@@ -249,13 +249,6 @@ export class VimEditor extends CustomEditor {
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
-  }
-
-  reloadConfig(options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics): void {
-    this.options = cloneOptions(options);
-    this.diagnostics = { warnings: [...diagnostics.warnings] };
-    this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
-    this.invalidate();
   }
 
   getVimMode(): VimMode {

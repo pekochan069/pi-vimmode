@@ -2025,6 +2025,17 @@ describe("Ex command-line modal behavior", () => {
     expect(reflowed.text).toBe("alpha beta gamma\ndelta epsilon");
   });
 
+  test("project semantic action exact keys override built-in grammar", () => {
+    const options = resolveVimOptions(undefined, {
+      piVimMode: {
+        keymap: { actions: { "prompt.transform.quote": [{ key: "u", modes: ["normal"] }] } },
+      },
+    }).options;
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["u"], options);
+    expect(result.text).toBe("> hello");
+  });
+
   test("keybound prompt transform actions edit visual touched lines", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },

@@ -259,6 +259,40 @@ export default (vim) => {
     expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.quote");
   });
 
+  test("later JS remap replaces lower action in only claimed scopes", () => {
+    const result = resolveVimOptions(
+      {
+        piVimMode: {
+          keymap: {
+            actions: {
+              "prompt.transform.quote": [{ key: "zq", modes: ["normal", "visual"] }],
+            },
+          },
+        },
+      },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "zq", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.zq?.kind).toBe("remap");
+    expect(result.plan.scopes.visual.exact.zq?.kind).toBe("action");
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      expect.objectContaining({ actionId: "prompt.transform.quote", modes: ["visual"] }),
+    ]);
+    expect(result.options.keymap?.remaps.accepted).toEqual([
+      { key: "zq", inputs: ["l"], modes: ["normal"] },
+    ]);
+  });
+
   test("action bindings on same key survive in disjoint modes", () => {
     const result = resolveVimOptions(undefined, undefined, {
       appendKeymap: true,
@@ -300,7 +334,12 @@ export default (vim) => {
         operations: [
           {
             kind: "map",
-            mapping: { kind: "remap", key: "zab", inputs: ["l"], modes: ["normal"] },
+            mapping: {
+              kind: "remap",
+              key: "zab",
+              inputs: ["l"],
+              modes: ["normal", "visual"],
+            },
           },
         ],
       },
@@ -308,6 +347,10 @@ export default (vim) => {
 
     expect(result.plan.scopes.normal.exact.za?.id).toBe("command.undo");
     expect(result.plan.scopes.normal.exact.zab).toBeUndefined();
+    expect(result.plan.scopes.visual.exact.zab?.kind).toBe("remap");
+    expect(result.options.keymap?.remaps.accepted).toEqual([
+      { key: "zab", inputs: ["l"], modes: ["visual"] },
+    ]);
     expect(result.warnings).toEqual([
       expect.stringContaining("remap.zab in normal: strict-prefix conflict with command.undo.za"),
     ]);
@@ -379,7 +422,7 @@ export default (vim) => {
     expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
   });
 
-  test("project escape mappings override lower JS remaps in visual scopes", () => {
+  test("project escape mappings override lower JS mappings in escape scopes", () => {
     const result = resolveVimOptions(
       undefined,
       { piVimMode: { keymap: { escape: ["<D-j>"] } } },
@@ -396,12 +439,17 @@ export default (vim) => {
               modes: ["visual", "visualLine", "visualBlock"],
             },
           },
+          {
+            kind: "map",
+            mapping: { kind: "insert", action: "openLineBelow", key: "super+j" },
+          },
         ],
       },
     );
 
     expect(result.options.keymap?.remaps.accepted).toEqual([]);
-    for (const scope of ["visual", "visualLine", "visualBlock"] as const) {
+    expect(result.options.keymap?.insert.openLineBelow).not.toContain("super+j");
+    for (const scope of ["insert", "visual", "visualLine", "visualBlock"] as const) {
       expect(result.plan.scopes[scope].exact["super+j"]?.kind).toBe("escape");
     }
   });

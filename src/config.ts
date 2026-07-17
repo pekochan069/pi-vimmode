@@ -1810,7 +1810,9 @@ function projectExactMappings(
     }
   };
 
-  for (const key of keymap.escape ?? []) add(key, ["visual", "visualLine", "visualBlock"]);
+  for (const key of keymap.escape ?? []) {
+    add(key, ["insert", "visual", "visualLine", "visualBlock"]);
+  }
   addRecord(keymap.operators, ACTION_BINDING_MODES);
   addRecord(keymap.motions, ACTION_BINDING_MODES);
   addRecord(keymap.commands, ["normal"]);
@@ -2576,19 +2578,84 @@ function strictPrefixConflict<T>(
   return accepted.find((candidate) => hasStrictPrefixConflict(getSequence(candidate), sequence));
 }
 
+type ResolvedVimRemap = ResolvedVimKeymap["remaps"]["accepted"][number];
+type ScopedPlanSource = ResolvedVimActionBinding | ResolvedVimRemap;
+type VimPlanCandidate = {
+  sequence: string;
+  binding: VimPlanBinding;
+  source?: ScopedPlanSource;
+};
+
+function retainAcceptedScopes<T extends ScopedPlanSource>(
+  bindings: readonly T[],
+  acceptedScopes: ReadonlyMap<ScopedPlanSource, ReadonlySet<VimMappingScope>>,
+): T[] {
+  return bindings.flatMap((binding) => {
+    const requestedModes = binding.modes ?? ACTION_BINDING_MODES;
+    const acceptedModes = requestedModes.filter((mode) => acceptedScopes.get(binding)?.has(mode));
+    if (acceptedModes.length === 0) return [];
+    return acceptedModes.length === requestedModes.length
+      ? [binding]
+      : [{ ...binding, modes: acceptedModes }];
+  });
+}
+
+function compilePlanScope(
+  scope: VimMappingScope,
+  candidates: readonly VimPlanCandidate[],
+  warnings: string[],
+  acceptedScopes: Map<ScopedPlanSource, Set<VimMappingScope>>,
+): VimScopeLookup {
+  const exact = Object.create(null) as Record<string, VimPlanBinding>;
+  const exactCandidates = Object.create(null) as Record<string, VimPlanCandidate>;
+  for (const candidate of candidates) {
+    const strictPrefix = strictPrefixConflict(
+      Object.keys(exact),
+      candidate.sequence,
+      (sequence) => sequence,
+    );
+    if (strictPrefix) {
+      const warning = `resolved settings: rejected ${candidate.binding.id}.${candidate.sequence} in ${scope}: strict-prefix conflict with ${exact[strictPrefix]!.id}.${strictPrefix}`;
+      if (!warnings.includes(warning)) warnings.push(warning);
+      continue;
+    }
+    exact[candidate.sequence] = candidate.binding;
+    exactCandidates[candidate.sequence] = candidate;
+  }
+  for (const candidate of Object.values(exactCandidates)) {
+    if (!candidate.source) continue;
+    const accepted = acceptedScopes.get(candidate.source) ?? new Set<VimMappingScope>();
+    accepted.add(scope);
+    acceptedScopes.set(candidate.source, accepted);
+  }
+
+  const prefixes = Object.create(null) as Record<string, string[]>;
+  for (const sequence of Object.keys(exact)) {
+    if (isAtomicMapping(sequence)) continue;
+    for (let index = 1; index < sequence.length; index += 1) {
+      const prefix = sequence.slice(0, index);
+      (prefixes[prefix] ??= []).push(sequence);
+    }
+  }
+  return { exact, prefixes };
+}
+
 export function createVimConfigPlan(
   options: ResolvedVimEditorOptions,
   warnings: readonly string[],
 ): VimConfigPlan {
+  const planOptions = cloneResolvedVimOptions(options);
   const candidates = Object.fromEntries(
-    VIM_MAPPING_SCOPES.map((scope) => [
-      scope,
-      [] as Array<{ sequence: string; binding: VimPlanBinding }>,
-    ]),
-  ) as Record<VimMappingScope, Array<{ sequence: string; binding: VimPlanBinding }>>;
-  const keymap = options.keymap ?? DEFAULT_VIM_KEYMAP;
-  const add = (scopes: readonly VimMappingScope[], sequence: string, binding: VimPlanBinding) => {
-    for (const scope of scopes) candidates[scope].push({ sequence, binding });
+    VIM_MAPPING_SCOPES.map((scope) => [scope, [] as VimPlanCandidate[]]),
+  ) as Record<VimMappingScope, VimPlanCandidate[]>;
+  const keymap = planOptions.keymap ?? DEFAULT_VIM_KEYMAP;
+  const add = (
+    scopes: readonly VimMappingScope[],
+    sequence: string,
+    binding: VimPlanBinding,
+    source?: ScopedPlanSource,
+  ) => {
+    for (const scope of scopes) candidates[scope].push({ sequence, binding, source });
   };
 
   for (const entry of grammarEntriesForKeymap(keymap)) {
@@ -2607,53 +2674,43 @@ export function createVimConfigPlan(
     for (const sequence of sequences) add(["insert"], sequence, { kind: "insert", id: action });
   }
   for (const binding of keymap.actions.accepted) {
-    add(binding.modes ?? ACTION_BINDING_MODES, binding.key, {
-      kind: "action",
-      id: binding.actionId,
-      args: binding.args,
-    });
+    add(
+      binding.modes ?? ACTION_BINDING_MODES,
+      binding.key,
+      { kind: "action", id: binding.actionId, args: binding.args },
+      binding,
+    );
   }
   for (const remap of keymap.remaps.accepted) {
-    add(remap.modes ?? ACTION_BINDING_MODES, remap.key, {
-      kind: "remap",
-      id: "remap",
-      inputs: remap.inputs,
-    });
+    add(
+      remap.modes ?? ACTION_BINDING_MODES,
+      remap.key,
+      { kind: "remap", id: "remap", inputs: remap.inputs },
+      remap,
+    );
   }
 
   const compileWarnings = [...warnings];
+  const acceptedScopes = new Map<ScopedPlanSource, Set<VimMappingScope>>();
   const scopes = Object.fromEntries(
-    VIM_MAPPING_SCOPES.map((scope) => {
-      const exact = Object.create(null) as Record<string, VimPlanBinding>;
-      for (const candidate of candidates[scope]) {
-        const strictPrefix = strictPrefixConflict(
-          Object.keys(exact),
-          candidate.sequence,
-          (sequence) => sequence,
-        );
-        if (strictPrefix) {
-          const warning = `resolved settings: rejected ${candidate.binding.id}.${candidate.sequence} in ${scope}: strict-prefix conflict with ${exact[strictPrefix]!.id}.${strictPrefix}`;
-          if (!compileWarnings.includes(warning)) compileWarnings.push(warning);
-          continue;
-        }
-        exact[candidate.sequence] = candidate.binding;
-      }
+    VIM_MAPPING_SCOPES.map((scope) => [
+      scope,
+      compilePlanScope(scope, candidates[scope], compileWarnings, acceptedScopes),
+    ]),
+  ) as Record<VimMappingScope, VimScopeLookup>;
 
-      const prefixes = Object.create(null) as Record<string, string[]>;
-      for (const sequence of Object.keys(exact)) {
-        if (isAtomicMapping(sequence)) continue;
-        for (let index = 1; index < sequence.length; index += 1) {
-          const prefix = sequence.slice(0, index);
-          (prefixes[prefix] ??= []).push(sequence);
-        }
-      }
-      return [scope, { exact, prefixes }];
-    }),
-  ) as unknown as Record<VimMappingScope, VimScopeLookup>;
-
-  const frozenOptions = deepFreeze(options);
+  if (planOptions.keymap) {
+    planOptions.keymap.actions.accepted = retainAcceptedScopes(
+      planOptions.keymap.actions.accepted,
+      acceptedScopes,
+    );
+    planOptions.keymap.remaps.accepted = retainAcceptedScopes(
+      planOptions.keymap.remaps.accepted,
+      acceptedScopes,
+    );
+  }
   return deepFreeze({
-    options: frozenOptions,
+    options: planOptions,
     diagnostics: { warnings: compileWarnings },
     scopes,
   });

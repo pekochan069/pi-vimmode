@@ -567,34 +567,6 @@ describe("vim editor integration", () => {
     expectRenderedWidth(message, 20);
   });
 
-  test("live config reload updates bindings and diagnostics on the active editor", () => {
-    const before = resolveVimOptions({ piVimMode: { startMode: "normal" } }, undefined, {
-      kind: "success",
-      operations: [
-        {
-          kind: "map",
-          mapping: { kind: "remap", key: "zq", inputs: ["l"], modes: ["normal"] },
-        },
-      ],
-    });
-    const after = resolveVimOptions({
-      piVimMode: {
-        startMode: "normal",
-        keymap: { actions: { "prompt.transform.quote": ["zq"] } },
-      },
-    });
-    const { editor, overlays } = createEditor(before.options);
-
-    editor.reloadConfig(after.options, { warnings: ["fatal JS config"] });
-    editor.setText("hello");
-    typeKeys(editor, ["z", "q"]);
-    expect(editor.getText()).toBe("> hello");
-
-    runEx(editor, "vimdoctor");
-    const overlayText = overlays.at(-1)?.component.render(64).join("\n") ?? "";
-    expect(overlayText).toContain("fatal JS config");
-  });
-
   test("diagnostic popups and feedback info rows render width-safely", () => {
     const { editor, overlays } = createEditor(
       { ...DEFAULT_VIM_OPTIONS, startMode: "normal", feedback: { noop: "status" } },

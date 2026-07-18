@@ -356,6 +356,30 @@ export default (vim) => {
     ]);
   });
 
+  test("printable plus sequences participate in strict-prefix preflight", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["g+"] } } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "g+x", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact["g+"]?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact["g+x"]).toBeUndefined();
+    expect(result.plan.scopes.normal.prefixes["g+"]).toBeUndefined();
+    expect(result.warnings).toEqual([
+      expect.stringContaining("remap.g+x in normal: strict-prefix conflict with command.undo.g+"),
+    ]);
+  });
+
   test("latest same-scope JS exact mapping wins", () => {
     const result = resolveVimOptions(undefined, undefined, {
       kind: "success",

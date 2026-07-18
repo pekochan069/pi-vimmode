@@ -92,6 +92,8 @@ function createLifecycleHarness(
   const shutdownCallbacks: Array<(() => void) | undefined> = [];
   const warnings: string[][] = [];
   const fatalLoads: boolean[] = [];
+  const asyncLoads = new Set<number>();
+  const rejectedLoads = new Set<number>();
   let loadIndex = 0;
 
   const pi = {
@@ -106,17 +108,20 @@ function createLifecycleHarness(
   registerVimLifecycle(pi as never, {
     loadOptions: (paths) => {
       loadCalls.push(paths);
-      const index = Math.min(loadIndex, options.length - 1);
+      const load = loadIndex;
+      const index = Math.min(load, options.length - 1);
       const option = options[index]!;
-      const warning = warnings[Math.min(loadIndex, warnings.length - 1)] ?? [];
-      const fatal = fatalLoads[loadIndex] ?? false;
+      const warning = warnings[Math.min(load, warnings.length - 1)] ?? [];
+      const fatal = fatalLoads[load] ?? false;
       loadIndex += 1;
-      return {
+      if (rejectedLoads.has(load)) return Promise.reject(new Error("async load failed"));
+      const result = {
         plan: createVimConfigPlan(option, warning),
         options: option,
         warnings: warning,
         fatal,
       };
+      return asyncLoads.has(load) ? Promise.resolve(result) : result;
     },
     createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
@@ -149,6 +154,8 @@ function createLifecycleHarness(
     shutdownCallbacks,
     warnings,
     fatalLoads,
+    asyncLoads,
+    rejectedLoads,
   };
 }
 
@@ -356,6 +363,31 @@ describe("vim extension lifecycle", () => {
 
     expect(createdEditors[0]?.options.startMode).toBe("normal");
     expect(createdEditors[0]?.diagnostics.warnings).toEqual(["fatal JS config"]);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
+  });
+
+  test("async loads commit success and preserve it after rejection", async () => {
+    const { hooks, asyncLoads, rejectedLoads, createdEditors } = createLifecycleHarness([
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+      DEFAULT_VIM_OPTIONS,
+    ]);
+    asyncLoads.add(0);
+    rejectedLoads.add(1);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+
+    hooks.get("agent_end")?.({}, ctx);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    factory({}, {}, {});
+
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["normal", "normal"]);
+    expect(createdEditors[1]?.diagnostics.warnings).toEqual([
+      "global JS config: failed to load (async load failed)",
+    ]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 

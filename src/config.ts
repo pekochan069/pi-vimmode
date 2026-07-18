@@ -2558,7 +2558,10 @@ function deepFreeze<T>(value: T): T {
 }
 
 function isAtomicMapping(sequence: string): boolean {
-  return sequence.includes("+") || ["left", "down", "up", "right"].includes(sequence);
+  return (
+    /^(?:ctrl|alt|shift|super)\+/.test(sequence) ||
+    ["left", "down", "up", "right"].includes(sequence)
+  );
 }
 
 function hasStrictPrefixConflict(left: string, right: string): boolean {

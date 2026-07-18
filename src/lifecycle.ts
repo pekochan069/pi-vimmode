@@ -222,7 +222,7 @@ function registerVimCommand(pi: ExtensionAPI, state: EditorState): void {
         return;
       }
       if (action === "reload") {
-        await state.config.refresh(ctx);
+        if (!(await state.config.refresh(ctx))) return;
         if (state.enabled) finishInstall(state, ctx);
         ctx.ui.notify(
           `pi-vimmode ${state.enabled ? "reloaded" : "config reloaded (disabled)"}`,

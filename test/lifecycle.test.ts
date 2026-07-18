@@ -563,6 +563,31 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
   });
 
+  test("stale vimmode reload cannot reinstall an older context", async () => {
+    const { hooks, commands, deferredLoads, resolveDeferred, shutdownCallbacks } =
+      createLifecycleHarness();
+    const older = createContext("/older");
+    const newer = createContext("/newer");
+
+    hooks.get("session_start")?.({}, older);
+    deferredLoads.add(1);
+    const reload = commands.get("vimmode")?.handler("reload", older);
+    hooks.get("agent_end")?.({}, newer);
+    resolveDeferred.get(1)?.({
+      plan: createVimConfigPlan(DEFAULT_VIM_OPTIONS, []),
+      options: DEFAULT_VIM_OPTIONS,
+      warnings: [],
+      fatal: false,
+    });
+    await reload;
+
+    newer.ui.component?.({}, {}, {});
+    shutdownCallbacks[0]?.();
+    expect(older.shutdownCalls).toBe(0);
+    expect(newer.shutdownCalls).toBe(1);
+    expect(older.ui.notifications).toEqual([]);
+  });
+
   test("vimmode command toggles editor off and on", async () => {
     const { hooks, commands, createdEditors } = createLifecycleHarness();
     const ctx = createContext("/repo");

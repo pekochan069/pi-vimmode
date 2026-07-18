@@ -45,7 +45,9 @@ type FakeEditor = {
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
+  reconfigureCalls: Array<[ResolvedVimEditorOptions, VimDiagnostics]>;
   resetCount: number;
+  reconfigure: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: () => void;
   setAgentBusy: (active: boolean) => void;
 };
@@ -138,7 +140,13 @@ function createLifecycleHarness(
         options: editorOptions,
         diagnostics,
         busyCalls: [],
+        reconfigureCalls: [],
         resetCount: 0,
+        reconfigure: (options, nextDiagnostics) => {
+          editor.options = options;
+          editor.diagnostics = nextDiagnostics;
+          editor.reconfigureCalls.push([options, nextDiagnostics]);
+        },
         resetTerminalCursorStyle: () => {
           editor.resetCount += 1;
         },
@@ -338,7 +346,7 @@ describe("vim extension lifecycle", () => {
     expect(ctx.ui.setCalls[0]).toBe(ctx.ui.setCalls[1]);
   });
 
-  test("settings refresh updates status and new editor options", () => {
+  test("settings refresh reconfigures active editors and updates new editor options", () => {
     const { hooks, warnings, createdEditors, loadCalls } = createLifecycleHarness();
     warnings.push([], ["bad config"]);
     const ctx = createContext("/repo");
@@ -354,11 +362,12 @@ describe("vim extension lifecycle", () => {
       ["pi-vimmode", "vim"],
       ["pi-vimmode", "vim ⚠"],
     ]);
-    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["normal", "normal"]);
     expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
-      [],
+      ["bad config"],
       ["bad config"],
     ]);
+    expect(createdEditors[0]!.reconfigureCalls).toHaveLength(1);
   });
 
   test("fatal first load commits its usable JSON-backed plan", () => {
@@ -495,6 +504,7 @@ describe("vim extension lifecycle", () => {
       [],
       ["fatal JS config"],
     ]);
+    expect(createdEditors[0]!.reconfigureCalls).toHaveLength(0);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 
@@ -560,7 +570,7 @@ describe("vim extension lifecycle", () => {
     expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
     expect(ctx.ui.component).toBe(factory);
     expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode reloaded", "info"]);
-    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
+    expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["normal", "normal"]);
   });
 
   test("vimmode reload stays disabled after refreshing options", async () => {

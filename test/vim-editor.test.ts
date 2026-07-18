@@ -296,6 +296,24 @@ describe("vim editor integration", () => {
     expect(editor.getVimMode()).toBe("normal");
   });
 
+  test("reconfigure applies new keymaps immediately while clearing pending grammar", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "insert", keymap: { commands: { openLineBelow: [",k"] } } },
+    }).options;
+
+    editor.setText("one\ntwo");
+    editor.handleInput("d");
+    expect(editor.getPendingOperator()).toBe("d");
+
+    editor.reconfigure(options, { warnings: ["reloaded"] });
+    expectEditorState(editor, { text: "one\ntwo", mode: "normal", pending: undefined });
+    typeKeys(editor, ["g", "g", ",", "k"]);
+
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getVimMode()).toBe("insert");
+  });
+
   test("plain insert text uses fast path without full snapshot", () => {
     const { editor } = createEditor();
     (editor as unknown as { getLines: () => string[] }).getLines = () => {

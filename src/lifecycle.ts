@@ -21,7 +21,7 @@ type VimEditorFactory = (
 export type VimShutdownCallback = () => void;
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
-type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle" | "setAgentBusy">;
+type TrackedEditor = Pick<VimEditor, "reconfigure" | "resetTerminalCursorStyle" | "setAgentBusy">;
 type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
@@ -45,7 +45,10 @@ type ConfigState = {
   refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
 };
 
-function createConfigState(dependencies: VimLifecycleDependencies): ConfigState {
+function createConfigState(
+  dependencies: VimLifecycleDependencies,
+  onCommit: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void,
+): ConfigState {
   let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
   let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
   let hasCommittedLoad = false;
@@ -53,11 +56,13 @@ function createConfigState(dependencies: VimLifecycleDependencies): ConfigState 
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    if (!loaded.fatal || !hasCommittedLoad) {
+    const committed = !loaded.fatal || !hasCommittedLoad;
+    if (committed) {
       currentPlan = loaded.plan;
       hasCommittedLoad = true;
     }
     currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
+    if (committed) onCommit(currentPlan.options, currentDiagnostics);
     ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };
   const applyFailure = (ctx: ExtensionContext, error: unknown) => {
@@ -161,8 +166,13 @@ function resetKnownEditors(state: EditorState): void {
 }
 
 function createEditorState(dependencies: VimLifecycleDependencies): EditorState {
-  const state: EditorState = {
-    config: createConfigState(dependencies),
+  let state: EditorState;
+  const config = createConfigState(dependencies, (options, diagnostics) => {
+    if (!state?.enabled) return;
+    for (const editor of state.editors) editor.reconfigure(options, diagnostics);
+  });
+  state = {
+    config,
     createEditor:
       dependencies.createEditor ??
       ((tui, theme, keybindings, options, diagnostics, vimOptions) =>

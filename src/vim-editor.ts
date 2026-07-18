@@ -53,7 +53,7 @@ import {
   modalPendingDisplay,
 } from "./modal/engine.ts";
 import { appendMessageHistory } from "./modal/inspect.ts";
-import { createModalState } from "./modal/state.ts";
+import { createModalState, resetTransientState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import {
   cursorShapeEscape,
@@ -215,14 +215,20 @@ function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
   return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
 }
 
+function clampToText(text: string, position: Position): Position {
+  const lines = text.split("\n");
+  const line = Math.max(0, Math.min(position.line, lines.length - 1));
+  return { line, col: Math.max(0, Math.min(position.col, lines[line]!.length)) };
+}
+
 export type VimEditorOptions = {
   onShutdown?: () => void;
 };
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private readonly options: ResolvedVimEditorOptions;
-  private readonly diagnostics: VimDiagnostics;
+  private options: ResolvedVimEditorOptions;
+  private diagnostics: VimDiagnostics;
   private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
@@ -277,6 +283,31 @@ export class VimEditor extends CustomEditor {
 
   getCurrentCursorStyle(): CursorStyle {
     return cursorStyleForMode(this.options, this.modalState.mode);
+  }
+
+  reconfigure(options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics): void {
+    this.options = cloneOptions(options);
+    this.diagnostics = { warnings: [...diagnostics.warnings] };
+    const { recordingSlot: _recordingSlot, ...reset } = resetTransientState(
+      this.modalState,
+      this.modalState.mode,
+    );
+    const text = this.getText();
+    if (this.modalState.visualAnchor && this.modalState.mode.startsWith("visual")) {
+      reset.visualAnchor = clampToText(text, this.modalState.visualAnchor);
+    }
+    if (reset.lastVisualSelection) {
+      reset.lastVisualSelection = {
+        ...reset.lastVisualSelection,
+        anchor: clampToText(text, reset.lastVisualSelection.anchor),
+        cursor: clampToText(text, reset.lastVisualSelection.cursor),
+      };
+    }
+    this.modalState = reset;
+    this.helpOverlay?.hide();
+    this.helpOverlay = undefined;
+    this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
+    this.invalidate();
   }
 
   setAgentBusy(active: boolean): void {

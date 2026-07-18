@@ -343,6 +343,22 @@ describe("vim extension lifecycle", () => {
     ]);
   });
 
+  test("fatal first load commits its usable JSON-backed plan", () => {
+    const { hooks, fatalLoads, warnings, createdEditors } = createLifecycleHarness([
+      { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+    ]);
+    fatalLoads.push(true);
+    warnings.push(["fatal JS config"]);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    ctx.ui.setCalls[0]!({}, {}, {});
+
+    expect(createdEditors[0]?.options.startMode).toBe("normal");
+    expect(createdEditors[0]?.diagnostics.warnings).toEqual(["fatal JS config"]);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
+  });
+
   test("fatal reload updates diagnostics but preserves last-known-good options", () => {
     const { hooks, fatalLoads, warnings, createdEditors } = createLifecycleHarness();
     fatalLoads.push(false, true);

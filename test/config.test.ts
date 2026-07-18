@@ -80,7 +80,7 @@ describe("vim config parsing", () => {
   test("compiles resolved options and scoped lookups into one immutable plan", () => {
     const result = resolveVimOptions({
       piVimMode: {
-        keymap: { motions: { wordForward: ["zw"] } },
+        keymap: { escape: ["<C-j>"], motions: { wordForward: ["zw"] } },
         promptTransforms: { commands: { quote: ["qte"] } },
       },
     });
@@ -93,6 +93,8 @@ describe("vim config parsing", () => {
     expect(result.plan.scopes.normal.exact.zw?.id).toBe("motion.wordForward");
     expect(result.plan.scopes.normal.prefixes.z).toEqual(["zw"]);
     expect(result.plan.scopes.operatorPending.exact.zw?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.operatorPending.exact["ctrl+j"]?.kind).toBe("escape");
+    expect(result.plan.scopes.normal.prefixes.ctrl).toBeUndefined();
     expect(result.plan.scopes.insert.exact.zw).toBeUndefined();
     expect(() =>
       (result.plan.options.keymap!.motions.wordForward as unknown as string[]).push("custom-word"),
@@ -386,7 +388,11 @@ describe("vim config parsing", () => {
   test("merges status position across global, JS, and project fields", () => {
     const result = resolveVimOptions(
       { piVimMode: { ui: { status: { position: "right" } } } },
-      { piVimMode: { ui: { mode: { narrowLabels: { normal: "P" } } } } },
+      {
+        piVimMode: {
+          ui: { status: { position: "right" }, mode: { narrowLabels: { normal: "P" } } },
+        },
+      },
       {
         partial: {
           ui: { status: { position: "left" }, mode: { labels: { normal: "JS" } } },
@@ -395,7 +401,7 @@ describe("vim config parsing", () => {
     );
 
     expect(result.warnings).toEqual([]);
-    expect(result.options.ui?.status.position).toBe("left");
+    expect(result.options.ui?.status.position).toBe("right");
     expect(result.options.ui?.mode.labels.normal).toBe("JS");
     expect(result.options.ui?.mode.narrowLabels.normal).toBe("P");
   });

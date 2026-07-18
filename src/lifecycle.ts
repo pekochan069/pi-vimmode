@@ -203,15 +203,23 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
   return state;
 }
 
-function ignoreStaleInstall(install: void | Promise<void>): void {
-  if (install instanceof Promise) void install.catch(() => {});
+function observeInstall(install: void | Promise<void>, ctx: ExtensionContext): void {
+  if (!(install instanceof Promise)) return;
+  void install.catch((error: unknown) => {
+    try {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.ui.notify(`pi-vimmode install failed: ${message}`, "error");
+    } catch {
+      // Context went stale while reporting the original failure.
+    }
+  });
 }
 
 function installEditorSoon(state: EditorState, ctx: ExtensionContext): void {
-  ignoreStaleInstall(installEditor(state, ctx));
+  observeInstall(installEditor(state, ctx), ctx);
   state.schedule(() => {
     try {
-      ignoreStaleInstall(installEditor(state, ctx));
+      observeInstall(installEditor(state, ctx), ctx);
     } catch {
       // Context can go stale during reload/session switch. Next session_start will reinstall.
     }

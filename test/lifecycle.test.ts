@@ -520,7 +520,7 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors[0]!.reconfigureCalls).toHaveLength(0);
   });
 
-  test("delayed async reinstall catches stale context rejection", async () => {
+  test("delayed async reinstall reports current-context failures", async () => {
     const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
     const { hooks, scheduled, deferredLoads, resolveDeferred } = createLifecycleHarness([
       normal,
@@ -543,6 +543,10 @@ describe("vim extension lifecycle", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(ctx.ui.component).toBeDefined();
+    expect(ctx.ui.notifications).toContainEqual([
+      "pi-vimmode install failed: stale context",
+      "error",
+    ]);
   });
 
   test("delayed reinstall refreshes settings and catches stale context failures", () => {

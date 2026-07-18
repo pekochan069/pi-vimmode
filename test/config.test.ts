@@ -77,26 +77,42 @@ describe("vim config parsing", () => {
     expect(options.ui?.status.position).toBe("left");
   });
 
-  test("resolved defaults do not share mutable nested config fields", () => {
-    const options = resolveVimOptions(undefined).options;
+  test("compiles resolved options and scoped lookups into one immutable plan", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: { escape: ["<C-j>"], motions: { wordForward: ["zw"] } },
+        promptTransforms: { commands: { quote: ["qte"] } },
+      },
+    });
 
-    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
-    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
-    (options.ui!.status.items as unknown as string[]).push("mode");
-    if (options.ui) options.ui.mode.labels.normal = "COMMAND";
-
-    expect(DEFAULT_VIM_OPTIONS.keymap?.motions.wordForward).toEqual(["w"]);
-    expect(DEFAULT_VIM_OPTIONS.promptTransforms?.commands.quote).toEqual(["quote"]);
-    expect(DEFAULT_VIM_OPTIONS.ui?.status.items).toEqual([
-      "mode",
-      "pendingOperator",
-      "selection",
-      "cursorPosition",
-    ]);
-    expect(DEFAULT_VIM_OPTIONS.ui?.mode.labels.normal).toBe("NORMAL");
+    expect(result.plan.options).toBe(result.options);
+    expect(Object.isFrozen(result.plan)).toBe(true);
+    expect(Object.isFrozen(result.plan.options)).toBe(true);
+    expect(Object.isFrozen(result.plan.options.keymap?.motions.wordForward)).toBe(true);
+    expect(Object.isFrozen(result.plan.scopes)).toBe(true);
+    expect(result.plan.scopes.normal.exact.zw?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.normal.prefixes.z).toEqual(["zw"]);
+    expect(result.plan.scopes.operatorPending.exact.zw?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.operatorPending.exact["ctrl+j"]?.kind).toBe("escape");
+    expect(result.plan.scopes.normal.prefixes.ctrl).toBeUndefined();
+    expect(result.plan.scopes.insert.exact.zw).toBeUndefined();
+    expect(() =>
+      (result.plan.options.keymap!.motions.wordForward as unknown as string[]).push("custom-word"),
+    ).toThrow();
   });
 
-  test("resolved configured options do not share mutable nested config fields", () => {
+  test("named terminal keys compile atomically without character prefixes", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { commands: { undo: ["<Home>", "<F1>"] } } },
+    });
+
+    expect(result.plan.scopes.normal.exact.home?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.f1?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.prefixes.h).toBeUndefined();
+    expect(result.plan.scopes.normal.prefixes.f).toBeUndefined();
+  });
+
+  test("immutable plan does not share configured nested fields", () => {
     const settings = {
       piVimMode: {
         keymap: { motions: { wordForward: ["q"] }, commands: { openLineBelow: ["n"] } },
@@ -109,17 +125,17 @@ describe("vim config parsing", () => {
     };
     const options = resolveVimOptions(settings).options;
 
-    (options.keymap!.motions.wordForward as unknown as string[]).push("custom-word");
-    (options.keymap!.commands.openLineBelow as unknown as string[]).push("custom-open");
-    (options.promptTransforms!.commands.quote as unknown as string[]).push("custom-quote");
-    (options.ui!.status.items as unknown as string[]).push("cursorPosition");
-    if (options.ui) options.ui.mode.labels.normal = "NORMAL-MUTATED";
-
     expect(settings.piVimMode.keymap.motions.wordForward).toEqual(["q"]);
     expect(settings.piVimMode.keymap.commands.openLineBelow).toEqual(["n"]);
     expect(settings.piVimMode.promptTransforms.commands.quote).toEqual(["qte"]);
     expect(settings.piVimMode.ui.status.items).toEqual(["mode", "selection"]);
     expect(settings.piVimMode.ui.mode.labels.normal).toBe("COMMAND");
+    expect(options.keymap?.motions.wordForward).not.toBe(
+      settings.piVimMode.keymap.motions.wordForward,
+    );
+    expect(options.ui?.status.items).not.toBe(settings.piVimMode.ui.status.items);
+    expect(Object.isFrozen(settings.piVimMode.keymap.motions.wordForward)).toBe(false);
+    expect(Object.isFrozen(settings.piVimMode.ui.status.items)).toBe(false);
     expect(options.keymap?.motions.left).toEqual(["h", "left"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h", "left"]);
   });
@@ -389,7 +405,11 @@ describe("vim config parsing", () => {
   test("merges status position across global, JS, and project fields", () => {
     const result = resolveVimOptions(
       { piVimMode: { ui: { status: { position: "right" } } } },
-      { piVimMode: { ui: { mode: { narrowLabels: { normal: "P" } } } } },
+      {
+        piVimMode: {
+          ui: { status: { position: "right" }, mode: { narrowLabels: { normal: "P" } } },
+        },
+      },
       {
         partial: {
           ui: { status: { position: "left" }, mode: { labels: { normal: "JS" } } },
@@ -398,7 +418,7 @@ describe("vim config parsing", () => {
     );
 
     expect(result.warnings).toEqual([]);
-    expect(result.options.ui?.status.position).toBe("left");
+    expect(result.options.ui?.status.position).toBe("right");
     expect(result.options.ui?.mode.labels.normal).toBe("JS");
     expect(result.options.ui?.mode.narrowLabels.normal).toBe("P");
   });
@@ -709,13 +729,13 @@ describe("vim config parsing", () => {
       );
     });
 
-    test("insert bindings survive cloning without sharing arrays with defaults", () => {
+    test("insert bindings compile as immutable arrays without sharing defaults", () => {
       const result = resolveVimOptions({
         piVimMode: {
           keymap: { insert: { openLineBelow: ["ctrl+j"] } },
         },
       });
-      (result.options.keymap!.insert.openLineBelow as unknown as string[]).push("ctrl+k");
+      expect(Object.isFrozen(result.options.keymap!.insert.openLineBelow)).toBe(true);
       expect(DEFAULT_VIM_OPTIONS.keymap?.insert.openLineBelow).toEqual([]);
     });
 
@@ -1523,6 +1543,59 @@ describe("vim config parsing", () => {
     }
   });
 
+  test("project exact actions override inherited grammar in only claimed scopes", () => {
+    const result = resolveVimOptions(undefined, {
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "u", modes: ["normal"] }],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: "u",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact.u).toEqual({
+      kind: "action",
+      id: "prompt.transform.quote",
+      args: { action: "quote" },
+    });
+    expect(result.plan.scopes.visual.exact.u).toBeUndefined();
+    expect(result.warnings.join("\n")).not.toContain("conflicts with commands.undo");
+  });
+
+  test("project leader actions override inherited grammar after final leader expansion", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: [",u"] } } } },
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: {
+            actions: { "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }] },
+          },
+        },
+      },
+    );
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: ",u",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+    expect(result.warnings.join("\n")).not.toContain("conflicts with commands.undo");
+  });
+
   test("project action bindings replace global bindings and empty arrays unbind", () => {
     const replaced = resolveVimOptions(
       { piVimMode: { keymap: { actions: { "prompt.transform.reflow": ["gq"] } } } },
@@ -1629,6 +1702,62 @@ describe("vim config parsing", () => {
     expect(result.warnings).not.toEqual(
       expect.arrayContaining([expect.stringContaining("protected key ctrl+p")]),
     );
+  });
+
+  test("rejects later strict-prefix action overlap per scope", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "za", modes: ["normal"] }],
+            "prompt.transform.reflow": [
+              { key: "zab", modes: ["normal"] },
+              { key: "zab", modes: ["visual"] },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        key: "za",
+        actionId: "prompt.transform.quote",
+        args: { action: "quote" },
+        modes: ["normal"],
+      },
+      {
+        key: "zab",
+        actionId: "prompt.transform.reflow",
+        args: { action: "reflow" },
+        modes: ["visual"],
+      },
+    ]);
+    expect(result.warnings).toEqual([
+      expect.stringContaining("strict-prefix conflict with prompt.transform.quote.za"),
+    ]);
+  });
+
+  test("keeps non-conflicting scopes from one multi-scope action binding", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "za", modes: ["normal"] }],
+            "prompt.transform.reflow": [{ key: "zab", modes: ["normal", "visual"] }],
+          },
+        },
+      },
+    });
+
+    expect(result.options.keymap?.actions.accepted).toContainEqual({
+      key: "zab",
+      actionId: "prompt.transform.reflow",
+      args: { action: "reflow" },
+      modes: ["visual"],
+    });
+    expect(result.plan.scopes.visual.exact.zab?.id).toBe("prompt.transform.reflow");
+    expect(result.plan.scopes.normal.exact.zab).toBeUndefined();
   });
 
   test("rejects action conflicts but allows shared non-executable prefixes", () => {

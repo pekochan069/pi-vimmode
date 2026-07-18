@@ -399,8 +399,14 @@ function remapUpdate(
   key: string,
 ): ModalUpdate | undefined {
   const sequence = `${state.pending ?? ""}${key}`;
-  const remaps = keymapForOptions(options).remaps.accepted.filter(
-    (remap) => !remap.modes || remap.modes.includes(mode),
+  const keymap = keymapForOptions(options);
+  const actionKeys = new Set(
+    keymap.actions.accepted
+      .filter((action) => !action.modes || action.modes.includes(mode))
+      .map((action) => action.key),
+  );
+  const remaps = keymap.remaps.accepted.filter(
+    (remap) => (!remap.modes || remap.modes.includes(mode)) && !actionKeys.has(remap.key),
   );
   const exact = remaps.find((remap) => remap.key === sequence);
   if (exact) {

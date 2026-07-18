@@ -27,6 +27,7 @@ import {
   KEYMAP_OPERATOR_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
 import { grammarEntriesForKeymap } from "./keymap-grammar.ts";
+import { isAtomicMappingSequence } from "./mapping-scopes.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(
   Object.keys(deriveLegacyKeyToAction(KEYMAP_OPERATOR_DESCRIPTORS)),
@@ -263,6 +264,7 @@ function lineCommandFor(operator: VimOperator): NormalCommand {
 }
 
 function addLongerPrefixes(prefixes: Set<string>, sequence: string): void {
+  if (isAtomicMappingSequence(sequence)) return;
   for (let index = 1; index < sequence.length; index += 1) prefixes.add(sequence.slice(0, index));
 }
 
@@ -275,6 +277,7 @@ function addActionBinding(bindings: Map<string, ActionBinding[]>, binding: Actio
 }
 
 function addActionPrefixes(prefixes: Map<string, ActionBinding[]>, binding: ActionBinding): void {
+  if (isAtomicMappingSequence(binding.sequence)) return;
   for (let index = 1; index < binding.sequence.length; index += 1) {
     const prefix = binding.sequence.slice(0, index);
     prefixes.set(prefix, [...(prefixes.get(prefix) ?? []), binding]);
@@ -307,11 +310,6 @@ function compiledKeymapFor(keymap: ResolvedVimKeymap): CompiledKeymap {
   const compiled = compileKeymap(keymap);
   COMPILED_KEYMAPS.set(keymap, compiled);
   return compiled;
-}
-
-function isAtomicKeySequence(sequence: string): boolean {
-  // Arrow-key aliases arrive as complete terminal escape sequences, never character-by-character.
-  return sequence === "left" || sequence === "down" || sequence === "up" || sequence === "right";
 }
 
 function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
@@ -358,10 +356,8 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
         kind: "motion",
         motion: entry.id,
       });
-      if (!isAtomicKeySequence(entry.sequence)) {
-        addLongerPrefixes(longerPrefixes, entry.sequence);
-        addLongerPrefixes(motionLongerPrefixes, entry.sequence);
-      }
+      addLongerPrefixes(longerPrefixes, entry.sequence);
+      addLongerPrefixes(motionLongerPrefixes, entry.sequence);
     } else if (entry.family === "command") {
       setFirstBinding(exactBindings, {
         sequence: entry.sequence,
@@ -461,11 +457,10 @@ function exactBinding(
   mode?: VimActionBindingMode,
 ): Binding | undefined {
   const compiled = compiledKeymapFor(keymap);
-  const binding = compiled.exactBindings.get(sequence);
-  if (binding) return binding;
-  return compiled.actionBindings
+  const action = compiled.actionBindings
     .get(sequence)
-    ?.find((action) => actionBindingMatchesMode(action, mode));
+    ?.find((binding) => actionBindingMatchesMode(binding, mode));
+  return action ?? compiled.exactBindings.get(sequence);
 }
 
 function hasLongerPrefix(

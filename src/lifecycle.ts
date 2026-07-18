@@ -3,6 +3,7 @@ import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-cod
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "./types.ts";
 
 import {
+  createVimConfigPlan,
   DEFAULT_VIM_OPTIONS,
   loadVimOptions,
   type VimConfigLoadResult,
@@ -20,9 +21,7 @@ type VimEditorFactory = (
 export type VimShutdownCallback = () => void;
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
-
-type TrackedEditor = Pick<VimEditor, "resetTerminalCursorStyle" | "setAgentBusy">;
-
+type TrackedEditor = Pick<VimEditor, "reconfigure" | "resetTerminalCursorStyle" | "setAgentBusy">;
 type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
@@ -31,188 +30,265 @@ type CreateEditor = (
   diagnostics: VimDiagnostics,
   vimOptions?: { onShutdown?: () => void },
 ) => TrackedEditor;
-
 type Schedule = (callback: () => void) => void;
 
 export type VimLifecycleDependencies = {
   defaultOptions?: ResolvedVimEditorOptions;
-  loadOptions?: (paths: VimConfigPaths) => VimConfigLoadResult;
+  loadOptions?: (paths: VimConfigPaths) => VimConfigLoadResult | Promise<VimConfigLoadResult>;
   createEditor?: CreateEditor;
   schedule?: Schedule;
 };
 
-export function registerVimLifecycle(
-  pi: ExtensionAPI,
-  dependencies: VimLifecycleDependencies = {},
-) {
-  let currentOptions = dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS;
-  let currentDiagnostics: VimDiagnostics = { warnings: [] };
-  let currentShutdown: (() => void) | undefined;
-  let enabled = true;
-  let agentBusy = false;
-  let previousEditorFactory: EditorComponentFactory;
-  let hasInstalledFactory = false;
-  const editors = new Set<TrackedEditor>();
+type ConfigState = {
+  options: () => ResolvedVimEditorOptions;
+  diagnostics: () => VimDiagnostics;
+  refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
+};
+
+function createConfigState(
+  dependencies: VimLifecycleDependencies,
+  onCommit: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void,
+): ConfigState {
+  let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
+  let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
+  let hasCommittedLoad = false;
+  let refreshGeneration = 0;
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
-  const createEditor =
-    dependencies.createEditor ??
-    ((tui, theme, keybindings, options, diagnostics, vimOptions) =>
-      new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions));
-  const schedule = dependencies.schedule ?? ((callback) => setTimeout(callback, 0));
 
-  const editorFactory: VimEditorFactory = (tui, theme, keybindings) => {
-    const editor = createEditor(tui, theme, keybindings, currentOptions, currentDiagnostics, {
-      onShutdown: currentShutdown,
+  const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
+    const previousConfig = JSON.stringify([currentPlan.options, currentDiagnostics]);
+    const committed = !loaded.fatal || !hasCommittedLoad;
+    if (committed) {
+      currentPlan = loaded.plan;
+      hasCommittedLoad = true;
+    }
+    currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
+    const configChanged =
+      JSON.stringify([currentPlan.options, currentDiagnostics]) !== previousConfig;
+    if (committed && configChanged) onCommit(currentPlan.options, currentDiagnostics);
+    ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
+  };
+  const applyFailure = (ctx: ExtensionContext, error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const warnings = [`global JS config: failed to load (${message})`];
+    apply(ctx, {
+      plan: createVimConfigPlan(currentPlan.options, warnings),
+      options: currentPlan.options,
+      warnings,
+      fatal: true,
     });
-    editors.add(editor);
-    if (agentBusy) editor.setAgentBusy(true);
-    return editor as VimEditor;
   };
-
-  const applyLoadedOptions = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    currentOptions = loaded.options;
-    currentDiagnostics = { warnings: [...loaded.warnings] };
-    ctx.ui.setStatus("pi-vimmode", loaded.warnings.length > 0 ? "vim ⚠" : "vim");
-  };
-
-  const refreshOptions = (ctx: ExtensionContext): boolean | Promise<boolean> => {
+  const refresh = (ctx: ExtensionContext): boolean | Promise<boolean> => {
+    const generation = ++refreshGeneration;
     try {
       const loaded = loadOptions({ cwd: ctx.cwd });
       if (loaded instanceof Promise) {
-        return loaded.then((result) => {
-          applyLoadedOptions(ctx, result);
-          return true;
-        });
+        return loaded.then(
+          (result) => {
+            if (generation !== refreshGeneration) return false;
+            apply(ctx, result);
+            return true;
+          },
+          (error) => {
+            if (generation !== refreshGeneration) return false;
+            applyFailure(ctx, error);
+            return true;
+          },
+        );
       }
-      applyLoadedOptions(ctx, loaded);
-      return true;
+      apply(ctx, loaded);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      applyLoadedOptions(ctx, {
-        options: currentOptions,
-        warnings: [`global JS config: failed to load (${message})`],
-      });
-      return true;
+      applyFailure(ctx, error);
     }
+    return true;
   };
 
-  const finishInstall = (ctx: ExtensionContext, force = false) => {
-    currentShutdown = () => ctx.shutdown();
-    const current = ctx.ui.getEditorComponent();
-    if (current === editorFactory) {
-      hasInstalledFactory = true;
-      return;
-    }
-
-    // Preserve a foreign factory that took ownership after Vim installed.
-    if (
-      !force &&
-      hasInstalledFactory &&
-      current !== undefined &&
-      current !== previousEditorFactory
-    ) {
-      return;
-    }
-
-    previousEditorFactory = current;
-    ctx.ui.setEditorComponent(editorFactory);
-    hasInstalledFactory = true;
+  return {
+    options: () => currentPlan.options,
+    diagnostics: () => currentDiagnostics,
+    refresh,
   };
+}
 
-  const installEditor = (ctx: ExtensionContext, force = false): void | Promise<void> => {
-    if (!enabled) {
-      ctx.ui.setStatus("pi-vimmode", "vim off");
-      return;
-    }
-    const refreshed = refreshOptions(ctx);
-    if (refreshed instanceof Promise) return refreshed.then(() => finishInstall(ctx, force));
-    finishInstall(ctx, force);
-  };
+type EditorState = {
+  config: ConfigState;
+  createEditor: CreateEditor;
+  schedule: Schedule;
+  editors: Set<TrackedEditor>;
+  editorFactory: VimEditorFactory;
+  currentShutdown?: () => void;
+  enabled: boolean;
+  agentBusy: boolean;
+  previousEditorFactory?: EditorComponentFactory;
+  hasInstalledFactory: boolean;
+};
 
-  const installEditorSoon = (ctx: ExtensionContext) => {
-    void installEditor(ctx);
-    schedule(() => {
-      try {
-        void installEditor(ctx);
-      } catch {
-        // Context can go stale during reload/session switch. Next session_start will reinstall.
-      }
-    });
-  };
+function finishInstall(state: EditorState, ctx: ExtensionContext, force = false): void {
+  state.currentShutdown = () => ctx.shutdown();
+  const current = ctx.ui.getEditorComponent();
+  if (current === state.editorFactory) {
+    state.hasInstalledFactory = true;
+    return;
+  }
+  if (
+    !force &&
+    state.hasInstalledFactory &&
+    current !== undefined &&
+    current !== state.previousEditorFactory
+  ) {
+    return;
+  }
+  state.previousEditorFactory = current;
+  ctx.ui.setEditorComponent(state.editorFactory);
+  state.hasInstalledFactory = true;
+}
 
-  const setKnownEditorsAgentBusy = (active: boolean) => {
-    agentBusy = active;
-    for (const editor of editors) editor.setAgentBusy(active);
-  };
-
-  const resetKnownEditors = () => {
-    for (const editor of editors) editor.resetTerminalCursorStyle();
-    editors.clear();
-  };
-
-  const disableEditor = (ctx: ExtensionContext) => {
-    enabled = false;
-    agentBusy = false;
-    resetKnownEditors();
-    const current = ctx.ui.getEditorComponent();
-    if (current === editorFactory) {
-      ctx.ui.setEditorComponent(previousEditorFactory);
-      hasInstalledFactory = false;
-    }
+function installEditor(
+  state: EditorState,
+  ctx: ExtensionContext,
+  force = false,
+): void | Promise<void> {
+  if (!state.enabled) {
     ctx.ui.setStatus("pi-vimmode", "vim off");
-  };
+    return;
+  }
+  const refreshed = state.config.refresh(ctx);
+  if (refreshed instanceof Promise) {
+    return refreshed.then((applied) => {
+      if (!applied) return;
+      if (state.enabled) finishInstall(state, ctx, force);
+      else ctx.ui.setStatus("pi-vimmode", "vim off");
+    });
+  }
+  finishInstall(state, ctx, force);
+}
 
-  const enableEditor = (ctx: ExtensionContext): void | Promise<void> => {
-    enabled = true;
-    return installEditor(ctx, true);
-  };
+function resetKnownEditors(state: EditorState): void {
+  for (const editor of state.editors) editor.resetTerminalCursorStyle();
+  state.editors.clear();
+}
 
+function createEditorState(dependencies: VimLifecycleDependencies): EditorState {
+  let state: EditorState;
+  const config = createConfigState(dependencies, (options, diagnostics) => {
+    if (!state?.enabled) return;
+    for (const editor of state.editors) editor.reconfigure(options, diagnostics);
+  });
+  state = {
+    config,
+    createEditor:
+      dependencies.createEditor ??
+      ((tui, theme, keybindings, options, diagnostics, vimOptions) =>
+        new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions)),
+    schedule: dependencies.schedule ?? ((callback) => setTimeout(callback, 0)),
+    editors: new Set<TrackedEditor>(),
+    editorFactory: undefined as unknown as VimEditorFactory,
+    enabled: true,
+    agentBusy: false,
+    hasInstalledFactory: false,
+  };
+  state.editorFactory = (tui, theme, keybindings) => {
+    const editor = state.createEditor(
+      tui,
+      theme,
+      keybindings,
+      state.config.options(),
+      state.config.diagnostics(),
+      { onShutdown: state.currentShutdown },
+    );
+    state.editors.add(editor);
+    if (state.agentBusy) editor.setAgentBusy(true);
+    return editor as VimEditor;
+  };
+  return state;
+}
+
+function observeInstall(install: void | Promise<void>, ctx: ExtensionContext): void {
+  if (!(install instanceof Promise)) return;
+  void install.catch((error: unknown) => {
+    try {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.ui.notify(`pi-vimmode install failed: ${message}`, "error");
+    } catch {
+      // Context went stale while reporting the original failure.
+    }
+  });
+}
+
+function installEditorSoon(state: EditorState, ctx: ExtensionContext): void {
+  observeInstall(installEditor(state, ctx), ctx);
+  state.schedule(() => {
+    try {
+      observeInstall(installEditor(state, ctx), ctx);
+    } catch {
+      // Context can go stale during reload/session switch. Next session_start will reinstall.
+    }
+  });
+}
+
+function disableEditor(state: EditorState, ctx: ExtensionContext): void {
+  state.enabled = false;
+  state.agentBusy = false;
+  resetKnownEditors(state);
+  if (ctx.ui.getEditorComponent() === state.editorFactory) {
+    ctx.ui.setEditorComponent(state.previousEditorFactory);
+    state.hasInstalledFactory = false;
+  }
+  ctx.ui.setStatus("pi-vimmode", "vim off");
+}
+
+function registerVimCommand(pi: ExtensionAPI, state: EditorState): void {
   pi.registerCommand("vimmode", {
     description: "Toggle pi-vimmode editor on/off",
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase() || "toggle";
       if (action === "status") {
-        ctx.ui.notify(`pi-vimmode ${enabled ? "enabled" : "disabled"}`, "info");
+        ctx.ui.notify(`pi-vimmode ${state.enabled ? "enabled" : "disabled"}`, "info");
         return;
       }
       if (action === "reload") {
-        const refreshed = refreshOptions(ctx);
-        if (refreshed instanceof Promise) await refreshed;
-        if (enabled) finishInstall(ctx);
-        ctx.ui.notify(`pi-vimmode ${enabled ? "reloaded" : "config reloaded (disabled)"}`, "info");
+        if (!(await state.config.refresh(ctx))) return;
+        if (state.enabled) finishInstall(state, ctx);
+        ctx.ui.notify(
+          `pi-vimmode ${state.enabled ? "reloaded" : "config reloaded (disabled)"}`,
+          "info",
+        );
         return;
       }
       if (action !== "toggle" && action !== "on" && action !== "off") {
         ctx.ui.notify("Usage: /vimmode [on|off|toggle|status|reload]", "warning");
         return;
       }
-
-      if (action === "on" || (action === "toggle" && !enabled)) await enableEditor(ctx);
-      else disableEditor(ctx);
-
-      ctx.ui.notify(`pi-vimmode ${enabled ? "enabled" : "disabled"}`, "info");
+      if (action === "on" || (action === "toggle" && !state.enabled)) {
+        state.enabled = true;
+        await installEditor(state, ctx, true);
+      } else {
+        disableEditor(state, ctx);
+      }
+      ctx.ui.notify(`pi-vimmode ${state.enabled ? "enabled" : "disabled"}`, "info");
     },
   });
+}
 
-  pi.on("session_start", (_event, ctx) => {
-    installEditorSoon(ctx);
-  });
-
-  pi.on("resources_discover", (_event, ctx) => {
-    installEditorSoon(ctx);
-  });
-
+export function registerVimLifecycle(
+  pi: ExtensionAPI,
+  dependencies: VimLifecycleDependencies = {},
+): void {
+  const state = createEditorState(dependencies);
+  registerVimCommand(pi, state);
+  pi.on("session_start", (_event, ctx) => installEditorSoon(state, ctx));
+  pi.on("resources_discover", (_event, ctx) => installEditorSoon(state, ctx));
   pi.on("agent_start", () => {
-    setKnownEditorsAgentBusy(true);
+    state.agentBusy = true;
+    for (const editor of state.editors) editor.setAgentBusy(true);
   });
-
   pi.on("agent_end", (_event, ctx) => {
-    setKnownEditorsAgentBusy(false);
-    void installEditor(ctx);
+    state.agentBusy = false;
+    for (const editor of state.editors) editor.setAgentBusy(false);
+    observeInstall(installEditor(state, ctx), ctx);
   });
-
   pi.on("session_shutdown", () => {
-    agentBusy = false;
-    resetKnownEditors();
+    state.agentBusy = false;
+    resetKnownEditors(state);
   });
 }

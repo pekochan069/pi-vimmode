@@ -258,13 +258,15 @@ describe("vim editor integration", () => {
   });
 
   test("constructor clones caller-owned nested keymap options", () => {
-    const options = resolveVimOptions({
-      piVimMode: {
-        startMode: "normal",
-        leader: ",",
-        keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["<leader>k"] } },
-      },
-    }).options;
+    const options = structuredClone(
+      resolveVimOptions({
+        piVimMode: {
+          startMode: "normal",
+          leader: ",",
+          keymap: { escape: ["<D-j>"], commands: { openLineBelow: ["<leader>k"] } },
+        },
+      }).options,
+    );
     const { editor } = createEditor(options);
     options.leader = ";";
     options.keymap!.leader = ";";
@@ -292,6 +294,24 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("abc Def");
     expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
     expect(editor.getVimMode()).toBe("normal");
+  });
+
+  test("reconfigure applies new keymaps immediately while clearing pending grammar", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "insert", keymap: { commands: { openLineBelow: [",k"] } } },
+    }).options;
+
+    editor.setText("one\ntwo");
+    editor.handleInput("d");
+    expect(editor.getPendingOperator()).toBe("d");
+
+    editor.reconfigure(options, { warnings: ["reloaded"] });
+    expectEditorState(editor, { text: "one\ntwo", mode: "normal", pending: undefined });
+    typeKeys(editor, ["g", "g", ",", "k"]);
+
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getVimMode()).toBe("insert");
   });
 
   test("plain insert text uses fast path without full snapshot", () => {
@@ -917,15 +937,17 @@ describe("vim editor integration", () => {
   });
 
   test("renders and clones a right-positioned status group", () => {
-    const options = resolveVimOptions({
-      piVimMode: {
-        startMode: "normal",
-        ui: {
-          status: { position: "right" },
-          mode: { labels: { normal: "COMMAND" } },
+    const options = structuredClone(
+      resolveVimOptions({
+        piVimMode: {
+          startMode: "normal",
+          ui: {
+            status: { position: "right" },
+            mode: { labels: { normal: "COMMAND" } },
+          },
         },
-      },
-    }).options;
+      }).options,
+    );
     const { editor } = createEditor(options);
     options.ui!.status.position = "left";
 

@@ -235,6 +235,64 @@ export default (vim) => {
     expect(result.options.keymap?.commands.insertBefore).toEqual(["z"]);
   });
 
+  test("project exact action replaces inherited JS remap", () => {
+    const result = resolveVimOptions(
+      undefined,
+      {
+        piVimMode: {
+          keymap: { actions: { "prompt.transform.quote": [{ key: "zq", modes: ["normal"] }] } },
+        },
+      },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "zq", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.quote");
+  });
+
+  test("later JS remap replaces lower action in only claimed scopes", () => {
+    const result = resolveVimOptions(
+      {
+        piVimMode: {
+          keymap: {
+            actions: {
+              "prompt.transform.quote": [{ key: "zq", modes: ["normal", "visual"] }],
+            },
+          },
+        },
+      },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "zq", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.zq?.kind).toBe("remap");
+    expect(result.plan.scopes.visual.exact.zq?.kind).toBe("action");
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      expect.objectContaining({ actionId: "prompt.transform.quote", modes: ["visual"] }),
+    ]);
+    expect(result.options.keymap?.remaps.accepted).toEqual([
+      { key: "zq", inputs: ["l"], modes: ["normal"] },
+    ]);
+  });
+
   test("action bindings on same key survive in disjoint modes", () => {
     const result = resolveVimOptions(undefined, undefined, {
       appendKeymap: true,
@@ -264,6 +322,160 @@ export default (vim) => {
         modes: ["visual"],
       },
     ]);
+  });
+
+  test("plan preflights remap strict-prefix conflicts in concrete scope", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["za"] } } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "remap",
+              key: "zab",
+              inputs: ["l"],
+              modes: ["normal", "visual"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.za?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.zab).toBeUndefined();
+    expect(result.plan.scopes.visual.exact.zab?.kind).toBe("remap");
+    expect(result.options.keymap?.remaps.accepted).toEqual([
+      { key: "zab", inputs: ["l"], modes: ["visual"] },
+    ]);
+    expect(result.warnings).toEqual([
+      expect.stringContaining("remap.zab in normal: strict-prefix conflict with command.undo.za"),
+    ]);
+  });
+
+  test("printable plus sequences participate in strict-prefix preflight", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { commands: { undo: ["g+"] } } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: "g+x", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact["g+"]?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact["g+x"]).toBeUndefined();
+    expect(result.plan.scopes.normal.prefixes["g+"]).toBeUndefined();
+    expect(result.warnings).toEqual([
+      expect.stringContaining("remap.g+x in normal: strict-prefix conflict with command.undo.g+"),
+    ]);
+  });
+
+  test("latest same-scope JS exact mapping wins", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.quote",
+            key: "zq",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "action",
+            actionId: "prompt.transform.reflow",
+            key: "zq",
+            args: {},
+            modes: ["normal"],
+          },
+        },
+      ],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.options.keymap?.actions.accepted).toEqual([
+      {
+        actionId: "prompt.transform.reflow",
+        key: "zq",
+        args: { action: "reflow" },
+        modes: ["normal"],
+      },
+    ]);
+    expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.reflow");
+  });
+
+  test("project leader actions override lower JS remaps after final expansion", () => {
+    const result = resolveVimOptions(
+      undefined,
+      {
+        piVimMode: {
+          leader: ",",
+          keymap: {
+            actions: { "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }] },
+          },
+        },
+      },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: { kind: "remap", key: ",u", inputs: ["l"], modes: ["normal"] },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+  });
+
+  test("project escape mappings override lower JS mappings in escape scopes", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { escape: ["<D-j>"] } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "remap",
+              key: "super+j",
+              inputs: ["l"],
+              modes: ["visual", "visualLine", "visualBlock"],
+            },
+          },
+          {
+            kind: "map",
+            mapping: { kind: "insert", action: "openLineBelow", key: "super+j" },
+          },
+        ],
+      },
+    );
+
+    expect(result.options.keymap?.remaps.accepted).toEqual([]);
+    expect(result.options.keymap?.insert.openLineBelow).not.toContain("super+j");
+    for (const scope of ["insert", "visual", "visualLine", "visualBlock"] as const) {
+      expect(result.plan.scopes[scope].exact["super+j"]?.kind).toBe("escape");
+    }
   });
 
   test("invalid remap modes are dropped", () => {

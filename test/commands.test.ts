@@ -367,6 +367,26 @@ describe("normal command parser", () => {
     });
   });
 
+  test("named terminal command mappings stay atomic at runtime", () => {
+    const keymap = resolveVimOptions({
+      piVimMode: { keymap: { commands: { undo: ["<Home>", "<F1>"] } } },
+    }).options.keymap!;
+
+    expect(resolveNormalCommand("h", undefined, keymap)).toEqual({
+      type: "motion",
+      motion: "left",
+    });
+    expect(resolveNormalCommand("f", undefined, keymap)).toMatchObject({ type: "pending" });
+    expect(resolveNormalCommand("home", undefined, keymap)).toMatchObject({
+      type: "command",
+      command: "undo",
+    });
+    expect(resolveNormalCommand("f1", undefined, keymap)).toMatchObject({
+      type: "command",
+      command: "undo",
+    });
+  });
+
   test("resolves configured semantic operators, motions, and commands", () => {
     const keymap = {
       ...DEFAULT_VIM_KEYMAP,

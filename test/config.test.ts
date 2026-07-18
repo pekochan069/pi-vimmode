@@ -103,11 +103,13 @@ describe("vim config parsing", () => {
 
   test("named terminal keys compile atomically without character prefixes", () => {
     const result = resolveVimOptions({
-      piVimMode: { keymap: { commands: { undo: ["<Home>"] } } },
+      piVimMode: { keymap: { commands: { undo: ["<Home>", "<F1>"] } } },
     });
 
     expect(result.plan.scopes.normal.exact.home?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.f1?.id).toBe("command.undo");
     expect(result.plan.scopes.normal.prefixes.h).toBeUndefined();
+    expect(result.plan.scopes.normal.prefixes.f).toBeUndefined();
   });
 
   test("immutable plan does not share configured nested fields", () => {

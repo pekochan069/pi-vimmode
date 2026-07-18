@@ -77,11 +77,13 @@ function createConfigState(dependencies: VimLifecycleDependencies): ConfigState 
       if (loaded instanceof Promise) {
         return loaded.then(
           (result) => {
-            if (generation === refreshGeneration) apply(ctx, result);
+            if (generation !== refreshGeneration) return false;
+            apply(ctx, result);
             return true;
           },
           (error) => {
-            if (generation === refreshGeneration) applyFailure(ctx, error);
+            if (generation !== refreshGeneration) return false;
+            applyFailure(ctx, error);
             return true;
           },
         );
@@ -144,7 +146,8 @@ function installEditor(
   }
   const refreshed = state.config.refresh(ctx);
   if (refreshed instanceof Promise) {
-    return refreshed.then(() => {
+    return refreshed.then((applied) => {
+      if (!applied) return;
       if (state.enabled) finishInstall(state, ctx, force);
       else ctx.ui.setStatus("pi-vimmode", "vim off");
     });

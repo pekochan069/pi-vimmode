@@ -20,6 +20,37 @@ export type VimMappingFamily =
   | "textObject.kind"
   | "textObject.target";
 
+const NAMED_TERMINAL_KEYS = new Set([
+  "enter",
+  "tab",
+  "escape",
+  "backspace",
+  "delete",
+  "home",
+  "end",
+  "pageup",
+  "pagedown",
+  "insert",
+  "up",
+  "down",
+  "left",
+  "right",
+]);
+
+export function isAtomicMappingSequence(sequence: string): boolean {
+  return (
+    /^(?:ctrl|alt|shift|super)\+/.test(sequence) ||
+    NAMED_TERMINAL_KEYS.has(sequence) ||
+    /^f\d+$/.test(sequence)
+  );
+}
+
+export function mappingSequencesOverlap(left: string, right: string): boolean {
+  if (left === right) return true;
+  if (isAtomicMappingSequence(left) || isAtomicMappingSequence(right)) return false;
+  return left.startsWith(right) || right.startsWith(left);
+}
+
 const VISUAL_SCOPES = ["visual", "visualLine", "visualBlock"] as const;
 const NORMAL_AND_VISUAL_SCOPES = ["normal", ...VISUAL_SCOPES] as const;
 

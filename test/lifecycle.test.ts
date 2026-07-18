@@ -433,6 +433,32 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors[0]?.options.startMode).toBe("insert");
   });
 
+  test("stale async refresh cannot install into an older context", async () => {
+    const { hooks, deferredLoads, resolveDeferred, shutdownCallbacks } = createLifecycleHarness();
+    deferredLoads.add(0).add(1);
+    const older = createContext("/older");
+    const newer = createContext("/newer");
+
+    hooks.get("agent_end")?.({}, older);
+    hooks.get("agent_end")?.({}, newer);
+    const result = {
+      plan: createVimConfigPlan(DEFAULT_VIM_OPTIONS, []),
+      options: DEFAULT_VIM_OPTIONS,
+      warnings: [],
+      fatal: false,
+    };
+    resolveDeferred.get(1)?.(result);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveDeferred.get(0)?.(result);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(older.ui.component).toBeUndefined();
+    newer.ui.component?.({}, {}, {});
+    shutdownCallbacks[0]?.();
+    expect(older.shutdownCalls).toBe(0);
+    expect(newer.shutdownCalls).toBe(1);
+  });
+
   test("async install cannot reactivate editor after vimmode off", async () => {
     const { hooks, commands, deferredLoads, resolveDeferred } = createLifecycleHarness();
     deferredLoads.add(0);

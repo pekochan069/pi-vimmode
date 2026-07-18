@@ -67,7 +67,9 @@ import {
   grammarEntriesForKeymap,
 } from "./keymap-grammar.ts";
 import {
+  isAtomicMappingSequence,
   mappingScopesForKeymapEntry,
+  mappingSequencesOverlap,
   VIM_MAPPING_SCOPES,
   type VimMappingScope,
 } from "./mapping-scopes.ts";
@@ -621,26 +623,8 @@ function parseStringArray(
   return parsed.length > 0 ? parsed : undefined;
 }
 
-const NON_PRINTABLE_KEY_NAMES = new Set([
-  "enter",
-  "tab",
-  "escape",
-  "backspace",
-  "delete",
-  "home",
-  "end",
-  "pageup",
-  "pagedown",
-  "insert",
-  "up",
-  "down",
-  "left",
-  "right",
-]);
-
 function isPrintableTextSequence(sequence: string): boolean {
-  if (sequence.includes("+")) return false;
-  if (NON_PRINTABLE_KEY_NAMES.has(sequence)) return false;
+  if (isAtomicMappingSequence(sequence)) return false;
   return [...sequence].every((char) => char.charCodeAt(0) >= 32);
 }
 
@@ -1632,12 +1616,7 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
     const next = {} as Record<K, string[]>;
     for (const action of Object.keys(record) as K[]) {
       next[action] = record[action].filter(
-        (binding) =>
-          ![...sequences].some((sequence) => {
-            if (binding === sequence) return true;
-            if (binding.includes("+") || sequence.includes("+")) return false;
-            return binding.startsWith(sequence) || sequence.startsWith(binding);
-          }),
+        (binding) => ![...sequences].some((sequence) => mappingSequencesOverlap(binding, sequence)),
       );
     }
     return next;
@@ -1650,12 +1629,7 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
   target.marks = remove(target.marks);
   target.remaps = {
     accepted: target.remaps.accepted.filter(
-      (remap) =>
-        ![...sequences].some((sequence) => {
-          if (remap.key === sequence) return true;
-          if (remap.key.includes("+") || sequence.includes("+")) return false;
-          return remap.key.startsWith(sequence) || sequence.startsWith(remap.key);
-        }),
+      (remap) => ![...sequences].some((sequence) => mappingSequencesOverlap(remap.key, sequence)),
     ),
   };
 }
@@ -1747,12 +1721,7 @@ function removePartialRemaps(target: PartialKeymapOptions, sequences: Set<string
   if (!target.remaps || sequences.size === 0) return;
   target.remaps = {
     accepted: target.remaps.accepted.filter(
-      (remap) =>
-        ![...sequences].some((sequence) => {
-          if (remap.key === sequence) return true;
-          if (remap.key.includes("+") || sequence.includes("+")) return false;
-          return remap.key.startsWith(sequence) || sequence.startsWith(remap.key);
-        }),
+      (remap) => ![...sequences].some((sequence) => mappingSequencesOverlap(remap.key, sequence)),
     ),
   };
 }
@@ -2370,17 +2339,13 @@ function detectKeymapConflicts(keymap: ResolvedVimKeymap): string[] {
     for (const second of bindings) {
       if (first === second) continue;
       if (second.sequence.length <= first.sequence.length) continue;
-      if (second.sequence.includes("+")) continue;
-      if (!second.sequence.startsWith(first.sequence)) continue;
-      // Arrow-key aliases are atomic terminal sequences, never typed character-by-character.
-      // Suppress shadow warnings when the longer binding is an atomic alias.
       if (
-        second.sequence === "left" ||
-        second.sequence === "down" ||
-        second.sequence === "up" ||
-        second.sequence === "right"
-      )
+        isAtomicMappingSequence(first.sequence) ||
+        isAtomicMappingSequence(second.sequence) ||
+        !second.sequence.startsWith(first.sequence)
+      ) {
         continue;
+      }
       warnings.push(
         `resolved settings: piVimMode.keymap binding ${first.sequence} for ${first.label} is shadowed by longer binding ${second.sequence} for ${second.label}`,
       );
@@ -2558,7 +2523,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 function isAtomicMapping(sequence: string): boolean {
-  return /^(?:ctrl|alt|shift|super)\+/.test(sequence) || NON_PRINTABLE_KEY_NAMES.has(sequence);
+  return isAtomicMappingSequence(sequence);
 }
 
 function hasStrictPrefixConflict(left: string, right: string): boolean {

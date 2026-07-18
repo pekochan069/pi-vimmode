@@ -508,6 +508,43 @@ describe("vim extension lifecycle", () => {
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 
+  test("unchanged delayed refresh does not reset active editor state", () => {
+    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const { hooks, scheduled, createdEditors } = createLifecycleHarness([normal, normal]);
+    const ctx = createContext("/repo");
+
+    hooks.get("session_start")?.({}, ctx);
+    ctx.ui.component?.({}, {}, {});
+    scheduled[0]!();
+
+    expect(createdEditors[0]!.reconfigureCalls).toHaveLength(0);
+  });
+
+  test("delayed async reinstall catches stale context rejection", async () => {
+    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const { hooks, scheduled, deferredLoads, resolveDeferred } = createLifecycleHarness([
+      normal,
+      normal,
+    ]);
+    const ctx = createContext("/repo");
+
+    hooks.get("session_start")?.({}, ctx);
+    deferredLoads.add(1);
+    scheduled[0]!();
+    ctx.ui.setStatus = () => {
+      throw new Error("stale context");
+    };
+    resolveDeferred.get(1)?.({
+      plan: createVimConfigPlan(normal, []),
+      options: normal,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ctx.ui.component).toBeDefined();
+  });
+
   test("delayed reinstall refreshes settings and catches stale context failures", () => {
     const { hooks, scheduled, loadCalls } = createLifecycleHarness();
     const ctx = createContext("/repo");

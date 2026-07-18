@@ -56,13 +56,16 @@ function createConfigState(
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
+    const previousConfig = JSON.stringify([currentPlan.options, currentDiagnostics]);
     const committed = !loaded.fatal || !hasCommittedLoad;
     if (committed) {
       currentPlan = loaded.plan;
       hasCommittedLoad = true;
     }
     currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
-    if (committed) onCommit(currentPlan.options, currentDiagnostics);
+    const configChanged =
+      JSON.stringify([currentPlan.options, currentDiagnostics]) !== previousConfig;
+    if (committed && configChanged) onCommit(currentPlan.options, currentDiagnostics);
     ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };
   const applyFailure = (ctx: ExtensionContext, error: unknown) => {
@@ -200,11 +203,15 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
   return state;
 }
 
+function ignoreStaleInstall(install: void | Promise<void>): void {
+  if (install instanceof Promise) void install.catch(() => {});
+}
+
 function installEditorSoon(state: EditorState, ctx: ExtensionContext): void {
-  void installEditor(state, ctx);
+  ignoreStaleInstall(installEditor(state, ctx));
   state.schedule(() => {
     try {
-      void installEditor(state, ctx);
+      ignoreStaleInstall(installEditor(state, ctx));
     } catch {
       // Context can go stale during reload/session switch. Next session_start will reinstall.
     }

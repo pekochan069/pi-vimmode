@@ -49,6 +49,7 @@ function createConfigState(dependencies: VimLifecycleDependencies): ConfigState 
   let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
   let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
   let hasCommittedLoad = false;
+  let refreshGeneration = 0;
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
@@ -70,16 +71,17 @@ function createConfigState(dependencies: VimLifecycleDependencies): ConfigState 
     });
   };
   const refresh = (ctx: ExtensionContext): boolean | Promise<boolean> => {
+    const generation = ++refreshGeneration;
     try {
       const loaded = loadOptions({ cwd: ctx.cwd });
       if (loaded instanceof Promise) {
         return loaded.then(
           (result) => {
-            apply(ctx, result);
+            if (generation === refreshGeneration) apply(ctx, result);
             return true;
           },
           (error) => {
-            applyFailure(ctx, error);
+            if (generation === refreshGeneration) applyFailure(ctx, error);
             return true;
           },
         );
@@ -142,7 +144,10 @@ function installEditor(
   }
   const refreshed = state.config.refresh(ctx);
   if (refreshed instanceof Promise) {
-    return refreshed.then(() => finishInstall(state, ctx, force));
+    return refreshed.then(() => {
+      if (state.enabled) finishInstall(state, ctx, force);
+      else ctx.ui.setStatus("pi-vimmode", "vim off");
+    });
   }
   finishInstall(state, ctx, force);
 }

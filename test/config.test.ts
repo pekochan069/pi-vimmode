@@ -101,6 +101,15 @@ describe("vim config parsing", () => {
     ).toThrow();
   });
 
+  test("named terminal keys compile atomically without character prefixes", () => {
+    const result = resolveVimOptions({
+      piVimMode: { keymap: { commands: { undo: ["<Home>"] } } },
+    });
+
+    expect(result.plan.scopes.normal.exact.home?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.prefixes.h).toBeUndefined();
+  });
+
   test("immutable plan does not share configured nested fields", () => {
     const settings = {
       piVimMode: {
@@ -119,6 +128,12 @@ describe("vim config parsing", () => {
     expect(settings.piVimMode.promptTransforms.commands.quote).toEqual(["qte"]);
     expect(settings.piVimMode.ui.status.items).toEqual(["mode", "selection"]);
     expect(settings.piVimMode.ui.mode.labels.normal).toBe("COMMAND");
+    expect(options.keymap?.motions.wordForward).not.toBe(
+      settings.piVimMode.keymap.motions.wordForward,
+    );
+    expect(options.ui?.status.items).not.toBe(settings.piVimMode.ui.status.items);
+    expect(Object.isFrozen(settings.piVimMode.keymap.motions.wordForward)).toBe(false);
+    expect(Object.isFrozen(settings.piVimMode.ui.status.items)).toBe(false);
     expect(options.keymap?.motions.left).toEqual(["h", "left"]);
     expect(DEFAULT_VIM_OPTIONS.keymap?.motions.left).toEqual(["h", "left"]);
   });

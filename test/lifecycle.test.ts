@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 
-import { createVimConfigPlan, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import {
+  createVimConfigPlan,
+  DEFAULT_VIM_OPTIONS,
+  type VimConfigLoadResult,
+} from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
 type HookName =
@@ -94,6 +98,8 @@ function createLifecycleHarness(
   const fatalLoads: boolean[] = [];
   const asyncLoads = new Set<number>();
   const rejectedLoads = new Set<number>();
+  const deferredLoads = new Set<number>();
+  const resolveDeferred = new Map<number, (result: VimConfigLoadResult) => void>();
   let loadIndex = 0;
 
   const pi = {
@@ -121,6 +127,9 @@ function createLifecycleHarness(
         warnings: warning,
         fatal,
       };
+      if (deferredLoads.has(load)) {
+        return new Promise<VimConfigLoadResult>((resolve) => resolveDeferred.set(load, resolve));
+      }
       return asyncLoads.has(load) ? Promise.resolve(result) : result;
     },
     createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
@@ -156,6 +165,8 @@ function createLifecycleHarness(
     fatalLoads,
     asyncLoads,
     rejectedLoads,
+    deferredLoads,
+    resolveDeferred,
   };
 }
 
@@ -389,6 +400,56 @@ describe("vim extension lifecycle", () => {
       "global JS config: failed to load (async load failed)",
     ]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
+  });
+
+  test("newer async refresh stays authoritative when loads resolve out of order", async () => {
+    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const insert = { ...DEFAULT_VIM_OPTIONS, startMode: "insert" as const };
+    const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
+      normal,
+      insert,
+    ]);
+    deferredLoads.add(0).add(1);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    hooks.get("agent_end")?.({}, ctx);
+    resolveDeferred.get(1)?.({
+      plan: createVimConfigPlan(insert, []),
+      options: insert,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveDeferred.get(0)?.({
+      plan: createVimConfigPlan(normal, []),
+      options: normal,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    ctx.ui.component?.({}, {}, {});
+    expect(createdEditors[0]?.options.startMode).toBe("insert");
+  });
+
+  test("async install cannot reactivate editor after vimmode off", async () => {
+    const { hooks, commands, deferredLoads, resolveDeferred } = createLifecycleHarness();
+    deferredLoads.add(0);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    await commands.get("vimmode")?.handler("off", ctx);
+    resolveDeferred.get(0)?.({
+      plan: createVimConfigPlan(DEFAULT_VIM_OPTIONS, []),
+      options: DEFAULT_VIM_OPTIONS,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ctx.ui.component).toBeUndefined();
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim off"]);
   });
 
   test("fatal reload updates diagnostics but preserves last-known-good options", () => {

@@ -225,6 +225,23 @@ describe("vim extension lifecycle", () => {
     expect(loadCalls).toEqual([{ cwd: "/repo" }]);
   });
 
+  test("agent end reports async install failures", async () => {
+    const { hooks, asyncLoads } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+    asyncLoads.add(0);
+    ctx.ui.setStatus = () => {
+      throw new Error("current context failed");
+    };
+
+    hooks.get("agent_end")?.({}, ctx);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ctx.ui.notifications).toContainEqual([
+      "pi-vimmode install failed: current context failed",
+      "error",
+    ]);
+  });
+
   test("agent start marks existing editors busy without installing", () => {
     const { hooks, createdEditors, loadCalls } = createLifecycleHarness();
     const ctx = createContext("/repo");

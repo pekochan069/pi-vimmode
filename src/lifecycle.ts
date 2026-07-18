@@ -285,7 +285,7 @@ export function registerVimLifecycle(
   pi.on("agent_end", (_event, ctx) => {
     state.agentBusy = false;
     for (const editor of state.editors) editor.setAgentBusy(false);
-    void installEditor(state, ctx);
+    observeInstall(installEditor(state, ctx), ctx);
   });
   pi.on("session_shutdown", () => {
     state.agentBusy = false;

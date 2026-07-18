@@ -563,6 +563,19 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "normal"]);
   });
 
+  test("vimmode reload stays disabled after refreshing options", async () => {
+    const { hooks, commands, loadCalls } = createLifecycleHarness();
+    const ctx = createContext("/repo");
+
+    hooks.get("session_start")?.({}, ctx);
+    await commands.get("vimmode")?.handler("off", ctx);
+    await commands.get("vimmode")?.handler("reload", ctx);
+
+    expect(loadCalls).toEqual([{ cwd: "/repo" }, { cwd: "/repo" }]);
+    expect(ctx.ui.component).toBeUndefined();
+    expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode config reloaded (disabled)", "info"]);
+  });
+
   test("stale vimmode reload cannot reinstall an older context", async () => {
     const { hooks, commands, deferredLoads, resolveDeferred, shutdownCallbacks } =
       createLifecycleHarness();

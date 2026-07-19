@@ -137,6 +137,7 @@ export const CONFIG_LEAVES: readonly ConfigLeaf[] = leaves([
   "search.clearOnInsert",
   "search.maxHighlights",
   "exCommand.autocomplete",
+  "easymotion.labelColor",
   "feedback.noop",
   "promptStructures.enabled",
   ...Object.keys(DEFAULT_VIM_OPTIONS.promptStructures!.targets).map(

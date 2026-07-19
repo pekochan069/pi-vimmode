@@ -40,6 +40,7 @@ import {
   promptTransformsForOptions,
   searchForOptions,
   uiForOptions,
+  easymotionForOptions,
 } from "./config.ts";
 import { suggestExCommands } from "./ex.ts";
 import {
@@ -404,6 +405,16 @@ export class VimEditor extends CustomEditor {
       maxHighlights: search.maxHighlights,
     };
   }
+  private easymotionRenderInput() {
+    const easymotion = easymotionForOptions(this.options);
+    if (!easymotion) return undefined;
+    const pending = this.modalState.pendingEasymotion;
+    if (pending?.kind !== "highlight") return undefined;
+    return {
+      targets: pending.targets.map((t) => ({ line: t.line, character: t.character })),
+      labelColor: easymotion.labelColor,
+    };
+  }
 
   private renderEditorLines(
     width: number,
@@ -437,6 +448,7 @@ export class VimEditor extends CustomEditor {
           },
         },
         search: this.searchRenderInput(),
+        easymotion: this.easymotionRenderInput(),
         display: {
           borderColor: this.borderColor,
         },
@@ -473,6 +485,7 @@ export class VimEditor extends CustomEditor {
           },
         },
         search: this.searchRenderInput(),
+        easymotion: this.easymotionRenderInput(),
         display: {
           borderColor: this.borderColor,
         },

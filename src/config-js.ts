@@ -127,6 +127,7 @@ const KNOWN_COMMANDS = new Set([
   "showKeybindings",
   "reselectVisual",
   "easymotion",
+  "easymotion.goToChar",
 ]);
 
 const INSERT_ACTIONS = new Set<VimInsertAction>([

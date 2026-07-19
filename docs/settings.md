@@ -672,6 +672,14 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
+## EasyMotion settings
+
+These settings control the visual appearance of EasyMotion character-search labels.
+
+| Path                              | Default    | Accepted values         | Effect                                                                                        |
+| --------------------------------- | ---------- | ----------------------- | --------------------------------------------------------------------------------------------- |
+| `piVimMode.easymotion.labelColor` | `\x1b[31m` | ANSI escape code string | Color applied to EasyMotion label characters (e.g. `\x1b[31m` for red, `\x1b[32m` for green). |
+
 Search is literal by default and prompt-local. `?` starts backward search, empty `/` or `?` recalls the previous successful query, and `Up` / `Down` navigate in-memory history while a search is pending. Prefix a pending query with `\r` for bounded regex search. Vim highlight groups, offsets, and cross-prompt history are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
 
 ## Feedback settings

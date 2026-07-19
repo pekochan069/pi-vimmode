@@ -17,6 +17,7 @@ import type {
   ResolvedVimPromptStructures,
   ResolvedVimPromptTransforms,
   ResolvedVimSearch,
+  ResolvedVimEasymotion,
   ResolvedVimUi,
   StartupMode,
   VimActionBindingMode,
@@ -252,6 +253,10 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   maxHighlights: 200,
 }) as unknown as ResolvedVimSearch;
 
+export const DEFAULT_VIM_EASYMOTION = Object.freeze({
+  labelColor: "\x1b[31m",
+}) as unknown as ResolvedVimEasymotion;
+
 export const DEFAULT_VIM_EX_COMMAND = Object.freeze({
   autocomplete: true,
 }) as unknown as ResolvedVimExCommand;
@@ -307,6 +312,7 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
   search: DEFAULT_VIM_SEARCH,
+  easymotion: DEFAULT_VIM_EASYMOTION,
   exCommand: DEFAULT_VIM_EX_COMMAND,
   feedback: DEFAULT_VIM_FEEDBACK,
   promptStructures: DEFAULT_VIM_PROMPT_STRUCTURES,
@@ -323,6 +329,7 @@ type PartialVimOptions = {
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
   search?: PartialSearchOptions;
+  easymotion?: PartialVimEasymotionOptions;
   exCommand?: PartialExCommandOptions;
   feedback?: PartialFeedbackOptions;
   promptStructures?: PartialPromptStructureOptions;
@@ -352,6 +359,7 @@ type PartialKeymapOptions = {
 type PartialMacroOptions = Partial<ResolvedVimMacros>;
 type PartialMarkOptions = Partial<ResolvedVimMarks>;
 type PartialSearchOptions = Partial<ResolvedVimSearch>;
+type PartialVimEasymotionOptions = Partial<ResolvedVimEasymotion>;
 type PartialFeedbackOptions = Partial<VimFeedbackOptions>;
 type PartialPromptStructureOptions = {
   enabled?: boolean;
@@ -473,6 +481,12 @@ function cloneMarks(marks: ResolvedVimMarks = DEFAULT_VIM_MARKS): ResolvedVimMar
 
 function cloneSearch(search: ResolvedVimSearch = DEFAULT_VIM_SEARCH): ResolvedVimSearch {
   return { ...search };
+}
+
+function cloneEasymotion(
+  easymotion: ResolvedVimEasymotion = DEFAULT_VIM_EASYMOTION,
+): ResolvedVimEasymotion {
+  return { ...easymotion };
 }
 
 function cloneExCommand(
@@ -2052,6 +2066,15 @@ function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): 
   Object.assign(target, partial);
 }
 
+function mergeEasymotion(
+  target: ResolvedVimEasymotion,
+  partial: PartialVimEasymotionOptions,
+): void {
+  if (partial.labelColor !== undefined) {
+    target.labelColor = partial.labelColor;
+  }
+}
+
 function mergeExCommand(target: ResolvedVimExCommand, partial: PartialExCommandOptions): void {
   Object.assign(target, partial);
 }
@@ -2395,6 +2418,8 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (partial.macros) mergeMacros(target.macros ?? cloneMacros(), partial.macros);
   if (partial.marks) mergeMarks(target.marks ?? cloneMarks(), partial.marks);
   if (partial.search) mergeSearch(target.search ?? cloneSearch(), partial.search);
+  if (partial.easymotion)
+    mergeEasymotion(target.easymotion ?? cloneEasymotion(), partial.easymotion);
   if (partial.exCommand) mergeExCommand(target.exCommand ?? cloneExCommand(), partial.exCommand);
   if (partial.feedback) mergeFeedback(target.feedback ?? cloneFeedback(), partial.feedback);
   if (partial.promptStructures) {
@@ -2499,7 +2524,10 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       removeJsMappings(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
       restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
       const commands = (keymap.commands ??= {}) as Partial<Record<VimCommandAction, string[]>>;
-      commands[mapping.command as VimCommandAction] = [...(commands[mapping.command as VimCommandAction] ?? []), mapping.key];
+      commands[mapping.command as VimCommandAction] = [
+        ...(commands[mapping.command as VimCommandAction] ?? []),
+        mapping.key,
+      ];
       continue;
     }
     removeJsMappings(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
@@ -2647,7 +2675,8 @@ export function createVimConfigPlan(
     for (const sequence of sequences) add(["insert"], sequence, { kind: "insert", id: action });
   }
   for (const [action, sequences] of Object.entries(keymap.commands)) {
-    for (const sequence of sequences) add(["normal"], sequence, { kind: "command", id: `command.${action}` });
+    for (const sequence of sequences)
+      add(["normal"], sequence, { kind: "command", id: `command.${action}` });
   }
   for (const binding of keymap.actions.accepted) {
     add(
@@ -2882,6 +2911,10 @@ export function macrosForOptions(options: ResolvedVimEditorOptions): ResolvedVim
 
 export function marksForOptions(options: ResolvedVimEditorOptions): ResolvedVimMarks {
   return options.marks ?? DEFAULT_VIM_MARKS;
+}
+
+export function easymotionForOptions(options: ResolvedVimEditorOptions): ResolvedVimEasymotion {
+  return options.easymotion ?? DEFAULT_VIM_EASYMOTION;
 }
 
 export function searchForOptions(options: ResolvedVimEditorOptions): ResolvedVimSearch {

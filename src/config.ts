@@ -374,6 +374,7 @@ export type VimPlanBinding =
       readonly id: BindablePromptTransformActionId;
       readonly args: ResolvedVimActionBinding["args"];
     }
+  | { readonly kind: "command"; readonly id: string }
   | { readonly kind: "remap"; readonly id: "remap"; readonly inputs: readonly string[] };
 
 export type VimScopeLookup = {
@@ -2494,6 +2495,13 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       ];
       continue;
     }
+    if (mapping.kind === "command") {
+      removeJsMappings(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
+      restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
+      const commands = (keymap.commands ??= {}) as Partial<Record<VimCommandAction, string[]>>;
+      commands[mapping.command as VimCommandAction] = [...(commands[mapping.command as VimCommandAction] ?? []), mapping.key];
+      continue;
+    }
     removeJsMappings(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
     restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
     const remaps = (keymap.remaps ??= { accepted: [] });
@@ -2637,6 +2645,9 @@ export function createVimConfigPlan(
   }
   for (const [action, sequences] of Object.entries(keymap.insert)) {
     for (const sequence of sequences) add(["insert"], sequence, { kind: "insert", id: action });
+  }
+  for (const [action, sequences] of Object.entries(keymap.commands)) {
+    for (const sequence of sequences) add(["normal"], sequence, { kind: "command", id: `command.${action}` });
   }
   for (const binding of keymap.actions.accepted) {
     add(

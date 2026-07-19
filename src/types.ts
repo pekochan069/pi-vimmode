@@ -95,7 +95,8 @@ export type VimCommandAction =
   | "undo"
   | "redo"
   | "showKeybindings"
-  | "reselectVisual";
+  | "reselectVisual"
+  | "easymotion";
 
 export type VimTextObjectKind = "inner" | "around";
 

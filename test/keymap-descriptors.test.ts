@@ -101,6 +101,7 @@ const expectedCommands = [
   "redo",
   "showKeybindings",
   "reselectVisual",
+  "easymotion",
 ];
 const expectedTextObjectTargets = [
   "word",

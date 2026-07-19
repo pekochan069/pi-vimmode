@@ -146,6 +146,7 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   redo: { defaults: ["ctrl+r"] },
   showKeybindings: { defaults: [] },
   reselectVisual: { defaults: ["gv"] },
+  easymotion: { defaults: [] },
 } as const satisfies Record<VimCommandAction, CommandDescriptor>;
 
 export function deriveActionKeys<T extends Record<string, KeymapDescriptor>>(

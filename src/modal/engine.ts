@@ -229,11 +229,15 @@ function handleEasymotionInput(
     let count = 0;
 
     for (let i = 0; i < lines.length && count < labels.length; i++) {
-      let pos = lines[i].indexOf(key);
+      const line = lines[i];
+      if (line === undefined) continue;
+      let pos = line.indexOf(key);
       while (pos !== -1 && count < labels.length) {
-        targets.push({ label: labels[count], line: i, character: pos });
+        const label = labels[count];
+        if (label === undefined) break;
+        targets.push({ label, line: i, character: pos });
         count++;
-        pos = lines[i].indexOf(key, pos + 1);
+        pos = line.indexOf(key, pos + 1);
       }
     }
 
@@ -254,7 +258,7 @@ function handleEasymotionInput(
     
     if (target) {
       return withEffects(rest, [
-        { type: "restoreCursor", position: { line: target.line, character: target.character } },
+        { type: "restoreCursor", position: { line: target.line, col: target.character } },
         { type: "invalidate" },
       ]);
     }

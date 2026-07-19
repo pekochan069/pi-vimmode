@@ -39,6 +39,12 @@ export type VimJsConfigMapOperation =
       key: string;
       inputs: readonly string[];
       modes: readonly VimActionBindingMode[];
+    }
+  | {
+      kind: "command";
+      command: string;
+      key: string;
+      modes: readonly VimActionBindingMode[];
     };
 
 export type VimJsConfigOperation =
@@ -75,6 +81,53 @@ const MODE_ALIASES: Record<string, readonly VimMode[]> = {
   visualLine: ["visualLine"],
   visualBlock: ["visualBlock"],
 };
+
+// Known command actions from KEYMAP_COMMAND_DESCRIPTORS — string RHS matching these
+// become command bindings instead of keystroke-replay remaps.
+const KNOWN_COMMANDS = new Set([
+  "insertBefore",
+  "insertAfter",
+  "insertLineStart",
+  "insertLineEnd",
+  "openLineBelow",
+  "openLineAbove",
+  "visualChar",
+  "visualLine",
+  "visualBlock",
+  "deleteChar",
+  "deleteCharBefore",
+  "deleteToLineEnd",
+  "changeToLineEnd",
+  "yankLine",
+  "joinLine",
+  "pasteAfter",
+  "pasteBefore",
+  "incrementNumber",
+  "decrementNumber",
+  "toggleCase",
+  "replaceChar",
+  "substituteChar",
+  "substituteLine",
+  "findCharForward",
+  "findCharBackward",
+  "tillCharForward",
+  "tillCharBackward",
+  "repeatCharSearch",
+  "repeatCharSearchReverse",
+  "startSearch",
+  "startSearchBackward",
+  "repeatSearch",
+  "repeatSearchReverse",
+  "searchWordForward",
+  "searchWordBackward",
+  "startExCommand",
+  "repeatChange",
+  "undo",
+  "redo",
+  "showKeybindings",
+  "reselectVisual",
+  "easymotion",
+]);
 
 const INSERT_ACTIONS = new Set<VimInsertAction>([
   "openLineBelow",
@@ -216,6 +269,15 @@ function compileMapping(session: ConfigSession, mode: unknown, lhs: unknown, rhs
     return;
   }
   if (typeof rhs === "string") {
+    // If the string matches a known command action, create a command binding
+    // instead of treating it as a keystroke-replay remap.
+    if (KNOWN_COMMANDS.has(rhs)) {
+      const actionModes = modes.filter((m) => m !== "insert") as VimActionBindingMode[];
+      if (actionModes.length > 0) {
+        session.recordMap({ kind: "command", command: rhs, key, modes: actionModes });
+      }
+      return;
+    }
     recordStringRemap(session, key, rhs, modes);
     return;
   }

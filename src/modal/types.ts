@@ -196,6 +196,7 @@ export type ModalState = {
     | {
         kind: "highlight";
         targets: { label: string; line: number; character: number; original: string }[];
+        originalText: string;
       }
     | { kind: "jump"; targets: { label: string; line: number; character: number }[]; char: string };
 };

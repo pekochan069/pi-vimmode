@@ -218,7 +218,20 @@ function handleEasymotionInput(
 ): ModalUpdate {
   const key = keySequence(data);
   if (!key || matchesKey(data, "escape")) {
-    const { pendingEasymotion: _, ...rest } = state;
+    const { pendingEasymotion, ...rest } = state;
+    if (pendingEasymotion?.kind === "highlight") {
+      return withEffects(rest, [
+        {
+          type: "edit",
+          result: {
+            text: pendingEasymotion.originalText,
+            cursor: snapshot.cursor,
+            changed: true,
+          },
+        },
+        { type: "invalidate" },
+      ]);
+    }
     return invalidate(rest);
   }
 
@@ -263,7 +276,7 @@ function handleEasymotionInput(
     return withEffects(
       {
         ...state,
-        pendingEasymotion: { kind: "highlight", targets },
+        pendingEasymotion: { kind: "highlight", targets, originalText: snapshot.text },
       },
       [
         {
@@ -280,18 +293,15 @@ function handleEasymotionInput(
 
     if (target) {
       const { pendingEasymotion: _, ...rest } = state;
-      // Restore the target's original character
-      const line = snapshot.lines[target.line] ?? "";
-      const nextLine =
-        line.slice(0, target.character) + target.original + line.slice(target.character + 1);
-      const nextLines = [...snapshot.lines];
-      nextLines[target.line] = nextLine;
-      const nextText = nextLines.join("\n");
-
+      // Restore full original text then place cursor on the target
       return withEffects(rest, [
         {
           type: "edit",
-          result: { text: nextText, cursor: snapshot.cursor, changed: nextText !== snapshot.text },
+          result: {
+            text: state.pendingEasymotion.originalText,
+            cursor: snapshot.cursor,
+            changed: true,
+          },
         },
         { type: "restoreCursor", position: { line: target.line, col: target.character } },
         { type: "invalidate" },

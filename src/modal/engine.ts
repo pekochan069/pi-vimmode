@@ -722,7 +722,8 @@ function handleNormalInput(
     if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
   }
   if (isProtectedPiDelegateKey(data)) {
-    if (!keymapHasBinding(keymap, key, "normal")) {
+    const scope = pendingOperator ? "operatorPending" : "normal";
+    if (!keymapHasBinding(keymap, key, scope)) {
       return delegateProtectedShortcut(state, options, data);
     }
   }

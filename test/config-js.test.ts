@@ -68,6 +68,207 @@ export default (vim) => {
     }
   });
 
+  test("keeps command leaf and nested EasyMotion descriptor factories callable", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "e", vim.action.command.easymotion());
+  vim.keymap.set("n", "g", vim.action.command.easymotion.goToChar());
+};`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([]);
+      expect(operations(result)).toEqual([
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.easymotion",
+            key: "e",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.easymotion",
+            key: "g",
+            modes: ["normal"],
+          },
+        },
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("runtime prefixes exclude scoped unmap tombstones and normal-only commands", () => {
+    const normalWithoutLastDescendant = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "zx",
+            modes: ["normal"],
+          },
+        },
+        { kind: "unmap", key: "zx", modes: ["normal"] },
+      ],
+    }).options.keymap!;
+    expect(resolveNormalCommand("z", undefined, normalWithoutLastDescendant, "normal")).toEqual({
+      type: "none",
+    });
+
+    const normalWithSibling = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "zx",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordBackward",
+            key: "zy",
+            modes: ["normal"],
+          },
+        },
+        { kind: "unmap", key: "zx", modes: ["normal"] },
+      ],
+    }).options.keymap!;
+    const normalPrefix = resolveNormalCommand("z", undefined, normalWithSibling, "normal");
+    expect(normalPrefix).toEqual({ type: "pending", pending: "z" });
+    if (normalPrefix.type !== "pending") throw new Error("expected normal prefix");
+    expect(
+      resolveNormalCommand("y", normalPrefix.pending, normalWithSibling, "normal"),
+    ).toMatchObject({
+      type: "motion",
+      motion: "wordBackward",
+    });
+
+    const operatorWithoutLastDescendant = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "zx",
+            modes: ["operatorPending"],
+          },
+        },
+        { kind: "unmap", key: "zx", modes: ["operatorPending"] },
+      ],
+    }).options.keymap!;
+    const deletePrefix = resolveNormalCommand(
+      "d",
+      undefined,
+      operatorWithoutLastDescendant,
+      "normal",
+    );
+    expect(deletePrefix.type).toBe("pending");
+    if (deletePrefix.type !== "pending") throw new Error("expected delete pending");
+    expect(resolveNormalCommand("z", deletePrefix.pending, operatorWithoutLastDescendant)).toEqual({
+      type: "invalid",
+    });
+
+    const operatorWithSibling = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "zx",
+            modes: ["operatorPending"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordBackward",
+            key: "zy",
+            modes: ["operatorPending"],
+          },
+        },
+        { kind: "unmap", key: "zx", modes: ["operatorPending"] },
+      ],
+    }).options.keymap!;
+    const operatorPrefix = resolveNormalCommand("d", undefined, operatorWithSibling, "normal");
+    expect(operatorPrefix.type).toBe("pending");
+    if (operatorPrefix.type !== "pending") throw new Error("expected delete pending");
+    const motionPrefix = resolveNormalCommand("z", operatorPrefix.pending, operatorWithSibling);
+    expect(motionPrefix.type).toBe("pending");
+    if (motionPrefix.type !== "pending") throw new Error("expected motion pending");
+    expect(resolveNormalCommand("y", motionPrefix.pending, operatorWithSibling)).toMatchObject({
+      type: "operatorMotion",
+      motion: "wordBackward",
+    });
+
+    const tombstonedRepeat = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "z",
+            modes: ["normal"],
+          },
+        },
+        { kind: "unmap", key: "z", modes: ["operatorPending"] },
+      ],
+    }).options.keymap!;
+    const customDelete = resolveNormalCommand("z", undefined, tombstonedRepeat, "normal");
+    expect(customDelete.type).toBe("pending");
+    if (customDelete.type !== "pending") throw new Error("expected custom delete pending");
+    expect(resolveNormalCommand("z", customDelete.pending, tombstonedRepeat)).toEqual({
+      type: "invalid",
+    });
+
+    const normalOnlyCommand = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "zx",
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options.keymap!;
+    const pendingDelete = resolveNormalCommand("d", undefined, normalOnlyCommand, "normal");
+    expect(pendingDelete.type).toBe("pending");
+    if (pendingDelete.type !== "pending") throw new Error("expected delete pending");
+    expect(resolveNormalCommand("z", pendingDelete.pending, normalOnlyCommand)).toEqual({
+      type: "invalid",
+    });
+  });
+
   test("loads opaque finite action descriptors in canonical scopes", async () => {
     const f = fixture();
     try {

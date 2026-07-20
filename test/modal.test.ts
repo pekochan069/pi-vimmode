@@ -2373,6 +2373,35 @@ describe("Ex command-line modal behavior", () => {
     ).toMatchObject({ pendingEasymotion: { kind: "char" } });
   });
 
+  test("operator-pending protected descriptors keep modal ownership", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "ctrl+p",
+            modes: ["operatorPending"],
+            allowProtected: true,
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "one two",
+      p(0, 0),
+      ["d", "\x10"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe("two");
+    expect(result.effects).not.toContainEqual({ type: "delegate", input: "\x10" });
+  });
+
   test("scoped unmaps remove inherited escape aliases by scope", () => {
     const options = resolveVimOptions({ piVimMode: { keymap: { escape: ["<D-j>"] } } }, undefined, {
       kind: "success",

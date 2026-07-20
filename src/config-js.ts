@@ -562,6 +562,16 @@ function createPromptApi() {
   });
 }
 
+function actionFactory(actionId: VimFiniteActionId): (args?: unknown) => object {
+  const factory = (args?: unknown) => descriptor(actionId, args);
+  // EasyMotion historically exposed its default char target as the command leaf.
+  // Keep that call while making the documented nested form available.
+  if (actionId === "command.easymotion") {
+    Object.assign(factory, { goToChar: () => descriptor(actionId) });
+  }
+  return Object.freeze(factory);
+}
+
 function actionApiTree(prefix = ""): object {
   const tree: Record<string, unknown> = {};
   for (const actionId of ACTION_SCOPES.keys()) {
@@ -570,7 +580,7 @@ function actionApiTree(prefix = ""): object {
     const [name, ...rest] = suffix.split(".");
     if (!name) continue;
     if (rest.length === 0) {
-      tree[name] = (args?: unknown) => descriptor(actionId, args);
+      tree[name] = actionFactory(actionId);
       continue;
     }
     tree[name] ??= actionApiTree(`${prefix}${name}.`);

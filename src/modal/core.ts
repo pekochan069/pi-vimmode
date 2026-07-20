@@ -79,7 +79,11 @@ function hasKeyInMap(map: Record<string, readonly string[]>, key: string): boole
   return Object.values(map).some((bindings) => bindings.includes(key));
 }
 
-export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string, mode?: VimMode): boolean {
+export function keymapHasBinding(
+  keymap: ResolvedVimKeymap,
+  key: string,
+  mode?: VimMode | "operatorPending",
+): boolean {
   if (keymap.escape.includes(key)) return true;
   if (hasKeyInMap(keymap.operators as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.motions as Record<string, readonly string[]>, key)) return true;

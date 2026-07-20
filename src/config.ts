@@ -2158,6 +2158,7 @@ function expandLeaderMappings(
         `resolved settings: piVimMode.keymap.${binding.actionId}`,
         context,
       );
+      usesNonActionLeader ||= result.usesLeader;
       return result.sequence ? [{ ...binding, key: result.sequence }] : [];
     });
   }

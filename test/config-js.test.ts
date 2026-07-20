@@ -1074,6 +1074,25 @@ export default (vim) => {
     }
   });
 
+  test("leader-form scoped descriptors reserve the expanded leader prefix", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "<leader>u", vim.action.command.undo());
+};`);
+      const resolved = resolveVimOptions(undefined, undefined, await loadVimJsConfig(f.path));
+      expect(resolved.options.keymap?.leader).toBe(",");
+      expect(resolved.options.keymap?.scoped).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ actionId: "command.undo", key: ",u", modes: ["normal"] }),
+        ]),
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("project text-object bindings replace matching JS descriptors", () => {
     const resolved = resolveVimOptions(
       undefined,

@@ -154,7 +154,7 @@ function escapeKey(data: string): string | undefined {
 }
 
 function aliasStartsWith(alias: string, sequence: string): boolean {
-  return alias.includes("+") ? alias === sequence : alias.startsWith(sequence);
+  return alias.startsWith(sequence);
 }
 
 function isInsertEscapePrefix(data: string, sequences: readonly string[]): boolean {

@@ -2196,6 +2196,104 @@ describe("Ex command-line modal behavior", () => {
     expect(visual.state.mode).toBe("visual");
   });
 
+  test("multi-key scoped text-object descriptors complete under operators", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "textObject.kind.inner",
+            key: "zz",
+            modes: ["operatorPending"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "textObject.target.word",
+            key: "xx",
+            modes: ["operatorPending"],
+          },
+        },
+      ],
+    }).options;
+
+    const pendingKind = applyModalKeys(
+      { mode: "normal" },
+      "hello world",
+      p(0, 1),
+      ["d", "z"],
+      descriptorOptions,
+    );
+    expect(pendingKind.state.pending).toBeDefined();
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "hello world",
+      p(0, 1),
+      ["d", "z", "z", "x", "x"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe(" world");
+  });
+
+  test("multi-key modified scoped escape descriptors retain token prefixes", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "ctrl+xz",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["\u001b[120;5u", "z"],
+      descriptorOptions,
+    );
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("scoped operator aliases repeat as linewise operations", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "z",
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo\nthree",
+      cursor,
+      ["z", "z"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe("two\nthree");
+  });
+
   test("scoped prefixes own visual grammar, macros, marks, and easymotion", () => {
     const visualOptions = resolveVimOptions(undefined, undefined, {
       kind: "success",

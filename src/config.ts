@@ -198,6 +198,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
   remaps: Object.freeze({
     accepted: Object.freeze([]),
   }),
+  scoped: Object.freeze([]),
 }) as unknown as ResolvedVimKeymap;
 
 export const DEFAULT_VIM_UI = Object.freeze({
@@ -357,7 +358,8 @@ type PartialKeymapOptions = {
   presetActionBindings?: ResolvedVimActionBinding[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
   remaps?: ResolvedVimKeymap["remaps"];
-  unmaps?: Array<{ key: string; modes: readonly VimMode[] }>;
+  scoped?: ResolvedVimKeymap["scoped"];
+  unmaps?: Array<{ key: string; modes: readonly VimMappingScope[] }>;
   allowProtectedOverrides?: string[];
 };
 
@@ -466,6 +468,11 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
         modes: binding.modes ? [...binding.modes] : undefined,
       })),
     },
+    scoped: keymap.scoped.map((binding) => ({
+      ...binding,
+      modes: [...binding.modes],
+      args: binding.args ? { ...binding.args } : undefined,
+    })),
   };
 }
 
@@ -1700,14 +1707,14 @@ function removeTopLevelKeymapSequences(target: ResolvedVimKeymap, sequences: Set
 
 function remainingScopedModes(
   modes: readonly VimActionBindingMode[] | undefined,
-  removedModes: readonly VimMode[],
+  removedModes: readonly VimMappingScope[],
 ): readonly VimActionBindingMode[] {
   return (modes ?? ACTION_BINDING_MODES).filter((mode) => !removedModes.includes(mode));
 }
 
 function removeScopedKeymapBindings(
   target: ResolvedVimKeymap,
-  unmap: { key: string; modes: readonly VimMode[] },
+  unmap: { key: string; modes: readonly VimMappingScope[] },
 ): void {
   target.actions.accepted = target.actions.accepted.flatMap((binding) => {
     if (binding.key !== unmap.key) return [binding];
@@ -1718,6 +1725,11 @@ function removeScopedKeymapBindings(
     if (mapping.key !== unmap.key) return [mapping];
     const modes = remainingScopedModes(mapping.modes, unmap.modes);
     return modes.length ? [{ ...mapping, modes }] : [];
+  });
+  target.scoped = target.scoped.flatMap((binding) => {
+    if (binding.key !== unmap.key) return [binding];
+    const modes = binding.modes.filter((mode) => !unmap.modes.includes(mode));
+    return modes.length ? [{ ...binding, modes }] : [];
   });
 }
 
@@ -1765,6 +1777,18 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
   if (partial.remaps) {
     target.remaps = { accepted: [...target.remaps.accepted, ...partial.remaps.accepted] };
   }
+  if (partial.scoped) {
+    for (const binding of partial.scoped) {
+      target.scoped = [
+        ...target.scoped.flatMap((current) => {
+          if (current.key !== binding.key) return [current];
+          const modes = current.modes.filter((mode) => !binding.modes.includes(mode));
+          return modes.length ? [{ ...current, modes }] : [];
+        }),
+        binding,
+      ];
+    }
+  }
   for (const unmap of partial.unmaps ?? []) removeScopedKeymapBindings(target, unmap);
 }
 
@@ -1790,6 +1814,7 @@ function additiveKeymapLayer(
     }
     next.actions = actions;
   }
+  if (partial.scoped) next.scoped = [...(base.scoped ?? []), ...partial.scoped];
   return next;
 }
 
@@ -1833,6 +1858,7 @@ function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymap
   if (partial.remaps) {
     target.remaps = { accepted: [...(target.remaps?.accepted ?? []), ...partial.remaps.accepted] };
   }
+  if (partial.scoped) target.scoped = [...(target.scoped ?? []), ...partial.scoped];
   if (partial.unmaps) target.unmaps = [...(target.unmaps ?? []), ...partial.unmaps];
 }
 
@@ -2538,10 +2564,14 @@ function removeJsMappings(
   }
 }
 
+function editorModes(modes: readonly VimMappingScope[]): VimMode[] {
+  return modes.filter((mode): mode is VimMode => mode !== "operatorPending");
+}
+
 function restoreJsUnmaps(
   keymap: PartialKeymapOptions,
   key: string,
-  modes: readonly VimMode[],
+  modes: readonly VimMappingScope[],
 ): void {
   keymap.unmaps = keymap.unmaps?.flatMap((unmap) => {
     if (unmap.key !== key) return [unmap];
@@ -2560,7 +2590,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     if (operation.kind === "leaf") continue;
     const keymap = (partial.keymap ??= {});
     if (operation.kind === "unmap") {
-      removeJsMappings(keymap as PartialKeymapOptions, operation.key, operation.modes);
+      removeJsMappings(keymap as PartialKeymapOptions, operation.key, editorModes(operation.modes));
       const unmaps = ((keymap as PartialKeymapOptions).unmaps ??= []);
       unmaps.push({ key: operation.key, modes: operation.modes });
       continue;
@@ -2591,6 +2621,24 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
         ...(commands[mapping.command as VimCommandAction] ?? []),
         mapping.key,
       ];
+      continue;
+    }
+    if (mapping.kind === "descriptor") {
+      restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
+      const scoped = ((keymap as PartialKeymapOptions).scoped ??= []);
+      const retained = scoped.flatMap((binding) => {
+        if (binding.key !== mapping.key) return [binding];
+        const modes = binding.modes.filter((mode) => !mapping.modes.includes(mode));
+        return modes.length ? [{ ...binding, modes }] : [];
+      });
+      retained.push({
+        actionId: mapping.actionId,
+        key: mapping.key,
+        modes: mapping.modes,
+        args: mapping.args,
+        desc: mapping.desc,
+      });
+      (keymap as PartialKeymapOptions).scoped = retained;
       continue;
     }
     removeJsMappings(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
@@ -2636,6 +2684,7 @@ function appendJsMapLayer(
   warnings.push(...parsed.warnings);
   const layer = additiveKeymapLayer(keymapLayers, parsed.partial.keymap);
   layer.unmaps = rawKeymap?.unmaps;
+  layer.scoped = rawKeymap?.scoped;
   keymapLayers.push(layer);
 }
 
@@ -2855,6 +2904,12 @@ export function createVimConfigPlan(
       { kind: "remap", id: "remap", inputs: remap.inputs },
       remap,
     );
+  }
+  for (const binding of keymap.scoped) {
+    add(binding.modes, binding.key, {
+      kind: "keymap",
+      id: binding.actionId,
+    });
   }
 
   const compileWarnings = [...warnings];

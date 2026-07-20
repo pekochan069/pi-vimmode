@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { resolveNormalCommand } from "../src/commands.ts";
 import { loadVimJsConfig } from "../src/config-js.ts";
 import { loadVimOptions, resolveVimOptions } from "../src/config.ts";
 
@@ -62,6 +63,86 @@ export default (vim) => {
           },
         },
       ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("loads opaque finite action descriptors in canonical scopes", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "H", vim.action.motion.wordForward(), { desc: "Next word" });
+  vim.keymap.set("x", "Q", vim.action.motion.wordBackward());
+  vim.keymap.set("o", "W", vim.action.textObject.target.word());
+  vim.keymap.set("n", "undo", "undo");
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([]);
+      expect(operations(result)).toEqual([
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "H",
+            modes: ["normal"],
+            desc: "Next word",
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordBackward",
+            key: "Q",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "textObject.target.word",
+            key: "W",
+            modes: ["operatorPending"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: { kind: "remap", key: "undo", inputs: ["u", "n", "d", "o"], modes: ["normal"] },
+        },
+      ]);
+      const resolved = resolveVimOptions(undefined, undefined, result);
+      expect(resolved.plan.scopes.normal.exact.H).toEqual({
+        kind: "keymap",
+        id: "motion.wordForward",
+      });
+      expect(resolved.plan.scopes.visual.exact.Q).toEqual({
+        kind: "keymap",
+        id: "motion.wordBackward",
+      });
+      expect(resolved.plan.scopes.operatorPending.exact.W).toEqual({
+        kind: "keymap",
+        id: "textObject.target.word",
+      });
+      const keymap = resolved.options.keymap!;
+      expect(resolveNormalCommand("H", undefined, keymap, "normal")).toMatchObject({
+        type: "motion",
+        motion: "wordForward",
+      });
+      const operator = resolveNormalCommand("d", undefined, keymap, "normal");
+      expect(operator.type).toBe("pending");
+      if (operator.type !== "pending") throw new Error("expected operator pending state");
+      const kind = resolveNormalCommand("i", operator.pending, keymap, "normal");
+      expect(kind.type).toBe("pending");
+      if (kind.type !== "pending") throw new Error("expected text object pending state");
+      expect(resolveNormalCommand("W", kind.pending, keymap, "normal")).toMatchObject({
+        type: "operatorTextObject",
+        textObject: { kind: "inner", target: "word" },
+      });
     } finally {
       f.cleanup();
     }

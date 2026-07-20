@@ -235,18 +235,40 @@ function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
 }
 
+function scopedActionFor(
+  key: string,
+  keymap: ResolvedVimKeymap,
+  prefix: string,
+): string | undefined {
+  return [...keymap.scoped]
+    .reverse()
+    .find(
+      (binding) =>
+        binding.key === key &&
+        binding.modes.includes("operatorPending") &&
+        binding.actionId.startsWith(prefix),
+    )
+    ?.actionId.slice(prefix.length);
+}
+
 function textObjectKindForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectKind | undefined {
-  return compiledKeymapFor(keymap).textObjects.kinds.get(key);
+  return (
+    (scopedActionFor(key, keymap, "textObject.kind.") as VimTextObjectKind | undefined) ??
+    compiledKeymapFor(keymap).textObjects.kinds.get(key)
+  );
 }
 
 function textObjectTargetForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectTarget | undefined {
-  return compiledKeymapFor(keymap).textObjects.targets.get(key);
+  return (
+    (scopedActionFor(key, keymap, "textObject.target.") as VimTextObjectTarget | undefined) ??
+    compiledKeymapFor(keymap).textObjects.targets.get(key)
+  );
 }
 
 function isLegacyVimOperator(key: string): key is VimOperator {
@@ -441,21 +463,50 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
 
 function actionBindingMatchesMode(
   binding: Binding,
-  mode: VimActionBindingMode | undefined,
+  mode: VimActionBindingMode | "operatorPending" | undefined,
 ): boolean {
   return (
     binding.kind !== "action" ||
     mode === undefined ||
     !binding.modes ||
-    binding.modes.includes(mode)
+    (mode !== "operatorPending" && binding.modes.includes(mode))
   );
+}
+
+function scopedBinding(
+  sequence: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode | "operatorPending",
+): Binding | undefined {
+  const mapping = [...keymap.scoped]
+    .reverse()
+    .find((binding) => binding.key === sequence && (!mode || binding.modes.includes(mode)));
+  if (!mapping) return undefined;
+  const [family, ...parts] = mapping.actionId.split(".");
+  const action = parts.join(".");
+  if (family === "operator")
+    return { sequence, kind: "operator", operator: action as VimOperatorAction };
+  if (family === "motion") return { sequence, kind: "motion", motion: action as VimMotionAction };
+  if (family === "command")
+    return { sequence, kind: "command", command: action as VimCommandAction };
+  if (mapping.actionId.startsWith("prompt.transform.")) {
+    return {
+      sequence,
+      kind: "action",
+      actionId: mapping.actionId as BindablePromptTransformActionId,
+      args: mapping.args as PromptTransform,
+    };
+  }
+  return undefined;
 }
 
 function exactBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
-  mode?: VimActionBindingMode,
+  mode?: VimActionBindingMode | "operatorPending",
 ): Binding | undefined {
+  const scoped = scopedBinding(sequence, keymap, mode);
+  if (scoped) return scoped;
   const compiled = compiledKeymapFor(keymap);
   const action = compiled.actionBindings
     .get(sequence)
@@ -466,8 +517,18 @@ function exactBinding(
 function hasLongerPrefix(
   sequence: string,
   keymap: ResolvedVimKeymap,
-  mode?: VimActionBindingMode,
+  mode?: VimActionBindingMode | "operatorPending",
 ): boolean {
+  if (
+    keymap.scoped.some(
+      (binding) =>
+        binding.key !== sequence &&
+        binding.key.startsWith(sequence) &&
+        (!mode || binding.modes.includes(mode)),
+    )
+  ) {
+    return true;
+  }
   const compiled = compiledKeymapFor(keymap);
   if (compiled.longerPrefixes.has(sequence)) return true;
   return (
@@ -769,11 +830,17 @@ function motionForSequence(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): VimMotionAction | undefined {
-  return compiledKeymapFor(keymap).motions.exact.get(sequence);
+  const scoped = exactBinding(sequence, keymap, "operatorPending");
+  return scoped?.kind === "motion"
+    ? scoped.motion
+    : compiledKeymapFor(keymap).motions.exact.get(sequence);
 }
 
 function hasMotionPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).motions.longerPrefixes.has(sequence);
+  return (
+    hasLongerPrefix(sequence, keymap, "operatorPending") ||
+    compiledKeymapFor(keymap).motions.longerPrefixes.has(sequence)
+  );
 }
 
 function operatorLookupFor(keymap: ResolvedVimKeymap, operator: VimOperatorAction) {

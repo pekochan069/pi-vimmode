@@ -1,3 +1,4 @@
+import type { VimMappingScope } from "./mapping-scopes.ts";
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 
 export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
@@ -232,6 +233,14 @@ export type ResolvedVimInsertKeymap = {
   moveLineEnd: readonly string[];
 };
 
+export type VimScopedKeymapBinding = {
+  actionId: string;
+  key: string;
+  modes: readonly VimMappingScope[];
+  args?: Readonly<Record<string, unknown>>;
+  desc?: string;
+};
+
 export type ResolvedVimKeymap = {
   leader?: string;
   escape: readonly string[];
@@ -245,6 +254,7 @@ export type ResolvedVimKeymap = {
   insert: ResolvedVimInsertKeymap;
   actions: ResolvedVimActionKeymap;
   remaps: VimKeySequenceRemapOptions;
+  scoped: readonly VimScopedKeymapBinding[];
 };
 
 export type VimSearchOptions = {

@@ -498,14 +498,24 @@ function markPendingForKey(
   options: ModalOptions,
   operator?: VimOperatorAction,
   operatorKey?: string,
+  mode: "normal" | "visual" | "visualLine" | "visualBlock" | "operatorPending" = "normal",
 ) {
   if (!marksForOptions(options).enabled) return undefined;
-  const keymap = keymapForOptions(options).marks;
-  if (!operator && keymap.set.includes(key)) return pendingMarkTarget("set");
-  if (keymap.jumpExact.includes(key)) {
+  const resolved = keymapForOptions(options);
+  const hasScopedMark = (action: "set" | "jumpExact" | "jumpLine") =>
+    resolved.scoped.some(
+      (binding) =>
+        binding.key === key &&
+        binding.actionId === `mark.${action}` &&
+        binding.modes.includes(mode),
+    );
+  if (!operator && (resolved.marks.set.includes(key) || hasScopedMark("set"))) {
+    return pendingMarkTarget("set");
+  }
+  if (resolved.marks.jumpExact.includes(key) || hasScopedMark("jumpExact")) {
     return pendingMarkTarget("jumpExact", operator, operatorKey);
   }
-  if (keymap.jumpLine.includes(key)) {
+  if (resolved.marks.jumpLine.includes(key) || hasScopedMark("jumpLine")) {
     return pendingMarkTarget("jumpLine", operator, operatorKey);
   }
   return undefined;
@@ -578,17 +588,27 @@ function handleNormalInput(
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macros = macrosForOptions(options);
+    const macroKeys = (action: "record" | "play") => [
+      ...keymap.macros[action],
+      ...keymap.scoped
+        .filter(
+          (binding) => binding.actionId === `macro.${action}` && binding.modes.includes("normal"),
+        )
+        .map((binding) => binding.key),
+    ];
+    const recordKeys = macroKeys("record");
+    const playKeys = macroKeys("play");
     if (
       snapshot.isMacroReplaying &&
-      (state.pendingMacro || isMacroControlKey(key, keymap.macros.record, keymap.macros.play))
+      (state.pendingMacro || isMacroControlKey(key, recordKeys, playKeys))
     ) {
       return invalidate(clearPendingMacro(state));
     }
     const macroResult = resolveMacroCommand(key, state.pendingMacro, Boolean(state.recordingSlot), {
       enabled: macros.enabled,
       slots: macros.slots,
-      recordKeys: keymap.macros.record,
-      playKeys: keymap.macros.play,
+      recordKeys,
+      playKeys,
     });
     if (macroResult.type === "pendingMacro")
       return invalidate({ ...clearPending(state), pendingMacro: macroResult.target });
@@ -623,7 +643,13 @@ function handleNormalInput(
     if (searchCommand.type === "command" && searchCommand.command === "startSearchBackward") {
       return startSearchUpdate(state, "backward", pendingOperator);
     }
-    const markTarget = markPendingForKey(key, options, pendingOperator, state.pending);
+    const markTarget = markPendingForKey(
+      key,
+      options,
+      pendingOperator,
+      state.pending,
+      "operatorPending",
+    );
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
 
@@ -767,7 +793,13 @@ function handleVisualInput(
     );
   }
   if (!state.pending && !state.pendingRegister && !startsLeader) {
-    const markTarget = markPendingForKey(key, options);
+    const markTarget = markPendingForKey(
+      key,
+      options,
+      undefined,
+      undefined,
+      state.mode as "visual" | "visualLine" | "visualBlock",
+    );
     if (markTarget?.kind === "jumpExact" || markTarget?.kind === "jumpLine") {
       return invalidate({ ...clearPending(state), pendingMark: markTarget });
     }

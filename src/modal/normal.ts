@@ -604,6 +604,22 @@ function oppositeCharSearch(command: CharSearchCommand): CharSearchCommand {
   return "tillCharForward";
 }
 
+function repeatCharSearchOffset(command: CharSearchCommand): number {
+  if (command === "tillCharForward") return 1;
+  if (command === "tillCharBackward") return -1;
+  return 0;
+}
+
+function repeatCharSearchSnapshot(
+  snapshot: EditorSnapshot,
+  command: CharSearchCommand,
+): EditorSnapshot {
+  const cursorOffset = repeatCharSearchOffset(command);
+  return cursorOffset
+    ? { ...snapshot, cursor: { ...snapshot.cursor, col: snapshot.cursor.col + cursorOffset } }
+    : snapshot;
+}
+
 function applyCharSearch(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -639,7 +655,14 @@ function repeatCharSearch(
   const command = reverse
     ? oppositeCharSearch(state.lastCharSearch.command)
     : state.lastCharSearch.command;
-  return applyCharSearch(state, snapshot, command, state.lastCharSearch.target, count, false);
+  return applyCharSearch(
+    state,
+    repeatCharSearchSnapshot(snapshot, command),
+    command,
+    state.lastCharSearch.target,
+    count,
+    false,
+  );
 }
 
 export function applyOperatorCharSearchRepeat(
@@ -664,6 +687,7 @@ export function applyOperatorCharSearchRepeat(
     count,
     true,
     false,
+    repeatCharSearchOffset(command),
   );
 }
 
@@ -677,6 +701,7 @@ export function applyOperatorCharSearch(
   count = 1,
   recordRepeat = true,
   recordLastCharSearch = true,
+  searchCursorOffset = 0,
 ): ModalUpdate {
   const baseState = clearCommandPending(state);
   const searchedState = recordLastCharSearch
@@ -684,11 +709,25 @@ export function applyOperatorCharSearch(
     : baseState;
   const kind = charSearchKind(command);
   if (operator === "yank") {
-    const register = yankByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
+    const register = yankByCharSearch(
+      snapshot.text,
+      snapshot.cursor,
+      kind,
+      target,
+      count,
+      searchCursorOffset,
+    );
     return yankUpdate(register ? searchedState : baseState, register);
   }
 
-  const result = deleteByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
+  const result = deleteByCharSearch(
+    snapshot.text,
+    snapshot.cursor,
+    kind,
+    target,
+    count,
+    searchCursorOffset,
+  );
   const written = editStateAndEffects(result.changed ? searchedState : baseState, result);
   let edited = written.state;
   if (recordRepeat) {

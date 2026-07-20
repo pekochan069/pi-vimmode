@@ -235,20 +235,33 @@ function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
 }
 
+export function scopedKeymapBindingFor(
+  keymap: ResolvedVimKeymap,
+  key: string,
+  mode: VimActionBindingMode | "operatorPending",
+) {
+  return [...keymap.scoped]
+    .reverse()
+    .find((binding) => binding.key === key && binding.modes.includes(mode));
+}
+
+export function scopedKeysForAction(
+  keymap: ResolvedVimKeymap,
+  actionId: ResolvedVimKeymap["scoped"][number]["actionId"],
+  mode: VimActionBindingMode | "operatorPending",
+): string[] {
+  return keymap.scoped
+    .filter((binding) => binding.actionId === actionId && binding.modes.includes(mode))
+    .map((binding) => binding.key);
+}
+
 function scopedActionFor(
   key: string,
   keymap: ResolvedVimKeymap,
   prefix: string,
 ): string | undefined {
-  return [...keymap.scoped]
-    .reverse()
-    .find(
-      (binding) =>
-        binding.key === key &&
-        binding.modes.includes("operatorPending") &&
-        binding.actionId.startsWith(prefix),
-    )
-    ?.actionId.slice(prefix.length);
+  const binding = scopedKeymapBindingFor(keymap, key, "operatorPending");
+  return binding?.actionId.startsWith(prefix) ? binding.actionId.slice(prefix.length) : undefined;
 }
 
 function textObjectKindForKey(
@@ -478,9 +491,7 @@ function scopedBinding(
   keymap: ResolvedVimKeymap,
   mode?: VimActionBindingMode | "operatorPending",
 ): Binding | undefined {
-  const mapping = [...keymap.scoped]
-    .reverse()
-    .find((binding) => binding.key === sequence && (!mode || binding.modes.includes(mode)));
+  const mapping = mode ? scopedKeymapBindingFor(keymap, sequence, mode) : undefined;
   if (!mapping) return undefined;
   const [family, ...parts] = mapping.actionId.split(".");
   const action = parts.join(".");

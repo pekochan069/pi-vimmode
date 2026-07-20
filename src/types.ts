@@ -153,6 +153,8 @@ export type VimActionKeyBindingEntry =
       key: string;
       args?: Readonly<Record<string, unknown>>;
       modes?: readonly VimActionBindingMode[];
+      allowProtected?: boolean;
+      desc?: string;
     };
 
 export type VimActionKeymapOptions = Partial<
@@ -214,6 +216,8 @@ export type ResolvedVimActionBinding = {
   actionId: BindablePromptTransformActionId;
   args: PromptTransform;
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
 };
 
 export type ResolvedVimActionKeymap = {
@@ -233,11 +237,24 @@ export type ResolvedVimInsertKeymap = {
   moveLineEnd: readonly string[];
 };
 
+export type VimFiniteActionId =
+  | "escape"
+  | `operator.${VimOperatorAction}`
+  | `motion.${VimMotionAction}`
+  | `command.${VimCommandAction}`
+  | `macro.${keyof ResolvedVimMacroKeymap}`
+  | `mark.${keyof ResolvedVimMarkKeymap}`
+  | `insert.${keyof ResolvedVimInsertKeymap}`
+  | `textObject.kind.${VimTextObjectKind}`
+  | `textObject.target.${VimTextObjectTarget}`
+  | BindablePromptTransformActionId;
+
 export type VimScopedKeymapBinding = {
-  actionId: string;
+  actionId: VimFiniteActionId;
   key: string;
   modes: readonly VimMappingScope[];
   args?: Readonly<Record<string, unknown>>;
+  allowProtected?: boolean;
   desc?: string;
 };
 

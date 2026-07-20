@@ -34,6 +34,7 @@ import {
   operatorActionForSequence,
   resolveMacroCommand,
   resolveNormalCommand,
+  scopedKeysForAction,
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
@@ -503,12 +504,7 @@ function markPendingForKey(
   if (!marksForOptions(options).enabled) return undefined;
   const resolved = keymapForOptions(options);
   const hasScopedMark = (action: "set" | "jumpExact" | "jumpLine") =>
-    resolved.scoped.some(
-      (binding) =>
-        binding.key === key &&
-        binding.actionId === `mark.${action}` &&
-        binding.modes.includes(mode),
-    );
+    scopedKeysForAction(resolved, `mark.${action}`, mode).includes(key);
   if (!operator && (resolved.marks.set.includes(key) || hasScopedMark("set"))) {
     return pendingMarkTarget("set");
   }
@@ -590,11 +586,7 @@ function handleNormalInput(
     const macros = macrosForOptions(options);
     const macroKeys = (action: "record" | "play") => [
       ...keymap.macros[action],
-      ...keymap.scoped
-        .filter(
-          (binding) => binding.actionId === `macro.${action}` && binding.modes.includes("normal"),
-        )
-        .map((binding) => binding.key),
+      ...scopedKeysForAction(keymap, `macro.${action}`, "normal"),
     ];
     const recordKeys = macroKeys("record");
     const playKeys = macroKeys("play");

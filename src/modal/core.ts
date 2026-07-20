@@ -104,7 +104,12 @@ export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string, mode?: 
   ) {
     return true;
   }
-  return false;
+  return keymap.scoped.some(
+    (binding) =>
+      (binding.key === key || binding.key.startsWith(key)) &&
+      binding.modes.includes(mode as never) &&
+      binding.allowProtected === true,
+  );
 }
 
 export function shiftActionForOperator(

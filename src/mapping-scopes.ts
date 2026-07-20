@@ -66,9 +66,7 @@ export function mappingScopesForKeymapEntry(
   if (family === "operator") return NORMAL_AND_VISUAL_SCOPES;
   if (family === "command" || family === "macro") return ["normal"];
   if (family === "mark") {
-    return action === "set"
-      ? NORMAL_AND_VISUAL_SCOPES
-      : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
+    return action === "set" ? ["normal"] : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
   }
   if (family === "insert") return ["insert"];
   if (

@@ -1903,6 +1903,12 @@ function projectExactMappings(
   for (const remap of keymap.remaps?.accepted ?? []) {
     add(remap.key, remap.modes ?? ACTION_BINDING_MODES);
   }
+  for (const binding of keymap.scoped ?? []) {
+    add(
+      binding.key,
+      binding.modes.filter((mode): mode is VimMode => mode !== "operatorPending"),
+    );
+  }
   return mappings;
 }
 
@@ -2061,6 +2067,17 @@ function expandLeaderMappings(
     const typedActionId = actionId as BindablePromptTransformActionId;
     if (expanded.length > 0 || bindings.length === 0) overlay.actions![typedActionId] = expanded;
     else delete overlay.actions![typedActionId];
+  }
+
+  if (overlay.scoped) {
+    overlay.scoped = overlay.scoped.flatMap((binding) => {
+      const result = expandLeaderSequence(
+        binding.key,
+        `resolved settings: piVimMode.keymap.${binding.actionId}`,
+        context,
+      );
+      return result.sequence ? [{ ...binding, key: result.sequence }] : [];
+    });
   }
 
   if (overlay.remaps) {
@@ -2562,6 +2579,13 @@ function removeJsMappings(
       return remainingModes.length ? [{ ...mapping, modes: remainingModes }] : [];
     });
   }
+  if (keymap.scoped) {
+    keymap.scoped = keymap.scoped.flatMap((binding) => {
+      if (!matchesKey(binding.key)) return [binding];
+      const remainingModes = binding.modes.filter((mode) => !modes.includes(mode as VimMode));
+      return remainingModes.length ? [{ ...binding, modes: remainingModes }] : [];
+    });
+  }
 }
 
 function editorModes(modes: readonly VimMappingScope[]): VimMode[] {
@@ -2601,6 +2625,15 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, ["insert"]);
       const insert = (keymap.insert ??= {});
       insert[mapping.action] = [...(insert[mapping.action] ?? []), mapping.key];
+      const scoped = [...((keymap as PartialKeymapOptions).scoped ?? [])];
+      scoped.push({
+        actionId: `insert.${mapping.action}`,
+        key: mapping.key,
+        modes: ["insert"],
+        allowProtected: mapping.allowProtected,
+        desc: mapping.desc,
+      });
+      (keymap as PartialKeymapOptions).scoped = scoped;
       continue;
     }
     if (mapping.kind === "action") {
@@ -2609,7 +2642,13 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       const actions = (keymap.actions ??= {});
       actions[mapping.actionId] = [
         ...(actions[mapping.actionId] ?? []),
-        { key: mapping.key, args: mapping.args, modes: mapping.modes },
+        {
+          key: mapping.key,
+          args: mapping.args,
+          modes: mapping.modes,
+          allowProtected: mapping.allowProtected,
+          desc: mapping.desc,
+        },
       ];
       continue;
     }
@@ -2625,6 +2664,10 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     }
     if (mapping.kind === "descriptor") {
       restoreJsUnmaps(keymap as PartialKeymapOptions, mapping.key, mapping.modes);
+      if (mapping.actionId === "escape") {
+        keymap.escape = [...(keymap.escape ?? []), mapping.key];
+        continue;
+      }
       const scoped = ((keymap as PartialKeymapOptions).scoped ??= []);
       const retained = scoped.flatMap((binding) => {
         if (binding.key !== mapping.key) return [binding];
@@ -2636,6 +2679,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
         key: mapping.key,
         modes: mapping.modes,
         args: mapping.args,
+        allowProtected: mapping.allowProtected,
         desc: mapping.desc,
       });
       (keymap as PartialKeymapOptions).scoped = retained;
@@ -2791,7 +2835,10 @@ function strictPrefixConflict<T>(
 }
 
 type ResolvedVimRemap = ResolvedVimKeymap["remaps"]["accepted"][number];
-type ScopedPlanSource = ResolvedVimActionBinding | ResolvedVimRemap;
+type ScopedPlanSource =
+  | ResolvedVimActionBinding
+  | ResolvedVimRemap
+  | ResolvedVimKeymap["scoped"][number];
 type VimPlanCandidate = {
   sequence: string;
   binding: VimPlanBinding;
@@ -2906,10 +2953,7 @@ export function createVimConfigPlan(
     );
   }
   for (const binding of keymap.scoped) {
-    add(binding.modes, binding.key, {
-      kind: "keymap",
-      id: binding.actionId,
-    });
+    add(binding.modes, binding.key, { kind: "keymap", id: binding.actionId }, binding);
   }
 
   const compileWarnings = [...warnings];
@@ -2930,6 +2974,7 @@ export function createVimConfigPlan(
       planOptions.keymap.remaps.accepted,
       acceptedScopes,
     );
+    planOptions.keymap.scoped = retainAcceptedScopes(planOptions.keymap.scoped, acceptedScopes);
   }
   return deepFreeze({
     options: planOptions,

@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
-import type { VimActionBindingMode, VimInsertAction, VimPreset } from "./types.ts";
+import type {
+  VimActionBindingMode,
+  VimFiniteActionId,
+  VimInsertAction,
+  VimPreset,
+} from "./types.ts";
 
 import { protectedShortcutForKey } from "./customization.ts";
 import {
@@ -29,7 +34,7 @@ import { VIM_PRESETS } from "./types.ts";
 export const DEFAULT_JS_CONFIG_PATH = join(homedir(), ".pi", "agent", "pi-vimmode.config.js");
 
 type ActionDescriptor = {
-  actionId: string;
+  actionId: VimFiniteActionId;
   args?: Readonly<Record<string, unknown>>;
 };
 
@@ -38,20 +43,28 @@ const ACTION_DESCRIPTORS = new WeakMap<object, ActionDescriptor>();
 export type VimJsConfigMapOperation =
   | {
       kind: "descriptor";
-      actionId: string;
+      actionId: VimFiniteActionId;
       key: string;
       modes: readonly VimMappingScope[];
       args?: Readonly<Record<string, unknown>>;
       allowProtected?: boolean;
       desc?: string;
     }
-  | { kind: "insert"; action: VimInsertAction; key: string }
+  | {
+      kind: "insert";
+      action: VimInsertAction;
+      key: string;
+      allowProtected?: boolean;
+      desc?: string;
+    }
   | {
       kind: "action";
       actionId: BindablePromptTransformActionId;
       key: string;
       args?: Readonly<Record<string, unknown>>;
       modes: readonly VimActionBindingMode[];
+      allowProtected?: boolean;
+      desc?: string;
     }
   | {
       kind: "remap";
@@ -132,15 +145,35 @@ const INSERT_ACTIONS = new Set<VimInsertAction>(
   Object.keys(KEYMAP_INSERT_DESCRIPTORS) as VimInsertAction[],
 );
 
-const ACTION_SCOPES = new Map<string, readonly VimMappingScope[]>([
+const ACTION_SCOPES = new Map<VimFiniteActionId, readonly VimMappingScope[]>([
   ["escape", VIM_MAPPING_SCOPES.filter((scope) => scope !== "normal")],
   ...ACTION_FAMILIES.flatMap(([family, actions]) =>
     Object.keys(actions).map(
-      (action) => [`${family}.${action}`, mappingScopesForKeymapEntry(family, action)] as const,
+      (action) =>
+        [
+          `${family}.${action}` as VimFiniteActionId,
+          mappingScopesForKeymapEntry(family, action),
+        ] as const,
     ),
   ),
-  ...PROMPT_TRANSFORM_ACTIONS.map(({ id, modes }) => [id, modes] as const),
+  ...PROMPT_TRANSFORM_ACTIONS.map(({ id, modes }) => [id as VimFiniteActionId, modes] as const),
 ]);
+
+function hasValidDescriptorArguments(
+  actionId: VimFiniteActionId,
+  args: Readonly<Record<string, unknown>> | undefined,
+): boolean {
+  if (!args) return true;
+  if (actionId === "prompt.transform.fence") {
+    return Object.keys(args).every(
+      (key) => key === "language" && typeof args.language === "string",
+    );
+  }
+  if (actionId === "prompt.transform.reflow") {
+    return Object.keys(args).every((key) => key === "width" && typeof args.width === "number");
+  }
+  return Object.keys(args).length === 0;
+}
 
 const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
 
@@ -287,7 +320,7 @@ function modesFor(rawMode: unknown): readonly VimMappingScope[] | undefined {
   return MODE_ALIASES[rawMode];
 }
 
-function descriptor(actionId: string, args?: Record<string, unknown>): object {
+function descriptor(actionId: VimFiniteActionId, args?: Record<string, unknown>): object {
   const value = Object.freeze({});
   ACTION_DESCRIPTORS.set(value, { actionId, args: args && frozenSnapshot(args) });
   return value;
@@ -298,7 +331,7 @@ function actionDescriptor(value: unknown): ActionDescriptor | undefined {
 }
 
 function builtinPromptTransform(action: string, args?: Record<string, unknown>): object {
-  return descriptor(`prompt.transform.${action}`, args);
+  return descriptor(`prompt.transform.${action}` as VimFiniteActionId, args);
 }
 
 function builtinInsert(action: VimInsertAction): object {
@@ -420,13 +453,23 @@ function compileMapping(
     session.warning(`${action.actionId} does not support selected mode`);
     return;
   }
+  if (!hasValidDescriptorArguments(action.actionId, action.args)) {
+    session.warning(`${action.actionId} does not accept these arguments`);
+    return;
+  }
   if (action.actionId.startsWith("insert.")) {
     const insertAction = action.actionId.slice("insert.".length) as VimInsertAction;
     if (!INSERT_ACTIONS.has(insertAction)) {
       session.warning(`unsupported insert action ${insertAction}`);
       return;
     }
-    session.recordMap({ kind: "insert", action: insertAction, key });
+    session.recordMap({
+      kind: "insert",
+      action: insertAction,
+      key,
+      ...(options.allowProtected ? { allowProtected: true } : {}),
+      ...(options.desc === undefined ? {} : { desc: options.desc }),
+    });
     return;
   }
   if (action.actionId.startsWith("prompt.transform.")) {
@@ -436,6 +479,8 @@ function compileMapping(
       key,
       args: action.args,
       modes: modes as VimActionBindingMode[],
+      ...(options.allowProtected ? { allowProtected: true } : {}),
+      ...(options.desc === undefined ? {} : { desc: options.desc }),
     });
     return;
   }

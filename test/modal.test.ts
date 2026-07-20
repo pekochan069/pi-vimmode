@@ -3102,6 +3102,30 @@ describe("modal engine", () => {
       target: "a",
     });
 
+    const tillRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "t",
+      "a",
+      ";",
+    ]);
+    expect(tillRepeated.cursor).toEqual(p(0, 2));
+
+    const tillBackwardRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 5), [
+      "T",
+      "a",
+      ";",
+    ]);
+    expect(tillBackwardRepeated.cursor).toEqual(p(0, 2));
+
+    const tillReverseRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "l",
+      "l",
+      "l",
+      "T",
+      "a",
+      ",",
+    ]);
+    expect(tillReverseRepeated.cursor).toEqual(p(0, 4));
+
     const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
     const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
     const repeatedChange = handleModalInput(
@@ -3355,6 +3379,16 @@ describe("modal engine", () => {
     expect(reversed.state.mode).toBe("insert");
     expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
     expect(reversed.state.lastCharSearch).toEqual({ command: "findCharForward", target: ":" });
+
+    const tillSearched = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "t",
+      "a",
+    ]);
+    const tillDeleted = applyModalKeys(tillSearched.state, tillSearched.text, tillSearched.cursor, [
+      "d",
+      ";",
+    ]);
+    expect(tillDeleted.text).toBe("ana apple alpha");
   });
 
   test("normal mode supports WORD and previous-end motions", () => {

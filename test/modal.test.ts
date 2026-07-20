@@ -3077,6 +3077,31 @@ describe("modal engine", () => {
     );
     expect(repeated.effects[0]).toEqual({ type: "restoreCursor", position: { line: 0, col: 3 } });
 
+    const reversedRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "f",
+      "a",
+      ";",
+      ";",
+      ",",
+      ",",
+    ]);
+    expect(reversedRepeated.cursor).toEqual(p(0, 1));
+    expect(reversedRepeated.state.lastCharSearch).toEqual({
+      command: "findCharForward",
+      target: "a",
+    });
+
+    const backwardReversed = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 17), [
+      "F",
+      "a",
+      ",",
+    ]);
+    expect(backwardReversed.cursor).toEqual(p(0, 17));
+    expect(backwardReversed.state.lastCharSearch).toEqual({
+      command: "findCharBackward",
+      target: "a",
+    });
+
     const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
     const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
     const repeatedChange = handleModalInput(
@@ -3329,6 +3354,7 @@ describe("modal engine", () => {
     expect(reversed.text).toBe("ac");
     expect(reversed.state.mode).toBe("insert");
     expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
+    expect(reversed.state.lastCharSearch).toEqual({ command: "findCharForward", target: ":" });
   });
 
   test("normal mode supports WORD and previous-end motions", () => {

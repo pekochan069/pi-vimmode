@@ -43,4 +43,5 @@ export default (vim) => {
 
 ## Bug fixes
 
+- Fixed repeated reverse character searches with `,` alternating direction instead of continuing opposite to original `f`, `F`, `t`, or `T` search.
 - Fixed normal-mode `a` crossing into the next logical line when invoked at end of line, including on wrapped prompts followed by a blank line.

@@ -318,11 +318,17 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
+    const keymap = keymapForOptions(this.options);
     if (
       canFastDelegateInsertInput(this.modalState, data, {
         isAutocompleteOpen: this.isShowingAutocomplete(),
         isMacroReplaying: this.isMacroReplaying,
-        escape: keymapForOptions(this.options).escape,
+        escape: [
+          ...keymap.escape,
+          ...keymap.scoped
+            .filter((binding) => binding.actionId === "escape" && binding.modes.includes("insert"))
+            .map((binding) => binding.key),
+        ],
       })
     ) {
       this.delegateDefaultInput(data);

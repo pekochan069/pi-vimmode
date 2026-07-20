@@ -143,6 +143,100 @@ export default (vim) => {
         type: "operatorTextObject",
         textObject: { kind: "inner", target: "word" },
       });
+
+      const customOperator = resolveVimOptions(undefined, undefined, {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "operator.delete",
+              key: "Z",
+              modes: ["normal"],
+            },
+          },
+        ],
+      }).options.keymap!;
+      const pendingDelete = resolveNormalCommand("Z", undefined, customOperator, "normal");
+      expect(pendingDelete.type).toBe("pending");
+      if (pendingDelete.type !== "pending")
+        throw new Error("expected custom operator pending state");
+      expect(
+        resolveNormalCommand("w", pendingDelete.pending, customOperator, "normal"),
+      ).toMatchObject({
+        type: "operatorMotion",
+        operator: "delete",
+        motion: "wordForward",
+      });
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("insert descriptors reject multi-key lhs", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("i", "<A-x><A-y>", vim.action.insert.deleteWordBackward());
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([]);
+      expect(operations(result)).toEqual([
+        {
+          kind: "map",
+          mapping: {
+            kind: "insert",
+            action: "deleteWordBackward",
+            key: "alt+xalt+y",
+          },
+        },
+      ]);
+      const resolved = resolveVimOptions(undefined, undefined, result);
+      expect(resolved.warnings).toContain(
+        "global JS config: piVimMode.keymap.insert.deleteWordBackward contains unsupported printable text sequence alt+xalt+y",
+      );
+      expect(resolved.plan.scopes.insert.exact).not.toHaveProperty("alt+xalt+y");
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("visual aliases reject commands not executable across every selected scope", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("v", "I", vim.action.command.insertLineStart());
+  vim.keymap.set("visualBlock", "I", vim.action.command.insertLineStart());
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([
+        "global JS config: command.insertLineStart does not support selected mode",
+      ]);
+      expect(operations(result)).toHaveLength(1);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("operator-pending rejects mark descriptors", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("o", "M", vim.action.mark.jumpExact());
+};
+`);
+      const result = await loadVimJsConfig(f.path);
+      expect(result.warnings).toEqual([
+        "global JS config: mark.jumpExact does not support selected mode",
+      ]);
+      expect(operations(result)).toEqual([]);
     } finally {
       f.cleanup();
     }
@@ -338,6 +432,64 @@ export default (vim) => {
 
     expect(result.options.keymap?.remaps.accepted).toEqual([]);
     expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.quote");
+  });
+
+  test("project empty action removes JS descriptor across canonical scopes", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { motions: { wordForward: [] } } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "motion.wordForward",
+              key: "H",
+              modes: ["normal", "operatorPending"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.H).toBeUndefined();
+    expect(result.plan.scopes.operatorPending.exact.H).toBeUndefined();
+  });
+
+  test("operator-pending unmaps suppress inherited motions and text objects", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        { kind: "unmap", key: "w", modes: ["operatorPending"] },
+        { kind: "unmap", key: "i", modes: ["operatorPending"] },
+        { kind: "unmap", key: "/", modes: ["operatorPending"] },
+      ],
+    });
+    const keymap = result.options.keymap!;
+    const pending = resolveNormalCommand("d", undefined, keymap, "normal");
+    expect(pending.type).toBe("pending");
+    if (pending.type !== "pending") throw new Error("expected operator pending state");
+    expect(resolveNormalCommand("w", pending.pending, keymap, "normal").type).toBe("invalid");
+    expect(resolveNormalCommand("i", pending.pending, keymap, "normal").type).toBe("invalid");
+    expect(resolveNormalCommand("/", pending.pending, keymap, "normal").type).toBe("invalid");
+  });
+
+  test("project exact mappings restore lower JS unmaps", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { motions: { wordForward: ["w"] } } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [{ kind: "unmap", key: "w", modes: ["normal"] }],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.w?.id).toBe("motion.wordForward");
   });
 
   test("project action replaces JS descriptor across canonical scopes", () => {
@@ -552,6 +704,54 @@ export default (vim) => {
 
     expect(result.options.keymap?.remaps.accepted).toEqual([]);
     expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+  });
+
+  test("JS escape descriptors stay in selected scopes", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "alt+z",
+            modes: ["insert"],
+          },
+        },
+      ],
+    });
+
+    expect(result.plan.scopes.insert.exact["alt+z"]?.kind).toBe("escape");
+    for (const scope of ["visual", "visualLine", "visualBlock", "operatorPending"] as const) {
+      expect(result.plan.scopes[scope].exact["alt+z"]).toBeUndefined();
+    }
+  });
+
+  test("project command mappings replace JS descriptors in visual scopes", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { commands: { toggleCase: ["Q"] } } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "command.toggleCase",
+              key: "X",
+              modes: ["visual", "visualLine", "visualBlock"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.visual.exact.X).toBeUndefined();
+    expect(result.plan.scopes.visual.exact.Q?.id).toBe("command.toggleCase");
   });
 
   test("project escape mappings override lower JS mappings in escape scopes", () => {

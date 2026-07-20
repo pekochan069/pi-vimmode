@@ -1,6 +1,11 @@
 import { matchesKey, parseKey } from "@earendil-works/pi-tui";
 
-import type { VimDiagnostics, VimOperatorAction } from "../types.ts";
+import type {
+  ResolvedVimKeymap,
+  VimActionBindingMode,
+  VimDiagnostics,
+  VimOperatorAction,
+} from "../types.ts";
 import type {
   EditorSnapshot,
   FastInsertDelegateContext,
@@ -37,6 +42,7 @@ import {
   resolveNormalCommand,
   scopedKeymapBindingFor,
   scopedKeysForAction,
+  type SemanticCommandResult,
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
@@ -149,6 +155,19 @@ function aliasStartsWith(alias: string, sequence: string): boolean {
 function isInsertEscapePrefix(data: string, sequences: readonly string[]): boolean {
   const key = escapeKey(data);
   return Boolean(key && sequences.some((sequence) => aliasStartsWith(sequence, key)));
+}
+
+function escapeAliasesForScope(
+  options: ModalOptions,
+  scope: "insert" | "visual" | "visualLine" | "visualBlock" | "operatorPending",
+): string[] {
+  const keymap = keymapForOptions(options);
+  return [
+    ...keymap.escape,
+    ...keymap.scoped
+      .filter((binding) => binding.actionId === "escape" && binding.modes.includes(scope))
+      .map((binding) => binding.key),
+  ];
 }
 
 type InsertEscapeMatch =
@@ -344,7 +363,7 @@ function handleInsertInput(
 
   if (snapshot.isAutocompleteOpen) return delegateBufferedInsertEscape(state, data);
 
-  const match = matchInsertEscapeInput(state, data, keymapForOptions(options).escape);
+  const match = matchInsertEscapeInput(state, data, escapeAliasesForScope(options, "insert"));
   if (match.kind === "matched")
     return modeUpdate(clearPendingInsertEscape(state), "normal", options);
   if (match.kind === "pending") {
@@ -547,6 +566,131 @@ function remapUpdate(
   return undefined;
 }
 
+function handleNormalMacroOrMark(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  keymap: ResolvedVimKeymap,
+  key: string,
+): ModalUpdate | undefined {
+  const macros = macrosForOptions(options);
+  const macroKeys = (action: "record" | "play") =>
+    [...keymap.macros[action], ...scopedKeysForAction(keymap, `macro.${action}`, "normal")].filter(
+      (binding) => !isKeyUnmapped(keymap, binding, "normal"),
+    );
+  const recordKeys = macroKeys("record");
+  const playKeys = macroKeys("play");
+  if (
+    snapshot.isMacroReplaying &&
+    (state.pendingMacro || isMacroControlKey(key, recordKeys, playKeys))
+  ) {
+    return invalidate(clearPendingMacro(state));
+  }
+  const result = resolveMacroCommand(key, state.pendingMacro, Boolean(state.recordingSlot), {
+    enabled: macros.enabled,
+    slots: macros.slots,
+    recordKeys,
+    playKeys,
+  });
+  if (result.type === "pendingMacro")
+    return invalidate({ ...clearPending(state), pendingMacro: result.target });
+  if (result.type === "startRecording") return startMacroRecording(state, result.slot);
+  if (result.type === "stopRecording") return stopMacroRecording(state);
+  if (result.type === "playMacro") {
+    if (snapshot.isMacroReplaying || state.recordingSlot)
+      return invalidate(clearPendingMacro(state));
+    return playMacroUpdate(state, result.slot, options);
+  }
+  if (result.type === "repeatMacro") {
+    if (snapshot.isMacroReplaying || state.recordingSlot || !state.lastPlayedMacro)
+      return invalidate(clearPendingMacro(state));
+    return playMacroUpdate(state, state.lastPlayedMacro, options);
+  }
+  if (result.type === "invalid") return invalidate(clearPendingMacro(state));
+
+  const markTarget = markPendingForKey(key, options);
+  return markTarget ? invalidate({ ...clearPending(state), pendingMark: markTarget }) : undefined;
+}
+
+function applyNormalResolution(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  keymap: ResolvedVimKeymap,
+  key: string,
+  result: SemanticCommandResult,
+): ModalUpdate {
+  if (result.type === "pending") {
+    const operator = operatorActionForSequence(result.pending, keymap);
+    if (state.pendingRegister && !operator) return invalidate(clearPending(state));
+    return invalidate({ ...state, pending: result.pending });
+  }
+  if (result.type === "motion") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return moveUpdate(clearPending(state), result.motion, snapshot, result.count);
+  }
+  if (result.type === "command") {
+    if (result.command === "easymotion") {
+      return invalidate({ ...state, pending: undefined, pendingEasymotion: { kind: "char" } });
+    }
+    return applyCommand(state, snapshot, options, result.command, result.count);
+  }
+  if (result.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyPromptTransformAction(state, snapshot, options, result);
+  }
+  if (result.type === "charCommand")
+    return applyCommand(state, snapshot, options, result.command, result.count, result.char);
+  if (result.type === "lineCommand")
+    return applyLineCommand(state, snapshot, options, result.operator, result.count);
+  if (result.type === "operatorMotion")
+    return applyOperatorMotion(
+      state,
+      snapshot,
+      result.operator,
+      result.motion,
+      options,
+      result.count,
+    );
+  if (result.type === "operatorSearch")
+    return startSearchUpdate(state, result.direction, result.operator);
+  if (result.type === "operatorCharSearch")
+    return applyOperatorCharSearch(
+      state,
+      snapshot,
+      result.operator,
+      result.command,
+      result.char,
+      options,
+      result.count,
+    );
+  if (result.type === "operatorCharSearchRepeat")
+    return applyOperatorCharSearchRepeat(
+      state,
+      snapshot,
+      result.operator,
+      result.reverse,
+      options,
+      result.count,
+    );
+  if (result.type === "operatorTextObject")
+    return applyOperatorTextObject(
+      state,
+      snapshot,
+      result.operator,
+      result.textObject,
+      options,
+      result.count,
+    );
+  if (result.type === "invalid") {
+    if (keymap.leader && state.pending?.startsWith(keymap.leader))
+      return invalidate(clearPending(state));
+    return invalidate(withNoopFeedback(clearPending(state), options, "invalid Vim key sequence"));
+  }
+  if (state.pendingRegister) return invalidate(clearPending(state));
+  return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -566,6 +710,18 @@ function handleNormalInput(
   }
 
   const keymap = keymapForOptions(options);
+  const pendingOperator = operatorActionForSequence(state.pending, keymap);
+  if (pendingOperator) {
+    const escapeMatch = matchInsertEscapeInput(
+      state,
+      data,
+      escapeAliasesForScope(options, "operatorPending"),
+    );
+    if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
+    if (escapeMatch.kind === "pending")
+      return withEffects({ ...state, pendingInsertEscape: escapeMatch.sequence }, []);
+    if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
+  }
   if (isProtectedPiDelegateKey(data)) {
     if (!keymapHasBinding(keymap, key, "normal")) {
       return delegateProtectedShortcut(state, options, data);
@@ -599,52 +755,14 @@ function handleNormalInput(
   }
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
-    const macros = macrosForOptions(options);
-    const macroKeys = (action: "record" | "play") =>
-      [
-        ...keymap.macros[action],
-        ...scopedKeysForAction(keymap, `macro.${action}`, "normal"),
-      ].filter((binding) => !isKeyUnmapped(keymap, binding, "normal"));
-    const recordKeys = macroKeys("record");
-    const playKeys = macroKeys("play");
-    if (
-      snapshot.isMacroReplaying &&
-      (state.pendingMacro || isMacroControlKey(key, recordKeys, playKeys))
-    ) {
-      return invalidate(clearPendingMacro(state));
-    }
-    const macroResult = resolveMacroCommand(key, state.pendingMacro, Boolean(state.recordingSlot), {
-      enabled: macros.enabled,
-      slots: macros.slots,
-      recordKeys,
-      playKeys,
-    });
-    if (macroResult.type === "pendingMacro")
-      return invalidate({ ...clearPending(state), pendingMacro: macroResult.target });
-    if (macroResult.type === "startRecording") return startMacroRecording(state, macroResult.slot);
-    if (macroResult.type === "stopRecording") return stopMacroRecording(state);
-    if (macroResult.type === "playMacro") {
-      if (snapshot.isMacroReplaying || state.recordingSlot)
-        return invalidate(clearPendingMacro(state));
-      return playMacroUpdate(state, macroResult.slot, options);
-    }
-    if (macroResult.type === "repeatMacro") {
-      if (snapshot.isMacroReplaying || state.recordingSlot || !state.lastPlayedMacro) {
-        return invalidate(clearPendingMacro(state));
-      }
-      return playMacroUpdate(state, state.lastPlayedMacro, options);
-    }
-    if (macroResult.type === "invalid") return invalidate(clearPendingMacro(state));
-
-    const markTarget = markPendingForKey(key, options);
-    if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
+    const macroOrMark = handleNormalMacroOrMark(state, snapshot, options, keymap, key);
+    if (macroOrMark) return macroOrMark;
   }
 
   const remapped = remapUpdate(state, options, "normal", key);
   if (remapped) return remapped;
 
-  const pendingOperator = operatorActionForSequence(state.pending, keymap);
-  if (pendingOperator) {
+  if (pendingOperator && !isKeyUnmapped(keymap, key, "operatorPending")) {
     const searchCommand = resolveNormalCommand(key, undefined, keymap, "normal");
     if (searchCommand.type === "command" && searchCommand.command === "startSearch") {
       return startSearchUpdate(state, "forward", pendingOperator);
@@ -662,92 +780,101 @@ function handleNormalInput(
     if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
   }
 
-  const pendingResult = resolveNormalCommand(key, state.pending, keymap, "normal");
-  if (pendingResult.type === "pending") {
-    const operator = operatorActionForSequence(pendingResult.pending, keymap);
-    if (state.pendingRegister && !operator) return invalidate(clearPending(state));
-    return invalidate({ ...state, pending: pendingResult.pending });
-  }
-  if (pendingResult.type === "motion") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return moveUpdate(clearPending(state), pendingResult.motion, snapshot, pendingResult.count);
-  }
-  if (pendingResult.type === "command") {
-    // Intercept the configurable "easymotion" command here
-    if (pendingResult.command === "easymotion") {
-      return invalidate({ ...state, pending: undefined, pendingEasymotion: { kind: "char" } });
-    }
-    return applyCommand(state, snapshot, options, pendingResult.command, pendingResult.count);
-  }
-  if (pendingResult.type === "action") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return applyPromptTransformAction(state, snapshot, options, pendingResult);
-  }
-  if (pendingResult.type === "charCommand")
-    return applyCommand(
-      state,
-      snapshot,
-      options,
-      pendingResult.command,
-      pendingResult.count,
-      pendingResult.char,
-    );
-  if (pendingResult.type === "lineCommand") {
-    return applyLineCommand(state, snapshot, options, pendingResult.operator, pendingResult.count);
-  }
-  if (pendingResult.type === "operatorMotion") {
-    return applyOperatorMotion(
-      state,
-      snapshot,
-      pendingResult.operator,
-      pendingResult.motion,
-      options,
-      pendingResult.count,
-    );
-  }
-  if (pendingResult.type === "operatorSearch") {
-    return startSearchUpdate(state, pendingResult.direction, pendingResult.operator);
-  }
-  if (pendingResult.type === "operatorCharSearch") {
-    return applyOperatorCharSearch(
-      state,
-      snapshot,
-      pendingResult.operator,
-      pendingResult.command,
-      pendingResult.char,
-      options,
-      pendingResult.count,
-    );
-  }
-  if (pendingResult.type === "operatorCharSearchRepeat") {
-    return applyOperatorCharSearchRepeat(
-      state,
-      snapshot,
-      pendingResult.operator,
-      pendingResult.reverse,
-      options,
-      pendingResult.count,
-    );
-  }
-  if (pendingResult.type === "operatorTextObject") {
-    return applyOperatorTextObject(
-      state,
-      snapshot,
-      pendingResult.operator,
-      pendingResult.textObject,
-      options,
-      pendingResult.count,
-    );
-  }
-  if (pendingResult.type === "invalid") {
-    if (keymap.leader && state.pending?.startsWith(keymap.leader)) {
-      return invalidate(clearPending(state));
-    }
-    return invalidate(withNoopFeedback(clearPending(state), options, "invalid Vim key sequence"));
-  }
+  return applyNormalResolution(
+    state,
+    snapshot,
+    options,
+    keymap,
+    key,
+    resolveNormalCommand(key, state.pending, keymap, "normal"),
+  );
+}
 
-  if (state.pendingRegister) return invalidate(clearPending(state));
-  return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
+function applyVisualCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: Extract<SemanticCommandResult, { type: "command" }>["command"],
+): ModalUpdate {
+  const registerAware = command === "deleteChar" || command === "pasteAfter";
+  if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
+  if (command === "startSearch") return startSearchUpdate(state);
+  if (command === "startSearchBackward") return startSearchUpdate(state, "backward");
+  if (command === "startExCommand")
+    return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
+  if (command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
+  if (command === "repeatSearchReverse") return repeatSearch(state, snapshot, options, true);
+  if (command === "visualLine")
+    return state.mode === "visualLine"
+      ? invalidate(state)
+      : modeUpdate(state, "visualLine", options);
+  if (command === "visualChar")
+    return state.mode === "visual" ? invalidate(state) : modeUpdate(state, "visual", options);
+  if (command === "visualBlock")
+    return state.mode === "visualBlock"
+      ? invalidate(state)
+      : modeUpdate(state, "visualBlock", options);
+  if (state.mode === "visualBlock" && command === "insertLineStart")
+    return startBlockInsert(state, snapshot, options, "start");
+  if (state.mode === "visualBlock" && command === "insertLineEnd")
+    return startBlockInsert(state, snapshot, options, "end");
+  if (command === "deleteChar")
+    return deleteVisualSelection(state, snapshot, options, "normal", visualKindForMode(state.mode));
+  if (command === "toggleCase")
+    return toggleVisualSelection(state, snapshot, options, visualKindForMode(state.mode));
+  if (command === "pasteAfter" && state.mode === "visualLine")
+    return pasteVisualLineSelection(state, snapshot, options);
+  return invalidate(state.pendingRegister ? clearPending(state) : state);
+}
+
+function applyVisualResolution(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  keymap: ResolvedVimKeymap,
+  result: SemanticCommandResult,
+): ModalUpdate {
+  if (result.type === "motion") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return moveUpdate(state, result.motion, snapshot, result.count);
+  }
+  if (result.type === "charCommand") {
+    if (state.pendingRegister || result.command !== "replaceChar")
+      return invalidate(clearPending(state));
+    return replaceVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      result.char,
+    );
+  }
+  if (result.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return applyVisualPromptTransformAction(state, snapshot, options, result);
+  }
+  if (result.type === "command")
+    return applyVisualCommand(state, snapshot, options, result.command);
+  if (result.type === "pending") {
+    const operator = operatorActionForSequence(
+      result.pending,
+      keymap,
+      state.mode as VimActionBindingMode,
+    );
+    if (operator)
+      return applyVisualOperator(
+        state,
+        snapshot,
+        options,
+        visualKindForMode(state.mode),
+        operator,
+        countForPendingSequence(result.pending),
+      );
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    return invalidate({ ...state, pending: result.pending });
+  }
+  if (result.type === "invalid") return invalidate(clearPending(state));
+  return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
 function handleVisualInput(
@@ -758,8 +885,16 @@ function handleVisualInput(
 ): ModalUpdate {
   if (matchesKey(data, "escape"))
     return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
-  if (matchInsertEscapeInput(state, data, keymapForOptions(options).escape).kind === "matched")
+  const escapeMatch = matchInsertEscapeInput(
+    state,
+    data,
+    escapeAliasesForScope(options, state.mode as "visual" | "visualLine" | "visualBlock"),
+  );
+  if (escapeMatch.kind === "matched")
     return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
+  if (escapeMatch.kind === "pending")
+    return withEffects({ ...state, pendingInsertEscape: escapeMatch.sequence }, []);
+  if (escapeMatch.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   const key = keySequence(data);
   if (!key) return delegate(state, data);
@@ -769,6 +904,16 @@ function handleVisualInput(
     if (!keymapHasBinding(keymap, key, state.mode)) {
       return delegateProtectedShortcut(state, options, data);
     }
+  }
+
+  if (!state.pending && scopedKeymapBindingFor(keymap, key, state.mode as VimActionBindingMode)) {
+    return applyVisualResolution(
+      state,
+      snapshot,
+      options,
+      keymap,
+      resolveNormalCommand(key, undefined, keymap, state.mode as VimActionBindingMode),
+    );
   }
 
   if (state.pendingRegister === "awaitingSlot") {
@@ -822,97 +967,18 @@ function handleVisualInput(
   );
   if (remapped) return remapped;
 
-  const result = resolveNormalCommand(
-    key,
-    state.pending,
+  return applyVisualResolution(
+    state,
+    snapshot,
+    options,
     keymap,
-    state.mode as "visual" | "visualLine" | "visualBlock",
+    resolveNormalCommand(
+      key,
+      state.pending,
+      keymap,
+      state.mode as "visual" | "visualLine" | "visualBlock",
+    ),
   );
-  if (result.type === "motion") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return moveUpdate(state, result.motion, snapshot, result.count);
-  }
-  if (result.type === "charCommand") {
-    if (state.pendingRegister || result.command !== "replaceChar")
-      return invalidate(clearPending(state));
-    return replaceVisualSelection(
-      state,
-      snapshot,
-      options,
-      visualKindForMode(state.mode),
-      result.char,
-    );
-  }
-  if (result.type === "action") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return applyVisualPromptTransformAction(state, snapshot, options, result);
-  }
-  if (result.type === "command") {
-    const registerAware = result.command === "deleteChar" || result.command === "pasteAfter";
-    if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
-
-    if (result.command === "startSearch") return startSearchUpdate(state);
-    if (result.command === "startSearchBackward") return startSearchUpdate(state, "backward");
-    if (result.command === "startExCommand") {
-      return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
-    }
-    if (result.command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
-    if (result.command === "repeatSearchReverse")
-      return repeatSearch(state, snapshot, options, true);
-
-    if (result.command === "visualLine") {
-      return state.mode === "visualLine"
-        ? invalidate(state)
-        : modeUpdate(state, "visualLine", options);
-    }
-    if (result.command === "visualChar") {
-      return state.mode === "visual" ? invalidate(state) : modeUpdate(state, "visual", options);
-    }
-    if (result.command === "visualBlock") {
-      return state.mode === "visualBlock"
-        ? invalidate(state)
-        : modeUpdate(state, "visualBlock", options);
-    }
-    if (state.mode === "visualBlock" && result.command === "insertLineStart") {
-      return startBlockInsert(state, snapshot, options, "start");
-    }
-    if (state.mode === "visualBlock" && result.command === "insertLineEnd") {
-      return startBlockInsert(state, snapshot, options, "end");
-    }
-    if (result.command === "deleteChar") {
-      return deleteVisualSelection(
-        state,
-        snapshot,
-        options,
-        "normal",
-        visualKindForMode(state.mode),
-      );
-    }
-    if (result.command === "toggleCase") {
-      return toggleVisualSelection(state, snapshot, options, visualKindForMode(state.mode));
-    }
-    if (result.command === "pasteAfter") {
-      if (state.mode === "visualLine") return pasteVisualLineSelection(state, snapshot, options);
-      return invalidate(state.pendingRegister ? clearPending(state) : state);
-    }
-  }
-  if (result.type === "pending") {
-    const operator = operatorActionForSequence(result.pending, keymap);
-    if (operator)
-      return applyVisualOperator(
-        state,
-        snapshot,
-        options,
-        visualKindForMode(state.mode),
-        operator,
-        countForPendingSequence(result.pending),
-      );
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return invalidate({ ...state, pending: result.pending });
-  }
-  if (result.type === "invalid") return invalidate(clearPending(state));
-
-  return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
 function handleHelpPopupInput(state: ModalState, options: ModalOptions, data: string): ModalUpdate {

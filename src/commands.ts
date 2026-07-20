@@ -268,6 +268,7 @@ function textObjectKindForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectKind | undefined {
+  if (isKeyUnmapped(keymap, key, "operatorPending")) return undefined;
   return (
     (scopedActionFor(key, keymap, "textObject.kind.") as VimTextObjectKind | undefined) ??
     compiledKeymapFor(keymap).textObjects.kinds.get(key)
@@ -278,6 +279,7 @@ function textObjectTargetForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectTarget | undefined {
+  if (isKeyUnmapped(keymap, key, "operatorPending")) return undefined;
   return (
     (scopedActionFor(key, keymap, "textObject.target.") as VimTextObjectTarget | undefined) ??
     compiledKeymapFor(keymap).textObjects.targets.get(key)
@@ -564,7 +566,9 @@ function searchDirectionForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): "forward" | "backward" | undefined {
-  return compiledKeymapFor(keymap).commands.searchDirections.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.searchDirections.get(sequence);
 }
 
 function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
@@ -575,7 +579,9 @@ function charSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): OperatorCharSearchCommand | undefined {
-  return compiledKeymapFor(keymap).commands.charSearch.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.charSearch.get(sequence);
 }
 
 function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
@@ -586,7 +592,9 @@ function repeatCharSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> | undefined {
-  return compiledKeymapFor(keymap).commands.repeatCharSearch.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.repeatCharSearch.get(sequence);
 }
 
 function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
@@ -827,11 +835,12 @@ function decodeOperatorCharSearchRepeatPending(
 export function operatorActionForSequence(
   sequence: string | undefined,
   keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP,
+  mode: VimActionBindingMode = "normal",
 ): VimOperatorAction | undefined {
   if (!sequence) return undefined;
   const count = decodeCountPending(sequence);
-  if (count) return operatorActionForSequence(count.inner, keymap);
-  const binding = exactBinding(sequence, keymap);
+  if (count) return operatorActionForSequence(count.inner, keymap, mode);
+  const binding = exactBinding(sequence, keymap, mode);
   return binding?.kind === "operator" ? binding.operator : undefined;
 }
 
@@ -852,6 +861,7 @@ function motionForSequence(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): VimMotionAction | undefined {
+  if (isKeyUnmapped(keymap, sequence, "operatorPending")) return undefined;
   const scoped = exactBinding(sequence, keymap, "operatorPending");
   return scoped?.kind === "motion"
     ? scoped.motion

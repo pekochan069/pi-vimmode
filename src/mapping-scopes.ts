@@ -39,7 +39,7 @@ const NAMED_TERMINAL_KEYS = new Set([
 
 export function isAtomicMappingSequence(sequence: string): boolean {
   return (
-    /^(?:ctrl|alt|shift|super)\+/.test(sequence) ||
+    /^(?:ctrl|alt|shift|super)(?:\+(?:ctrl|alt|shift|super))*\+[^+]+$/.test(sequence) ||
     NAMED_TERMINAL_KEYS.has(sequence) ||
     /^f\d+$/.test(sequence)
   );
@@ -80,8 +80,12 @@ export function mappingScopesForKeymapEntry(
       : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
   }
   if (family === "operator") return NORMAL_AND_VISUAL_SCOPES;
-  if (family === "command")
+  if (family === "command") {
+    if (action === "insertLineStart" || action === "insertLineEnd")
+      return ["normal", "visualBlock"];
+    if (action === "pasteAfter") return ["normal", "visualLine"];
     return VISUAL_COMMANDS.has(action) ? NORMAL_AND_VISUAL_SCOPES : ["normal"];
+  }
   if (family === "macro") return ["normal"];
   if (family === "mark") {
     return action === "set" ? ["normal"] : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];

@@ -2111,6 +2111,91 @@ describe("Ex command-line modal behavior", () => {
     expect(result.effects).toContainEqual({ type: "adapterCommand", command: "undo" });
   });
 
+  test("visual-scoped operator descriptors execute visual operations", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "u",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u"],
+      options,
+    );
+    expect(result.text).toBe("hlo");
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("multi-key scoped escape descriptors complete in visual mode", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "zz",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["z", "z"],
+      options,
+    );
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("scoped escape descriptors dispatch only in selected modes", () => {
+    const insertOnly = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "alt+z",
+            modes: ["insert"],
+          },
+        },
+      ],
+    }).options;
+
+    const insert = applyModalKeys({ mode: "insert" }, "hello", p(0, 5), ["\u001bz"], insertOnly);
+    expect(insert.state.mode).toBe("normal");
+
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["\u001bz"],
+      insertOnly,
+    );
+    expect(visual.state.mode).toBe("visual");
+  });
+
   test("scoped unmap disables inherited macro key", () => {
     const options = resolveVimOptions(undefined, undefined, {
       kind: "success",

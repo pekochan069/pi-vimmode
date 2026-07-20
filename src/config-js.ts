@@ -152,7 +152,9 @@ const ACTION_SCOPES = new Map<VimFiniteActionId, readonly VimMappingScope[]>([
       (action) =>
         [
           `${family}.${action}` as VimFiniteActionId,
-          mappingScopesForKeymapEntry(family, action),
+          mappingScopesForKeymapEntry(family, action).filter(
+            (scope) => family !== "mark" || scope !== "operatorPending",
+          ),
         ] as const,
     ),
   ),
@@ -399,6 +401,60 @@ function mappingOptions(value: unknown): MappingOptions | undefined {
   return options;
 }
 
+function recordDescriptorMapping(
+  session: ConfigSession,
+  key: string,
+  modes: readonly VimMappingScope[],
+  action: ActionDescriptor,
+  options: MappingOptions,
+): void {
+  const scopes = ACTION_SCOPES.get(action.actionId);
+  if (!scopes || !modes.every((candidate) => scopes.includes(candidate))) {
+    session.warning(`${action.actionId} does not support selected mode`);
+    return;
+  }
+  if (!hasValidDescriptorArguments(action.actionId, action.args)) {
+    session.warning(`${action.actionId} does not accept these arguments`);
+    return;
+  }
+  if (action.actionId.startsWith("insert.")) {
+    const insertAction = action.actionId.slice("insert.".length) as VimInsertAction;
+    if (!INSERT_ACTIONS.has(insertAction)) {
+      session.warning(`unsupported insert action ${insertAction}`);
+      return;
+    }
+    session.recordMap({
+      kind: "insert",
+      action: insertAction,
+      key,
+      ...(options.allowProtected ? { allowProtected: true } : {}),
+      ...(options.desc === undefined ? {} : { desc: options.desc }),
+    });
+    return;
+  }
+  if (action.actionId.startsWith("prompt.transform.")) {
+    session.recordMap({
+      kind: "action",
+      actionId: action.actionId as BindablePromptTransformActionId,
+      key,
+      args: action.args as Readonly<Record<string, unknown>> | undefined,
+      modes: modes as VimActionBindingMode[],
+      ...(options.allowProtected ? { allowProtected: true } : {}),
+      ...(options.desc === undefined ? {} : { desc: options.desc }),
+    });
+    return;
+  }
+  session.recordMap({
+    kind: "descriptor",
+    actionId: action.actionId,
+    key,
+    modes,
+    args: action.args as Readonly<Record<string, unknown>> | undefined,
+    ...(options.allowProtected ? { allowProtected: true } : {}),
+    ...(options.desc === undefined ? {} : { desc: options.desc }),
+  });
+}
+
 function compileMapping(
   session: ConfigSession,
   mode: unknown,
@@ -450,51 +506,7 @@ function compileMapping(
     );
     return;
   }
-  const scopes = ACTION_SCOPES.get(action.actionId);
-  if (!scopes || !modes.every((candidate) => scopes.includes(candidate))) {
-    session.warning(`${action.actionId} does not support selected mode`);
-    return;
-  }
-  if (!hasValidDescriptorArguments(action.actionId, action.args)) {
-    session.warning(`${action.actionId} does not accept these arguments`);
-    return;
-  }
-  if (action.actionId.startsWith("insert.")) {
-    const insertAction = action.actionId.slice("insert.".length) as VimInsertAction;
-    if (!INSERT_ACTIONS.has(insertAction)) {
-      session.warning(`unsupported insert action ${insertAction}`);
-      return;
-    }
-    session.recordMap({
-      kind: "insert",
-      action: insertAction,
-      key,
-      ...(options.allowProtected ? { allowProtected: true } : {}),
-      ...(options.desc === undefined ? {} : { desc: options.desc }),
-    });
-    return;
-  }
-  if (action.actionId.startsWith("prompt.transform.")) {
-    session.recordMap({
-      kind: "action",
-      actionId: action.actionId as BindablePromptTransformActionId,
-      key,
-      args: action.args as Readonly<Record<string, unknown>> | undefined,
-      modes: modes as VimActionBindingMode[],
-      ...(options.allowProtected ? { allowProtected: true } : {}),
-      ...(options.desc === undefined ? {} : { desc: options.desc }),
-    });
-    return;
-  }
-  session.recordMap({
-    kind: "descriptor",
-    actionId: action.actionId,
-    key,
-    modes,
-    args: action.args as Readonly<Record<string, unknown>> | undefined,
-    ...(options.allowProtected ? { allowProtected: true } : {}),
-    ...(options.desc === undefined ? {} : { desc: options.desc }),
-  });
+  recordDescriptorMapping(session, key, modes, action, options);
 }
 
 function recordStringRemap(

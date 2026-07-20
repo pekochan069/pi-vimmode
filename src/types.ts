@@ -272,6 +272,8 @@ export type ResolvedVimKeymap = {
   actions: ResolvedVimActionKeymap;
   remaps: VimKeySequenceRemapOptions;
   scoped: readonly VimScopedKeymapBinding[];
+  /** Compiler tombstones. Keep scope-local unmaps from erasing sibling grammar. */
+  unmaps: readonly { key: string; modes: readonly VimMappingScope[] }[];
 };
 
 export type VimSearchOptions = {

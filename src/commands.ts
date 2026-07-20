@@ -486,6 +486,16 @@ function actionBindingMatchesMode(
   );
 }
 
+function isUnmapped(
+  keymap: ResolvedVimKeymap,
+  sequence: string,
+  mode: VimActionBindingMode | "operatorPending" | undefined,
+): boolean {
+  return Boolean(
+    mode && keymap.unmaps.some((unmap) => unmap.key === sequence && unmap.modes.includes(mode)),
+  );
+}
+
 function scopedBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
@@ -518,6 +528,7 @@ function exactBinding(
 ): Binding | undefined {
   const scoped = scopedBinding(sequence, keymap, mode);
   if (scoped) return scoped;
+  if (isUnmapped(keymap, sequence, mode)) return undefined;
   const compiled = compiledKeymapFor(keymap);
   const action = compiled.actionBindings
     .get(sequence)

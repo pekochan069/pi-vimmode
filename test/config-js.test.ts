@@ -778,6 +778,24 @@ export default (vim) => {
     }
   });
 
+  test("unmaps inherited grammar in only selected scopes", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => vim.keymap.set("n", "w", null);`);
+      const resolved = resolveVimOptions(undefined, undefined, await loadVimJsConfig(f.path));
+      const keymap = resolved.options.keymap;
+      expect(resolved.plan.scopes.normal.exact.w).toBeUndefined();
+      expect(resolved.plan.scopes.visual.exact.w?.id).toBe("motion.wordForward");
+      expect(resolveNormalCommand("w", undefined, keymap, "normal").type).toBe("none");
+      expect(resolveNormalCommand("w", undefined, keymap, "visual")).toMatchObject({
+        type: "motion",
+        motion: "wordForward",
+      });
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("keeps mappings declared after an unmap", async () => {
     const f = fixture();
     try {

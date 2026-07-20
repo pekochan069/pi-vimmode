@@ -199,6 +199,7 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
     accepted: Object.freeze([]),
   }),
   scoped: Object.freeze([]),
+  unmaps: Object.freeze([]),
 }) as unknown as ResolvedVimKeymap;
 
 export const DEFAULT_VIM_UI = Object.freeze({
@@ -473,6 +474,7 @@ function cloneKeymap(keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP): ResolvedVi
       modes: [...binding.modes],
       args: binding.args ? { ...binding.args } : undefined,
     })),
+    unmaps: keymap.unmaps.map((unmap) => ({ ...unmap, modes: [...unmap.modes] })),
   };
 }
 
@@ -1742,6 +1744,7 @@ function mergeOperatorMotions(
 }
 
 function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): void {
+  target.unmaps = [...target.unmaps, ...(partial.unmaps ?? [])];
   for (const unmap of partial.unmaps ?? []) {
     if (unmap.modes.includes("insert")) {
       for (const action of Object.keys(target.insert) as Array<keyof ResolvedVimInsertKeymap>) {
@@ -2918,7 +2921,11 @@ export function createVimConfigPlan(
   };
 
   for (const entry of grammarEntriesForKeymap(keymap)) {
-    add(mappingScopesForKeymapEntry(entry.family, entry.id), entry.sequence, {
+    const scopes = mappingScopesForKeymapEntry(entry.family, entry.id).filter(
+      (scope) =>
+        !keymap.unmaps.some((unmap) => unmap.key === entry.sequence && unmap.modes.includes(scope)),
+    );
+    add(scopes, entry.sequence, {
       kind: "keymap",
       id: `${entry.family}.${entry.id}`,
     });

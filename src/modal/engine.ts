@@ -34,6 +34,7 @@ import {
   operatorActionForSequence,
   resolveMacroCommand,
   resolveNormalCommand,
+  scopedKeymapBindingFor,
   scopedKeysForAction,
 } from "../commands.ts";
 import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
@@ -567,6 +568,19 @@ function handleNormalInput(
     if (!keymapHasBinding(keymap, key, "normal")) {
       return delegateProtectedShortcut(state, options, data);
     }
+  }
+
+  // A concrete scoped descriptor owns its exact key before legacy macro/mark grammar.
+  // This prevents structural defaults (for example `q`) from shadowing configuration.
+  if (!state.pending && scopedKeymapBindingFor(keymap, key, "normal")) {
+    const resolved = resolveNormalCommand(key, undefined, keymap, "normal");
+    if (resolved.type === "pending") return invalidate({ ...state, pending: resolved.pending });
+    if (resolved.type === "motion")
+      return moveUpdate(clearPending(state), resolved.motion, snapshot, resolved.count);
+    if (resolved.type === "command")
+      return applyCommand(state, snapshot, options, resolved.command, resolved.count);
+    if (resolved.type === "action")
+      return applyPromptTransformAction(state, snapshot, options, resolved);
   }
 
   if (state.pendingRegister === "awaitingSlot") {

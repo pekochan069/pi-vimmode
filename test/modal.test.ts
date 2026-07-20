@@ -2096,6 +2096,21 @@ describe("Ex command-line modal behavior", () => {
     expect(visual.state.pending).toBeUndefined();
   });
 
+  test("scoped command binding overrides macro record key", () => {
+    const base = resolveVimOptions(undefined).options;
+    const options: ModalOptions = {
+      ...base,
+      keymap: {
+        ...base.keymap!,
+        scoped: [...base.keymap!.scoped, { actionId: "command.undo", key: "q", modes: ["normal"] }],
+      },
+    };
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], options);
+    expect(result.state.pendingMacro).toBeUndefined();
+    expect(result.effects).toContainEqual({ type: "adapterCommand", command: "undo" });
+  });
+
   test("exact semantic actions win when a stale remap survives resolution", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: {

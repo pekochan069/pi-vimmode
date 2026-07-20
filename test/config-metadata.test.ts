@@ -65,7 +65,7 @@ describe("canonical config metadata", () => {
     const scopesFor = (id: string) =>
       VIM_ACTION_METADATA.find((action) => action.id === id)?.scopes;
 
-    expect(scopesFor("mark.set")).toEqual(["normal", "visual", "visualLine", "visualBlock"]);
+    expect(scopesFor("mark.set")).toEqual(["normal"]);
     expect(scopesFor("mark.jumpExact")).toEqual([
       "normal",
       "visual",

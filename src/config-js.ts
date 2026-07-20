@@ -35,7 +35,7 @@ export const DEFAULT_JS_CONFIG_PATH = join(homedir(), ".pi", "agent", "pi-vimmod
 
 type ActionDescriptor = {
   actionId: VimFiniteActionId;
-  args?: Readonly<Record<string, unknown>>;
+  args?: unknown;
 };
 
 const ACTION_DESCRIPTORS = new WeakMap<object, ActionDescriptor>();
@@ -159,20 +159,19 @@ const ACTION_SCOPES = new Map<VimFiniteActionId, readonly VimMappingScope[]>([
   ...PROMPT_TRANSFORM_ACTIONS.map(({ id, modes }) => [id as VimFiniteActionId, modes] as const),
 ]);
 
-function hasValidDescriptorArguments(
-  actionId: VimFiniteActionId,
-  args: Readonly<Record<string, unknown>> | undefined,
-): boolean {
-  if (!args) return true;
+function hasValidDescriptorArguments(actionId: VimFiniteActionId, args: unknown): boolean {
+  if (args === undefined) return true;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return false;
+  const record = args as Record<string, unknown>;
   if (actionId === "prompt.transform.fence") {
-    return Object.keys(args).every(
-      (key) => key === "language" && typeof args.language === "string",
+    return Object.keys(record).every(
+      (key) => key === "language" && typeof record.language === "string",
     );
   }
   if (actionId === "prompt.transform.reflow") {
-    return Object.keys(args).every((key) => key === "width" && typeof args.width === "number");
+    return Object.keys(record).every((key) => key === "width" && typeof record.width === "number");
   }
-  return Object.keys(args).length === 0;
+  return false;
 }
 
 const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
@@ -320,9 +319,12 @@ function modesFor(rawMode: unknown): readonly VimMappingScope[] | undefined {
   return MODE_ALIASES[rawMode];
 }
 
-function descriptor(actionId: VimFiniteActionId, args?: Record<string, unknown>): object {
+function descriptor(actionId: VimFiniteActionId, args?: unknown): object {
   const value = Object.freeze({});
-  ACTION_DESCRIPTORS.set(value, { actionId, args: args && frozenSnapshot(args) });
+  ACTION_DESCRIPTORS.set(value, {
+    actionId,
+    args: args === undefined ? undefined : frozenSnapshot(args),
+  });
   return value;
 }
 
@@ -330,7 +332,7 @@ function actionDescriptor(value: unknown): ActionDescriptor | undefined {
   return value && typeof value === "object" ? ACTION_DESCRIPTORS.get(value) : undefined;
 }
 
-function builtinPromptTransform(action: string, args?: Record<string, unknown>): object {
+function builtinPromptTransform(action: string, args?: unknown): object {
   return descriptor(`prompt.transform.${action}` as VimFiniteActionId, args);
 }
 
@@ -477,7 +479,7 @@ function compileMapping(
       kind: "action",
       actionId: action.actionId as BindablePromptTransformActionId,
       key,
-      args: action.args,
+      args: action.args as Readonly<Record<string, unknown>> | undefined,
       modes: modes as VimActionBindingMode[],
       ...(options.allowProtected ? { allowProtected: true } : {}),
       ...(options.desc === undefined ? {} : { desc: options.desc }),
@@ -489,7 +491,7 @@ function compileMapping(
     actionId: action.actionId,
     key,
     modes,
-    args: action.args,
+    args: action.args as Readonly<Record<string, unknown>> | undefined,
     ...(options.allowProtected ? { allowProtected: true } : {}),
     ...(options.desc === undefined ? {} : { desc: options.desc }),
   });
@@ -505,7 +507,7 @@ function recordStringRemap(
     (mode): mode is VimActionBindingMode =>
       mode === "normal" || mode === "visual" || mode === "visualLine" || mode === "visualBlock",
   );
-  if (actionModes.length === 0) {
+  if (actionModes.length !== modes.length) {
     session.warning("string rhs keymaps only support normal and visual modes");
     return;
   }
@@ -556,7 +558,7 @@ function actionApiTree(prefix = ""): object {
     const [name, ...rest] = suffix.split(".");
     if (!name) continue;
     if (rest.length === 0) {
-      tree[name] = (args?: Record<string, unknown>) => descriptor(actionId, args);
+      tree[name] = (args?: unknown) => descriptor(actionId, args);
       continue;
     }
     tree[name] ??= actionApiTree(`${prefix}${name}.`);

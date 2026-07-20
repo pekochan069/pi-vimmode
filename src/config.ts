@@ -1876,43 +1876,52 @@ function projectExactMappings(
   leader?: string | null,
 ): ProjectExactMapping[] {
   const mappings: ProjectExactMapping[] = [];
-  const add = (key: string, modes: readonly VimMode[]) => {
+  const add = (key: string, modes: readonly VimMappingScope[], actionId?: string) => {
     const finalKey = leader === undefined ? key : resolvedLeaderKey(key, leader ?? undefined);
-    if (finalKey) mappings.push({ key: finalKey, modes });
+    if (finalKey) mappings.push({ key: finalKey, modes, actionId });
   };
   const addRecord = (
     record: Partial<Record<string, readonly string[]>> | undefined,
-    modes: readonly VimMode[],
+    modes: readonly VimMappingScope[],
+    family: string,
   ) => {
-    for (const bindings of Object.values(record ?? {})) {
-      for (const key of bindings ?? []) add(key, modes);
+    for (const [action, bindings] of Object.entries(record ?? {})) {
+      for (const key of bindings ?? []) add(key, modes, `${family}.${action}`);
     }
   };
 
   for (const key of keymap.escape ?? []) {
     add(key, ["insert", "visual", "visualLine", "visualBlock"]);
   }
-  addRecord(keymap.operators, ACTION_BINDING_MODES);
-  addRecord(keymap.motions, ACTION_BINDING_MODES);
-  addRecord(keymap.commands, ["normal"]);
-  addRecord(keymap.macros, ["normal"]);
-  addRecord(keymap.marks, ACTION_BINDING_MODES);
-  addRecord(keymap.insert, ["insert"]);
+  addRecord(keymap.operators, ACTION_BINDING_MODES, "operator");
+  addRecord(keymap.motions, [...ACTION_BINDING_MODES, "operatorPending"], "motion");
+  addRecord(keymap.commands, ["normal"], "command");
+  addRecord(keymap.macros, ["normal"], "macro");
+  addRecord(keymap.marks, ACTION_BINDING_MODES, "mark");
+  addRecord(keymap.insert, ["insert"], "insert");
   for (const bindings of Object.values(keymap.actions ?? {})) {
     for (const binding of bindings ?? []) {
-      add(binding.key, binding.modes ?? ACTION_BINDING_MODES);
+      add(binding.key, binding.modes ?? ACTION_BINDING_MODES, binding.actionId);
     }
   }
   for (const remap of keymap.remaps?.accepted ?? []) {
     add(remap.key, remap.modes ?? ACTION_BINDING_MODES);
   }
-  for (const binding of keymap.scoped ?? []) {
-    add(
-      binding.key,
-      binding.modes.filter((mode): mode is VimMode => mode !== "operatorPending"),
-    );
-  }
+  for (const binding of keymap.scoped ?? []) add(binding.key, binding.modes, binding.actionId);
   return mappings;
+}
+
+function removeJsActionMappings(
+  keymap: PartialKeymapOptions,
+  actionId: string,
+  modes: readonly VimMappingScope[],
+): void {
+  if (!keymap.scoped) return;
+  keymap.scoped = keymap.scoped.flatMap((binding) => {
+    if (binding.actionId !== actionId) return [binding];
+    const remaining = binding.modes.filter((mode) => !modes.includes(mode));
+    return remaining.length ? [{ ...binding, modes: remaining }] : [];
+  });
 }
 
 function applyProjectExactPrecedence(
@@ -1923,6 +1932,7 @@ function applyProjectExactPrecedence(
   for (const mapping of projectExactMappings(project, leader ?? null)) {
     for (const layer of lowerLayers) {
       removeJsMappings(layer, mapping.key, mapping.modes, leader ?? null);
+      if (mapping.actionId) removeJsActionMappings(layer, mapping.actionId, mapping.modes);
     }
   }
 }
@@ -2243,7 +2253,11 @@ function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
   if (partial.workbench) target.workbench = { ...target.workbench, ...partial.workbench };
 }
 
-type ProjectExactMapping = { key: string; modes: readonly VimMode[] };
+type ProjectExactMapping = {
+  key: string;
+  modes: readonly VimMappingScope[];
+  actionId?: string;
+};
 
 function actionBindingModes(binding: ResolvedVimActionBinding): readonly VimActionBindingMode[] {
   return binding.modes ?? ACTION_BINDING_MODES;
@@ -2551,7 +2565,7 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
 function removeJsMappings(
   keymap: PartialKeymapOptions,
   key: string,
-  modes: readonly VimMode[],
+  modes: readonly VimMappingScope[],
   leader?: string | null,
 ): void {
   const matchesKey = (candidate: string) =>
@@ -2731,7 +2745,13 @@ function appendJsMapLayer(
   warnings.push(...parsed.warnings);
   const layer = additiveKeymapLayer(keymapLayers, parsed.partial.keymap);
   layer.unmaps = rawKeymap?.unmaps;
-  layer.scoped = rawKeymap?.scoped;
+  // Parsed insert bindings carry existing key-shape and protected-shortcut validation.
+  // Do not restore raw descriptor entries that validation rejected.
+  layer.scoped = rawKeymap?.scoped?.filter((binding) => {
+    if (!binding.actionId.startsWith("insert.")) return true;
+    const action = binding.actionId.slice("insert.".length) as keyof ResolvedVimInsertKeymap;
+    return parsed.partial.keymap?.insert?.[action]?.includes(binding.key) ?? false;
+  });
   keymapLayers.push(layer);
 }
 

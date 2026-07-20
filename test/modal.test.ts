@@ -2111,6 +2111,35 @@ describe("Ex command-line modal behavior", () => {
     expect(result.effects).toContainEqual({ type: "adapterCommand", command: "undo" });
   });
 
+  test("scoped unmap disables inherited macro key", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "q", modes: ["normal"] }],
+    }).options;
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], options);
+    expect(result.state.pendingMacro).toBeUndefined();
+  });
+
+  test("scoped unmap disables inherited visual command", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "x", modes: ["visual", "visualLine", "visualBlock"] }],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["x"],
+      options,
+    );
+    expect(result.text).toBe("hello");
+    expect(result.state.mode).toBe("visual");
+  });
+
   test("exact semantic actions win when a stale remap survives resolution", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: {

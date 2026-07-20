@@ -340,6 +340,33 @@ export default (vim) => {
     expect(result.plan.scopes.normal.exact.zq?.id).toBe("prompt.transform.quote");
   });
 
+  test("project action replaces JS descriptor across canonical scopes", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { motions: { wordForward: ["L"] } } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "motion.wordForward",
+              key: "H",
+              modes: ["normal", "operatorPending"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(result.plan.scopes.normal.exact.H).toBeUndefined();
+    expect(result.plan.scopes.operatorPending.exact.H).toBeUndefined();
+    expect(result.plan.scopes.normal.exact.L?.id).toBe("motion.wordForward");
+    expect(result.plan.scopes.operatorPending.exact.L?.id).toBe("motion.wordForward");
+  });
+
   test("later JS remap replaces lower action in only claimed scopes", () => {
     const result = resolveVimOptions(
       {
@@ -559,6 +586,27 @@ export default (vim) => {
     }
   });
 
+  test("rejected insert descriptors do not reappear in scoped plan", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "insert.deleteWordBackward",
+            key: "a",
+            modes: ["insert"],
+          },
+        },
+      ],
+    });
+
+    expect(result.options.keymap?.scoped).toEqual([]);
+    expect(result.plan.scopes.insert.exact.a).toBeUndefined();
+  });
+
   test("invalid remap modes are dropped", () => {
     const result = resolveVimOptions(undefined, undefined, {
       appendKeymap: true,
@@ -626,6 +674,24 @@ export default (vim) => {
         },
       ]);
       expect(result.warnings).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("rejects null and empty arguments for no-argument descriptors", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.keymap.set("n", "H", vim.action.motion.wordForward(null));
+  vim.keymap.set("n", "L", vim.action.motion.wordForward({}));
+};`);
+      const result = await loadVimJsConfig(f.path);
+      expect(operations(result)).toEqual([]);
+      expect(result.warnings).toEqual([
+        "global JS config: motion.wordForward does not accept these arguments",
+        "global JS config: motion.wordForward does not accept these arguments",
+      ]);
     } finally {
       f.cleanup();
     }

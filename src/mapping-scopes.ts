@@ -53,6 +53,22 @@ export function mappingSequencesOverlap(left: string, right: string): boolean {
 
 const VISUAL_SCOPES = ["visual", "visualLine", "visualBlock"] as const;
 const NORMAL_AND_VISUAL_SCOPES = ["normal", ...VISUAL_SCOPES] as const;
+const VISUAL_COMMANDS = new Set([
+  "insertLineStart",
+  "insertLineEnd",
+  "visualChar",
+  "visualLine",
+  "visualBlock",
+  "deleteChar",
+  "pasteAfter",
+  "toggleCase",
+  "replaceChar",
+  "startSearch",
+  "startSearchBackward",
+  "repeatSearch",
+  "repeatSearchReverse",
+  "startExCommand",
+]);
 
 export function mappingScopesForKeymapEntry(
   family: VimMappingFamily,
@@ -64,7 +80,9 @@ export function mappingScopesForKeymapEntry(
       : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
   }
   if (family === "operator") return NORMAL_AND_VISUAL_SCOPES;
-  if (family === "command" || family === "macro") return ["normal"];
+  if (family === "command")
+    return VISUAL_COMMANDS.has(action) ? NORMAL_AND_VISUAL_SCOPES : ["normal"];
+  if (family === "macro") return ["normal"];
   if (family === "mark") {
     return action === "set" ? ["normal"] : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
   }

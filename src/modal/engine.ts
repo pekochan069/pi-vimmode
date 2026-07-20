@@ -30,6 +30,7 @@ import {
 } from "../buffer.ts";
 import {
   countForPendingSequence,
+  isKeyUnmapped,
   isMacroControlKey,
   operatorActionForSequence,
   resolveMacroCommand,
@@ -504,6 +505,7 @@ function markPendingForKey(
 ) {
   if (!marksForOptions(options).enabled) return undefined;
   const resolved = keymapForOptions(options);
+  if (isKeyUnmapped(resolved, key, mode)) return undefined;
   const hasScopedMark = (action: "set" | "jumpExact" | "jumpLine") =>
     scopedKeysForAction(resolved, `mark.${action}`, mode).includes(key);
   if (!operator && (resolved.marks.set.includes(key) || hasScopedMark("set"))) {
@@ -598,10 +600,11 @@ function handleNormalInput(
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macros = macrosForOptions(options);
-    const macroKeys = (action: "record" | "play") => [
-      ...keymap.macros[action],
-      ...scopedKeysForAction(keymap, `macro.${action}`, "normal"),
-    ];
+    const macroKeys = (action: "record" | "play") =>
+      [
+        ...keymap.macros[action],
+        ...scopedKeysForAction(keymap, `macro.${action}`, "normal"),
+      ].filter((binding) => !isKeyUnmapped(keymap, binding, "normal"));
     const recordKeys = macroKeys("record");
     const playKeys = macroKeys("play");
     if (

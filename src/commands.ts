@@ -486,7 +486,7 @@ function actionBindingMatchesMode(
   );
 }
 
-function isUnmapped(
+export function isKeyUnmapped(
   keymap: ResolvedVimKeymap,
   sequence: string,
   mode: VimActionBindingMode | "operatorPending" | undefined,
@@ -528,7 +528,7 @@ function exactBinding(
 ): Binding | undefined {
   const scoped = scopedBinding(sequence, keymap, mode);
   if (scoped) return scoped;
-  if (isUnmapped(keymap, sequence, mode)) return undefined;
+  if (isKeyUnmapped(keymap, sequence, mode)) return undefined;
   const compiled = compiledKeymapFor(keymap);
   const action = compiled.actionBindings
     .get(sequence)

@@ -95,7 +95,8 @@ export type VimCommandAction =
   | "undo"
   | "redo"
   | "showKeybindings"
-  | "reselectVisual";
+  | "reselectVisual"
+  | "easymotion";
 
 export type VimTextObjectKind = "inner" | "around";
 
@@ -256,6 +257,14 @@ export type VimSearchOptions = {
 
 export type ResolvedVimSearch = VimSearchOptions;
 
+export type VimEasymotionOptions = {
+  labelColor: string;
+};
+
+export type ResolvedVimEasymotion = VimEasymotionOptions;
+
+export type PartialVimEasymotionOptions = Partial<ResolvedVimEasymotion>;
+
 export type VimUiOptions = {
   status: {
     enabled: boolean;
@@ -352,6 +361,7 @@ export type VimEditorOptions = {
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;
+  easymotion?: PartialVimEasymotionOptions;
   feedback?: Partial<VimFeedbackOptions>;
   promptStructures?: VimPromptStructureEditorOptions;
   promptTransforms?: VimPromptTransformEditorOptions;
@@ -367,6 +377,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  easymotion?: ResolvedVimEasymotion;
   exCommand?: ResolvedVimExCommand;
   feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;

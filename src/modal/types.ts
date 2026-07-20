@@ -191,6 +191,14 @@ export type ModalState = {
     cursor: Position;
     text: string;
   };
+  pendingEasymotion?:
+    | { kind: "char" }
+    | {
+        kind: "highlight";
+        targets: { label: string; line: number; character: number; original: string }[];
+        originalText: string;
+      }
+    | { kind: "jump"; targets: { label: string; line: number; character: number }[]; char: string };
 };
 
 export type FastInsertDelegateContext = {

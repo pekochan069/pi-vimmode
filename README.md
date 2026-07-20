@@ -148,6 +148,22 @@ Example keymap/UI override:
 }
 ```
 
+### EasyMotion
+
+When you trigger character search (e.g. `f`, `t`, `F`, `T`), matching characters on the current line are replaced with colored label characters. Press the label to jump to that character, which restores the original. The label color is configurable under `piVimMode.easymotion.labelColor`:
+
+```json
+{
+  "piVimMode": {
+    "easymotion": {
+      "labelColor": "\u001b[31m"
+    }
+  }
+}
+```
+
+Common ANSI color codes: `\u001b[31m` (red), `\u001b[32m` (green), `\u001b[33m` (yellow), `\u001b[34m` (blue), `\u001b[35m` (magenta), `\u001b[36m` (cyan), `\u001b[37m` (white). Default is red (`\u001b[31m`).
+
 Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as local code with Pi process privileges:
 
 ```js

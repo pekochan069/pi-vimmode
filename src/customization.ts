@@ -121,6 +121,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   redo: "redo prompt edit",
   showKeybindings: "show keybindings popup",
   reselectVisual: "reselect last visual selection",
+  easymotion: "jump to character on current file (EasyMotion)",
 };
 
 const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {

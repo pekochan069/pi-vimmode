@@ -36,6 +36,11 @@ export type SearchHighlightRenderInput = {
   maxHighlights: number;
 };
 
+export type EasymotionRenderInput = {
+  targets: { line: number; character: number }[];
+  labelColor: string;
+};
+
 export type PromptRenderInput = {
   snapshot: {
     lines: string[];
@@ -54,6 +59,7 @@ export type PromptRenderInput = {
   display?: {
     borderColor?: (text: string) => string;
   };
+  easymotion?: EasymotionRenderInput;
 };
 
 export type ActiveVisualRenderInput = {
@@ -78,6 +84,7 @@ export type ActiveVisualRenderInput = {
   display?: {
     borderColor?: (text: string) => string;
   };
+  easymotion?: EasymotionRenderInput;
 };
 
 type VisualRenderView = {
@@ -94,6 +101,8 @@ type VisualRenderView = {
   borderColor?: (text: string) => string;
   search?: SearchHighlightRenderInput;
   searchRanges: TextRange[];
+  easymotion: EasymotionRenderInput | undefined;
+  easymotionTargets: Set<string>;
 };
 
 function styleSelection(text: string): string {
@@ -280,6 +289,8 @@ function renderLayoutLine(
       )
     ) {
       output += styleSelection(cell);
+    } else if (options.easymotionTargets?.has(`${chunk.lineIndex}:${cellStart}`)) {
+      output += options.easymotion?.labelColor + cell + ANSI_RESET;
     } else {
       const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
       if (searchStyle === "current") output += styleCurrentSearch(cell);
@@ -364,6 +375,10 @@ function createPromptRenderView(input: PromptRenderInput): VisualRenderView {
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(input.snapshot.text, input.search),
+    easymotion: input.easymotion,
+    easymotionTargets: new Set(
+      (input.easymotion?.targets ?? []).map((t) => `${t.line}:${t.character}`),
+    ),
   };
 }
 
@@ -383,6 +398,10 @@ function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderVie
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(text, input.search),
+    easymotion: input.easymotion,
+    easymotionTargets: new Set(
+      (input.easymotion?.targets ?? []).map((t) => `${t.line}:${t.character}`),
+    ),
   };
 }
 

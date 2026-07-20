@@ -207,6 +207,125 @@ export function canFastDelegateInsertInput(
   );
 }
 
+/**
+ * EASYNOMOTION LOGIC
+ */
+function handleEasymotionInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  _options: ModalOptions,
+  data: string,
+): ModalUpdate {
+  const key = keySequence(data);
+  if (!key || matchesKey(data, "escape")) {
+    const { pendingEasymotion, ...rest } = state;
+    if (pendingEasymotion?.kind === "highlight") {
+      return withEffects(rest, [
+        {
+          type: "edit",
+          result: {
+            text: pendingEasymotion.originalText,
+            cursor: snapshot.cursor,
+            changed: true,
+          },
+        },
+        { type: "invalidate" },
+      ]);
+    }
+    return invalidate(rest);
+  }
+
+  if (state.pendingEasymotion?.kind === "char") {
+    // Transition to highlight state with case-insensitive matching
+    const targets: { label: string; line: number; character: number; original: string }[] = [];
+    const lines = snapshot.text.split("\n");
+    const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    let count = 0;
+    const targetChar = key.toLowerCase();
+
+    for (let i = 0; i < lines.length && count < labels.length; i++) {
+      const line = lines[i];
+      if (line === undefined) continue;
+      // Case-insensitive matching
+      let pos = line.toLowerCase().indexOf(targetChar);
+      while (pos !== -1 && count < labels.length) {
+        const label = labels[count];
+        if (label === undefined) break;
+        const original = line[pos] ?? key;
+        targets.push({ label, line: i, character: pos, original });
+        count++;
+        pos = line.toLowerCase().indexOf(targetChar, pos + 1);
+      }
+    }
+
+    if (targets.length === 0) {
+      const { pendingEasymotion: _, ...rest } = state;
+      return invalidate(rest);
+    }
+
+    // Build text with address characters replacing matched characters
+    const nextLines = [...snapshot.lines];
+    for (const target of targets) {
+      const line = nextLines[target.line];
+      if (line === undefined) continue;
+      nextLines[target.line] =
+        line.slice(0, target.character) + target.label + line.slice(target.character + 1);
+    }
+    const nextText = nextLines.join("\n");
+
+    return withEffects(
+      {
+        ...state,
+        pendingEasymotion: { kind: "highlight", targets, originalText: snapshot.text },
+      },
+      [
+        {
+          type: "edit",
+          result: { text: nextText, cursor: snapshot.cursor, changed: nextText !== snapshot.text },
+        },
+      ],
+    );
+  }
+
+  if (state.pendingEasymotion?.kind === "highlight") {
+    // Address character input: jump to target and restore that character
+    const target = state.pendingEasymotion.targets.find((t) => t.label === key);
+
+    if (target) {
+      const { pendingEasymotion: _, ...rest } = state;
+      // Restore full original text then place cursor on the target
+      return withEffects(rest, [
+        {
+          type: "edit",
+          result: {
+            text: state.pendingEasymotion.originalText,
+            cursor: snapshot.cursor,
+            changed: true,
+          },
+        },
+        { type: "restoreCursor", position: { line: target.line, col: target.character } },
+        { type: "invalidate" },
+      ]);
+    }
+    return invalidate(state);
+  }
+
+  if (state.pendingEasymotion?.kind === "jump") {
+    const target = state.pendingEasymotion.targets.find((t: any) => t.label === key);
+    const { pendingEasymotion: _, ...rest } = state;
+
+    if (target) {
+      return withEffects(rest, [
+        { type: "restoreCursor", position: { line: target.line, col: target.character } },
+        { type: "invalidate" },
+      ]);
+    }
+    return invalidate(rest);
+  }
+
+  return invalidate(state);
+}
+
 function handleInsertInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -518,8 +637,13 @@ function handleNormalInput(
     if (state.pendingRegister) return invalidate(clearPending(state));
     return moveUpdate(clearPending(state), pendingResult.motion, snapshot, pendingResult.count);
   }
-  if (pendingResult.type === "command")
+  if (pendingResult.type === "command") {
+    // Intercept the configurable "easymotion" command here
+    if (pendingResult.command === "easymotion") {
+      return invalidate({ ...state, pending: undefined, pendingEasymotion: { kind: "char" } });
+    }
     return applyCommand(state, snapshot, options, pendingResult.command, pendingResult.count);
+  }
   if (pendingResult.type === "action") {
     if (state.pendingRegister) return invalidate(clearPending(state));
     return applyPromptTransformAction(state, snapshot, options, pendingResult);
@@ -787,6 +911,11 @@ function routeModalInput(
 ): ModalUpdate {
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
   if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
+
+  // Easymotion routing
+  if (routedState.pendingEasymotion)
+    return handleEasymotionInput(routedState, snapshot, options, data);
+
   if (routedState.pendingEx)
     return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
   if (routedState.pendingSearch)
@@ -803,6 +932,14 @@ function routeModalInput(
 }
 
 export function modalPendingDisplay(state: ModalState): string | undefined {
+  if (state.pendingEasymotion?.kind === "char") return "EasyMotion: Find Char...";
+  if (state.pendingEasymotion?.kind === "highlight") {
+    return `Jump [${state.pendingEasymotion.targets.map((t) => t.label).join("")}]: `;
+  }
+  if (state.pendingEasymotion?.kind === "jump") {
+    return `Jump [${state.pendingEasymotion.targets.map((t: any) => t.label).join("")}]: `;
+  }
+
   return (
     exDisplay(state.pendingEx) ??
     pendingSearchDisplay(state.pendingSearch) ??

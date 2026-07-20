@@ -582,6 +582,9 @@ export function applyCommand(
         { type: "invalidate" },
       ]);
     }
+    // easymotion is intercepted in handleNormalInput before reaching applyCommand
+    default:
+      return invalidate(nextState);
   }
 }
 

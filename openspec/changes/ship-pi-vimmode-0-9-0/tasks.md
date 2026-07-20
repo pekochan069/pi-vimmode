@@ -11,7 +11,7 @@
 
 ## 3. Public Config Behavior and Reload
 
-- [ ] 3.1 Implement [#38](https://github.com/pekochan069/pi-vimmode/issues/38): expose every finite `piVimMode` option through validated domain-grouped trusted JavaScript properties and prove source-order/replacement/fallback behavior. **Blocked by:** #37.
+- [x] 3.1 Implement [#38](https://github.com/pekochan069/pi-vimmode/issues/38): expose every finite `piVimMode` option through validated domain-grouped trusted JavaScript properties and prove source-order/replacement/fallback behavior. **Blocked by:** #37.
 - [ ] 3.2 Implement [#39](https://github.com/pekochan069/pi-vimmode/issues/39): add opaque action descriptors and finite mode-scoped mappings with unmapping, deterministic conflicts, bounded replay, insert/operator restrictions, protected override, compatibility aliases, and project precedence. **Blocked by:** #37; may run parallel with #38.
 - [ ] 3.3 Implement [#40](https://github.com/pekochan069/pi-vimmode/issues/40): reconfigure tracked active editors atomically on generation-guarded reload, preserving durable state and clearing specified transient grammar through lifecycle and real-editor tests. **Blocked by:** #38 and #39.
 

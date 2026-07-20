@@ -45,6 +45,7 @@ import {
   isPrintableLeader,
   loadVimJsConfig,
   type VimJsConfigOperation,
+  type VimJsConfigRules,
 } from "./config-js.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
@@ -341,6 +342,7 @@ type PartialKeymapOptions = {
     targets?: Partial<Record<VimTextObjectTarget, string[]>>;
   };
   operatorMotions?: Partial<Record<VimMotionOperatorAction, VimMotionAction[]>>;
+  replaceOperatorMotions?: boolean;
   insert?: Partial<ResolvedVimInsertKeymap>;
   actionPresets?: VimActionKeybindingPreset[];
   actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
@@ -1595,6 +1597,53 @@ function parsePiVimMode(
   return { partial, warnings };
 }
 
+function setOptionPath(value: Record<string, unknown>, path: string, next: unknown): void {
+  const keys = path.split(".");
+  const leaf = keys.pop();
+  if (!leaf) return;
+  let target = value;
+  for (const key of keys) {
+    const child = target[key];
+    if (!child || typeof child !== "object") target[key] = {};
+    target = target[key] as Record<string, unknown>;
+  }
+  target[leaf] = next;
+}
+
+function optionValueAtPath(value: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, key) => {
+    if (!current || typeof current !== "object") return undefined;
+    return (current as Record<string, unknown>)[key];
+  }, value);
+}
+
+function configRuleFor(path: string, value: unknown): ReturnType<VimJsConfigRules["validate"]> {
+  const config: Record<string, unknown> = {};
+  setOptionPath(config, path, value);
+  const parsed = parsePiVimMode(config, "global JS config");
+  const parsedValue = optionValueAtPath(parsed.partial, path);
+  const unknownRecordMember =
+    isRecord(value) &&
+    isRecord(parsedValue) &&
+    Object.keys(value).some((key) => !Object.hasOwn(parsedValue, key));
+  if (parsed.warnings.length === 0 && parsedValue !== undefined && !unknownRecordMember) {
+    return { ok: true, value: parsedValue };
+  }
+  const message = parsed.warnings[0] ?? `unsupported piVimMode.${path}`;
+  return { ok: false, message: message.replace(/^global JS config: /, "") };
+}
+
+function jsConfigRules(): VimJsConfigRules {
+  return {
+    validate: configRuleFor,
+    applyPreset(state, preset) {
+      const options = cloneResolvedVimOptions(state as ResolvedVimEditorOptions);
+      mergePartialOptions(options, presetOptions(preset));
+      return options as unknown as Record<string, unknown>;
+    },
+  };
+}
+
 function configuredTopLevelKeymapSequences(partial: PartialKeymapOptions): Set<string> {
   const sequences = new Set<string>();
   for (const group of [partial.operators, partial.motions, partial.macros, partial.marks]) {
@@ -1680,7 +1729,11 @@ function mergeKeymap(target: ResolvedVimKeymap, partial: PartialKeymapOptions): 
     };
   }
   if (partial.operatorMotions) {
-    target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
+    target.operatorMotions = (
+      partial.replaceOperatorMotions
+        ? { ...partial.operatorMotions }
+        : { ...target.operatorMotions, ...partial.operatorMotions }
+    ) as typeof target.operatorMotions;
   }
   if (partial.insert) {
     target.insert = { ...target.insert, ...partial.insert };
@@ -1727,6 +1780,7 @@ function removePartialRemaps(target: PartialKeymapOptions, sequences: Set<string
 }
 
 function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymapOptions): void {
+  if (partial.replaceOperatorMotions) target.replaceOperatorMotions = true;
   removePartialRemaps(target, configuredTopLevelKeymapSequences(partial));
   if (partial.escape) target.escape = [...partial.escape];
   if (partial.operators) target.operators = { ...target.operators, ...partial.operators };
@@ -1741,7 +1795,11 @@ function mergeKeymapOverlay(target: PartialKeymapOptions, partial: PartialKeymap
     };
   }
   if (partial.operatorMotions) {
-    target.operatorMotions = { ...target.operatorMotions, ...partial.operatorMotions };
+    target.operatorMotions = (
+      partial.replaceOperatorMotions
+        ? { ...partial.operatorMotions }
+        : { ...target.operatorMotions, ...partial.operatorMotions }
+    ) as typeof target.operatorMotions;
   }
   if (partial.insert) {
     target.insert = { ...target.insert, ...partial.insert };
@@ -2465,10 +2523,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
       partial.preset = operation.preset;
       continue;
     }
-    if (operation.kind === "leaf") {
-      partial.leader = operation.value;
-      continue;
-    }
+    if (operation.kind === "leaf") continue;
     const keymap = (partial.keymap ??= {});
     if (operation.kind === "unmap") {
       removeJsMappings(keymap as PartialKeymapOptions, operation.key, operation.modes);
@@ -2503,6 +2558,79 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     ];
   }
   return partial;
+}
+
+const JS_REPLACED_RECORD_PATHS = new Set([
+  "ui.mode.labels",
+  "ui.mode.narrowLabels",
+  "promptStructures.targets",
+  "promptTransforms.actions",
+  "promptTransforms.commands",
+]);
+
+function replaceJsRecord(
+  options: ResolvedVimEditorOptions,
+  path: string,
+  partial: PartialVimOptions,
+): void {
+  if (!JS_REPLACED_RECORD_PATHS.has(path)) return;
+  const value = optionValueAtPath(partial, path);
+  if (value !== undefined)
+    setOptionPath(options as unknown as Record<string, unknown>, path, value);
+}
+
+function appendJsMapLayer(
+  keymapLayers: PartialKeymapOptions[],
+  operations: readonly VimJsConfigOperation[],
+  warnings: string[],
+): void {
+  if (operations.length === 0) return;
+  const source = partialFromJsOperations(operations);
+  const rawKeymap = source.keymap as PartialKeymapOptions | undefined;
+  const parsed = parsePiVimMode(source, "global JS config");
+  if (!parsed.partial.keymap) return;
+  warnings.push(...parsed.warnings);
+  const layer = additiveKeymapLayer(keymapLayers, parsed.partial.keymap);
+  layer.unmaps = rawKeymap?.unmaps;
+  keymapLayers.push(layer);
+}
+
+function applyJsOptionOperations(
+  options: ResolvedVimEditorOptions,
+  keymapLayers: PartialKeymapOptions[],
+  operations: readonly VimJsConfigOperation[],
+  warnings: string[],
+): void {
+  let mapOperations: VimJsConfigOperation[] = [];
+  const flushMapOperations = () => {
+    appendJsMapLayer(keymapLayers, mapOperations, warnings);
+    mapOperations = [];
+  };
+
+  for (const operation of operations) {
+    if (operation.kind === "map" || operation.kind === "unmap") {
+      mapOperations.push(operation);
+      continue;
+    }
+    flushMapOperations();
+    if (operation.kind === "preset") {
+      const preset = presetOptions(operation.preset);
+      mergePartialOptions(options, preset);
+      if (preset.keymap) keymapLayers.push(preset.keymap);
+      continue;
+    }
+    const value: Record<string, unknown> = {};
+    setOptionPath(value, operation.path, operation.value);
+    const parsed = parsePiVimMode(value, "global JS config");
+    mergePartialOptions(options, parsed.partial);
+    replaceJsRecord(options, operation.path, parsed.partial);
+    if (operation.path === "keymap.operatorMotions" && parsed.partial.keymap) {
+      parsed.partial.keymap.replaceOperatorMotions = true;
+    }
+    if (parsed.partial.keymap) keymapLayers.push(parsed.partial.keymap);
+    warnings.push(...parsed.warnings);
+  }
+  flushMapOperations();
 }
 
 function compileJsConfig(jsConfig: Parameters<typeof resolveVimOptions>[2]): {
@@ -2774,10 +2902,14 @@ export function resolveVimOptions(
   if (parsedGlobal.partial.keymap) keymapLayers.push(parsedGlobal.partial.keymap);
   warnings.push(...parsedGlobal.warnings);
 
-  const compiledJs = compileJsConfig(jsConfig);
-  const parsedJs = parsePiVimMode(compiledJs.source, "global JS config");
-  const appendJsKeymap = jsConfig?.kind === "success" || jsConfig?.appendKeymap;
-  if (parsedJs.partial.preset) {
+  const compiledJs = jsConfig?.operations ? undefined : compileJsConfig(jsConfig);
+  if (jsConfig?.operations) {
+    applyJsOptionOperations(options, keymapLayers, jsConfig.operations, warnings);
+  }
+  const parsedJs = parsePiVimMode(compiledJs?.source, "global JS config");
+  const appendJsKeymap =
+    !jsConfig?.operations && (jsConfig?.kind === "success" || jsConfig?.appendKeymap);
+  if (!jsConfig?.operations && parsedJs.partial.preset) {
     const preset = presetOptions(parsedJs.partial.preset);
     mergePartialOptions(options, preset);
     if (preset.keymap) keymapLayers.push(preset.keymap);
@@ -2788,7 +2920,7 @@ export function resolveVimOptions(
           ...parsedJs.partial,
           keymap: {
             ...additiveKeymapLayer(keymapLayers, parsedJs.partial.keymap),
-            unmaps: compiledJs.unmaps,
+            unmaps: compiledJs?.unmaps,
           },
         }
       : parsedJs.partial;
@@ -2844,7 +2976,11 @@ export async function loadVimOptions(paths: VimConfigPaths = {}): Promise<VimCon
   const globalRead = readJsonFile(globalPath, "global settings");
   const projectRead = readJsonFile(projectPath, "project settings");
   const globalSeed = resolveVimOptions(globalRead.settings).options;
-  const jsRead = await loadVimJsConfig(jsConfigPath, { leader: globalSeed.leader });
+  const jsRead = await loadVimJsConfig(
+    jsConfigPath,
+    globalSeed as unknown as Record<string, unknown>,
+    jsConfigRules(),
+  );
   const resolved = resolveVimOptions(globalRead.settings, projectRead.settings, jsRead);
 
   const warnings = [...globalRead.warnings, ...projectRead.warnings, ...resolved.warnings];

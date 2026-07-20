@@ -859,6 +859,105 @@ export default (vim) => {
     }
   });
 
+  test("replays preset and leaf operations in source order", () => {
+    const afterLeaf = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        { kind: "leaf", path: "startMode", value: "insert" },
+        { kind: "preset", preset: "vim-heavy" },
+      ],
+    });
+    const afterPreset = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        { kind: "preset", preset: "vim-heavy" },
+        { kind: "leaf", path: "startMode", value: "insert" },
+      ],
+    });
+
+    expect(afterLeaf.options.startMode).toBe("normal");
+    expect(afterPreset.options.startMode).toBe("insert");
+  });
+
+  test("exposes validated domain options from global JSON without project settings", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-options-"));
+    try {
+      const globalPath = join(dir, "settings.json");
+      const projectPath = join(dir, "project-settings.json");
+      const jsConfigPath = join(dir, "pi-vimmode.config.js");
+      writeFileSync(globalPath, JSON.stringify({ piVimMode: { startMode: "normal" } }));
+      writeFileSync(projectPath, JSON.stringify({ piVimMode: { startMode: "insert" } }));
+      writeFileSync(
+        jsConfigPath,
+        `export default (vim) => {
+  if (vim.startMode !== "normal") throw new Error("missing global seed");
+  vim.cursor.normal = "bar";
+  vim.ui.status.items = ["mode"];
+  vim.macros.enabled = false;
+  vim.marks.enabled = false;
+  vim.search.maxHighlights = 10;
+  vim.exCommand.autocomplete = false;
+  vim.feedback.noop = "status";
+  vim.promptStructures.targets = { codeFence: false };
+  vim.promptTransforms.commands = { quote: ["quoteit"] };
+  vim.keymap.actionPresets = ["paragraph-editing"];
+  vim.keymap.operatorMotions = { delete: ["wordForward"] };
+};`,
+      );
+
+      const result = await loadVimOptions({
+        globalSettingsPath: globalPath,
+        projectSettingsPath: projectPath,
+        jsConfigPath,
+      });
+      expect(result.options.startMode).toBe("insert");
+      expect(result.options.cursor.normal).toBe("bar");
+      expect(result.options.ui?.status.items).toEqual(["mode"]);
+      expect(result.options.macros?.enabled).toBe(false);
+      expect(result.options.marks?.enabled).toBe(false);
+      expect(result.options.search?.maxHighlights).toBe(10);
+      expect(result.options.exCommand?.autocomplete).toBe(false);
+      expect(result.options.feedback?.noop).toBe("status");
+      expect(result.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+      expect(Object.keys(result.options.promptStructures?.targets ?? [])).toEqual(["codeFence"]);
+      expect(result.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
+      expect(Object.keys(result.options.promptTransforms?.commands ?? [])).toEqual(["quote"]);
+      expect(result.options.keymap?.operatorMotions).toMatchObject({ delete: ["wordForward"] });
+      expect(Object.keys(result.options.keymap?.operatorMotions ?? [])).toEqual(["delete"]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects invalid composite writes without changing frozen staged reads", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  const slots = vim.macros.slots;
+  if (!Object.isFrozen(slots)) throw new Error("slots must be frozen");
+  vim.macros.slots = ["a", "!"];
+  if (vim.macros.slots.join(",") !== slots.join(",")) throw new Error("invalid slots replaced staged value");
+  vim.macros.enabled = false;
+  vim.search.unknown = true;
+};`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+      expect(result.options.macros?.enabled).toBe(false);
+      expect(result.warnings).toEqual([
+        "global JS config: piVimMode.macros.slots only supports lowercase a-z slots",
+        "global JS config: unknown vim.search property unknown",
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("loadVimOptions includes JS string remaps", async () => {
     const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-remap-load-"));
     try {

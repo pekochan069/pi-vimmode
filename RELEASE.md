@@ -27,7 +27,7 @@ export default (vim) => {
 }
 ```
 
-- Added `piVimMode.ui.status.position` to place the complete editor-border status group on the left or right side of the editor. #21 @alanpog
+- Added `piVimMode.ui.status.position` to place the complete editor-border status group on the left or right side of the editor. [#21](https://github.com/pekochan069/pi-vimmode/pull/21) [@alanpog](https://github.com/alanpog)
 
 ```json
 {
@@ -41,7 +41,7 @@ export default (vim) => {
 }
 ```
 
-- Added configurable EasyMotion-style character jumps. Bind the `easymotion` command, enter a target character, then press one of up to 52 case-insensitive labels to jump across the prompt. Set `piVimMode.easymotion.labelColor` to customize the ANSI label color. #49 @tecfu
+- Added configurable EasyMotion-style character jumps. Bind the `easymotion` command, enter a target character, then press one of up to 52 case-insensitive labels to jump across the prompt. Set `piVimMode.easymotion.labelColor` to customize the ANSI label color. [#49](https://github.com/pekochan069/pi-vimmode/pull/49) [@tecfu](https://github.com/tecfu)
 
 ```json
 {

@@ -41,6 +41,23 @@ export default (vim) => {
 }
 ```
 
+- Added configurable EasyMotion-style character jumps. Bind the `easymotion` command, enter a target character, then press one of up to 52 case-insensitive labels to jump across the prompt. Set `piVimMode.easymotion.labelColor` to customize the ANSI label color. #49 @tecfu
+
+```json
+{
+  "piVimMode": {
+    "keymap": {
+      "commands": {
+        "easymotion": ["<leader><leader>"]
+      }
+    },
+    "easymotion": {
+      "labelColor": "\u001b[31m"
+    }
+  }
+}
+```
+
 ## Bug fixes
 
 - Fixed character-search repeats: `,` now keeps opposite original `f`, `F`, `t`, or `T` direction, and `;` now advances `t` and `T` searches.

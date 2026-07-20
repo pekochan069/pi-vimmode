@@ -859,6 +859,343 @@ export default (vim) => {
     }
   });
 
+  test("applies presets to staged reads and replaces UI mode label records", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-ui-labels-"));
+    try {
+      const globalPath = join(dir, "settings.json");
+      const jsConfigPath = join(dir, "pi-vimmode.config.js");
+      writeFileSync(
+        globalPath,
+        JSON.stringify({
+          piVimMode: {
+            ui: {
+              mode: {
+                labels: { insert: "GLOBAL-INSERT" },
+                narrowLabels: { insert: "GI" },
+              },
+            },
+          },
+        }),
+      );
+      writeFileSync(
+        jsConfigPath,
+        `export default (vim) => {
+  vim.preset = "vim-heavy";
+  if (vim.startMode !== "normal") throw new Error("preset did not update staged reads");
+  vim.ui.mode.labels = { normal: "JS-NORMAL" };
+  vim.ui.mode.narrowLabels = { normal: "JN" };
+};`,
+      );
+
+      const result = await loadVimOptions({
+        globalSettingsPath: globalPath,
+        projectSettingsPath: join(dir, "missing-project-settings.json"),
+        jsConfigPath,
+      });
+      expect(result.options.ui?.mode.labels).toMatchObject({ normal: "JS-NORMAL" });
+      expect(Object.keys(result.options.ui?.mode.labels ?? {})).toEqual(["normal"]);
+      expect(result.options.ui?.mode.narrowLabels).toMatchObject({ normal: "JN" });
+      expect(Object.keys(result.options.ui?.mode.narrowLabels ?? {})).toEqual(["normal"]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("replays preset and leaf operations in source order", () => {
+    const afterLeaf = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        { kind: "leaf", path: "startMode", value: "insert" },
+        { kind: "preset", preset: "vim-heavy" },
+      ],
+    });
+    const afterPreset = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        { kind: "preset", preset: "vim-heavy" },
+        { kind: "leaf", path: "startMode", value: "insert" },
+      ],
+    });
+
+    expect(afterLeaf.options.startMode).toBe("normal");
+    expect(afterPreset.options.startMode).toBe("insert");
+  });
+
+  test("replaces action presets on each assignment", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.keymap.set("n", "za", vim.prompt.quote());
+  vim.keymap.actionPresets = ["paragraph-editing"];
+  vim.keymap.set("n", "zq", vim.prompt.reflow());
+  vim.keymap.actionPresets = [];
+};`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+
+      expect(result.options.keymap?.actions.accepted).toEqual([
+        {
+          key: "za",
+          actionId: "prompt.transform.quote",
+          args: { action: "quote" },
+          modes: ["normal"],
+        },
+        {
+          key: "zq",
+          actionId: "prompt.transform.reflow",
+          args: { action: "reflow" },
+          modes: ["normal"],
+        },
+      ]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("JS action preset assignment replaces global JSON preset bindings", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [{ kind: "leaf", path: "keymap.actionPresets", value: [] }],
+      },
+    );
+
+    expect(result.options.keymap?.actions.accepted).toEqual([]);
+  });
+
+  test("exposes validated domain options from global JSON without project settings", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-options-"));
+    try {
+      const globalPath = join(dir, "settings.json");
+      const projectPath = join(dir, "project-settings.json");
+      const jsConfigPath = join(dir, "pi-vimmode.config.js");
+      writeFileSync(globalPath, JSON.stringify({ piVimMode: { startMode: "normal" } }));
+      writeFileSync(projectPath, JSON.stringify({ piVimMode: { startMode: "insert" } }));
+      writeFileSync(
+        jsConfigPath,
+        `export default (vim) => {
+  if (vim.startMode !== "normal") throw new Error("missing global seed");
+  vim.cursor.normal = "bar";
+  vim.ui.status.items = ["mode"];
+  vim.macros.enabled = false;
+  vim.marks.enabled = false;
+  vim.search.maxHighlights = 10;
+  vim.exCommand.autocomplete = false;
+  vim.feedback.noop = "status";
+  vim.promptStructures.targets = { codeFence: false };
+  vim.promptTransforms.commands = { quote: ["quoteit"] };
+  vim.keymap.actionPresets = ["paragraph-editing"];
+  vim.keymap.operatorMotions = { delete: ["wordForward"] };
+};`,
+      );
+
+      const result = await loadVimOptions({
+        globalSettingsPath: globalPath,
+        projectSettingsPath: projectPath,
+        jsConfigPath,
+      });
+      expect(result.options.startMode).toBe("insert");
+      expect(result.options.cursor.normal).toBe("bar");
+      expect(result.options.ui?.status.items).toEqual(["mode"]);
+      expect(result.options.macros?.enabled).toBe(false);
+      expect(result.options.marks?.enabled).toBe(false);
+      expect(result.options.search?.maxHighlights).toBe(10);
+      expect(result.options.exCommand?.autocomplete).toBe(false);
+      expect(result.options.feedback?.noop).toBe("status");
+      expect(result.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+      expect(Object.keys(result.options.promptStructures?.targets ?? [])).toEqual(["codeFence"]);
+      expect(result.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
+      expect(Object.keys(result.options.promptTransforms?.commands ?? [])).toEqual(["quote"]);
+      expect(result.options.keymap?.operatorMotions).toMatchObject({ delete: ["wordForward"] });
+      expect(Object.keys(result.options.keymap?.operatorMotions ?? [])).toEqual(["delete"]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("exposes every finite option path through trusted JavaScript", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.leader = ",";
+  vim.startMode = "normal";
+  vim.cursor.insert = "underline";
+  vim.cursor.normal = "bar";
+  vim.cursor.visual = "block";
+  vim.cursor.visualLine = "underline";
+  vim.cursor.visualBlock = "bar";
+  vim.keymap.actionPresets = [];
+  vim.keymap.operatorMotions = { delete: ["wordForward"] };
+  vim.ui.status.enabled = false;
+  vim.ui.status.position = "right";
+  vim.ui.status.items = ["mode"];
+  vim.ui.mode.enabled = false;
+  vim.ui.mode.labels = { normal: "NORMAL" };
+  vim.ui.mode.narrowLabels = { normal: "N" };
+  vim.ui.selection.enabled = false;
+  vim.ui.selection.previewMaxChars = 24;
+  vim.ui.cursorPosition.enabled = false;
+  vim.ui.cursorPosition.base = 1;
+  vim.ui.cursorPosition.format = "{line}:{column}";
+  vim.ui.workbench.reservedRows = 3;
+  vim.macros.enabled = false;
+  vim.macros.slots = ["a"];
+  vim.macros.maxReplaySteps = 12;
+  vim.marks.enabled = false;
+  vim.marks.slots = ["a"];
+  vim.search.highlight = false;
+  vim.search.highlightCurrent = false;
+  vim.search.clearOnCancel = false;
+  vim.search.clearOnInsert = true;
+  vim.search.maxHighlights = 12;
+  vim.exCommand.autocomplete = false;
+  vim.feedback.noop = "status";
+  vim.promptStructures.enabled = false;
+  vim.promptStructures.targets = { codeFence: false };
+  vim.promptTransforms.enabled = false;
+  vim.promptTransforms.actions = { quote: false };
+  vim.promptTransforms.commands = { quote: ["quoteit"] };
+};`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+
+      expect(result.options).toMatchObject({
+        leader: ",",
+        startMode: "normal",
+        cursor: {
+          insert: "underline",
+          normal: "bar",
+          visual: "block",
+          visualLine: "underline",
+          visualBlock: "bar",
+        },
+        keymap: { operatorMotions: { delete: ["wordForward"] } },
+        ui: {
+          status: { enabled: false, position: "right", items: ["mode"] },
+          mode: { enabled: false, labels: { normal: "NORMAL" }, narrowLabels: { normal: "N" } },
+          selection: { enabled: false, previewMaxChars: 24 },
+          cursorPosition: { enabled: false, base: 1, format: "{line}:{column}" },
+          workbench: { reservedRows: 3 },
+        },
+        macros: { enabled: false, slots: ["a"], maxReplaySteps: 12 },
+        marks: { enabled: false, slots: ["a"] },
+        search: {
+          highlight: false,
+          highlightCurrent: false,
+          clearOnCancel: false,
+          clearOnInsert: true,
+          maxHighlights: 12,
+        },
+        exCommand: { autocomplete: false },
+        feedback: { noop: "status" },
+        promptStructures: { enabled: false, targets: { codeFence: false } },
+        promptTransforms: {
+          enabled: false,
+          actions: { quote: false },
+          commands: { quote: ["quoteit"] },
+        },
+      });
+      expect(result.warnings).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("rejects invalid composite writes without changing frozen staged reads", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  const slots = vim.macros.slots;
+  if (!Object.isFrozen(slots)) throw new Error("slots must be frozen");
+  vim.macros.slots = ["a", "!"];
+  if (vim.macros.slots.join(",") !== slots.join(",")) throw new Error("invalid slots replaced staged value");
+  vim.macros.enabled = false;
+  vim.search.unknown = true;
+};`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+      expect(result.options.macros?.enabled).toBe(false);
+      expect(result.warnings).toEqual([
+        "global JS config: piVimMode.macros.slots only supports lowercase a-z slots",
+        "global JS config: unknown vim.search property unknown",
+      ]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("rejects invalid prompt records and accepts empty replacements", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.promptStructures.targets = { codeFence: false };
+  vim.promptTransforms.actions = { quote: false };
+  vim.promptTransforms.commands = { quote: ["quoteit"] };
+  vim.promptStructures.targets = { codeFence: true, unknown: true };
+  vim.promptTransforms.actions = { quote: true, unknown: true };
+  vim.promptTransforms.commands = { quote: ["valid", "not-valid!"] };
+};`);
+      const rejected = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+      expect(rejected.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+      expect(rejected.options.promptTransforms?.actions).toMatchObject({ quote: false });
+      expect(rejected.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
+
+      const empty = fixture();
+      try {
+        empty.write(`export default (vim) => {
+  vim.promptStructures.targets = {};
+  vim.promptTransforms.actions = {};
+  vim.promptTransforms.commands = {};
+};`);
+        const cleared = await loadVimOptions({
+          globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+          projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+          jsConfigPath: empty.path,
+        });
+        expect(Object.keys(cleared.options.promptStructures?.targets ?? {})).toEqual([]);
+        expect(Object.keys(cleared.options.promptTransforms?.actions ?? {})).toEqual([]);
+        expect(Object.keys(cleared.options.promptTransforms?.commands ?? {})).toEqual([]);
+      } finally {
+        empty.cleanup();
+      }
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("keeps valid prompt records from JSON when siblings are invalid", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptStructures: { targets: { codeFence: false, unknown: true } },
+        promptTransforms: { commands: { quote: ["quoteit", "not-valid!"], unknown: ["ignored"] } },
+      },
+    });
+
+    expect(result.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+    expect(result.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
+  });
+
   test("loadVimOptions includes JS string remaps", async () => {
     const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-remap-load-"));
     try {

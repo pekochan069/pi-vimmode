@@ -4,13 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
-import type {
-  VimActionBindingMode,
-  VimEditorOptions,
-  VimInsertAction,
-  VimMode,
-  VimPreset,
-} from "./types.ts";
+import type { VimActionBindingMode, VimInsertAction, VimMode, VimPreset } from "./types.ts";
 
 import { protectedShortcutForKey } from "./customization.ts";
 import { VIM_PRESETS } from "./types.ts";
@@ -43,9 +37,19 @@ export type VimJsConfigMapOperation =
 
 export type VimJsConfigOperation =
   | { kind: "preset"; preset: VimPreset }
-  | { kind: "leaf"; path: "leader"; value: string | null }
+  | { kind: "leaf"; path: string; value: unknown }
   | { kind: "map"; mapping: VimJsConfigMapOperation }
   | { kind: "unmap"; key: string; modes: readonly VimMode[] };
+
+export type VimJsConfigRules = {
+  validate(
+    path: string,
+    value: unknown,
+  ):
+    | { readonly ok: true; readonly value: unknown }
+    | { readonly ok: false; readonly message: string };
+  applyPreset(state: Record<string, unknown>, preset: VimPreset): Record<string, unknown>;
+};
 
 export type VimJsConfigLoadResult =
   | { kind: "missing"; warnings: readonly string[] }
@@ -56,8 +60,8 @@ type ConfigSession = {
   vim: object;
   assertOpen(): void;
   close(): void;
-  readLeader(): string | null | undefined;
-  setMapleader(value: unknown): void;
+  readOption(path: string): unknown;
+  setOption(path: string, value: unknown): void;
   setPreset(value: unknown): void;
   warning(message: string): void;
   recordMap(mapping: VimJsConfigMapOperation): void;
@@ -112,6 +116,112 @@ function frozenSnapshot<T>(value: T): T {
   return Object.freeze(
     Object.fromEntries(Object.entries(value).map(([key, child]) => [key, frozenSnapshot(child)])),
   ) as T;
+}
+
+type OptionEntry = { path: string };
+
+const OPTION_ENTRIES: readonly OptionEntry[] = [
+  { path: "leader" },
+  { path: "startMode" },
+  ...["insert", "normal", "visual", "visualLine", "visualBlock"].map((mode) => ({
+    path: `cursor.${mode}`,
+  })),
+  { path: "keymap.actionPresets" },
+  { path: "keymap.operatorMotions" },
+  { path: "ui.status.enabled" },
+  { path: "ui.status.position" },
+  { path: "ui.status.items" },
+  { path: "ui.mode.enabled" },
+  { path: "ui.mode.labels" },
+  { path: "ui.mode.narrowLabels" },
+  { path: "ui.selection.enabled" },
+  { path: "ui.selection.previewMaxChars" },
+  { path: "ui.cursorPosition.enabled" },
+  { path: "ui.cursorPosition.base" },
+  { path: "ui.cursorPosition.format" },
+  { path: "ui.workbench.reservedRows" },
+  { path: "macros.enabled" },
+  { path: "macros.slots" },
+  { path: "macros.maxReplaySteps" },
+  { path: "marks.enabled" },
+  { path: "marks.slots" },
+  { path: "search.highlight" },
+  { path: "search.highlightCurrent" },
+  { path: "search.clearOnCancel" },
+  { path: "search.clearOnInsert" },
+  { path: "search.maxHighlights" },
+  { path: "exCommand.autocomplete" },
+  { path: "feedback.noop" },
+  { path: "promptStructures.enabled" },
+  { path: "promptStructures.targets" },
+  { path: "promptTransforms.enabled" },
+  { path: "promptTransforms.actions" },
+  { path: "promptTransforms.commands" },
+];
+
+function optionPath(prefix: string, property: string): string {
+  return prefix ? `${prefix}.${property}` : property;
+}
+
+function hasOption(path: string): boolean {
+  return OPTION_ENTRIES.some((entry) => entry.path === path);
+}
+
+function hasOptionChild(path: string): boolean {
+  return OPTION_ENTRIES.some((entry) => entry.path.startsWith(`${path}.`));
+}
+
+export function optionValueAtPath(value: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, key) => {
+    if (!current || typeof current !== "object") return undefined;
+    return (current as Record<string, unknown>)[key];
+  }, value);
+}
+
+export function setOptionPath(value: Record<string, unknown>, path: string, next: unknown): void {
+  const keys = path.split(".");
+  const leaf = keys.pop();
+  if (!leaf) return;
+  let target = value;
+  for (const key of keys) {
+    const child = target[key];
+    if (!child || typeof child !== "object") target[key] = {};
+    target = target[key] as Record<string, unknown>;
+  }
+  target[leaf] = next;
+}
+
+function createOptionNamespace(
+  session: ConfigSession,
+  prefix: string,
+  target: object = {},
+): object {
+  return new Proxy(target, {
+    get(current, property, receiver) {
+      if (typeof property !== "string") return Reflect.get(current, property, receiver);
+      if (Reflect.has(current, property)) return Reflect.get(current, property, receiver);
+      const path = optionPath(prefix, property);
+      if (hasOption(path)) return frozenSnapshot(session.readOption(path));
+      if (hasOptionChild(path)) return createOptionNamespace(session, path);
+      return undefined;
+    },
+    set(current, property, value, receiver) {
+      session.assertOpen();
+      if (typeof property !== "string") return Reflect.set(current, property, value, receiver);
+      if (Reflect.has(current, property)) return Reflect.set(current, property, value, receiver);
+      const path = optionPath(prefix, property);
+      if (hasOption(path)) {
+        session.setOption(path, value);
+        return true;
+      }
+      session.warning(`unknown vim${prefix ? `.${prefix}` : ""} property ${property}`);
+      return true;
+    },
+    defineProperty(current, property, descriptor) {
+      session.assertOpen();
+      return Reflect.defineProperty(current, property, descriptor);
+    },
+  });
 }
 
 function modesFor(rawMode: unknown): readonly VimMode[] | undefined {
@@ -304,10 +414,14 @@ function createGlobalApi(session: ConfigSession): object {
   return new Proxy(
     {
       get mapleader() {
-        return session.readLeader();
+        return session.readOption("leader");
       },
       set mapleader(value: unknown) {
-        session.setMapleader(value);
+        if (value !== null && !isPrintableLeader(value)) {
+          session.warning("vim.g.mapleader must be one printable character or null");
+          return;
+        }
+        session.setOption("leader", value);
       },
     },
     {
@@ -325,37 +439,28 @@ function createGlobalApi(session: ConfigSession): object {
 }
 
 function createVimApi(session: ConfigSession, g: object): object {
-  return new Proxy(
-    {
-      g,
-      get preset() {
-        return undefined;
-      },
-      set preset(value: unknown) {
-        session.setPreset(value);
-      },
-      prompt: createPromptApi(),
-      keymap: Object.freeze({
-        set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(session, mode, lhs, rhs),
-      }),
+  const keymap = createOptionNamespace(session, "keymap", {
+    set: (mode: unknown, lhs: unknown, rhs: unknown) => compileMapping(session, mode, lhs, rhs),
+  });
+  return createOptionNamespace(session, "", {
+    g,
+    get preset() {
+      return session.readOption("preset");
     },
-    {
-      set(target, property, value, receiver) {
-        if (property === "preset") return Reflect.set(target, property, value, receiver);
-        session.warning(`unknown vim property ${String(property)}`);
-        return true;
-      },
-      defineProperty(target, property, descriptor) {
-        session.assertOpen();
-        return Reflect.defineProperty(target, property, descriptor);
-      },
+    set preset(value: unknown) {
+      session.setPreset(value);
     },
-  );
+    prompt: createPromptApi(),
+    keymap,
+  });
 }
 
-function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSession {
+function createSession(
+  seed: Record<string, unknown> = {},
+  rules?: VimJsConfigRules,
+): ConfigSession {
   let closed = false;
-  let leader = seed.leader;
+  let staged = frozenSnapshot(seed) as Record<string, unknown>;
   const warnings: string[] = [];
   const operations: VimJsConfigOperation[] = [];
   const assertOpen = () => {
@@ -367,26 +472,33 @@ function createSession(seed: Pick<VimEditorOptions, "leader"> = {}): ConfigSessi
     close: () => {
       closed = true;
     },
-    readLeader: () => {
+    readOption: (path) => {
       assertOpen();
-      return leader;
+      return optionValueAtPath(staged, path);
     },
-    setMapleader: (value) => {
+    setOption: (path, value) => {
       assertOpen();
-      if (value === null || isPrintableLeader(value)) {
-        leader = value;
-        operations.push({ kind: "leaf", path: "leader", value });
+      const result = rules?.validate(path, value) ?? { ok: true as const, value };
+      if (!result.ok) {
+        warnings.push(warning(result.message));
         return;
       }
-      warnings.push(warning("vim.g.mapleader must be one printable character or null"));
+      const next = structuredClone(staged);
+      setOptionPath(next, path, frozenSnapshot(result.value));
+      staged = next;
+      operations.push({ kind: "leaf", path, value: frozenSnapshot(result.value) });
     },
     setPreset: (value) => {
       assertOpen();
-      if (typeof value === "string" && VIM_PRESET_SET.has(value as VimPreset)) {
-        operations.push({ kind: "preset", preset: value as VimPreset });
+      if (typeof value !== "string" || !VIM_PRESET_SET.has(value as VimPreset)) {
+        warnings.push(warning("vim.preset must be a supported preset"));
         return;
       }
-      warnings.push(warning("vim.preset must be a supported preset"));
+      const next =
+        rules?.applyPreset(structuredClone(staged), value as VimPreset) ?? structuredClone(staged);
+      setOptionPath(next, "preset", value);
+      staged = next;
+      operations.push({ kind: "preset", preset: value as VimPreset });
     },
     warning: (message) => {
       assertOpen();
@@ -425,7 +537,8 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 export async function loadVimJsConfig(
   configPath = DEFAULT_JS_CONFIG_PATH,
-  seed: Pick<VimEditorOptions, "leader"> = {},
+  seed: Record<string, unknown> = {},
+  rules?: VimJsConfigRules,
 ): Promise<VimJsConfigLoadResult> {
   if (!existsSync(configPath)) return { kind: "missing", warnings: [] };
 
@@ -440,7 +553,7 @@ export async function loadVimJsConfig(
   }
   if (typeof exported !== "function") return fatal(new Error("default export must be a function"));
 
-  const session = createSession(seed);
+  const session = createSession(seed, rules);
   try {
     const result = exported(session.vim);
     if (isThenable(result)) await result;

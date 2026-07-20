@@ -680,7 +680,10 @@ function parseInsertBindings(
   value: unknown,
   sourceLabel: string,
   warnings: string[],
-  options: { allowProtectedKey?: (key: string) => boolean } = {},
+  options: {
+    allowProtectedKey?: (key: string) => boolean;
+    allowProtectedBinding?: (action: keyof ResolvedVimInsertKeymap, key: string) => boolean;
+  } = {},
 ): Partial<ResolvedVimInsertKeymap> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
@@ -697,7 +700,9 @@ function parseInsertBindings(
     }
     const label = `${sourceLabel}: piVimMode.keymap.insert.${action}`;
     const keys = parseStringArray(bindings, label, warnings, {
-      allowProtectedKey: options.allowProtectedKey,
+      allowProtectedKey: (key) =>
+        options.allowProtectedBinding?.(action as keyof ResolvedVimInsertKeymap, key) === true ||
+        options.allowProtectedKey?.(key) === true,
     });
     if (!keys) continue;
     const filtered = keys.filter((sequence) => {
@@ -804,10 +809,12 @@ function parseActionBindingEntry(
   let rawKey: unknown;
   let rawArgs: unknown;
   let modes: VimActionBindingMode[] | undefined;
+  let allowProtected = false;
   if (typeof entry === "string") rawKey = entry;
   else if (isRecord(entry)) {
     rawKey = entry.key;
     rawArgs = entry.args;
+    allowProtected = entry.allowProtected === true;
     if (entry.modes !== undefined) {
       if (!Array.isArray(entry.modes)) {
         warnings.push(`${label} contains unsupported action binding modes`);
@@ -839,7 +846,7 @@ function parseActionBindingEntry(
     return undefined;
   }
   const protectedShortcut = protectedShortcutForKey(key);
-  if (protectedShortcut && !options.allowProtectedKey?.(key)) {
+  if (protectedShortcut && !allowProtected && !options.allowProtectedKey?.(key)) {
     warnings.push(`${label} contains protected key ${key} (${protectedShortcut.reason})`);
     return undefined;
   }
@@ -853,7 +860,13 @@ function parseActionBindingEntry(
     warnings.push(`${label}.${key}: ${normalized.message}`);
     return undefined;
   }
-  return { key, actionId, args: normalized.transform, modes };
+  return {
+    key,
+    actionId,
+    args: normalized.transform,
+    modes,
+    ...(allowProtected ? { allowProtected: true } : {}),
+  };
 }
 
 function parseActionBindings(
@@ -1001,8 +1014,18 @@ function parseKeymap(
     { allowProtectedKey },
   );
 
+  const scopedAllowProtected = (action: keyof ResolvedVimInsertKeymap, key: string) =>
+    Array.isArray(value.scoped) &&
+    value.scoped.some(
+      (binding) =>
+        isRecord(binding) &&
+        binding.actionId === `insert.${action}` &&
+        binding.key === key &&
+        binding.allowProtected === true,
+    );
   partial.insert = parseInsertBindings(value.insert, sourceLabel, warnings, {
     allowProtectedKey,
+    allowProtectedBinding: scopedAllowProtected,
   });
 
   if (value.textObjects !== undefined) {
@@ -1900,8 +1923,8 @@ function projectExactMappings(
   addRecord(keymap.macros, "macro");
   addRecord(keymap.marks, "mark");
   addRecord(keymap.insert, "insert");
-  addRecord(keymap.textObjects?.kinds, "textObjectKind");
-  addRecord(keymap.textObjects?.targets, "textObjectTarget");
+  addRecord(keymap.textObjects?.kinds, "textObject.kind");
+  addRecord(keymap.textObjects?.targets, "textObject.target");
   for (const bindings of Object.values(keymap.actions ?? {})) {
     for (const binding of bindings ?? []) {
       add(binding.key, binding.modes ?? ACTION_BINDING_MODES, binding.actionId);
@@ -1948,8 +1971,8 @@ function projectConfiguredActions(
   addRecord(keymap.macros, "macro");
   addRecord(keymap.marks, "mark");
   addRecord(keymap.insert, "insert");
-  addRecord(keymap.textObjects?.kinds, "textObjectKind");
-  addRecord(keymap.textObjects?.targets, "textObjectTarget");
+  addRecord(keymap.textObjects?.kinds, "textObject.kind");
+  addRecord(keymap.textObjects?.targets, "textObject.target");
   for (const actionId of Object.keys(keymap.actions ?? {})) {
     actions.push({ actionId, modes: ACTION_BINDING_MODES });
   }
@@ -2093,6 +2116,17 @@ function expandLeaderMappings(
     "resolved settings: piVimMode.keymap.textObjects.targets",
   );
   expandRecord(overlay.insert, "resolved settings: piVimMode.keymap.insert");
+  if (overlay.unmaps) {
+    overlay.unmaps = overlay.unmaps.flatMap((unmap) => {
+      const result = expandLeaderSequence(
+        unmap.key,
+        "resolved settings: piVimMode.keymap.unmaps",
+        context,
+      );
+      usesNonActionLeader ||= result.usesLeader;
+      return result.sequence ? [{ ...unmap, key: result.sequence }] : [];
+    });
+  }
 
   const leaderActionBindings = new Set<ResolvedVimActionBinding>();
   for (const [actionId, bindings] of Object.entries(overlay.actions ?? {})) {
@@ -2971,7 +3005,11 @@ export function createVimConfigPlan(
     binding: VimPlanBinding,
     source?: ScopedPlanSource,
   ) => {
-    for (const scope of scopes) candidates[scope].push({ sequence, binding, source });
+    for (const scope of scopes) {
+      if (!keymap.unmaps.some((unmap) => unmap.key === sequence && unmap.modes.includes(scope))) {
+        candidates[scope].push({ sequence, binding, source });
+      }
+    }
   };
 
   for (const entry of grammarEntriesForKeymap(keymap)) {
@@ -2984,11 +3022,16 @@ export function createVimConfigPlan(
       id: `${entry.family}.${entry.id}`,
     });
   }
-  for (const sequence of keymap.escape) {
-    add(["insert", "visual", "visualLine", "visualBlock", "operatorPending"], sequence, {
-      kind: "escape",
-      id: "escape",
-    });
+  for (const scope of [
+    "insert",
+    "visual",
+    "visualLine",
+    "visualBlock",
+    "operatorPending",
+  ] as const) {
+    for (const sequence of escapeAliasesForScope(keymap, scope)) {
+      add([scope], sequence, { kind: "escape", id: "escape" });
+    }
   }
   for (const [action, sequences] of Object.entries(keymap.insert)) {
     for (const sequence of sequences) add(["insert"], sequence, { kind: "insert", id: action });
@@ -3237,6 +3280,25 @@ export async function loadVimOptions(paths: VimConfigPaths = {}): Promise<VimCon
 
 export function keymapForOptions(options: ResolvedVimEditorOptions): ResolvedVimKeymap {
   return options.keymap ?? DEFAULT_VIM_KEYMAP;
+}
+
+export function escapeAliasesForScope(
+  keymap: ResolvedVimKeymap,
+  scope: Extract<
+    VimMappingScope,
+    "insert" | "visual" | "visualLine" | "visualBlock" | "operatorPending"
+  >,
+): string[] {
+  return [
+    ...keymap.escape,
+    ...keymap.scoped
+      .filter((binding) => binding.actionId === "escape" && binding.modes.includes(scope))
+      .map((binding) => binding.key),
+  ].filter(
+    (key, index, aliases) =>
+      !keymap.unmaps.some((unmap) => unmap.key === key && unmap.modes.includes(scope)) &&
+      aliases.indexOf(key) === index,
+  );
 }
 
 export function uiForOptions(options: ResolvedVimEditorOptions): ResolvedVimUi {

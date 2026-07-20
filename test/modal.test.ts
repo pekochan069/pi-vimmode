@@ -2196,6 +2196,103 @@ describe("Ex command-line modal behavior", () => {
     expect(visual.state.mode).toBe("visual");
   });
 
+  test("scoped prefixes own visual grammar, macros, marks, and easymotion", () => {
+    const visualOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "uz",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+    const pendingVisual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u"],
+      visualOptions,
+    );
+    expect(pendingVisual.text).toBe("hello");
+    expect(pendingVisual.state).toMatchObject({ mode: "visual", pending: "u" });
+    const deleted = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u", "z"],
+      visualOptions,
+    );
+    expect(deleted.text).toBe("hlo");
+
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: { kind: "descriptor", actionId: "macro.record", key: "zz", modes: ["normal"] },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.easymotion",
+            key: "q",
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z"], descriptorOptions).state,
+    ).toMatchObject({ pending: "z" });
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z", "z", "a"], descriptorOptions).state
+        .recordingSlot,
+    ).toBe("a");
+    const markOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: { kind: "descriptor", actionId: "mark.set", key: "zz", modes: ["normal"] },
+        },
+      ],
+    }).options;
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z", "z", "a"], markOptions).state
+        .marks,
+    ).toMatchObject({ a: p(0, 0) });
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], descriptorOptions).state,
+    ).toMatchObject({ pendingEasymotion: { kind: "char" } });
+  });
+
+  test("scoped unmaps remove inherited escape aliases by scope", () => {
+    const options = resolveVimOptions({ piVimMode: { keymap: { escape: ["<D-j>"] } } }, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "super+j", modes: ["insert"] }],
+    }).options;
+    const insert = handleModalInput({ mode: "insert" }, snapshot, options, superJ);
+    expect(insert.state.mode).toBe("insert");
+    expect(insert.effects).toContainEqual({ type: "delegate", input: superJ });
+    const visual = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      snapshot,
+      options,
+      superJ,
+    );
+    expect(visual.state.mode).toBe("normal");
+  });
+
   test("scoped unmap disables inherited macro key", () => {
     const options = resolveVimOptions(undefined, undefined, {
       kind: "success",

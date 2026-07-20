@@ -897,6 +897,38 @@ export default (vim) => {
     }
   });
 
+  test("per-binding protected overrides survive prompt and insert descriptor compilation", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "<C-p>", vim.prompt.quote(), { allowProtected: true });
+  vim.keymap.set("i", "<C-v>", vim.prompt.deleteWordBackward(), { allowProtected: true });
+  vim.keymap.set("n", "<C-t>", vim.prompt.reflow());
+};`);
+      const loaded = await loadVimJsConfig(f.path);
+      const resolved = resolveVimOptions(undefined, undefined, loaded);
+      expect(resolved.options.keymap?.actions.accepted).toEqual([
+        {
+          actionId: "prompt.transform.quote",
+          key: "ctrl+p",
+          args: { action: "quote" },
+          modes: ["normal"],
+          allowProtected: true,
+        },
+      ]);
+      expect(resolved.options.keymap?.insert.deleteWordBackward).toContain("ctrl+v");
+      expect(resolved.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining("protected key ctrl+t")]),
+      );
+      expect(resolved.options.keymap?.actions.accepted).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ key: "ctrl+t" })]),
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("protected lhs warns without registering", async () => {
     const f = fixture();
     try {
@@ -1015,6 +1047,60 @@ export default (vim) => {
     } finally {
       f.cleanup();
     }
+  });
+
+  test("leader-form unmaps suppress inherited bindings after expansion", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.g.mapleader = ",";
+  vim.keymap.set("n", "<leader>x", null);
+};`);
+      const loaded = await loadVimJsConfig(f.path);
+      const resolved = resolveVimOptions(
+        {
+          piVimMode: {
+            leader: ",",
+            keymap: { commands: { undo: ["<leader>x"] } },
+          },
+        },
+        undefined,
+        loaded,
+      );
+      expect(resolved.plan.scopes.normal.exact[",x"]).toBeUndefined();
+      expect(resolved.options.keymap?.unmaps).toEqual([{ key: ",x", modes: ["normal"] }]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("project text-object bindings replace matching JS descriptors", () => {
+    const resolved = resolveVimOptions(
+      undefined,
+      {
+        piVimMode: {
+          keymap: { textObjects: { kinds: { inner: ["z"] } } },
+        },
+      },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "textObject.kind.inner",
+              key: "i",
+              modes: ["operatorPending"],
+            },
+          },
+        ],
+      },
+    );
+    expect(resolved.options.keymap?.scoped).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ actionId: "textObject.kind.inner" })]),
+    );
   });
 
   test("unmaps inherited mappings in only selected scopes", async () => {

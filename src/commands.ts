@@ -245,6 +245,23 @@ export function scopedKeymapBindingFor(
     .find((binding) => binding.key === key && binding.modes.includes(mode));
 }
 
+export function scopedKeymapSequenceFor(
+  keymap: ResolvedVimKeymap,
+  sequence: string,
+  mode: VimActionBindingMode | "operatorPending",
+): { exact?: ResolvedVimKeymap["scoped"][number]; isPrefix: boolean } {
+  const exact = scopedKeymapBindingFor(keymap, sequence, mode);
+  return {
+    exact,
+    isPrefix: keymap.scoped.some(
+      (binding) =>
+        binding.modes.includes(mode) &&
+        binding.key.startsWith(sequence) &&
+        binding.key !== sequence,
+    ),
+  };
+}
+
 export function scopedKeysForAction(
   keymap: ResolvedVimKeymap,
   actionId: ResolvedVimKeymap["scoped"][number]["actionId"],

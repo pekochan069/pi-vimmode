@@ -40,11 +40,16 @@ import {
   operatorActionForSequence,
   resolveMacroCommand,
   resolveNormalCommand,
-  scopedKeymapBindingFor,
+  scopedKeymapSequenceFor,
   scopedKeysForAction,
   type SemanticCommandResult,
 } from "../commands.ts";
-import { keymapForOptions, macrosForOptions, marksForOptions } from "../config.ts";
+import {
+  escapeAliasesForScope as configuredEscapeAliasesForScope,
+  keymapForOptions,
+  macrosForOptions,
+  marksForOptions,
+} from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
 import { scrollHelpPopup } from "../read-only-popup.ts";
 import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
@@ -161,13 +166,7 @@ function escapeAliasesForScope(
   options: ModalOptions,
   scope: "insert" | "visual" | "visualLine" | "visualBlock" | "operatorPending",
 ): string[] {
-  const keymap = keymapForOptions(options);
-  return [
-    ...keymap.escape,
-    ...keymap.scoped
-      .filter((binding) => binding.actionId === "escape" && binding.modes.includes(scope))
-      .map((binding) => binding.key),
-  ];
+  return configuredEscapeAliasesForScope(keymapForOptions(options), scope);
 }
 
 type InsertEscapeMatch =
@@ -728,17 +727,33 @@ function handleNormalInput(
     }
   }
 
-  // A concrete scoped descriptor owns its exact key before legacy macro/mark grammar.
-  // This prevents structural defaults (for example `q`) from shadowing configuration.
-  if (!state.pending && scopedKeymapBindingFor(keymap, key, "normal")) {
-    const resolved = resolveNormalCommand(key, undefined, keymap, "normal");
-    if (resolved.type === "pending") return invalidate({ ...state, pending: resolved.pending });
-    if (resolved.type === "motion")
-      return moveUpdate(clearPending(state), resolved.motion, snapshot, resolved.count);
-    if (resolved.type === "command")
-      return applyCommand(state, snapshot, options, resolved.command, resolved.count);
-    if (resolved.type === "action")
-      return applyPromptTransformAction(state, snapshot, options, resolved);
+  const scopedSequence = `${state.pending ?? ""}${key}`;
+  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal");
+  if (
+    !state.pendingMacro &&
+    !state.pendingMark &&
+    !state.pendingRegister &&
+    (scoped.exact || scoped.isPrefix)
+  ) {
+    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
+    if (scoped.exact.actionId.startsWith("macro.") || scoped.exact.actionId.startsWith("mark.")) {
+      const handled = handleNormalMacroOrMark(
+        { ...state, pending: undefined },
+        snapshot,
+        options,
+        keymap,
+        scopedSequence,
+      );
+      if (handled) return handled;
+    }
+    return applyNormalResolution(
+      state,
+      snapshot,
+      options,
+      keymap,
+      scopedSequence,
+      resolveNormalCommand(scopedSequence, undefined, keymap, "normal"),
+    );
   }
 
   if (state.pendingRegister === "awaitingSlot") {
@@ -906,13 +921,20 @@ function handleVisualInput(
     }
   }
 
-  if (!state.pending && scopedKeymapBindingFor(keymap, key, state.mode as VimActionBindingMode)) {
+  const scopedSequence = `${state.pending ?? ""}${key}`;
+  const scoped = scopedKeymapSequenceFor(
+    keymap,
+    scopedSequence,
+    state.mode as VimActionBindingMode,
+  );
+  if (!state.pendingMark && !state.pendingRegister && (scoped.exact || scoped.isPrefix)) {
+    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
     return applyVisualResolution(
       state,
       snapshot,
       options,
       keymap,
-      resolveNormalCommand(key, undefined, keymap, state.mode as VimActionBindingMode),
+      resolveNormalCommand(scopedSequence, undefined, keymap, state.mode as VimActionBindingMode),
     );
   }
 

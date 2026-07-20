@@ -171,14 +171,14 @@ function hasOptionChild(path: string): boolean {
   return OPTION_ENTRIES.some((entry) => entry.path.startsWith(`${path}.`));
 }
 
-function readPath(value: unknown, path: string): unknown {
+export function optionValueAtPath(value: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((current, key) => {
     if (!current || typeof current !== "object") return undefined;
     return (current as Record<string, unknown>)[key];
   }, value);
 }
 
-function setPath(value: Record<string, unknown>, path: string, next: unknown): void {
+export function setOptionPath(value: Record<string, unknown>, path: string, next: unknown): void {
   const keys = path.split(".");
   const leaf = keys.pop();
   if (!leaf) return;
@@ -474,7 +474,7 @@ function createSession(
     },
     readOption: (path) => {
       assertOpen();
-      return readPath(staged, path);
+      return optionValueAtPath(staged, path);
     },
     setOption: (path, value) => {
       assertOpen();
@@ -484,7 +484,7 @@ function createSession(
         return;
       }
       const next = structuredClone(staged);
-      setPath(next, path, frozenSnapshot(result.value));
+      setOptionPath(next, path, frozenSnapshot(result.value));
       staged = next;
       operations.push({ kind: "leaf", path, value: frozenSnapshot(result.value) });
     },
@@ -496,7 +496,7 @@ function createSession(
       }
       const next =
         rules?.applyPreset(structuredClone(staged), value as VimPreset) ?? structuredClone(staged);
-      setPath(next, "preset", value);
+      setOptionPath(next, "preset", value);
       staged = next;
       operations.push({ kind: "preset", preset: value as VimPreset });
     },

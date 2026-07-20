@@ -881,6 +881,55 @@ export default (vim) => {
     expect(afterPreset.options.startMode).toBe("insert");
   });
 
+  test("replaces action presets on each assignment", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.keymap.set("n", "za", vim.prompt.quote());
+  vim.keymap.actionPresets = ["paragraph-editing"];
+  vim.keymap.set("n", "zq", vim.prompt.reflow());
+  vim.keymap.actionPresets = [];
+};`);
+      const result = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+
+      expect(result.options.keymap?.actions.accepted).toEqual([
+        {
+          key: "za",
+          actionId: "prompt.transform.quote",
+          args: { action: "quote" },
+          modes: ["normal"],
+        },
+        {
+          key: "zq",
+          actionId: "prompt.transform.reflow",
+          args: { action: "reflow" },
+          modes: ["normal"],
+        },
+      ]);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("JS action preset assignment replaces global JSON preset bindings", () => {
+    const result = resolveVimOptions(
+      { piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } } },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [{ kind: "leaf", path: "keymap.actionPresets", value: [] }],
+      },
+    );
+
+    expect(result.options.keymap?.actions.accepted).toEqual([]);
+  });
+
   test("exposes validated domain options from global JSON without project settings", async () => {
     const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-options-"));
     try {
@@ -956,6 +1005,61 @@ export default (vim) => {
     } finally {
       f.cleanup();
     }
+  });
+
+  test("rejects invalid prompt records and accepts empty replacements", async () => {
+    const f = fixture();
+    try {
+      f.write(`export default (vim) => {
+  vim.promptStructures.targets = { codeFence: false };
+  vim.promptTransforms.actions = { quote: false };
+  vim.promptTransforms.commands = { quote: ["quoteit"] };
+  vim.promptStructures.targets = { codeFence: true, unknown: true };
+  vim.promptTransforms.actions = { quote: true, unknown: true };
+  vim.promptTransforms.commands = { quote: ["valid", "not-valid!"] };
+};`);
+      const rejected = await loadVimOptions({
+        globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+        projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+        jsConfigPath: f.path,
+      });
+      expect(rejected.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+      expect(rejected.options.promptTransforms?.actions).toMatchObject({ quote: false });
+      expect(rejected.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
+
+      const empty = fixture();
+      try {
+        empty.write(`export default (vim) => {
+  vim.promptStructures.targets = {};
+  vim.promptTransforms.actions = {};
+  vim.promptTransforms.commands = {};
+};`);
+        const cleared = await loadVimOptions({
+          globalSettingsPath: join(tmpdir(), "missing-settings.json"),
+          projectSettingsPath: join(tmpdir(), "missing-project-settings.json"),
+          jsConfigPath: empty.path,
+        });
+        expect(Object.keys(cleared.options.promptStructures?.targets ?? {})).toEqual([]);
+        expect(Object.keys(cleared.options.promptTransforms?.actions ?? {})).toEqual([]);
+        expect(Object.keys(cleared.options.promptTransforms?.commands ?? {})).toEqual([]);
+      } finally {
+        empty.cleanup();
+      }
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  test("keeps valid prompt records from JSON when siblings are invalid", () => {
+    const result = resolveVimOptions({
+      piVimMode: {
+        promptStructures: { targets: { codeFence: false, unknown: true } },
+        promptTransforms: { commands: { quote: ["quoteit", "not-valid!"], unknown: ["ignored"] } },
+      },
+    });
+
+    expect(result.options.promptStructures?.targets).toMatchObject({ codeFence: false });
+    expect(result.options.promptTransforms?.commands).toMatchObject({ quote: ["quoteit"] });
   });
 
   test("loadVimOptions includes JS string remaps", async () => {

@@ -2,7 +2,7 @@
 
 ## What's new
 
-- Added trusted JavaScript configuration via `~/.pi/agent/pi-vimmode.config.js`. Configure presets, leader, prompt actions, insert actions, replay mappings, and scoped unmaps with a small `vim` API. Configuration writes are staged atomically, then defaults, global JSON, JavaScript, and project JSON compile into one immutable scoped plan before activation. Failed config files leave existing settings unchanged.
+- Added trusted JavaScript configuration via `~/.pi/agent/pi-vimmode.config.js`. Configure presets, leader, cursor mode, UI, macros, marks, search, Ex command, prompt structures/transforms, action presets, prompt/insert actions, replay mappings, and scoped unmaps with a small `vim` API. Configuration writes are validated and staged atomically; defaults, global JSON, JavaScript, and project JSON compile into one immutable scoped plan before activation. Project JSON remains final authority, and failed config files leave existing settings unchanged.
 
 ```js
 export default (vim) => {

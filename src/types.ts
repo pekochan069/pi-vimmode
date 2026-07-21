@@ -155,6 +155,8 @@ export type VimActionKeyBindingEntry =
       modes?: readonly VimActionBindingMode[];
       allowProtected?: boolean;
       desc?: string;
+      /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+      __sourceOrder?: number;
     };
 
 export type VimActionKeymapOptions = Partial<
@@ -165,6 +167,8 @@ export type VimKeySequenceRemap = {
   key: string;
   inputs: readonly string[];
   modes?: readonly VimActionBindingMode[];
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type VimKeySequenceRemapOptions = {
@@ -218,6 +222,8 @@ export type ResolvedVimActionBinding = {
   modes?: readonly VimActionBindingMode[];
   allowProtected?: boolean;
   desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type ResolvedVimActionKeymap = {
@@ -256,6 +262,8 @@ export type VimScopedKeymapBinding = {
   args?: Readonly<Record<string, unknown>>;
   allowProtected?: boolean;
   desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type ResolvedVimKeymap = {

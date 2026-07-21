@@ -267,6 +267,36 @@ export default (vim) => {
     expect(resolveNormalCommand("z", pendingDelete.pending, normalOnlyCommand)).toEqual({
       type: "invalid",
     });
+
+    const tombstonedOperatorCommands = resolveVimOptions(
+      {
+        piVimMode: {
+          keymap: {
+            commands: {
+              startSearch: ["zx"],
+              findChar: ["zy"],
+              repeatCharSearch: ["zz"],
+            },
+          },
+        },
+      },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          { kind: "unmap", key: "zx", modes: ["operatorPending"] },
+          { kind: "unmap", key: "zy", modes: ["operatorPending"] },
+          { kind: "unmap", key: "zz", modes: ["operatorPending"] },
+        ],
+      },
+    ).options.keymap!;
+    const operatorCommand = resolveNormalCommand("d", undefined, tombstonedOperatorCommands);
+    expect(operatorCommand.type).toBe("pending");
+    if (operatorCommand.type !== "pending") throw new Error("expected operator pending");
+    expect(resolveNormalCommand("z", operatorCommand.pending, tombstonedOperatorCommands)).toEqual({
+      type: "invalid",
+    });
   });
 
   test("loads opaque finite action descriptors in canonical scopes", async () => {
@@ -841,6 +871,103 @@ export default (vim) => {
     ]);
   });
 
+  test("preserves source order across descriptor and remap mapping kinds", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "zz",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: { kind: "remap", key: "z", inputs: ["u"], modes: ["normal"] },
+        },
+      ],
+    });
+
+    expect(result.plan.scopes.normal.exact.zz?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.z).toBeUndefined();
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining("remap.z in normal: strict-prefix conflict with command.undo.zz"),
+    );
+  });
+
+  test("treats modified key plus trailing keys as a sequence during prefix preflight", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "alt+x",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.redo",
+            key: "alt+xa",
+            modes: ["normal"],
+          },
+        },
+      ],
+    });
+
+    expect(result.plan.scopes.normal.exact["alt+x"]?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact["alt+xa"]).toBeUndefined();
+    expect(result.plan.scopes.normal.prefixes["alt+x"]).toBeUndefined();
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining(
+        "command.redo.alt+xa in normal: strict-prefix conflict with command.undo.alt+x",
+      ),
+    );
+  });
+
+  test("canonicalizes modifier order and rejects duplicate modifiers", async () => {
+    const f = fixture();
+    try {
+      f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "<C-S-x>", vim.action.command.undo());
+  vim.keymap.set("n", "<C-C-x>", vim.action.command.redo());
+};`);
+      const result = await loadVimJsConfig(f.path);
+      expect(operations(result)).toEqual([
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "shift+ctrl+x",
+            modes: ["normal"],
+          },
+        },
+      ]);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining("keymap lhs must contain supported key syntax"),
+      );
+      const keymap = resolveVimOptions(undefined, undefined, result).options.keymap!;
+      expect(resolveNormalCommand("shift+ctrl+x", undefined, keymap, "normal")).toMatchObject({
+        type: "command",
+        command: "undo",
+      });
+    } finally {
+      f.cleanup();
+    }
+  });
+
   test("latest same-scope JS exact mapping wins", () => {
     const result = resolveVimOptions(undefined, undefined, {
       kind: "success",
@@ -984,6 +1111,39 @@ export default (vim) => {
     expect(result.options.keymap?.insert.openLineBelow).not.toContain("super+j");
     for (const scope of ["insert", "visual", "visualLine", "visualBlock"] as const) {
       expect(result.plan.scopes[scope].exact["super+j"]?.kind).toBe("escape");
+    }
+  });
+
+  test("project escape array replaces lower JS escape descriptors", () => {
+    const result = resolveVimOptions(
+      undefined,
+      { piVimMode: { keymap: { escape: ["<C-[>"] } } },
+      {
+        kind: "success",
+        warnings: [],
+        operations: [
+          {
+            kind: "map",
+            mapping: {
+              kind: "descriptor",
+              actionId: "escape",
+              key: "alt+z",
+              modes: ["insert", "visual", "visualLine", "visualBlock", "operatorPending"],
+            },
+          },
+        ],
+      },
+    );
+
+    for (const scope of [
+      "insert",
+      "visual",
+      "visualLine",
+      "visualBlock",
+      "operatorPending",
+    ] as const) {
+      expect(result.plan.scopes[scope].exact["alt+z"]).toBeUndefined();
+      expect(result.plan.scopes[scope].exact["ctrl+["]?.kind).toBe("escape");
     }
   });
 

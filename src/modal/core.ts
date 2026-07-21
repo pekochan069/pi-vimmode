@@ -84,6 +84,9 @@ export function keymapHasBinding(
   key: string,
   mode?: VimMode | "operatorPending",
 ): boolean {
+  if (mode && keymap.unmaps.some((unmap) => unmap.key === key && unmap.modes.includes(mode))) {
+    return false;
+  }
   if (keymap.escape.includes(key)) return true;
   if (hasKeyInMap(keymap.operators as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.motions as Record<string, readonly string[]>, key)) return true;

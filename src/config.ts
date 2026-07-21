@@ -72,6 +72,7 @@ import {
 } from "./keymap-grammar.ts";
 import {
   isAtomicMappingSequence,
+  mappingSequencePrefixes,
   mappingScopesForKeymapEntry,
   mappingSequencesOverlap,
   VIM_MAPPING_SCOPES,
@@ -810,11 +811,13 @@ function parseActionBindingEntry(
   let rawArgs: unknown;
   let modes: VimActionBindingMode[] | undefined;
   let allowProtected = false;
+  let sourceOrder: number | undefined;
   if (typeof entry === "string") rawKey = entry;
   else if (isRecord(entry)) {
     rawKey = entry.key;
     rawArgs = entry.args;
     allowProtected = entry.allowProtected === true;
+    sourceOrder = typeof entry.__sourceOrder === "number" ? entry.__sourceOrder : undefined;
     if (entry.modes !== undefined) {
       if (!Array.isArray(entry.modes)) {
         warnings.push(`${label} contains unsupported action binding modes`);
@@ -866,6 +869,7 @@ function parseActionBindingEntry(
     args: normalized.transform,
     modes,
     ...(allowProtected ? { allowProtected: true } : {}),
+    ...(sourceOrder === undefined ? {} : { __sourceOrder: sourceOrder }),
   };
 }
 
@@ -1973,6 +1977,12 @@ function projectConfiguredActions(
   addRecord(keymap.insert, "insert");
   addRecord(keymap.textObjects?.kinds, "textObject.kind");
   addRecord(keymap.textObjects?.targets, "textObject.target");
+  if (keymap.escape !== undefined) {
+    actions.push({
+      actionId: "escape",
+      modes: ["insert", "visual", "visualLine", "visualBlock", "operatorPending"],
+    });
+  }
   for (const actionId of Object.keys(keymap.actions ?? {})) {
     actions.push({ actionId, modes: ACTION_BINDING_MODES });
   }
@@ -2696,7 +2706,7 @@ function restoreJsUnmaps(
 
 function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): VimEditorOptions {
   const partial: VimEditorOptions = {};
-  for (const operation of operations) {
+  for (const [sourceOrder, operation] of operations.entries()) {
     if (operation.kind === "preset") {
       partial.preset = operation.preset;
       continue;
@@ -2722,6 +2732,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
         modes: ["insert"],
         allowProtected: mapping.allowProtected,
         desc: mapping.desc,
+        __sourceOrder: sourceOrder,
       });
       (keymap as PartialKeymapOptions).scoped = scoped;
       continue;
@@ -2738,6 +2749,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
           modes: mapping.modes,
           allowProtected: mapping.allowProtected,
           desc: mapping.desc,
+          __sourceOrder: sourceOrder,
         },
       ];
       continue;
@@ -2767,6 +2779,7 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
         args: mapping.args,
         allowProtected: mapping.allowProtected,
         desc: mapping.desc,
+        __sourceOrder: sourceOrder,
       });
       (keymap as PartialKeymapOptions).scoped = retained;
       continue;
@@ -2776,7 +2789,12 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
     const remaps = (keymap.remaps ??= { accepted: [] });
     remaps.accepted = [
       ...remaps.accepted,
-      { key: mapping.key, inputs: mapping.inputs, modes: mapping.modes },
+      {
+        key: mapping.key,
+        inputs: mapping.inputs,
+        modes: mapping.modes,
+        __sourceOrder: sourceOrder,
+      },
     ];
   }
   return partial;
@@ -2905,17 +2923,8 @@ function deepFreeze<T>(value: T): T {
   return Object.freeze(value);
 }
 
-function isAtomicMapping(sequence: string): boolean {
-  return isAtomicMappingSequence(sequence);
-}
-
 function hasStrictPrefixConflict(left: string, right: string): boolean {
-  return (
-    left !== right &&
-    !isAtomicMapping(left) &&
-    !isAtomicMapping(right) &&
-    (left.startsWith(right) || right.startsWith(left))
-  );
+  return left !== right && mappingSequencesOverlap(left, right);
 }
 
 function strictPrefixConflict<T>(
@@ -2982,9 +2991,7 @@ function compilePlanScope(
 
   const prefixes = Object.create(null) as Record<string, string[]>;
   for (const sequence of Object.keys(exact)) {
-    if (isAtomicMapping(sequence)) continue;
-    for (let index = 1; index < sequence.length; index += 1) {
-      const prefix = sequence.slice(0, index);
+    for (const prefix of mappingSequencePrefixes(sequence)) {
       (prefixes[prefix] ??= []).push(sequence);
     }
   }
@@ -3068,6 +3075,12 @@ export function createVimConfigPlan(
     );
   }
 
+  for (const scope of VIM_MAPPING_SCOPES) {
+    candidates[scope].sort(
+      (left, right) => (left.source?.__sourceOrder ?? -1) - (right.source?.__sourceOrder ?? -1),
+    );
+  }
+
   const compileWarnings = [...warnings];
   const acceptedScopes = new Map<ScopedPlanSource, Set<VimMappingScope>>();
   const scopes = Object.fromEntries(
@@ -3087,6 +3100,9 @@ export function createVimConfigPlan(
       acceptedScopes,
     );
     planOptions.keymap.scoped = retainAcceptedScopes(planOptions.keymap.scoped, acceptedScopes);
+    for (const binding of planOptions.keymap.actions.accepted) delete binding.__sourceOrder;
+    for (const remap of planOptions.keymap.remaps.accepted) delete remap.__sourceOrder;
+    for (const binding of planOptions.keymap.scoped) delete binding.__sourceOrder;
   }
   return deepFreeze({
     options: planOptions,

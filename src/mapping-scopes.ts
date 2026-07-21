@@ -37,9 +37,39 @@ const NAMED_TERMINAL_KEYS = new Set([
   "right",
 ]);
 
+function modifiedKeyTokenLength(sequence: string): number | undefined {
+  const modifiers = /^(?:(?:shift|ctrl|alt|super)\+)+/.exec(sequence)?.[0];
+  if (!modifiers) return undefined;
+  const keyAndRest = sequence.slice(modifiers.length);
+  if (!keyAndRest) return undefined;
+  const namedKey = [...NAMED_TERMINAL_KEYS]
+    .sort((left, right) => right.length - left.length)
+    .find((key) => keyAndRest.startsWith(key));
+  const functionKey = /^f\d+/.exec(keyAndRest)?.[0];
+  const key = namedKey ?? functionKey ?? [...keyAndRest][0];
+  return key ? modifiers.length + key.length : undefined;
+}
+
+export function mappingSequencePrefixes(sequence: string): string[] {
+  const modifiedLength = modifiedKeyTokenLength(sequence);
+  if (modifiedLength === sequence.length) return [];
+  if (!modifiedLength) {
+    if (NAMED_TERMINAL_KEYS.has(sequence) || /^f\d+$/.test(sequence)) return [];
+    return Array.from({ length: Math.max(0, sequence.length - 1) }, (_, index) =>
+      sequence.slice(0, index + 1),
+    );
+  }
+  const prefixes = [sequence.slice(0, modifiedLength)];
+  for (let index = modifiedLength + 1; index < sequence.length; index += 1) {
+    prefixes.push(sequence.slice(0, index));
+  }
+  return prefixes;
+}
+
 export function isAtomicMappingSequence(sequence: string): boolean {
+  const modifiedLength = modifiedKeyTokenLength(sequence);
   return (
-    /^(?:ctrl|alt|shift|super)(?:\+(?:ctrl|alt|shift|super))*\+[^+]+$/.test(sequence) ||
+    modifiedLength === sequence.length ||
     NAMED_TERMINAL_KEYS.has(sequence) ||
     /^f\d+$/.test(sequence)
   );
@@ -47,8 +77,9 @@ export function isAtomicMappingSequence(sequence: string): boolean {
 
 export function mappingSequencesOverlap(left: string, right: string): boolean {
   if (left === right) return true;
-  if (isAtomicMappingSequence(left) || isAtomicMappingSequence(right)) return false;
-  return left.startsWith(right) || right.startsWith(left);
+  return (
+    mappingSequencePrefixes(left).includes(right) || mappingSequencePrefixes(right).includes(left)
+  );
 }
 
 const VISUAL_SCOPES = ["visual", "visualLine", "visualBlock"] as const;

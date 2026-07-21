@@ -28,6 +28,7 @@ const csiAltD = "\u001b[100;3u";
 const altF = "\u001bf";
 const csiAltF = "\u001b[102;3u";
 const ctrlE = "\u001b[101;5u";
+const ctrlP = "\u001b[112;5u";
 const altV = "\u001bv";
 const ctrlAltV = "\u001b[118;7u";
 const escapeOptions = resolveVimOptions({
@@ -2371,6 +2372,29 @@ describe("Ex command-line modal behavior", () => {
     expect(
       applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], descriptorOptions).state,
     ).toMatchObject({ pendingEasymotion: { kind: "char" } });
+  });
+
+  test("scoped unmaps return protected inherited keys to Pi", () => {
+    const unmappedOptions = resolveVimOptions(
+      {
+        piVimMode: {
+          keymap: {
+            allowProtectedOverrides: ["<C-p>"],
+            commands: { undo: ["<C-p>"] },
+          },
+        },
+      },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [{ kind: "unmap", key: "ctrl+p", modes: ["normal"] }],
+      },
+    ).options;
+
+    const update = handleModalInput({ mode: "normal" }, snapshot, unmappedOptions, ctrlP);
+    expect(update.effects).toContainEqual({ type: "delegate", input: ctrlP });
+    expect(update.state).toEqual({ mode: "normal" });
   });
 
   test("operator-pending protected descriptors keep modal ownership", () => {

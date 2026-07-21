@@ -28,7 +28,7 @@ import {
 } from "./keymap-descriptors.ts";
 import { grammarEntriesForKeymap, type KeymapGrammarEntry } from "./keymap-grammar.ts";
 import {
-  isAtomicMappingSequence,
+  mappingSequencePrefixes,
   mappingScopesForKeymapEntry,
   type VimMappingScope,
 } from "./mapping-scopes.ts";
@@ -328,8 +328,7 @@ function lineCommandFor(operator: VimOperator): NormalCommand {
 }
 
 function addLongerPrefixes(prefixes: Set<string>, sequence: string): void {
-  if (isAtomicMappingSequence(sequence)) return;
-  for (let index = 1; index < sequence.length; index += 1) prefixes.add(sequence.slice(0, index));
+  for (const prefix of mappingSequencePrefixes(sequence)) prefixes.add(prefix);
 }
 
 function setFirstBinding(bindings: Map<string, Binding>, binding: Binding): void {
@@ -341,9 +340,7 @@ function addActionBinding(bindings: Map<string, ActionBinding[]>, binding: Actio
 }
 
 function addActionPrefixes(prefixes: Map<string, ActionBinding[]>, binding: ActionBinding): void {
-  if (isAtomicMappingSequence(binding.sequence)) return;
-  for (let index = 1; index < binding.sequence.length; index += 1) {
-    const prefix = binding.sequence.slice(0, index);
+  for (const prefix of mappingSequencePrefixes(binding.sequence)) {
     prefixes.set(prefix, [...(prefixes.get(prefix) ?? []), binding]);
   }
 }
@@ -587,11 +584,8 @@ function hasLongerPrefix(
     return true;
   }
   if (
-    liveGrammarEntries(keymap, mode).some(
-      (entry) =>
-        !isAtomicMappingSequence(entry.sequence) &&
-        entry.sequence !== sequence &&
-        entry.sequence.startsWith(sequence),
+    liveGrammarEntries(keymap, mode).some((entry) =>
+      mappingSequencePrefixes(entry.sequence).includes(sequence),
     )
   ) {
     return true;
@@ -616,7 +610,11 @@ function searchDirectionForBinding(
 }
 
 function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.searchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.searchDirections.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 function charSearchCommandForBinding(
@@ -629,7 +627,11 @@ function charSearchCommandForBinding(
 }
 
 function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.charSearchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.charSearch.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 function repeatCharSearchCommandForBinding(
@@ -642,7 +644,11 @@ function repeatCharSearchCommandForBinding(
 }
 
 function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.repeatCharSearchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.repeatCharSearch.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -952,9 +958,7 @@ function hasOperatorPrefix(
       (entry) =>
         entry.family === "operator" &&
         entry.id === operator &&
-        !isAtomicMappingSequence(entry.sequence) &&
-        entry.sequence !== sequence &&
-        entry.sequence.startsWith(sequence) &&
+        mappingSequencePrefixes(entry.sequence).includes(sequence) &&
         !isKeyUnmapped(keymap, entry.sequence, "operatorPending"),
     )
   );

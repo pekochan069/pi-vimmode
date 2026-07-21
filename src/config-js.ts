@@ -364,7 +364,11 @@ function normalizeKey(value: string): string | undefined {
   });
 
   if (modifiers.some((modifier) => modifier === undefined)) return undefined;
-  return [...(modifiers as string[]), key].join("+");
+  const normalizedModifiers = modifiers as string[];
+  if (new Set(normalizedModifiers).size !== normalizedModifiers.length) return undefined;
+  const order = ["shift", "ctrl", "alt", "super"];
+  normalizedModifiers.sort((left, right) => order.indexOf(left) - order.indexOf(right));
+  return [...normalizedModifiers, key].join("+");
 }
 
 function tokenizeKeys(value: string): string[] | undefined {

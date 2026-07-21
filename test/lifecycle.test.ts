@@ -490,6 +490,42 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors[1]?.plan).toBe(newestPlan);
   });
 
+  test("lookup-only reload reconfigures active editors", async () => {
+    const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
+      DEFAULT_VIM_OPTIONS,
+      DEFAULT_VIM_OPTIONS,
+    ]);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    ctx.ui.component?.({}, {}, {});
+    const initialPlan = createdEditors[0]!.plan;
+    const lookupOnlyPlan: VimConfigPlan = {
+      ...initialPlan,
+      scopes: {
+        ...initialPlan.scopes,
+        normal: {
+          exact: {
+            ...initialPlan.scopes.normal.exact,
+            ",x": { kind: "command", id: "showKeybindings" },
+          },
+          prefixes: { ...initialPlan.scopes.normal.prefixes, ",": [",x"] },
+        },
+      },
+    };
+    deferredLoads.add(1);
+    hooks.get("agent_end")?.({}, ctx);
+    resolveDeferred.get(1)?.({
+      plan: lookupOnlyPlan,
+      options: DEFAULT_VIM_OPTIONS,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createdEditors[0]!.reconfigureCalls).toEqual([[lookupOnlyPlan, { warnings: [] }]]);
+  });
+
   test("stale async refresh cannot install into an older context", async () => {
     const { hooks, deferredLoads, resolveDeferred, shutdownCallbacks } = createLifecycleHarness();
     deferredLoads.add(0).add(1);

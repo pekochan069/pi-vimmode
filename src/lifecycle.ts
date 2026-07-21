@@ -60,7 +60,11 @@ function createConfigState(
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    const previousConfig = JSON.stringify([currentPlan.options, currentDiagnostics]);
+    const previousConfig = JSON.stringify([
+      currentPlan.options,
+      currentPlan.scopes,
+      currentDiagnostics,
+    ]);
     const committed = !loaded.fatal || !hasCommittedLoad;
     if (committed) {
       currentPlan = loaded.plan;
@@ -68,7 +72,8 @@ function createConfigState(
     }
     currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
     const configChanged =
-      JSON.stringify([currentPlan.options, currentDiagnostics]) !== previousConfig;
+      JSON.stringify([currentPlan.options, currentPlan.scopes, currentDiagnostics]) !==
+      previousConfig;
     if (configChanged) onUpdate(committed ? currentPlan : undefined, currentDiagnostics);
     ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };

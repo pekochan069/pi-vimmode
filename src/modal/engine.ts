@@ -760,6 +760,52 @@ function handleNormalScopedInput(
   );
 }
 
+function handleRegisterOrMarkInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  startsLeader: boolean,
+): ModalUpdate | undefined {
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+}
+
+function handleNormalPendingOrProtectedInput(
+  state: ModalState,
+  options: ModalOptions,
+  data: string,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  pendingOperator: VimOperatorAction | undefined,
+): ModalUpdate | undefined {
+  if (pendingOperator) {
+    const escapeMatch = matchInsertEscapeInput(
+      state,
+      data,
+      escapeAliasesForScope(options, "operatorPending"),
+    );
+    if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
+    if (escapeMatch.kind === "pending")
+      return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
+    if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
+  }
+  if (isProtectedPiDelegateKey(data)) {
+    const scope = pendingOperator ? "operatorPending" : "normal";
+    if (!keymapHasBinding(keymap, key, scope)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
+  }
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -781,39 +827,29 @@ function handleNormalInput(
 
   const keymap = keymapForOptions(options);
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
-  if (pendingOperator) {
-    const escapeMatch = matchInsertEscapeInput(
-      state,
-      data,
-      escapeAliasesForScope(options, "operatorPending"),
-    );
-    if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
-    if (escapeMatch.kind === "pending")
-      return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
-    if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
-  }
-  if (isProtectedPiDelegateKey(data)) {
-    const scope = pendingOperator ? "operatorPending" : "normal";
-    if (!keymapHasBinding(keymap, key, scope)) {
-      return delegateProtectedShortcut(state, options, data);
-    }
-  }
+  const pendingUpdate = handleNormalPendingOrProtectedInput(
+    state,
+    options,
+    data,
+    key,
+    keymap,
+    pendingOperator,
+  );
+  if (pendingUpdate) return pendingUpdate;
 
   const scopedUpdate = handleNormalScopedInput(state, snapshot, options, key, keymap, scopes);
   if (scopedUpdate) return scopedUpdate;
 
-  if (state.pendingRegister === "awaitingSlot") {
-    const target = registerTargetForKey(key);
-    return invalidate(
-      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
-    );
-  }
-  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
-    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
-  }
+  const registerOrMarkUpdate = handleRegisterOrMarkInput(
+    state,
+    snapshot,
+    options,
+    key,
+    startsLeader,
+  );
+  if (registerOrMarkUpdate) return registerOrMarkUpdate;
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macroOrMark = handleNormalMacroOrMark(state, snapshot, options, keymap, key);
@@ -979,6 +1015,35 @@ function handleVisualEscapeInput(
   if (match.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
 }
 
+function handleVisualDirectInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  startsLeader: boolean,
+): ModalUpdate | undefined {
+  if (state.pending || state.pendingRegister || startsLeader) return;
+  if (key === "u" || key === "U") {
+    return transformVisualSelection(
+      state,
+      snapshot,
+      options,
+      visualKindForMode(state.mode),
+      key === "u" ? "lowercase" : "uppercase",
+    );
+  }
+  const markTarget = markPendingForKey(
+    key,
+    options,
+    undefined,
+    undefined,
+    state.mode as "visual" | "visualLine" | "visualBlock",
+  );
+  if (markTarget?.kind === "jumpExact" || markTarget?.kind === "jumpLine") {
+    return invalidate({ ...clearPending(state), pendingMark: markTarget });
+  }
+}
+
 function handleVisualInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -1011,48 +1076,18 @@ function handleVisualInput(
   );
   if (scopedUpdate) return scopedUpdate;
 
-  if (state.pendingRegister === "awaitingSlot") {
-    const target = registerTargetForKey(key);
-    return invalidate(
-      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
-    );
-  }
-  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
-    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
-  }
-  if (!state.pending && !state.pendingRegister && !startsLeader && key === "u") {
-    return transformVisualSelection(
-      state,
-      snapshot,
-      options,
-      visualKindForMode(state.mode),
-      "lowercase",
-    );
-  }
-  if (!state.pending && !state.pendingRegister && !startsLeader && key === "U") {
-    return transformVisualSelection(
-      state,
-      snapshot,
-      options,
-      visualKindForMode(state.mode),
-      "uppercase",
-    );
-  }
-  if (!state.pending && !state.pendingRegister && !startsLeader) {
-    const markTarget = markPendingForKey(
-      key,
-      options,
-      undefined,
-      undefined,
-      state.mode as "visual" | "visualLine" | "visualBlock",
-    );
-    if (markTarget?.kind === "jumpExact" || markTarget?.kind === "jumpLine") {
-      return invalidate({ ...clearPending(state), pendingMark: markTarget });
-    }
-  }
+  const registerOrMarkUpdate = handleRegisterOrMarkInput(
+    state,
+    snapshot,
+    options,
+    key,
+    startsLeader,
+  );
+  if (registerOrMarkUpdate) return registerOrMarkUpdate;
+  const directUpdate = handleVisualDirectInput(state, snapshot, options, key, startsLeader);
+  if (directUpdate) return directUpdate;
 
   const remapped = remapUpdate(
     state,

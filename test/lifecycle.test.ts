@@ -5,7 +5,9 @@ import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 import {
   createVimConfigPlan,
   DEFAULT_VIM_OPTIONS,
+  resolveVimOptions,
   type VimConfigLoadResult,
+  type VimConfigPlan,
 } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
@@ -42,13 +44,16 @@ type FakeContext = {
 };
 
 type FakeEditor = {
+  plan: VimConfigPlan;
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
-  reconfigureCalls: Array<[ResolvedVimEditorOptions, VimDiagnostics]>;
+  reconfigureCalls: Array<[VimConfigPlan, VimDiagnostics]>;
+  diagnosticsCalls: VimDiagnostics[];
   resetCount: number;
   resetOptions: Array<{ restoreHardwareCursorVisibility?: boolean } | undefined>;
-  reconfigure: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void;
+  reconfigure: (plan: VimConfigPlan, diagnostics: VimDiagnostics) => void;
+  updateDiagnostics: (diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: (options?: { restoreHardwareCursorVisibility?: boolean }) => void;
   setAgentBusy: (active: boolean) => void;
 };
@@ -83,6 +88,37 @@ function createContext(cwd = "/workspace"): FakeContext {
     },
   };
   return ctx;
+}
+
+function createFakeEditor(plan: VimConfigPlan, diagnostics: VimDiagnostics): FakeEditor {
+  const editor: FakeEditor = {
+    plan,
+    options: plan.options,
+    diagnostics,
+    busyCalls: [],
+    reconfigureCalls: [],
+    diagnosticsCalls: [],
+    resetCount: 0,
+    resetOptions: [],
+    reconfigure: (nextPlan, nextDiagnostics) => {
+      editor.plan = nextPlan;
+      editor.options = nextPlan.options;
+      editor.diagnostics = nextDiagnostics;
+      editor.reconfigureCalls.push([nextPlan, nextDiagnostics]);
+    },
+    updateDiagnostics: (nextDiagnostics) => {
+      editor.diagnostics = nextDiagnostics;
+      editor.diagnosticsCalls.push(nextDiagnostics);
+    },
+    resetTerminalCursorStyle: (options) => {
+      editor.resetCount += 1;
+      editor.resetOptions.push(options);
+    },
+    setAgentBusy: (active) => {
+      editor.busyCalls.push(active);
+    },
+  };
+  return editor;
 }
 
 function createLifecycleHarness(
@@ -135,28 +171,9 @@ function createLifecycleHarness(
       }
       return asyncLoads.has(load) ? Promise.resolve(result) : result;
     },
-    createEditor: (_tui, _theme, _keybindings, editorOptions, diagnostics, vimOptions) => {
+    createEditor: (_tui, _theme, _keybindings, plan, diagnostics, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
-      const editor: FakeEditor = {
-        options: editorOptions,
-        diagnostics,
-        busyCalls: [],
-        reconfigureCalls: [],
-        resetCount: 0,
-        resetOptions: [],
-        reconfigure: (options, nextDiagnostics) => {
-          editor.options = options;
-          editor.diagnostics = nextDiagnostics;
-          editor.reconfigureCalls.push([options, nextDiagnostics]);
-        },
-        resetTerminalCursorStyle: (options) => {
-          editor.resetCount += 1;
-          editor.resetOptions.push(options);
-        },
-        setAgentBusy: (active) => {
-          editor.busyCalls.push(active);
-        },
-      };
+      const editor = createFakeEditor(plan, diagnostics);
       createdEditors.push(editor);
       return editor;
     },
@@ -431,35 +448,46 @@ describe("vim extension lifecycle", () => {
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 
-  test("newer async refresh stays authoritative when loads resolve out of order", async () => {
-    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
-    const insert = { ...DEFAULT_VIM_OPTIONS, startMode: "insert" as const };
+  test("newer async refresh alone reconfigures active editors", async () => {
+    const initial = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const stale = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: [",s"] } } },
+    }).options;
+    const newest = resolveVimOptions({
+      piVimMode: { startMode: "insert", keymap: { commands: { openLineBelow: [",n"] } } },
+    }).options;
     const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
-      normal,
-      insert,
+      initial,
+      stale,
+      newest,
     ]);
-    deferredLoads.add(0).add(1);
     const ctx = createContext("/repo");
 
     hooks.get("agent_end")?.({}, ctx);
+    ctx.ui.component?.({}, {}, {});
+    deferredLoads.add(1).add(2);
     hooks.get("agent_end")?.({}, ctx);
-    resolveDeferred.get(1)?.({
-      plan: createVimConfigPlan(insert, []),
-      options: insert,
+    hooks.get("agent_end")?.({}, ctx);
+    const newestPlan = createVimConfigPlan(newest, []);
+    resolveDeferred.get(2)?.({
+      plan: newestPlan,
+      options: newest,
       warnings: [],
       fatal: false,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    resolveDeferred.get(0)?.({
-      plan: createVimConfigPlan(normal, []),
-      options: normal,
-      warnings: [],
+    resolveDeferred.get(1)?.({
+      plan: createVimConfigPlan(stale, ["stale"]),
+      options: stale,
+      warnings: ["stale"],
       fatal: false,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
     ctx.ui.component?.({}, {}, {});
-    expect(createdEditors[0]?.options.startMode).toBe("insert");
+    expect(createdEditors[1]?.plan).toBe(newestPlan);
   });
 
   test("stale async refresh cannot install into an older context", async () => {
@@ -521,10 +549,11 @@ describe("vim extension lifecycle", () => {
 
     expect(createdEditors.map((editor) => editor.options.startMode)).toEqual(["insert", "insert"]);
     expect(createdEditors.map((editor) => editor.diagnostics.warnings)).toEqual([
-      [],
+      ["fatal JS config"],
       ["fatal JS config"],
     ]);
     expect(createdEditors[0]!.reconfigureCalls).toHaveLength(0);
+    expect(createdEditors[0]!.diagnosticsCalls).toEqual([{ warnings: ["fatal JS config"] }]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim ⚠"]);
   });
 

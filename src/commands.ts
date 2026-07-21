@@ -17,7 +17,7 @@ import type {
   VimTextObjectTarget,
 } from "./types.ts";
 
-import { DEFAULT_VIM_KEYMAP } from "./config.ts";
+import { DEFAULT_VIM_KEYMAP, type VimScopeLookup } from "./config.ts";
 import {
   deriveActionsWhere,
   deriveLegacyActionToKey,
@@ -246,16 +246,17 @@ export function scopedKeymapSequenceFor(
   keymap: ResolvedVimKeymap,
   sequence: string,
   mode: VimActionBindingMode | "operatorPending",
+  lookup?: VimScopeLookup,
 ): { exact?: ResolvedVimKeymap["scoped"][number]; isPrefix: boolean } {
-  const exact = scopedKeymapBindingFor(keymap, sequence, mode);
+  const exact =
+    !lookup || lookup.exact[sequence] ? scopedKeymapBindingFor(keymap, sequence, mode) : undefined;
+  const isScopedPrefix = keymap.scoped.some(
+    (binding) =>
+      binding.modes.includes(mode) && binding.key.startsWith(sequence) && binding.key !== sequence,
+  );
   return {
     exact,
-    isPrefix: keymap.scoped.some(
-      (binding) =>
-        binding.modes.includes(mode) &&
-        binding.key.startsWith(sequence) &&
-        binding.key !== sequence,
-    ),
+    isPrefix: isScopedPrefix && (lookup ? Boolean(lookup.prefixes[sequence]) : true),
   };
 }
 

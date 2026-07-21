@@ -8,6 +8,7 @@ import {
   loadVimOptions,
   type VimConfigLoadResult,
   type VimConfigPaths,
+  type VimConfigPlan,
 } from "./config.ts";
 import { type ResetTerminalCursorStyleOptions, VimEditor } from "./vim-editor.ts";
 
@@ -21,12 +22,15 @@ type VimEditorFactory = (
 export type VimShutdownCallback = () => void;
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
-type TrackedEditor = Pick<VimEditor, "reconfigure" | "resetTerminalCursorStyle" | "setAgentBusy">;
+type TrackedEditor = Pick<
+  VimEditor,
+  "reconfigure" | "resetTerminalCursorStyle" | "setAgentBusy" | "updateDiagnostics"
+>;
 type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
   keybindings: ConstructorParameters<typeof VimEditor>[2],
-  options: ResolvedVimEditorOptions,
+  plan: VimConfigPlan,
   diagnostics: VimDiagnostics,
   vimOptions?: { onShutdown?: () => void },
 ) => TrackedEditor;
@@ -40,14 +44,14 @@ export type VimLifecycleDependencies = {
 };
 
 type ConfigState = {
-  options: () => ResolvedVimEditorOptions;
+  plan: () => VimConfigPlan;
   diagnostics: () => VimDiagnostics;
   refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
 };
 
 function createConfigState(
   dependencies: VimLifecycleDependencies,
-  onCommit: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void,
+  onUpdate: (plan: VimConfigPlan | undefined, diagnostics: VimDiagnostics) => void,
 ): ConfigState {
   let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
   let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
@@ -65,7 +69,7 @@ function createConfigState(
     currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
     const configChanged =
       JSON.stringify([currentPlan.options, currentDiagnostics]) !== previousConfig;
-    if (committed && configChanged) onCommit(currentPlan.options, currentDiagnostics);
+    if (configChanged) onUpdate(committed ? currentPlan : undefined, currentDiagnostics);
     ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };
   const applyFailure = (ctx: ExtensionContext, error: unknown) => {
@@ -104,7 +108,7 @@ function createConfigState(
   };
 
   return {
-    options: () => currentPlan.options,
+    plan: () => currentPlan,
     diagnostics: () => currentDiagnostics,
     refresh,
   };
@@ -170,16 +174,19 @@ function resetKnownEditors(state: EditorState, options?: ResetTerminalCursorStyl
 
 function createEditorState(dependencies: VimLifecycleDependencies): EditorState {
   let state: EditorState;
-  const config = createConfigState(dependencies, (options, diagnostics) => {
+  const config = createConfigState(dependencies, (plan, diagnostics) => {
     if (!state?.enabled) return;
-    for (const editor of state.editors) editor.reconfigure(options, diagnostics);
+    for (const editor of state.editors) {
+      if (plan) editor.reconfigure(plan, diagnostics);
+      else editor.updateDiagnostics(diagnostics);
+    }
   });
   state = {
     config,
     createEditor:
       dependencies.createEditor ??
-      ((tui, theme, keybindings, options, diagnostics, vimOptions) =>
-        new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions)),
+      ((tui, theme, keybindings, plan, diagnostics, vimOptions) =>
+        new VimEditor(tui, theme, keybindings, plan, diagnostics, vimOptions)),
     schedule: dependencies.schedule ?? ((callback) => setTimeout(callback, 0)),
     editors: new Set<TrackedEditor>(),
     editorFactory: undefined as unknown as VimEditorFactory,
@@ -192,7 +199,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
       tui,
       theme,
       keybindings,
-      state.config.options(),
+      state.config.plan(),
       state.config.diagnostics(),
       { onShutdown: state.currentShutdown },
     );

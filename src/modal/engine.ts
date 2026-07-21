@@ -49,6 +49,7 @@ import {
   keymapForOptions,
   macrosForOptions,
   marksForOptions,
+  type VimConfigPlan,
 } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
 import { appendMappingToken } from "../mapping-scopes.ts";
@@ -712,6 +713,7 @@ function handleNormalInput(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
   if (matchesKey(data, "escape")) {
     const nextState = clearPending(state);
@@ -752,7 +754,7 @@ function handleNormalInput(
       .filter((binding) => binding.modes.includes("normal"))
       .map((binding) => binding.key),
   );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal");
+  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal", scopes?.normal);
   if (
     !state.pendingMacro &&
     !state.pendingMark &&
@@ -921,6 +923,7 @@ function handleVisualInput(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
   if (matchesKey(data, "escape"))
     return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
@@ -951,7 +954,7 @@ function handleVisualInput(
     key,
     keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
   );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, scope);
+  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, scope, scopes?.[scope]);
   if (!state.pendingMark && !state.pendingRegister && (scoped.exact || scoped.isPrefix)) {
     if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
     return applyVisualResolution(
@@ -1062,6 +1065,7 @@ function routeModalInput(
   options: ModalOptions,
   data: string,
   diagnostics: VimDiagnostics,
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
   if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
@@ -1080,9 +1084,9 @@ function routeModalInput(
     routedState.mode === "visualLine" ||
     routedState.mode === "visualBlock"
   ) {
-    return handleVisualInput(routedState, snapshot, options, data);
+    return handleVisualInput(routedState, snapshot, options, data, scopes);
   }
-  return handleNormalInput(routedState, snapshot, options, data);
+  return handleNormalInput(routedState, snapshot, options, data, scopes);
 }
 
 export function modalPendingDisplay(state: ModalState): string | undefined {
@@ -1107,8 +1111,9 @@ export function handleModalInput(
   options: ModalOptions,
   data: string,
   diagnostics: VimDiagnostics = { warnings: [] },
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
-  const update = routeModalInput(state, snapshot, options, data, diagnostics);
+  const update = routeModalInput(state, snapshot, options, data, diagnostics, scopes);
   if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, options, data))
     return update;
   return {

@@ -5,7 +5,7 @@ import type { ModalState } from "../src/modal/types.ts";
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
-import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
+import { createVimConfigPlan, DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
@@ -32,13 +32,16 @@ function createEditor(
   const hardwareCursorChanges: boolean[] = [];
   const overlays: Array<{ component: any; options: any; hidden: boolean }> = [];
   let hardwareCursorVisible = initialHardwareCursorVisible;
+  let renderRequests = 0;
   const tui = {
     terminal: {
       rows: terminalSize.rows ?? 24,
       columns: terminalSize.columns,
       write: (data: string) => writes.push(data),
     },
-    requestRender() {},
+    requestRender() {
+      renderRequests += 1;
+    },
     showOverlay(component: any, options: any) {
       const entry = { component, options, hidden: false };
       overlays.push(entry);
@@ -96,6 +99,7 @@ function createEditor(
     hardwareCursorChanges,
     overlays,
     getHardwareCursorVisible: () => hardwareCursorVisible,
+    getRenderRequests: () => renderRequests,
   };
 }
 
@@ -306,12 +310,157 @@ describe("vim editor integration", () => {
     editor.handleInput("d");
     expect(editor.getPendingOperator()).toBe("d");
 
-    editor.reconfigure(options, { warnings: ["reloaded"] });
+    editor.reconfigure(createVimConfigPlan(options, []), { warnings: ["reloaded"] });
     expectEditorState(editor, { text: "one\ntwo", mode: "normal", pending: undefined });
     typeKeys(editor, ["g", "g", ",", "k"]);
 
     expect(editor.getText()).toBe("one\n\ntwo");
     expect(editor.getVimMode()).toBe("insert");
+  });
+
+  test("reconfigure preserves durable state and clears transient grammar", () => {
+    const { editor, writes, getRenderRequests } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      startMode: "normal",
+    });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", "v", "j"]);
+    const internal = editor as unknown as {
+      modalState: ModalState;
+      redoStack: Array<{ text: string; cursor: { line: number; col: number } }>;
+    };
+    internal.modalState = {
+      ...internal.modalState,
+      register: { type: "char", text: "unnamed" },
+      namedRegisters: { a: { type: "line", text: "named\n" } },
+      clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
+      macros: { q: ["i", "x", "escape"] },
+      recordingSlot: "q",
+      lastPlayedMacro: "q",
+      marks: { a: { line: 1, col: 2 } },
+      searchHistory: [{ query: "two", matcherMode: "literal" }],
+      exHistory: ["messages"],
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: { line: 99, col: 99 },
+        cursor: { line: 0, col: 99 },
+        text: "one\ntwo",
+      },
+      pending: "2d",
+      pendingMacro: "play",
+      pendingRegister: "awaitingSlot",
+      pendingMark: { kind: "set" },
+      pendingSearch: { query: "stale", direction: "forward" },
+      pendingEx: { command: "stale", sourceMode: "visual" },
+      pendingInsertEscape: "j",
+      pendingInsertEscapeInputs: ["j"],
+      pendingWorkbench: { kind: "ex", prefix: ":", text: "stale", sourceMode: "visual" },
+      pendingEasymotion: {
+        kind: "highlight",
+        targets: [{ label: "a", line: 0, character: 0, original: "o" }],
+        originalText: "one\ntwo",
+      },
+    };
+    editor.setText("ane\ntwo");
+    internal.redoStack.push({ text: "redo", cursor: { line: 0, col: 4 } });
+    const beforeCursor = editor.getCursor();
+    const renderRequests = getRenderRequests();
+    const plan = createVimConfigPlan(
+      resolveVimOptions({
+        piVimMode: {
+          cursor: { visual: "underline" },
+          keymap: { commands: { openLineBelow: [",k"] } },
+        },
+      }).options,
+      [],
+    );
+
+    editor.reconfigure(plan, { warnings: ["reloaded"] });
+
+    expectEditorState(editor, { text: "one\ntwo", cursor: beforeCursor, mode: "visual" });
+    expect(internal.modalState).toMatchObject({
+      register: { type: "char", text: "unnamed" },
+      namedRegisters: { a: { type: "line", text: "named\n" } },
+      clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
+      macros: { q: ["i", "x", "escape"] },
+      lastPlayedMacro: "q",
+      marks: { a: { line: 1, col: 2 } },
+      searchHistory: [{ query: "two", matcherMode: "literal" }],
+      exHistory: ["messages"],
+      visualAnchor: { line: 0, col: 0 },
+      lastVisualSelection: {
+        anchor: { line: 1, col: 3 },
+        cursor: { line: 0, col: 3 },
+      },
+    });
+    for (const field of [
+      "recordingSlot",
+      "pending",
+      "pendingMacro",
+      "pendingRegister",
+      "pendingMark",
+      "pendingSearch",
+      "pendingEx",
+      "pendingInsertEscape",
+      "pendingInsertEscapeInputs",
+      "pendingWorkbench",
+      "pendingEasymotion",
+    ] as const) {
+      expect(internal.modalState[field]).toBeUndefined();
+    }
+    expect(internal.redoStack).toEqual([{ text: "redo", cursor: { line: 0, col: 4 } }]);
+    expect(writes.at(-1)).toBe("\x1b[4 q");
+    expect(getRenderRequests()).toBeGreaterThan(renderRequests);
+  });
+
+  test("reconfigure removes EasyMotion labels without adding undo history", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one");
+    typeKeys(editor, ["g", "g", "i", "X", "\x1b"]);
+    const internal = editor as unknown as { modalState: ModalState };
+    internal.modalState.pendingEasymotion = {
+      kind: "highlight",
+      targets: [{ label: "a", line: 0, character: 1, original: "o" }],
+      originalText: "Xone",
+    };
+    editor.setText("Xane");
+
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    expect(editor.getText()).toBe("Xone");
+    editor.handleInput("u");
+
+    expect(editor.getText()).toBe("one");
+  });
+
+  test("reconfigure preserves undo and redo behavior", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("draft");
+    typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);
+    expect(editor.getText()).toBe("draft");
+
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.handleInput("\x12");
+
+    expect(editor.getText()).toBe("xdraft");
+    editor.handleInput("u");
+    expect(editor.getText()).toBe("draft");
+  });
+
+  test("diagnostics-only update preserves editor state", () => {
+    const { editor, overlays } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("draft");
+    typeKeys(editor, ["g", "g", "l"]);
+    const before = {
+      text: editor.getText(),
+      cursor: editor.getCursor(),
+      mode: editor.getVimMode(),
+    };
+
+    editor.updateDiagnostics({ warnings: ["fatal reload"] });
+
+    expectEditorState(editor, before);
+    runEx(editor, "vimdoctor");
+    expect(overlays.at(-1)?.component.render(64).join("\n")).toContain("fatal reload");
   });
 
   test("plain insert text uses fast path without full snapshot", () => {

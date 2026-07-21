@@ -33,7 +33,7 @@ import { normalizeBufferPosition, pasteRegister, pasteRegisterBefore } from "./b
 import { readClipboardText } from "./clipboard.ts";
 import { pendingDisplay } from "./commands.ts";
 import {
-  cloneResolvedVimOptions,
+  createVimConfigPlan,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
   escapeAliasesForScope,
@@ -42,6 +42,7 @@ import {
   searchForOptions,
   uiForOptions,
   easymotionForOptions,
+  type VimConfigPlan,
 } from "./config.ts";
 import { suggestExCommands } from "./ex.ts";
 import {
@@ -204,10 +205,6 @@ export function fitStatusBorder(
   return `${border("─")}${leftText}${border("─".repeat(gapWidth))}${rightText}${border("─")}`;
 }
 
-function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
-  return cloneResolvedVimOptions(options);
-}
-
 type RedoSnapshot = {
   text: string;
   cursor: Position;
@@ -233,8 +230,7 @@ export type ResetTerminalCursorStyleOptions = {
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private options: ResolvedVimEditorOptions;
-  private diagnostics: VimDiagnostics;
+  private configuration: { plan: VimConfigPlan; diagnostics: VimDiagnostics };
   private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
@@ -249,18 +245,29 @@ export class VimEditor extends CustomEditor {
     tui: TUI,
     theme: EditorTheme,
     keybindings: KeybindingsManager,
-    options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+    planOrOptions: VimConfigPlan | ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
     diagnostics: VimDiagnostics = { warnings: [] },
     vimOptions?: VimEditorOptions,
   ) {
     super(tui, theme, keybindings);
-    this.options = cloneOptions(options);
-    this.diagnostics = { warnings: [...diagnostics.warnings] };
+    const plan =
+      "scopes" in planOrOptions
+        ? planOrOptions
+        : createVimConfigPlan(planOrOptions, diagnostics.warnings);
+    this.configuration = { plan, diagnostics: { warnings: [...diagnostics.warnings] } };
     this.overlayTheme = theme;
     this.onShutdown = vimOptions?.onShutdown;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
+  }
+
+  private get options(): ResolvedVimEditorOptions {
+    return this.configuration.plan.options;
+  }
+
+  private get diagnostics(): VimDiagnostics {
+    return this.configuration.diagnostics;
   }
 
   getVimMode(): VimMode {
@@ -291,14 +298,19 @@ export class VimEditor extends CustomEditor {
     return cursorStyleForMode(this.options, this.modalState.mode);
   }
 
-  reconfigure(options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics): void {
-    this.options = cloneOptions(options);
-    this.diagnostics = { warnings: [...diagnostics.warnings] };
+  reconfigure(plan: VimConfigPlan, diagnostics: VimDiagnostics): void {
+    this.configuration = { plan, diagnostics: { warnings: [...diagnostics.warnings] } };
     const { recordingSlot: _recordingSlot, ...reset } = resetTransientState(
       this.modalState,
       this.modalState.mode,
     );
-    const text = this.getText();
+    const currentCursor = this.getCursor();
+    const text =
+      this.modalState.pendingEasymotion?.kind === "highlight"
+        ? this.modalState.pendingEasymotion.originalText
+        : this.getText();
+    if (text !== this.getText()) super.handleInput(KEY.undo);
+    const cursor = clampToText(text, currentCursor);
     if (this.modalState.visualAnchor && this.modalState.mode.startsWith("visual")) {
       reset.visualAnchor = clampToText(text, this.modalState.visualAnchor);
     }
@@ -310,10 +322,19 @@ export class VimEditor extends CustomEditor {
       };
     }
     this.modalState = reset;
+    this.restoreCursor(cursor);
     this.helpOverlay?.hide();
     this.helpOverlay = undefined;
     this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
     this.invalidate();
+    this.tui.requestRender();
+  }
+
+  updateDiagnostics(diagnostics: VimDiagnostics): void {
+    this.configuration = {
+      plan: this.configuration.plan,
+      diagnostics: { warnings: [...diagnostics.warnings] },
+    };
   }
 
   setAgentBusy(active: boolean): void {
@@ -341,6 +362,7 @@ export class VimEditor extends CustomEditor {
       this.options,
       data,
       this.diagnostics,
+      this.configuration.plan.scopes,
     );
     this.modalState = update.state;
     this.applyEffects(update.effects);

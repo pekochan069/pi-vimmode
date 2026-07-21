@@ -23,6 +23,7 @@ import {
   KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
 import {
+  encodeMappingTokens,
   mappingScopesForKeymapEntry,
   VIM_MAPPING_SCOPES,
   type VimMappingFamily,
@@ -486,7 +487,7 @@ function compileMapping(
     session.warning("keymap lhs must contain supported key syntax");
     return;
   }
-  const key = lhsKeys.join("");
+  const key = encodeMappingTokens(lhsKeys);
   const protectedKey = lhsKeys.find((candidate) => protectedShortcutForKey(candidate));
   const protectedShortcut = protectedKey ? protectedShortcutForKey(protectedKey) : undefined;
   if (protectedKey && protectedShortcut && !options.allowProtected) {

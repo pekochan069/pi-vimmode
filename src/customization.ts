@@ -16,6 +16,7 @@ import {
   diagnosticActionMessage,
   type DiagnosticActionEntry,
 } from "./diagnostic-actions.ts";
+import { displayMappingSequence } from "./mapping-scopes.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   canonicalPromptTransformActionIdForShortName,
@@ -393,7 +394,10 @@ export function actionEntriesForKeymap(
     }
   }
   entries.push(...diagnosticActionEntries().map(diagnosticActionEntry));
-  return entries;
+  return entries.map((entry) => ({
+    ...entry,
+    keys: entry.keys.map(displayMappingSequence),
+  }));
 }
 
 export function searchActions(

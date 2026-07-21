@@ -40,6 +40,26 @@ const NAMED_TERMINAL_KEYS = new Set([
 const SORTED_NAMED_TERMINAL_KEYS = [...NAMED_TERMINAL_KEYS].sort(
   (left, right) => right.length - left.length,
 );
+export const MAPPING_TOKEN_SEPARATOR = "\u0000";
+
+export function displayMappingSequence(sequence: string): string {
+  return sequence.replaceAll(MAPPING_TOKEN_SEPARATOR, "");
+}
+
+export function encodeMappingTokens(tokens: readonly string[]): string {
+  if (tokens.length <= 1) return tokens[0] ?? "";
+  const raw = tokens.join("");
+  const hasAmbiguousTerminalSpelling = tokens.some((_, index) => {
+    const suffix = tokens.slice(index).join("");
+    return (
+      SORTED_NAMED_TERMINAL_KEYS.some((key) => suffix.startsWith(key)) ||
+      /^(?:(?:shift|ctrl|alt|super)\+)+/.test(suffix)
+    );
+  });
+  return tokens.some((token) => [...token].length !== 1) || hasAmbiguousTerminalSpelling
+    ? tokens.join(MAPPING_TOKEN_SEPARATOR)
+    : raw;
+}
 
 function mappingTokenLengthAt(sequence: string, offset: number): number | undefined {
   const rest = sequence.slice(offset);
@@ -53,6 +73,11 @@ function mappingTokenLengthAt(sequence: string, offset: number): number | undefi
 }
 
 export function mappingSequencePrefixes(sequence: string): string[] {
+  if (sequence.includes(MAPPING_TOKEN_SEPARATOR)) {
+    const tokens = sequence.split(MAPPING_TOKEN_SEPARATOR);
+    return tokens.slice(1).map((_, index) => encodeMappingTokens(tokens.slice(0, index + 1)));
+  }
+
   const prefixes: string[] = [];
   let offset = 0;
   while (offset < sequence.length) {

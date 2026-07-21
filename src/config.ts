@@ -71,7 +71,10 @@ import {
   grammarEntriesForKeymap,
 } from "./keymap-grammar.ts";
 import {
+  displayMappingSequence,
+  encodeMappingTokens,
   isAtomicMappingSequence,
+  MAPPING_TOKEN_SEPARATOR,
   mappingSequencePrefixes,
   mappingScopesForKeymapEntry,
   mappingSequencesOverlap,
@@ -655,6 +658,7 @@ function parseStringArray(
 }
 
 function isPrintableTextSequence(sequence: string): boolean {
+  if (sequence.includes(MAPPING_TOKEN_SEPARATOR)) return true;
   if (isAtomicMappingSequence(sequence)) return false;
   return [...sequence].every((char) => char.charCodeAt(0) >= 32);
 }
@@ -671,7 +675,9 @@ function parseInsertEscapeArray(
   const sequences = parseStringArray(value, label, warnings, options);
   const parsed = sequences?.filter((sequence) => {
     if (!isPrintableTextSequence(sequence)) return true;
-    warnings.push(`${label} contains unsupported printable text sequence ${sequence}`);
+    warnings.push(
+      `${label} contains unsupported printable text sequence ${sequence.replaceAll(MAPPING_TOKEN_SEPARATOR, "")}`,
+    );
     return false;
   });
   return parsed && parsed.length > 0 ? parsed : undefined;
@@ -708,7 +714,9 @@ function parseInsertBindings(
     if (!keys) continue;
     const filtered = keys.filter((sequence) => {
       if (!isPrintableTextSequence(sequence)) return true;
-      warnings.push(`${label} contains unsupported printable text sequence ${sequence}`);
+      warnings.push(
+        `${label} contains unsupported printable text sequence ${sequence.replaceAll(MAPPING_TOKEN_SEPARATOR, "")}`,
+      );
       return false;
     });
     if (filtered.length > 0) {
@@ -2026,7 +2034,7 @@ function expandLeaderSequence(
     context.warnings.push(`${label} uses <leader> but piVimMode.leader is unset`);
     return { usesLeader: false };
   }
-  const suffix = sequence.replace(/^(?:<leader>)+/i, "");
+  const suffix = sequence.replace(/^(?:<leader>)+/i, "").replaceAll(MAPPING_TOKEN_SEPARATOR, "");
   const protectedShortcut = protectedShortcutForKey(suffix);
   if (protectedShortcut) {
     context.warnings.push(
@@ -2038,8 +2046,15 @@ function expandLeaderSequence(
     context.warnings.push(`${label} cannot bind a lone <leader>`);
     return { usesLeader: false };
   }
+  const expanded = sequence.includes(MAPPING_TOKEN_SEPARATOR)
+    ? encodeMappingTokens(
+        sequence
+          .split(MAPPING_TOKEN_SEPARATOR)
+          .map((token) => (token.toLowerCase() === LEADER_TOKEN ? context.leader! : token)),
+      )
+    : sequence.replace(LEADER_TOKEN_PATTERN, context.leader);
   return {
-    sequence: context.expand ? sequence.replace(LEADER_TOKEN_PATTERN, context.leader) : sequence,
+    sequence: context.expand ? expanded : sequence,
     usesLeader: true,
   };
 }
@@ -3106,7 +3121,7 @@ export function createVimConfigPlan(
   }
   return deepFreeze({
     options: planOptions,
-    diagnostics: { warnings: compileWarnings },
+    diagnostics: { warnings: compileWarnings.map(displayMappingSequence) },
     scopes,
   });
 }

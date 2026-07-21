@@ -28,6 +28,8 @@ import {
 } from "./keymap-descriptors.ts";
 import { grammarEntriesForKeymap, type KeymapGrammarEntry } from "./keymap-grammar.ts";
 import {
+  displayMappingSequence,
+  MAPPING_TOKEN_SEPARATOR,
   mappingSequencePrefixes,
   mappingScopesForKeymapEntry,
   type VimMappingScope,
@@ -514,6 +516,22 @@ function liveGrammarEntries(
   );
 }
 
+function appendMappingSequence(
+  prefix: string,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode | "operatorPending",
+): string {
+  const separated = `${prefix}${MAPPING_TOKEN_SEPARATOR}${key}`;
+  const isSeparatedContinuation = (sequence: string) =>
+    sequence === separated || mappingSequencePrefixes(sequence).includes(separated);
+  const usesSeparatedBoundary =
+    keymap.scoped.some(
+      (binding) => (!mode || binding.modes.includes(mode)) && isSeparatedContinuation(binding.key),
+    ) || liveGrammarEntries(keymap, mode).some((entry) => isSeparatedContinuation(entry.sequence));
+  return usesSeparatedBoundary ? separated : `${prefix}${key}`;
+}
+
 export function isKeyUnmapped(
   keymap: ResolvedVimKeymap,
   sequence: string,
@@ -698,9 +716,14 @@ export function resolveMacroCommand(
 }
 
 export function pendingDisplay(pending: string | undefined): string | undefined {
+  const display = pendingDisplayInternal(pending);
+  return display === undefined ? undefined : displayMappingSequence(display);
+}
+
+function pendingDisplayInternal(pending: string | undefined): string | undefined {
   if (!pending) return undefined;
   const count = decodeCountPending(pending);
-  if (count) return `${count.count}${pendingDisplay(count.inner) ?? count.inner}`;
+  if (count) return `${count.count}${pendingDisplayInternal(count.inner) ?? count.inner}`;
   const charCommand = decodeCharCommandPending(pending);
   if (charCommand) return commandSequenceFor(charCommand.command, DEFAULT_VIM_KEYMAP);
   const textObject = decodeTextObjectPending(pending);
@@ -1009,7 +1032,12 @@ function resolveOperatorMotionPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const motionSequence = pending.motionPrefix + key;
+  const motionSequence = appendMappingSequence(
+    pending.motionPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const motion = motionForSequence(motionSequence, keymap);
   if (motion && keymap.operatorMotions[operator].includes(motion)) {
     return { type: "operatorMotion", operator, motion, count: pending.count };
@@ -1030,7 +1058,12 @@ function resolveOperatorLinePending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator) return { type: "invalid" };
-  const repeatSequence = pending.repeatPrefix + key;
+  const repeatSequence = appendMappingSequence(
+    pending.repeatPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   if (operatorSequenceMatches(repeatSequence, keymap, operator)) {
     return { type: "lineCommand", operator, count: pending.count };
   }
@@ -1050,7 +1083,12 @@ function resolveOperatorSearchPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const searchSequence = pending.searchPrefix + key;
+  const searchSequence = appendMappingSequence(
+    pending.searchPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const direction = searchDirectionForBinding(searchSequence, keymap);
   if (direction) {
     return { type: "operatorSearch", operator, direction, count: pending.count };
@@ -1120,7 +1158,12 @@ function resolveOperatorCharSearchPending(
       effectiveOperatorCharSearchCount(pending.count, pending.targetCount),
     );
   }
-  const commandSequence = pending.commandPrefix + key;
+  const commandSequence = appendMappingSequence(
+    pending.commandPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const command = charSearchCommandForBinding(commandSequence, keymap);
   if (command) {
     return {
@@ -1155,7 +1198,12 @@ function resolveOperatorCharSearchRepeatPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const repeatSequence = pending.repeatPrefix + key;
+  const repeatSequence = appendMappingSequence(
+    pending.repeatPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const command = repeatCharSearchCommandForBinding(repeatSequence, keymap);
   if (command) {
     return {
@@ -1187,7 +1235,7 @@ function resolveTextObjectPending(
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
 
   if (!pending.kind) {
-    const kindSequence = pending.kindPrefix + key;
+    const kindSequence = appendMappingSequence(pending.kindPrefix, key, keymap, "operatorPending");
     const scoped = scopedTextObjectSequenceFor(keymap, kindSequence, "textObject.kind.");
     const kind = textObjectKindForKey(kindSequence, keymap);
     if (kind && !scoped.isPrefix) {
@@ -1217,7 +1265,12 @@ function resolveTextObjectPending(
     return { type: "invalid" };
   }
 
-  const targetSequence = `${pending.targetPrefix ?? ""}${key}`;
+  const targetSequence = appendMappingSequence(
+    pending.targetPrefix ?? "",
+    key,
+    keymap,
+    "operatorPending",
+  );
   const scoped = scopedTextObjectSequenceFor(keymap, targetSequence, "textObject.target.");
   const target = textObjectTargetForKey(targetSequence, keymap);
   if (target && !scoped.isPrefix) {
@@ -1416,7 +1469,7 @@ export function resolveNormalCommand(
     const pendingOperator = operatorActionForSequence(pending, keymap);
     if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
 
-    const combined = pending + key;
+    const combined = appendMappingSequence(pending, key, keymap, mode);
     if (hasLongerPrefix(combined, keymap, mode)) return { type: "pending", pending: combined };
     const combinedBinding = exactBinding(combined, keymap, mode);
     if (combinedBinding?.kind === "motion")

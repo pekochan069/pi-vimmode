@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { resolveNormalCommand } from "../src/commands.ts";
 import { loadVimJsConfig } from "../src/config-js.ts";
 import { loadVimOptions, resolveVimOptions } from "../src/config.ts";
+import { encodeMappingTokens } from "../src/mapping-scopes.ts";
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-js-config-"));
@@ -422,13 +423,15 @@ export default (vim) => {
           mapping: {
             kind: "insert",
             action: "deleteWordBackward",
-            key: "alt+xalt+y",
+            key: encodeMappingTokens(["alt+x", "alt+y"]),
           },
         },
       ]);
       const resolved = resolveVimOptions(undefined, undefined, result);
-      expect(resolved.warnings).toContain(
-        "global JS config: piVimMode.keymap.insert.deleteWordBackward contains unsupported printable text sequence alt+xalt+y",
+      expect(resolved.warnings).toContainEqual(
+        expect.stringContaining(
+          "global JS config: piVimMode.keymap.insert.deleteWordBackward contains unsupported printable text sequence",
+        ),
       );
       expect(resolved.plan.scopes.insert.exact).not.toHaveProperty("alt+xalt+y");
     } finally {
@@ -494,7 +497,7 @@ export default (vim) => {
           mapping: {
             kind: "action",
             actionId: "prompt.transform.quote",
-            key: "<leader>q",
+            key: encodeMappingTokens(["<leader>", "q"]),
             args: undefined,
             modes: ["normal"],
           },
@@ -505,14 +508,19 @@ export default (vim) => {
           mapping: {
             kind: "action",
             actionId: "prompt.transform.reflow",
-            key: "<leader>r",
+            key: encodeMappingTokens(["<leader>", "r"]),
             args: {},
             modes: ["normal"],
           },
         },
         {
           kind: "map",
-          mapping: { kind: "remap", key: "<leader>x", inputs: ["leader"], modes: ["normal"] },
+          mapping: {
+            kind: "remap",
+            key: encodeMappingTokens(["<leader>", "x"]),
+            inputs: ["leader"],
+            modes: ["normal"],
+          },
         },
       ]);
 
@@ -935,7 +943,10 @@ export default (vim) => {
     );
   });
 
-  test("uses terminal-key token boundaries during prefix preflight", () => {
+  test("preserves terminal-key token boundaries during prefix preflight", () => {
+    const escapeThenA = encodeMappingTokens(["escape", "a"]);
+    const altZThenA = encodeMappingTokens(["alt+z", "a"]);
+    const altZThenCtrlY = encodeMappingTokens(["alt+z", "ctrl+y"]);
     const result = resolveVimOptions(undefined, undefined, {
       kind: "success",
       warnings: [],
@@ -954,7 +965,7 @@ export default (vim) => {
           mapping: {
             kind: "descriptor",
             actionId: "command.redo",
-            key: "escapea",
+            key: escapeThenA,
             modes: ["normal"],
           },
         },
@@ -963,7 +974,7 @@ export default (vim) => {
           mapping: {
             kind: "descriptor",
             actionId: "command.pasteAfter",
-            key: "alt+za",
+            key: altZThenA,
             modes: ["normal"],
           },
         },
@@ -972,7 +983,7 @@ export default (vim) => {
           mapping: {
             kind: "descriptor",
             actionId: "command.pasteBefore",
-            key: "alt+zctrl+y",
+            key: altZThenCtrlY,
             modes: ["normal"],
           },
         },
@@ -981,11 +992,52 @@ export default (vim) => {
 
     expect(result.warnings).toEqual([]);
     expect(result.plan.scopes.normal.exact.e?.id).toBe("command.undo");
-    expect(result.plan.scopes.normal.exact.escapea?.id).toBe("command.redo");
-    expect(result.plan.scopes.normal.exact["alt+za"]?.id).toBe("command.pasteAfter");
-    expect(result.plan.scopes.normal.exact["alt+zctrl+y"]?.id).toBe("command.pasteBefore");
-    expect(result.plan.scopes.normal.prefixes.escape).toEqual(["escapea"]);
-    expect(result.plan.scopes.normal.prefixes["alt+z"]).toEqual(["alt+za", "alt+zctrl+y"]);
+    expect(result.plan.scopes.normal.exact[escapeThenA]?.id).toBe("command.redo");
+    expect(result.plan.scopes.normal.exact[altZThenA]?.id).toBe("command.pasteAfter");
+    expect(result.plan.scopes.normal.exact[altZThenCtrlY]?.id).toBe("command.pasteBefore");
+    expect(result.plan.scopes.normal.prefixes.escape).toEqual([escapeThenA]);
+    expect(result.plan.scopes.normal.prefixes["alt+z"]).toEqual([altZThenA, altZThenCtrlY]);
+    const specialPrefix = resolveNormalCommand(
+      "escape",
+      undefined,
+      result.options.keymap!,
+      "normal",
+    );
+    expect(specialPrefix).toEqual({ type: "pending", pending: "escape" });
+    if (specialPrefix.type !== "pending") throw new Error("expected named-key prefix");
+    expect(
+      resolveNormalCommand("a", specialPrefix.pending, result.options.keymap!, "normal"),
+    ).toMatchObject({ type: "command", command: "redo" });
+
+    const literalEscapeA = encodeMappingTokens(["e", "s", "c", "a", "p", "e", "a"]);
+    const literal = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "e",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.redo",
+            key: literalEscapeA,
+            modes: ["normal"],
+          },
+        },
+      ],
+    });
+    expect(literal.plan.scopes.normal.exact[literalEscapeA]).toBeUndefined();
+    expect(literal.warnings).toContainEqual(
+      expect.stringContaining("strict-prefix conflict with command.undo.e"),
+    );
   });
 
   test("canonicalizes modifier order and rejects duplicate modifiers", async () => {
@@ -1084,7 +1136,9 @@ export default (vim) => {
     );
 
     expect(result.options.keymap?.remaps.accepted).toEqual([]);
-    expect(result.plan.scopes.normal.exact[",u"]?.id).toBe("prompt.transform.quote");
+    expect(result.plan.scopes.normal.exact[encodeMappingTokens([",", "u"])]?.id).toBe(
+      "prompt.transform.quote",
+    );
   });
 
   test("JS escape descriptors stay in selected scopes", () => {
@@ -1499,7 +1553,11 @@ export default (vim) => {
       expect(resolved.options.keymap?.leader).toBe(",");
       expect(resolved.options.keymap?.scoped).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ actionId: "command.undo", key: ",u", modes: ["normal"] }),
+          expect.objectContaining({
+            actionId: "command.undo",
+            key: encodeMappingTokens([",", "u"]),
+            modes: ["normal"],
+          }),
         ]),
       );
     } finally {

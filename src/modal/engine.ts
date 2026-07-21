@@ -708,6 +708,58 @@ function applyNormalResolution(
   return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
 }
 
+function scopedInputSequence(
+  state: ModalState,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scope: VimActionBindingMode,
+  lookup?: VimConfigPlan["scopes"][VimActionBindingMode],
+) {
+  const sequence = appendMappingToken(
+    state.pending ?? "",
+    key,
+    keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
+  );
+  return { sequence, match: scopedKeymapSequenceFor(keymap, sequence, scope, lookup) };
+}
+
+function handleNormalScopedInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scopes?: VimConfigPlan["scopes"],
+): ModalUpdate | undefined {
+  const { sequence, match } = scopedInputSequence(state, key, keymap, "normal", scopes?.normal);
+  if (
+    state.pendingMacro ||
+    state.pendingMark ||
+    state.pendingRegister ||
+    (!match.exact && !match.isPrefix)
+  )
+    return;
+  if (!match.exact) return invalidate({ ...state, pending: sequence });
+  if (match.exact.actionId.startsWith("macro.") || match.exact.actionId.startsWith("mark.")) {
+    const handled = handleNormalMacroOrMark(
+      { ...state, pending: undefined },
+      snapshot,
+      options,
+      keymap,
+      sequence,
+    );
+    if (handled) return handled;
+  }
+  return applyNormalResolution(
+    state,
+    snapshot,
+    options,
+    keymap,
+    sequence,
+    resolveNormalCommand(sequence, undefined, keymap, "normal"),
+  );
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -747,40 +799,8 @@ function handleNormalInput(
     }
   }
 
-  const scopedSequence = appendMappingToken(
-    state.pending ?? "",
-    key,
-    keymap.scoped
-      .filter((binding) => binding.modes.includes("normal"))
-      .map((binding) => binding.key),
-  );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal", scopes?.normal);
-  if (
-    !state.pendingMacro &&
-    !state.pendingMark &&
-    !state.pendingRegister &&
-    (scoped.exact || scoped.isPrefix)
-  ) {
-    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
-    if (scoped.exact.actionId.startsWith("macro.") || scoped.exact.actionId.startsWith("mark.")) {
-      const handled = handleNormalMacroOrMark(
-        { ...state, pending: undefined },
-        snapshot,
-        options,
-        keymap,
-        scopedSequence,
-      );
-      if (handled) return handled;
-    }
-    return applyNormalResolution(
-      state,
-      snapshot,
-      options,
-      keymap,
-      scopedSequence,
-      resolveNormalCommand(scopedSequence, undefined, keymap, "normal"),
-    );
-  }
+  const scopedUpdate = handleNormalScopedInput(state, snapshot, options, key, keymap, scopes);
+  if (scopedUpdate) return scopedUpdate;
 
   if (state.pendingRegister === "awaitingSlot") {
     const target = registerTargetForKey(key);
@@ -918,6 +938,47 @@ function applyVisualResolution(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
+function handleVisualScopedInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scope: VimActionBindingMode,
+  scopes?: VimConfigPlan["scopes"],
+): ModalUpdate | undefined {
+  const { sequence, match } = scopedInputSequence(state, key, keymap, scope, scopes?.[scope]);
+  if (state.pendingMark || state.pendingRegister || (!match.exact && !match.isPrefix)) return;
+  if (!match.exact) return invalidate({ ...state, pending: sequence });
+  return applyVisualResolution(
+    state,
+    snapshot,
+    options,
+    keymap,
+    resolveNormalCommand(sequence, undefined, keymap, scope),
+  );
+}
+
+function handleVisualEscapeInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate | undefined {
+  if (matchesKey(data, "escape"))
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
+  const match = matchInsertEscapeInput(
+    state,
+    data,
+    escapeAliasesForScope(options, state.mode as "visual" | "visualLine" | "visualBlock"),
+  );
+  if (match.kind === "matched")
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
+  if (match.kind === "pending")
+    return withEffects(pendingInsertEscape(state, match.sequence, data), []);
+  if (match.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
+}
+
 function handleVisualInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -925,18 +986,8 @@ function handleVisualInput(
   data: string,
   scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
-  if (matchesKey(data, "escape"))
-    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
-  const escapeMatch = matchInsertEscapeInput(
-    state,
-    data,
-    escapeAliasesForScope(options, state.mode as "visual" | "visualLine" | "visualBlock"),
-  );
-  if (escapeMatch.kind === "matched")
-    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
-  if (escapeMatch.kind === "pending")
-    return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
-  if (escapeMatch.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
+  const escapeUpdate = handleVisualEscapeInput(state, snapshot, options, data);
+  if (escapeUpdate) return escapeUpdate;
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   const key = keySequence(data);
   if (!key) return delegate(state, data);
@@ -949,22 +1000,16 @@ function handleVisualInput(
   }
 
   const scope = state.mode as VimActionBindingMode;
-  const scopedSequence = appendMappingToken(
-    state.pending ?? "",
+  const scopedUpdate = handleVisualScopedInput(
+    state,
+    snapshot,
+    options,
     key,
-    keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
+    keymap,
+    scope,
+    scopes,
   );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, scope, scopes?.[scope]);
-  if (!state.pendingMark && !state.pendingRegister && (scoped.exact || scoped.isPrefix)) {
-    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
-    return applyVisualResolution(
-      state,
-      snapshot,
-      options,
-      keymap,
-      resolveNormalCommand(scopedSequence, undefined, keymap, state.mode as VimActionBindingMode),
-    );
-  }
+  if (scopedUpdate) return scopedUpdate;
 
   if (state.pendingRegister === "awaitingSlot") {
     const target = registerTargetForKey(key);

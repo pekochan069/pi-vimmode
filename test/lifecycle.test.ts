@@ -49,11 +49,11 @@ type FakeEditor = {
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
-  reconfigureCalls: VimRuntimeConfiguration[];
+  reconfigureCalls: Array<[VimConfigPlan, VimDiagnostics]>;
   diagnosticsCalls: VimDiagnostics[];
   resetCount: number;
   resetOptions: Array<{ restoreHardwareCursorVisibility?: boolean } | undefined>;
-  reconfigure: (configuration: VimRuntimeConfiguration) => void;
+  reconfigure: (plan: VimConfigPlan, diagnostics: VimDiagnostics) => void;
   updateDiagnostics: (diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: (options?: { restoreHardwareCursorVisibility?: boolean }) => void;
   setAgentBusy: (active: boolean) => void;
@@ -101,11 +101,11 @@ function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
     diagnosticsCalls: [],
     resetCount: 0,
     resetOptions: [],
-    reconfigure: (nextConfiguration) => {
-      editor.plan = nextConfiguration.plan;
-      editor.options = nextConfiguration.plan.options;
-      editor.diagnostics = nextConfiguration.diagnostics;
-      editor.reconfigureCalls.push(nextConfiguration);
+    reconfigure: (nextPlan, nextDiagnostics) => {
+      editor.plan = nextPlan;
+      editor.options = nextPlan.options;
+      editor.diagnostics = nextDiagnostics;
+      editor.reconfigureCalls.push([nextPlan, nextDiagnostics]);
     },
     updateDiagnostics: (nextDiagnostics) => {
       editor.diagnostics = nextDiagnostics;
@@ -485,9 +485,7 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]?.reconfigureCalls).toEqual([
-      { plan: newestPlan, diagnostics: { warnings: [] } },
-    ]);
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
     ctx.ui.component?.({}, {}, {});
     expect(createdEditors[1]?.plan).toBe(newestPlan);
@@ -530,9 +528,7 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]?.reconfigureCalls).toEqual([
-      { plan: newestPlan, diagnostics: { warnings: [] } },
-    ]);
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
   });
 
@@ -569,9 +565,7 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]!.reconfigureCalls).toEqual([
-      { plan: lookupOnlyPlan, diagnostics: { warnings: [] } },
-    ]);
+    expect(createdEditors[0]!.reconfigureCalls).toEqual([[lookupOnlyPlan, { warnings: [] }]]);
   });
 
   test("stale async refresh cannot install into an older context", async () => {

@@ -335,9 +335,7 @@ describe("vim editor integration", () => {
     editor.handleInput("d");
     expect(editor.getPendingOperator()).toBe("d");
 
-    editor.reconfigure(
-      runtimeConfiguration(createVimConfigPlan(options, []), { warnings: ["reloaded"] }),
-    );
+    editor.reconfigure(createVimConfigPlan(options, []), { warnings: ["reloaded"] });
     expectEditorState(editor, { text: "one\ntwo", mode: "normal", pending: undefined });
     typeKeys(editor, ["g", "g", ",", "k"]);
 
@@ -402,7 +400,7 @@ describe("vim editor integration", () => {
       [],
     );
 
-    editor.reconfigure(runtimeConfiguration(plan, { warnings: ["reloaded"] }));
+    editor.reconfigure(plan, { warnings: ["reloaded"] });
 
     expectEditorState(editor, { text: "one\ntwo", cursor: beforeCursor, mode: "visual" });
     expect(internal.modalState).toMatchObject({
@@ -446,7 +444,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["G", "$"]);
     editor.setText("x");
 
-    editor.reconfigure(runtimeConfiguration());
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
 
     expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
   });
@@ -463,7 +461,7 @@ describe("vim editor integration", () => {
     };
     editor.setText("Xane");
 
-    editor.reconfigure(runtimeConfiguration());
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
     expect(editor.getText()).toBe("Xone");
     editor.handleInput("u");
 
@@ -476,7 +474,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);
     expect(editor.getText()).toBe("draft");
 
-    editor.reconfigure(runtimeConfiguration());
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
     editor.handleInput("\x12");
 
     expect(editor.getText()).toBe("xdraft");

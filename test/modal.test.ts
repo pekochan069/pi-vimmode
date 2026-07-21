@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import type { EditorSnapshot, ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
-import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
+import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { ResolvedVimEditorOptions } from "../src/types.ts";
 
 import {
   createVimConfigPlan,
   DEFAULT_VIM_KEYMAP,
-  DEFAULT_VIM_OPTIONS,
   resolveVimOptions,
   type VimConfigPlan,
 } from "../src/config.ts";
@@ -17,6 +16,7 @@ import {
 } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
+import { handleModalInputWithOptions as handleModalInput } from "./modal-test-helper.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 const cursor = { line: 0, col: 0 };
@@ -45,20 +45,6 @@ const ctrlAltV = "\u001b[118;7u";
 const escapeOptions = resolveVimOptions({
   piVimMode: { keymap: { escape: ["<D-j>"] } },
 }).options;
-
-function handleModalInput(
-  state: ModalState,
-  editorSnapshot: EditorSnapshot,
-  modalOptions: ModalOptions,
-  data: string,
-  diagnostics: VimDiagnostics = { warnings: [] },
-) {
-  const plan = createVimConfigPlan(
-    { ...DEFAULT_VIM_OPTIONS, ...modalOptions } as ResolvedVimEditorOptions,
-    diagnostics.warnings,
-  );
-  return handleModalInputWithPlan(state, editorSnapshot, plan, data, diagnostics);
-}
 
 function applyModalKeys(
   initialState: ModalState,

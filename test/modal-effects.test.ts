@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import type { EditorSnapshot, ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
-import type { ResolvedVimEditorOptions } from "../src/types.ts";
+import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
-import { createVimConfigPlan, DEFAULT_VIM_KEYMAP, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
-import { handleModalInput as handleModalInputWithPlan } from "../src/modal/engine.ts";
+import { DEFAULT_VIM_KEYMAP, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
+import { handleModalInputWithOptions as handleModalInput } from "./modal-test-helper.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 const options: ModalOptions = {
@@ -18,19 +17,6 @@ const options: ModalOptions = {
   },
   search: DEFAULT_VIM_OPTIONS.search,
 };
-
-function handleModalInput(
-  state: ModalState,
-  snapshot: EditorSnapshot,
-  modalOptions: ModalOptions,
-  data: string,
-) {
-  const plan = createVimConfigPlan(
-    { ...DEFAULT_VIM_OPTIONS, ...modalOptions } as ResolvedVimEditorOptions,
-    [],
-  );
-  return handleModalInputWithPlan(state, snapshot, plan, data);
-}
 
 type GoldenResult = {
   state: Record<string, unknown>;
@@ -52,7 +38,7 @@ function runGolden(
   const effects: unknown[] = [];
 
   for (const key of keys) {
-    const snapshot: EditorSnapshot = {
+    const snapshot = {
       text: currentText,
       lines: currentText.split("\n"),
       cursor: currentCursor,

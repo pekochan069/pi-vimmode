@@ -760,25 +760,6 @@ function handleNormalScopedInput(
   );
 }
 
-function handlePendingTargetInput(
-  state: ModalState,
-  snapshot: EditorSnapshot,
-  options: ModalOptions,
-  key: string,
-  startsLeader: boolean,
-): ModalUpdate | undefined {
-  if (state.pendingRegister === "awaitingSlot") {
-    const target = registerTargetForKey(key);
-    return invalidate(
-      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
-    );
-  }
-  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
-  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
-    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
-  }
-}
-
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -821,10 +802,18 @@ function handleNormalInput(
   const scopedUpdate = handleNormalScopedInput(state, snapshot, options, key, keymap, scopes);
   if (scopedUpdate) return scopedUpdate;
 
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  const pendingTargetUpdate = handlePendingTargetInput(state, snapshot, options, key, startsLeader);
-  if (pendingTargetUpdate) return pendingTargetUpdate;
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macroOrMark = handleNormalMacroOrMark(state, snapshot, options, keymap, key);
@@ -1022,10 +1011,18 @@ function handleVisualInput(
   );
   if (scopedUpdate) return scopedUpdate;
 
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  const pendingTargetUpdate = handlePendingTargetInput(state, snapshot, options, key, startsLeader);
-  if (pendingTargetUpdate) return pendingTargetUpdate;
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
   if (!state.pending && !state.pendingRegister && !startsLeader && key === "u") {
     return transformVisualSelection(
       state,

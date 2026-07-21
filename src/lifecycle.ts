@@ -188,7 +188,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
   const config = createConfigState(dependencies, (configuration, committed) => {
     if (!state?.enabled) return;
     for (const editor of state.editors) {
-      if (committed) editor.reconfigure(configuration);
+      if (committed) editor.reconfigure(configuration.plan, configuration.diagnostics);
       else editor.updateDiagnostics(configuration.diagnostics);
     }
   });

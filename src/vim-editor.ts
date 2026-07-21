@@ -42,6 +42,7 @@ import {
   searchForOptions,
   uiForOptions,
   easymotionForOptions,
+  type VimConfigPlan,
   type VimRuntimeConfiguration,
 } from "./config.ts";
 import { suggestExCommands } from "./ex.ts";
@@ -297,10 +298,10 @@ export class VimEditor extends CustomEditor {
     return cursorStyleForMode(this.options, this.modalState.mode);
   }
 
-  reconfigure(configuration: VimRuntimeConfiguration): void {
+  reconfigure(plan: VimConfigPlan, diagnostics: VimDiagnostics): void {
     this.configuration = {
-      plan: configuration.plan,
-      diagnostics: { warnings: [...configuration.diagnostics.warnings] },
+      plan,
+      diagnostics: { warnings: [...diagnostics.warnings] },
     };
     const { recordingSlot: _recordingSlot, ...reset } = resetTransientState(
       this.modalState,

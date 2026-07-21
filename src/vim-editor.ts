@@ -227,6 +227,10 @@ export type VimEditorOptions = {
   onShutdown?: () => void;
 };
 
+export type ResetTerminalCursorStyleOptions = {
+  restoreHardwareCursorVisibility?: boolean;
+};
+
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private options: ResolvedVimEditorOptions;
@@ -759,9 +763,11 @@ export class VimEditor extends CustomEditor {
     this.terminalWrite(cursorShapeEscape(style));
   }
 
-  resetTerminalCursorStyle(): void {
+  resetTerminalCursorStyle({
+    restoreHardwareCursorVisibility = true,
+  }: ResetTerminalCursorStyleOptions = {}): void {
     this.lastTerminalCursorStyle = undefined;
-    if (this.originalHardwareCursorVisible !== undefined) {
+    if (restoreHardwareCursorVisibility && this.originalHardwareCursorVisible !== undefined) {
       this.setHardwareCursorVisibility(this.originalHardwareCursorVisible);
     }
     this.terminalWrite(RESET_CURSOR_SHAPE);

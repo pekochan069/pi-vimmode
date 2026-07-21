@@ -2096,6 +2096,20 @@ describe("vim editor integration", () => {
     expect(hardwareCursorChanges).toEqual([true, false, true, false]);
   });
 
+  test("terminal-exit cursor reset skips visibility restoration", () => {
+    const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
+      ...DEFAULT_VIM_OPTIONS,
+      cursor: { ...DEFAULT_VIM_OPTIONS.cursor, insert: "bar" },
+    });
+
+    expect(getHardwareCursorVisible()).toBe(true);
+    editor.resetTerminalCursorStyle({ restoreHardwareCursorVisibility: false });
+
+    expect(writes.at(-1)).toBe("\x1b[0 q");
+    expect(getHardwareCursorVisible()).toBe(true);
+    expect(hardwareCursorChanges).toEqual([true]);
+  });
+
   test("agent busy preserves bar hardware cursor without changing editor state", () => {
     const { editor, writes, hardwareCursorChanges, getHardwareCursorVisible } = createEditor({
       ...DEFAULT_VIM_OPTIONS,

@@ -307,12 +307,9 @@ export class VimEditor extends CustomEditor {
       this.modalState,
       this.modalState.mode,
     );
+    if (this.modalState.blockInsert) reset.blockInsert = this.modalState.blockInsert;
     const currentCursor = this.getCursor();
-    const text =
-      this.modalState.pendingEasymotion?.kind === "highlight"
-        ? this.modalState.pendingEasymotion.originalText
-        : this.getText();
-    if (text !== this.getText()) super.handleInput(KEY.undo);
+    const text = this.getText();
     const cursor = clampToText(text, currentCursor);
     if (this.modalState.visualAnchor && this.modalState.mode.startsWith("visual")) {
       reset.visualAnchor = clampToText(text, this.modalState.visualAnchor);
@@ -441,7 +438,11 @@ export class VimEditor extends CustomEditor {
     const pending = this.modalState.pendingEasymotion;
     if (pending?.kind !== "highlight") return undefined;
     return {
-      targets: pending.targets.map((t) => ({ line: t.line, character: t.character })),
+      targets: pending.targets.map((t) => ({
+        line: t.line,
+        character: t.character,
+        label: t.label,
+      })),
       labelColor: easymotion.labelColor,
     };
   }
@@ -735,7 +736,11 @@ export class VimEditor extends CustomEditor {
     }
 
     super.handleInput(KEY.lineStart);
-    for (let i = 0; i < target.col; i++) super.handleInput(KEY.right);
+    while (this.getCursor().col < target.col) {
+      const before = this.getCursor().col;
+      super.handleInput(KEY.right);
+      if (this.getCursor().col <= before) break;
+    }
   }
 
   private terminalRows(): number | undefined {

@@ -37,7 +37,7 @@ export type SearchHighlightRenderInput = {
 };
 
 export type EasymotionRenderInput = {
-  targets: { line: number; character: number }[];
+  targets: { line: number; character: number; label: string }[];
   labelColor: string;
 };
 
@@ -102,7 +102,6 @@ type VisualRenderView = {
   search?: SearchHighlightRenderInput;
   searchRanges: TextRange[];
   easymotion: EasymotionRenderInput | undefined;
-  easymotionTargets: Set<string>;
 };
 
 function styleSelection(text: string): string {
@@ -115,6 +114,11 @@ function styleSearch(text: string): string {
 
 function styleCurrentSearch(text: string): string {
   return `${SEARCH_CURRENT_START}${text}${ANSI_RESET}`;
+}
+
+function fitEasymotionLabel(label: string, width: number): string {
+  const truncated = truncateToWidth(label, width, "");
+  return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
 export function renderCursorCell(cell: string, style: CursorStyle): string {
@@ -273,10 +277,17 @@ function renderLayoutLine(
     const cell = Array.from(chunk.text.slice(offset))[0] ?? "";
     const cellStart = chunk.startIndex + offset;
     const cellWidth = visibleWidth(cell);
+    const easymotionTarget = options.easymotion?.targets.find(
+      (target) => target.line === chunk.lineIndex && target.character === cellStart,
+    );
+    const displayCell =
+      easymotionTarget && options.easymotion
+        ? fitEasymotionLabel(easymotionTarget.label, cellWidth)
+        : cell;
     const isCursor = options.cursor.line === chunk.lineIndex && options.cursor.col === cellStart;
 
     if (isCursor) {
-      output += marker + renderCursorCell(cell, options.cursorStyle);
+      output += marker + renderCursorCell(displayCell, options.cursorStyle);
       cursorRendered = true;
     } else if (
       isSelectedCell(
@@ -288,9 +299,9 @@ function renderLayoutLine(
         cellStart,
       )
     ) {
-      output += styleSelection(cell);
-    } else if (options.easymotionTargets?.has(`${chunk.lineIndex}:${cellStart}`)) {
-      output += options.easymotion?.labelColor + cell + ANSI_RESET;
+      output += styleSelection(displayCell);
+    } else if (easymotionTarget && options.easymotion) {
+      output += options.easymotion.labelColor + displayCell + ANSI_RESET;
     } else {
       const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
       if (searchStyle === "current") output += styleCurrentSearch(cell);
@@ -376,9 +387,6 @@ function createPromptRenderView(input: PromptRenderInput): VisualRenderView {
     search: input.search,
     searchRanges: createSearchRanges(input.snapshot.text, input.search),
     easymotion: input.easymotion,
-    easymotionTargets: new Set(
-      (input.easymotion?.targets ?? []).map((t) => `${t.line}:${t.character}`),
-    ),
   };
 }
 
@@ -399,9 +407,6 @@ function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderVie
     search: input.search,
     searchRanges: createSearchRanges(text, input.search),
     easymotion: input.easymotion,
-    easymotionTargets: new Set(
-      (input.easymotion?.targets ?? []).map((t) => `${t.line}:${t.character}`),
-    ),
   };
 }
 

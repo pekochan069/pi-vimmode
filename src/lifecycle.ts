@@ -45,14 +45,15 @@ export type VimLifecycleDependencies = {
 type ConfigState = {
   configuration: () => VimRuntimeConfiguration;
   refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
+  invalidate: () => void;
 };
 
-function serializeConfig(configuration: VimRuntimeConfiguration): string {
-  return JSON.stringify([
-    configuration.plan.options,
-    configuration.plan.scopes,
-    configuration.diagnostics,
-  ]);
+function serializePlan(configuration: VimRuntimeConfiguration): string {
+  return JSON.stringify([configuration.plan.options, configuration.plan.scopes]);
+}
+
+function serializeDiagnostics(configuration: VimRuntimeConfiguration): string {
+  return JSON.stringify(configuration.diagnostics);
 }
 
 function createConfigState(
@@ -69,7 +70,8 @@ function createConfigState(
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    const previousConfig = serializeConfig(currentConfiguration);
+    const previousPlan = serializePlan(currentConfiguration);
+    const previousDiagnostics = serializeDiagnostics(currentConfiguration);
     const committed = !loaded.fatal || !hasCommittedLoad;
     const plan = committed ? loaded.plan : currentConfiguration.plan;
     if (committed) hasCommittedLoad = true;
@@ -77,8 +79,9 @@ function createConfigState(
       plan,
       diagnostics: loaded.fatal ? loaded.plan.diagnostics : plan.diagnostics,
     };
-    const configChanged = serializeConfig(currentConfiguration) !== previousConfig;
-    if (configChanged) onUpdate(currentConfiguration, committed);
+    const planChanged = serializePlan(currentConfiguration) !== previousPlan;
+    const diagnosticsChanged = serializeDiagnostics(currentConfiguration) !== previousDiagnostics;
+    if (planChanged || diagnosticsChanged) onUpdate(currentConfiguration, planChanged);
     ctx.ui.setStatus(
       "pi-vimmode",
       currentConfiguration.diagnostics.warnings.length > 0 ? "vim ⚠" : "vim",
@@ -122,6 +125,9 @@ function createConfigState(
   return {
     configuration: () => currentConfiguration,
     refresh,
+    invalidate: () => {
+      refreshGeneration += 1;
+    },
   };
 }
 
@@ -136,6 +142,7 @@ type EditorState = {
   agentBusy: boolean;
   previousEditorFactory?: EditorComponentFactory;
   hasInstalledFactory: boolean;
+  installGeneration: number;
 };
 
 function finishInstall(state: EditorState, ctx: ExtensionContext, force = false): void {
@@ -162,7 +169,9 @@ function installEditor(
   state: EditorState,
   ctx: ExtensionContext,
   force = false,
+  generation = state.installGeneration,
 ): void | Promise<void> {
+  if (generation !== state.installGeneration) return;
   if (!state.enabled) {
     ctx.ui.setStatus("pi-vimmode", "vim off");
     return;
@@ -170,7 +179,7 @@ function installEditor(
   const refreshed = state.config.refresh(ctx);
   if (refreshed instanceof Promise) {
     return refreshed.then((applied) => {
-      if (!applied) return;
+      if (!applied || generation !== state.installGeneration) return;
       if (state.enabled) finishInstall(state, ctx, force);
       else ctx.ui.setStatus("pi-vimmode", "vim off");
     });
@@ -185,10 +194,10 @@ function resetKnownEditors(state: EditorState, options?: ResetTerminalCursorStyl
 
 function createEditorState(dependencies: VimLifecycleDependencies): EditorState {
   let state: EditorState;
-  const config = createConfigState(dependencies, (configuration, committed) => {
+  const config = createConfigState(dependencies, (configuration, planChanged) => {
     if (!state?.enabled) return;
     for (const editor of state.editors) {
-      if (committed) editor.reconfigure(configuration.plan, configuration.diagnostics);
+      if (planChanged) editor.reconfigure(configuration.plan, configuration.diagnostics);
       else editor.updateDiagnostics(configuration.diagnostics);
     }
   });
@@ -204,6 +213,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
     enabled: true,
     agentBusy: false,
     hasInstalledFactory: false,
+    installGeneration: 0,
   };
   state.editorFactory = (tui, theme, keybindings) => {
     const editor = state.createEditor(tui, theme, keybindings, state.config.configuration(), {
@@ -229,10 +239,12 @@ function observeInstall(install: void | Promise<void>, ctx: ExtensionContext): v
 }
 
 function installEditorSoon(state: EditorState, ctx: ExtensionContext): void {
-  observeInstall(installEditor(state, ctx), ctx);
+  const generation = state.installGeneration;
+  observeInstall(installEditor(state, ctx, false, generation), ctx);
   state.schedule(() => {
+    if (generation !== state.installGeneration) return;
     try {
-      observeInstall(installEditor(state, ctx), ctx);
+      observeInstall(installEditor(state, ctx, false, generation), ctx);
     } catch {
       // Context can go stale during reload/session switch. Next session_start will reinstall.
     }
@@ -302,6 +314,11 @@ export function registerVimLifecycle(
   });
   pi.on("session_shutdown", (event) => {
     state.agentBusy = false;
+    state.config.invalidate();
+    state.installGeneration += 1;
+    state.currentShutdown = undefined;
+    state.previousEditorFactory = undefined;
+    state.hasInstalledFactory = false;
     resetKnownEditors(state, {
       restoreHardwareCursorVisibility: event.reason !== "quit",
     });

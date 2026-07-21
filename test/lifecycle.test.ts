@@ -11,6 +11,7 @@ import {
   type VimRuntimeConfiguration,
 } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
+import { VimEditor } from "../src/vim-editor.ts";
 
 type HookName =
   | "session_start"
@@ -91,6 +92,32 @@ function createContext(cwd = "/workspace"): FakeContext {
   return ctx;
 }
 
+function createRealEditor(configuration: VimRuntimeConfiguration): VimEditor {
+  const tui = {
+    terminal: { rows: 24, columns: 80, write: () => {} },
+    requestRender: () => {},
+    getShowHardwareCursor: () => false,
+    setShowHardwareCursor: () => {},
+    showOverlay: () => ({ hide: () => {} }),
+  } as any;
+  const theme = {
+    borderColor: (text: string) => text,
+    selectList: {
+      selectedText: (text: string) => text,
+      description: (text: string) => text,
+      noMatch: (text: string) => text,
+      scrollInfo: (text: string) => text,
+    },
+  } as any;
+  const keybindings = {
+    matches: () => false,
+    getKeys: () => [],
+    getDefinition: () => ({ defaultKeys: [] }),
+    getConflicts: () => [],
+  } as any;
+  return new VimEditor(tui, theme, keybindings, configuration);
+}
+
 function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
   const editor: FakeEditor = {
     plan: configuration.plan,
@@ -127,12 +154,14 @@ function createLifecycleHarness(
     DEFAULT_VIM_OPTIONS,
     { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
   ],
+  useRealEditor = false,
 ) {
   const hooks = new Map<HookName, Hook>();
   const commands = new Map<string, Command>();
   const scheduled: Array<() => void> = [];
   const loadCalls: Array<{ cwd?: string }> = [];
   const createdEditors: FakeEditor[] = [];
+  const realEditors: VimEditor[] = [];
   const shutdownCallbacks: Array<(() => void) | undefined> = [];
   const warnings: string[][] = [];
   const fatalLoads: boolean[] = [];
@@ -174,6 +203,11 @@ function createLifecycleHarness(
     },
     createEditor: (_tui, _theme, _keybindings, configuration, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
+      if (useRealEditor) {
+        const editor = createRealEditor(configuration);
+        realEditors.push(editor);
+        return editor;
+      }
       const editor = createFakeEditor(configuration);
       createdEditors.push(editor);
       return editor;
@@ -189,6 +223,7 @@ function createLifecycleHarness(
     scheduled,
     loadCalls,
     createdEditors,
+    realEditors,
     shutdownCallbacks,
     warnings,
     fatalLoads,
@@ -532,40 +567,44 @@ describe("vim extension lifecycle", () => {
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
   });
 
-  test("lookup-only reload reconfigures active editors", async () => {
-    const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
-      DEFAULT_VIM_OPTIONS,
-      DEFAULT_VIM_OPTIONS,
-    ]);
+  test("lookup-only reload changes live editor binding", async () => {
+    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const { hooks, deferredLoads, resolveDeferred, realEditors } = createLifecycleHarness(
+      [normal, normal],
+      true,
+    );
     const ctx = createContext("/repo");
 
     hooks.get("agent_end")?.({}, ctx);
     ctx.ui.component?.({}, {}, {});
-    const initialPlan = createdEditors[0]!.plan;
-    const lookupOnlyPlan: VimConfigPlan = {
-      ...initialPlan,
-      scopes: {
-        ...initialPlan.scopes,
-        normal: {
-          exact: {
-            ...initialPlan.scopes.normal.exact,
-            ",x": { kind: "command", id: "showKeybindings" },
-          },
-          prefixes: { ...initialPlan.scopes.normal.prefixes, ",": [",x"] },
-        },
+    const editor = realEditors[0]!;
+    const updatedOptions = {
+      ...normal,
+      keymap: {
+        ...normal.keymap!,
+        scoped: [
+          ...normal.keymap!.scoped,
+          { actionId: "command.openLineBelow" as const, key: "x", modes: ["normal"] as const },
+        ],
       },
     };
+    const lookupOnlyPlan = createVimConfigPlan(updatedOptions, []);
     deferredLoads.add(1);
     hooks.get("agent_end")?.({}, ctx);
     resolveDeferred.get(1)?.({
       plan: lookupOnlyPlan,
-      options: DEFAULT_VIM_OPTIONS,
+      options: updatedOptions,
       warnings: [],
       fatal: false,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]!.reconfigureCalls).toEqual([[lookupOnlyPlan, { warnings: [] }]]);
+    editor.setText("one\ntwo");
+    editor.handleInput("g");
+    editor.handleInput("g");
+    editor.handleInput("x");
+    expect(editor.getText()).toBe("one\n\ntwo");
+    expect(editor.getVimMode()).toBe("insert");
   });
 
   test("stale async refresh cannot install into an older context", async () => {
@@ -594,6 +633,36 @@ describe("vim extension lifecycle", () => {
     expect(newer.shutdownCalls).toBe(1);
   });
 
+  test("shutdown invalidates pending loads and delayed installs before next session", async () => {
+    const { hooks, scheduled, deferredLoads, resolveDeferred, loadCalls } =
+      createLifecycleHarness();
+    deferredLoads.add(0);
+    const oldContext = createContext("/old");
+    const nextContext = createContext("/next");
+    const nativeFactory = (() => ({}) as FakeEditor) as unknown as FakeEditorComponent;
+
+    hooks.get("session_start")?.({}, oldContext);
+    expect(loadCalls).toEqual([{ cwd: "/old" }]);
+    hooks.get("session_shutdown")?.({ reason: "new" }, oldContext);
+    scheduled[0]!();
+    expect(loadCalls).toEqual([{ cwd: "/old" }]);
+
+    resolveDeferred.get(0)?.({
+      plan: createVimConfigPlan(DEFAULT_VIM_OPTIONS, []),
+      options: DEFAULT_VIM_OPTIONS,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(oldContext.ui.component).toBeUndefined();
+
+    nextContext.ui.component = nativeFactory;
+    hooks.get("session_start")?.({}, nextContext);
+
+    expect(nextContext.ui.component).not.toBe(nativeFactory);
+    expect(nextContext.ui.setCalls).toHaveLength(1);
+  });
+
   test("async install cannot reactivate editor after vimmode off", async () => {
     const { hooks, commands, deferredLoads, resolveDeferred } = createLifecycleHarness();
     deferredLoads.add(0);
@@ -611,6 +680,33 @@ describe("vim extension lifecycle", () => {
 
     expect(ctx.ui.component).toBeUndefined();
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim off"]);
+  });
+
+  test("fatal reload recovery preserves live grammar and clears diagnostics", () => {
+    const normal = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const { hooks, fatalLoads, warnings, realEditors } = createLifecycleHarness(
+      [normal, normal, normal],
+      true,
+    );
+    fatalLoads.push(false, true, false);
+    warnings.push([], ["fatal JS config"], []);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    ctx.ui.component?.({}, {}, {});
+    const editor = realEditors[0]!;
+    editor.setText("one\ntwo");
+    editor.handleInput("d");
+    expect(editor.getPendingOperator()).toBe("d");
+
+    hooks.get("agent_end")?.({}, ctx);
+    hooks.get("agent_end")?.({}, ctx);
+
+    expect(editor.getPendingOperator()).toBe("d");
+    expect(
+      (editor as unknown as { configuration: VimRuntimeConfiguration }).configuration.diagnostics,
+    ).toEqual({ warnings: [] });
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
   });
 
   test("fatal reload updates diagnostics but preserves last-known-good options", () => {

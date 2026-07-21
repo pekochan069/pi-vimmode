@@ -265,6 +265,32 @@ describe("visual render helper", () => {
   });
 });
 
+describe("EasyMotion rendering", () => {
+  test("renders target label under cursor", () => {
+    const lines = renderPromptEditor({
+      snapshot: { text: "one", lines: ["one"], cursor: p(0, 0) },
+      cursorStyle: "block",
+      viewport: { width: 10, focused: true },
+      easymotion: { targets: [{ line: 0, character: 0, label: "a" }], labelColor: "red" },
+    });
+
+    expect(lines.join("\n")).toContain(`${CURSOR_BLOCK_START}a${ANSI_RESET}`);
+    expect(lines.join("\n")).not.toContain(`${CURSOR_BLOCK_START}o${ANSI_RESET}`);
+  });
+
+  test("preserves wide target cell width", () => {
+    const lines = renderPromptEditor({
+      snapshot: { text: "界x", lines: ["界x"], cursor: p(0, 2) },
+      cursorStyle: "block",
+      viewport: { width: 10, focused: false },
+      easymotion: { targets: [{ line: 0, character: 0, label: "a" }], labelColor: "red" },
+    });
+
+    expect(visibleWidth(lines[1]!)).toBe(10);
+    expect(lines.join("\n")).toContain("a ");
+  });
+});
+
 describe("cursor rendering", () => {
   test("renders distinct cursor style markers", () => {
     expect(renderCursorCell("x", "block")).toContain(CURSOR_BLOCK_START);

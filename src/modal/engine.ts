@@ -253,26 +253,13 @@ function handleEasymotionInput(
 ): ModalUpdate {
   const key = keySequence(data);
   if (!key || matchesKey(data, "escape")) {
-    const { pendingEasymotion, ...rest } = state;
-    if (pendingEasymotion?.kind === "highlight") {
-      return withEffects(rest, [
-        {
-          type: "edit",
-          result: {
-            text: pendingEasymotion.originalText,
-            cursor: snapshot.cursor,
-            changed: true,
-          },
-        },
-        { type: "invalidate" },
-      ]);
-    }
+    const { pendingEasymotion: _, ...rest } = state;
     return invalidate(rest);
   }
 
   if (state.pendingEasymotion?.kind === "char") {
     // Transition to highlight state with case-insensitive matching
-    const targets: { label: string; line: number; character: number; original: string }[] = [];
+    const targets: { label: string; line: number; character: number }[] = [];
     const lines = snapshot.text.split("\n");
     const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
     let count = 0;
@@ -286,8 +273,7 @@ function handleEasymotionInput(
       while (pos !== -1 && count < labels.length) {
         const label = labels[count];
         if (label === undefined) break;
-        const original = line[pos] ?? key;
-        targets.push({ label, line: i, character: pos, original });
+        targets.push({ label, line: i, character: pos });
         count++;
         pos = line.toLowerCase().indexOf(targetChar, pos + 1);
       }
@@ -298,46 +284,19 @@ function handleEasymotionInput(
       return invalidate(rest);
     }
 
-    // Build text with address characters replacing matched characters
-    const nextLines = [...snapshot.lines];
-    for (const target of targets) {
-      const line = nextLines[target.line];
-      if (line === undefined) continue;
-      nextLines[target.line] =
-        line.slice(0, target.character) + target.label + line.slice(target.character + 1);
-    }
-    const nextText = nextLines.join("\n");
-
-    return withEffects(
-      {
-        ...state,
-        pendingEasymotion: { kind: "highlight", targets, originalText: snapshot.text },
-      },
-      [
-        {
-          type: "edit",
-          result: { text: nextText, cursor: snapshot.cursor, changed: nextText !== snapshot.text },
-        },
-      ],
-    );
+    return invalidate({
+      ...state,
+      pendingEasymotion: { kind: "highlight", targets },
+    });
   }
 
   if (state.pendingEasymotion?.kind === "highlight") {
-    // Address character input: jump to target and restore that character
+    // Address character input: jump to target.
     const target = state.pendingEasymotion.targets.find((t) => t.label === key);
 
     if (target) {
       const { pendingEasymotion: _, ...rest } = state;
-      // Restore full original text then place cursor on the target
       return withEffects(rest, [
-        {
-          type: "edit",
-          result: {
-            text: state.pendingEasymotion.originalText,
-            cursor: snapshot.cursor,
-            changed: true,
-          },
-        },
         { type: "restoreCursor", position: { line: target.line, col: target.character } },
         { type: "invalidate" },
       ]);

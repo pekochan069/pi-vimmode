@@ -384,8 +384,7 @@ describe("vim editor integration", () => {
       pendingWorkbench: { kind: "ex", prefix: ":", text: "stale", sourceMode: "visual" },
       pendingEasymotion: {
         kind: "highlight",
-        targets: [{ label: "a", line: 0, character: 0, original: "o" }],
-        originalText: "one\ntwo",
+        targets: [{ label: "a", line: 0, character: 0 }],
       },
     };
     editor.setText("ane\ntwo");
@@ -404,7 +403,7 @@ describe("vim editor integration", () => {
 
     editor.reconfigure(plan, { warnings: ["reloaded"] });
 
-    expectEditorState(editor, { text: "one\ntwo", cursor: beforeCursor, mode: "visual" });
+    expectEditorState(editor, { text: "ane\ntwo", cursor: beforeCursor, mode: "visual" });
     expect(internal.modalState).toMatchObject({
       register: { type: "char", text: "unnamed" },
       namedRegisters: { a: { type: "line", text: "named\n" } },
@@ -451,23 +450,39 @@ describe("vim editor integration", () => {
     expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
   });
 
-  test("reconfigure removes EasyMotion labels without adding undo history", () => {
+  test("reconfigure clears EasyMotion labels without changing prompt text or undo history", () => {
     const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
-    editor.setText("one");
-    typeKeys(editor, ["g", "g", "i", "X", "\x1b"]);
+    editor.setText("Xone");
     const internal = editor as unknown as { modalState: ModalState };
     internal.modalState.pendingEasymotion = {
       kind: "highlight",
-      targets: [{ label: "a", line: 0, character: 1, original: "o" }],
-      originalText: "Xone",
+      targets: [{ label: "a", line: 0, character: 1 }],
     };
-    editor.setText("Xane");
+
+    expect(editor.render(20).join("\n")).toContain("\x1b[31ma\x1b[0m");
+    editor.setText("XoHOSTne");
 
     editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
-    expect(editor.getText()).toBe("Xone");
+    expect(editor.getText()).toBe("XoHOSTne");
     editor.handleInput("u");
 
+    expect(editor.getText()).toBe("Xone");
+  });
+
+  test("EasyMotion labels render without editing prompt text", () => {
+    const options = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
+    }).options;
+    const { editor } = createEditor(options);
+    editor.setText("one");
+    typeKeys(editor, ["e", "o"]);
+
     expect(editor.getText()).toBe("one");
+    expect(editor.render(20).join("\n")).toContain("\x1b[31ma\x1b[0m");
+    editor.handleInput("a");
+
+    expect(editor.getText()).toBe("one");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
   });
 
   test("reconfigure preserves undo and redo behavior", () => {
@@ -2218,6 +2233,31 @@ describe("vim editor integration", () => {
     expect(editor.getText()).toBe("aXbcd\neXfgh");
   });
 
+  test("visual block insert survives reload before escape", () => {
+    const { editor } = createEditor(ctrlVVisualBlockOptions("normal"));
+    editor.setText("abcd\nefgh");
+    typeKeys(editor, ["g", "g", "l", "\x16", "j", "l", "I", "X"]);
+
+    expect(editor.getText()).toBe("aXbcd\nefgh");
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
+    editor.handleInput("\x1b");
+
+    expect(editor.getText()).toBe("aXbcd\neXfgh");
+    expect(editor.getVimMode()).toBe("normal");
+  });
+
+  test("reconfigure restores cursor across emoji graphemes", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("😀x");
+    typeKeys(editor, ["g", "g", "l"]);
+    const before = editor.getCursor();
+
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
+
+    expect(before).toEqual({ line: 0, col: 2 });
+    expect(editor.getCursor()).toEqual(before);
+  });
+
   test("visual line change removes full lines and enters insert", () => {
     const { editor } = createEditor();
     editor.setText("one\ntwo");
@@ -2412,6 +2452,36 @@ describe("vim editor clipboard register integration", () => {
 
     expect(editor.getText()).toBe("onehost");
     expect(editor.getClipboardRegister("+")).toEqual({ type: "char", text: "host" });
+  });
+
+  test("reload does not undo clipboard paste after EasyMotion labels", async () => {
+    let resolveClipboard!: (text: string) => void;
+    setClipboardTextReaderForTesting(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveClipboard = resolve;
+        }),
+    );
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one");
+    const internal = editor as unknown as {
+      modalState: ModalState;
+      readClipboardAndPaste: (slot: "+" | "*", placement: "after" | "before") => void;
+    };
+    internal.modalState.pendingEasymotion = {
+      kind: "highlight",
+      targets: [{ label: "a", line: 0, character: 1 }],
+    };
+    internal.readClipboardAndPaste("+", "after");
+    resolveClipboard("HOST");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const pastedText = editor.getText();
+    expect(pastedText).not.toBe("one");
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
+    expect(editor.getText()).toBe(pastedText);
+    editor.handleInput("u");
+    expect(editor.getText()).toBe("one");
   });
 
   test("clipboard paste falls back to prompt-local mirror on host read failure", async () => {

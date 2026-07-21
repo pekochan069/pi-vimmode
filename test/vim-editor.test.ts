@@ -40,6 +40,8 @@ function runtimeConfiguration(
   };
 }
 
+const DEFAULT_PLAN = createVimConfigPlan(DEFAULT_VIM_OPTIONS, []);
+
 function createEditor(
   options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
@@ -444,7 +446,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["G", "$"]);
     editor.setText("x");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
 
     expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
   });
@@ -461,7 +463,7 @@ describe("vim editor integration", () => {
     };
     editor.setText("Xane");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
     expect(editor.getText()).toBe("Xone");
     editor.handleInput("u");
 
@@ -474,7 +476,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);
     expect(editor.getText()).toBe("draft");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(DEFAULT_PLAN, { warnings: [] });
     editor.handleInput("\x12");
 
     expect(editor.getText()).toBe("xdraft");

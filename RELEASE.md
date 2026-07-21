@@ -12,6 +12,8 @@ export default (vim) => {
 };
 ```
 
+- Added scoped action-keymap descriptors for trusted JavaScript. `vim.keymap.set` accepts finite actions in normal, visual, insert, or operator-pending scopes; supports compatibility mode aliases, scoped `unmap`, deterministic conflict resolution, protected-shortcut overrides, and bounded replay mappings. Project settings remain final authority.
+
 - Added configurable Vim leader mappings. Set `piVimMode.leader` in JSON or `vim.g.mapleader` in trusted JavaScript, then use `<leader>` at the start of mapping keys. Project settings can override or clear inherited leaders.
 
 ```json
@@ -62,4 +64,3 @@ export default (vim) => {
 
 - Fixed character-search repeats: `,` now keeps opposite original `f`, `F`, `t`, or `T` direction, and `;` now advances `t` and `T` searches.
 - Fixed normal-mode `a` crossing into the next logical line when invoked at end of line, including on wrapped prompts followed by a blank line.
-- Prevented `/quit` from hiding the shell cursor after using pi-vimmode's bar cursor. #53

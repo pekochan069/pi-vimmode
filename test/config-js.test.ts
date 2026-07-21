@@ -935,6 +935,59 @@ export default (vim) => {
     );
   });
 
+  test("uses terminal-key token boundaries during prefix preflight", () => {
+    const result = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.undo",
+            key: "e",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.redo",
+            key: "escapea",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.pasteAfter",
+            key: "alt+za",
+            modes: ["normal"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.pasteBefore",
+            key: "alt+zctrl+y",
+            modes: ["normal"],
+          },
+        },
+      ],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.plan.scopes.normal.exact.e?.id).toBe("command.undo");
+    expect(result.plan.scopes.normal.exact.escapea?.id).toBe("command.redo");
+    expect(result.plan.scopes.normal.exact["alt+za"]?.id).toBe("command.pasteAfter");
+    expect(result.plan.scopes.normal.exact["alt+zctrl+y"]?.id).toBe("command.pasteBefore");
+    expect(result.plan.scopes.normal.prefixes.escape).toEqual(["escapea"]);
+    expect(result.plan.scopes.normal.prefixes["alt+z"]).toEqual(["alt+za", "alt+zctrl+y"]);
+  });
+
   test("canonicalizes modifier order and rejects duplicate modifiers", async () => {
     const f = fixture();
     try {

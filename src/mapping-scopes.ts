@@ -37,39 +37,37 @@ const NAMED_TERMINAL_KEYS = new Set([
   "right",
 ]);
 
-function modifiedKeyTokenLength(sequence: string): number | undefined {
-  const modifiers = /^(?:(?:shift|ctrl|alt|super)\+)+/.exec(sequence)?.[0];
-  if (!modifiers) return undefined;
-  const keyAndRest = sequence.slice(modifiers.length);
+const SORTED_NAMED_TERMINAL_KEYS = [...NAMED_TERMINAL_KEYS].sort(
+  (left, right) => right.length - left.length,
+);
+
+function mappingTokenLengthAt(sequence: string, offset: number): number | undefined {
+  const rest = sequence.slice(offset);
+  const modifiers = /^(?:(?:shift|ctrl|alt|super)\+)+/.exec(rest)?.[0] ?? "";
+  const keyAndRest = rest.slice(modifiers.length);
   if (!keyAndRest) return undefined;
-  const namedKey = [...NAMED_TERMINAL_KEYS]
-    .sort((left, right) => right.length - left.length)
-    .find((key) => keyAndRest.startsWith(key));
+  const namedKey = SORTED_NAMED_TERMINAL_KEYS.find((key) => keyAndRest.startsWith(key));
   const functionKey = /^f\d+/.exec(keyAndRest)?.[0];
   const key = namedKey ?? functionKey ?? [...keyAndRest][0];
   return key ? modifiers.length + key.length : undefined;
 }
 
 export function mappingSequencePrefixes(sequence: string): string[] {
-  const modifiedLength = modifiedKeyTokenLength(sequence);
-  if (modifiedLength === sequence.length) return [];
-  if (!modifiedLength) {
-    if (NAMED_TERMINAL_KEYS.has(sequence) || /^f\d+$/.test(sequence)) return [];
-    return Array.from({ length: Math.max(0, sequence.length - 1) }, (_, index) =>
-      sequence.slice(0, index + 1),
-    );
-  }
-  const prefixes = [sequence.slice(0, modifiedLength)];
-  for (let index = modifiedLength + 1; index < sequence.length; index += 1) {
-    prefixes.push(sequence.slice(0, index));
+  const prefixes: string[] = [];
+  let offset = 0;
+  while (offset < sequence.length) {
+    const tokenLength = mappingTokenLengthAt(sequence, offset);
+    if (!tokenLength) break;
+    offset += tokenLength;
+    if (offset < sequence.length) prefixes.push(sequence.slice(0, offset));
   }
   return prefixes;
 }
 
 export function isAtomicMappingSequence(sequence: string): boolean {
-  const modifiedLength = modifiedKeyTokenLength(sequence);
   return (
-    modifiedLength === sequence.length ||
+    (/^(?:(?:shift|ctrl|alt|super)\+)+/.test(sequence) &&
+      mappingTokenLengthAt(sequence, 0) === sequence.length) ||
     NAMED_TERMINAL_KEYS.has(sequence) ||
     /^f\d+$/.test(sequence)
   );

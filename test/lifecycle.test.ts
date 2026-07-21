@@ -490,6 +490,47 @@ describe("vim extension lifecycle", () => {
     expect(createdEditors[1]?.plan).toBe(newestPlan);
   });
 
+  test("older async refresh cannot commit after a newer refresh starts", async () => {
+    const initial = { ...DEFAULT_VIM_OPTIONS, startMode: "normal" as const };
+    const stale = resolveVimOptions({
+      piVimMode: { startMode: "normal", keymap: { commands: { openLineBelow: [",s"] } } },
+    }).options;
+    const newest = { ...DEFAULT_VIM_OPTIONS, startMode: "insert" as const };
+    const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
+      initial,
+      stale,
+      newest,
+    ]);
+    const ctx = createContext("/repo");
+
+    hooks.get("agent_end")?.({}, ctx);
+    ctx.ui.component?.({}, {}, {});
+    deferredLoads.add(1).add(2);
+    hooks.get("agent_end")?.({}, ctx);
+    hooks.get("agent_end")?.({}, ctx);
+    resolveDeferred.get(1)?.({
+      plan: createVimConfigPlan(stale, ["stale"]),
+      options: stale,
+      warnings: ["stale"],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([]);
+
+    const newestPlan = createVimConfigPlan(newest, []);
+    resolveDeferred.get(2)?.({
+      plan: newestPlan,
+      options: newest,
+      warnings: [],
+      fatal: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
+    expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
+  });
+
   test("lookup-only reload reconfigures active editors", async () => {
     const { hooks, deferredLoads, resolveDeferred, createdEditors } = createLifecycleHarness([
       DEFAULT_VIM_OPTIONS,

@@ -49,6 +49,10 @@ type ConfigState = {
   refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
 };
 
+function serializeConfig(plan: VimConfigPlan, diagnostics: VimDiagnostics): string {
+  return JSON.stringify([plan.options, plan.scopes, diagnostics]);
+}
+
 function createConfigState(
   dependencies: VimLifecycleDependencies,
   onUpdate: (plan: VimConfigPlan | undefined, diagnostics: VimDiagnostics) => void,
@@ -60,20 +64,14 @@ function createConfigState(
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    const previousConfig = JSON.stringify([
-      currentPlan.options,
-      currentPlan.scopes,
-      currentDiagnostics,
-    ]);
+    const previousConfig = serializeConfig(currentPlan, currentDiagnostics);
     const committed = !loaded.fatal || !hasCommittedLoad;
     if (committed) {
       currentPlan = loaded.plan;
       hasCommittedLoad = true;
     }
     currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
-    const configChanged =
-      JSON.stringify([currentPlan.options, currentPlan.scopes, currentDiagnostics]) !==
-      previousConfig;
+    const configChanged = serializeConfig(currentPlan, currentDiagnostics) !== previousConfig;
     if (configChanged) onUpdate(committed ? currentPlan : undefined, currentDiagnostics);
     ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
   };

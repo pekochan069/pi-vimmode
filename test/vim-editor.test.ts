@@ -168,88 +168,6 @@ function expectEditorState(
   if (expected.pending !== undefined) expect(editor.getPendingOperator()).toBe(expected.pending);
 }
 
-type ReconfigureTestInternal = {
-  modalState: ModalState;
-  redoStack: Array<{ text: string; cursor: { line: number; col: number } }>;
-};
-
-const RECONFIGURE_TRANSIENT_FIELDS = [
-  "recordingSlot",
-  "pending",
-  "pendingMacro",
-  "pendingRegister",
-  "pendingMark",
-  "pendingSearch",
-  "pendingEx",
-  "pendingInsertEscape",
-  "pendingInsertEscapeInputs",
-  "pendingWorkbench",
-  "pendingEasymotion",
-] as const;
-
-function seedReconfigureState(editor: VimEditor): ReconfigureTestInternal {
-  editor.setText("one\ntwo");
-  typeKeys(editor, ["g", "g", "v", "j"]);
-  const internal = editor as unknown as ReconfigureTestInternal;
-  internal.modalState = {
-    ...internal.modalState,
-    register: { type: "char", text: "unnamed" },
-    namedRegisters: { a: { type: "line", text: "named\n" } },
-    clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
-    macros: { q: ["i", "x", "escape"] },
-    recordingSlot: "q",
-    lastPlayedMacro: "q",
-    marks: { a: { line: 1, col: 2 } },
-    searchHistory: [{ query: "two", matcherMode: "literal" }],
-    exHistory: ["messages"],
-    lastVisualSelection: {
-      mode: "visual",
-      anchor: { line: 99, col: 99 },
-      cursor: { line: 0, col: 99 },
-      text: "one\ntwo",
-    },
-    pending: "2d",
-    pendingMacro: "play",
-    pendingRegister: "awaitingSlot",
-    pendingMark: { kind: "set" },
-    pendingSearch: { query: "stale", direction: "forward" },
-    pendingEx: { command: "stale", sourceMode: "visual" },
-    pendingInsertEscape: "j",
-    pendingInsertEscapeInputs: ["j"],
-    pendingWorkbench: { kind: "ex", prefix: ":", text: "stale", sourceMode: "visual" },
-    pendingEasymotion: {
-      kind: "highlight",
-      targets: [{ label: "a", line: 0, character: 0, original: "o" }],
-      originalText: "one\ntwo",
-    },
-  };
-  editor.setText("ane\ntwo");
-  internal.redoStack.push({ text: "redo", cursor: { line: 0, col: 4 } });
-  return internal;
-}
-
-function expectReconfiguredDurableState(internal: ReconfigureTestInternal) {
-  expect(internal.modalState).toMatchObject({
-    register: { type: "char", text: "unnamed" },
-    namedRegisters: { a: { type: "line", text: "named\n" } },
-    clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
-    macros: { q: ["i", "x", "escape"] },
-    lastPlayedMacro: "q",
-    marks: { a: { line: 1, col: 2 } },
-    searchHistory: [{ query: "two", matcherMode: "literal" }],
-    exHistory: ["messages"],
-    visualAnchor: { line: 0, col: 0 },
-    lastVisualSelection: {
-      anchor: { line: 1, col: 3 },
-      cursor: { line: 0, col: 3 },
-    },
-  });
-  for (const field of RECONFIGURE_TRANSIENT_FIELDS) {
-    expect(internal.modalState[field]).toBeUndefined();
-  }
-  expect(internal.redoStack).toEqual([{ text: "redo", cursor: { line: 0, col: 4 } }]);
-}
-
 describe("vim editor integration", () => {
   test("starts insert, inserts text, and escape enters normal", () => {
     const { editor } = createEditor();
@@ -405,7 +323,46 @@ describe("vim editor integration", () => {
       ...DEFAULT_VIM_OPTIONS,
       startMode: "normal",
     });
-    const internal = seedReconfigureState(editor);
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["g", "g", "v", "j"]);
+    const internal = editor as unknown as {
+      modalState: ModalState;
+      redoStack: Array<{ text: string; cursor: { line: number; col: number } }>;
+    };
+    internal.modalState = {
+      ...internal.modalState,
+      register: { type: "char", text: "unnamed" },
+      namedRegisters: { a: { type: "line", text: "named\n" } },
+      clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
+      macros: { q: ["i", "x", "escape"] },
+      recordingSlot: "q",
+      lastPlayedMacro: "q",
+      marks: { a: { line: 1, col: 2 } },
+      searchHistory: [{ query: "two", matcherMode: "literal" }],
+      exHistory: ["messages"],
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: { line: 99, col: 99 },
+        cursor: { line: 0, col: 99 },
+        text: "one\ntwo",
+      },
+      pending: "2d",
+      pendingMacro: "play",
+      pendingRegister: "awaitingSlot",
+      pendingMark: { kind: "set" },
+      pendingSearch: { query: "stale", direction: "forward" },
+      pendingEx: { command: "stale", sourceMode: "visual" },
+      pendingInsertEscape: "j",
+      pendingInsertEscapeInputs: ["j"],
+      pendingWorkbench: { kind: "ex", prefix: ":", text: "stale", sourceMode: "visual" },
+      pendingEasymotion: {
+        kind: "highlight",
+        targets: [{ label: "a", line: 0, character: 0, original: "o" }],
+        originalText: "one\ntwo",
+      },
+    };
+    editor.setText("ane\ntwo");
+    internal.redoStack.push({ text: "redo", cursor: { line: 0, col: 4 } });
     const beforeCursor = editor.getCursor();
     const renderRequests = getRenderRequests();
     const plan = createVimConfigPlan(
@@ -421,9 +378,50 @@ describe("vim editor integration", () => {
     editor.reconfigure(plan, { warnings: ["reloaded"] });
 
     expectEditorState(editor, { text: "one\ntwo", cursor: beforeCursor, mode: "visual" });
-    expectReconfiguredDurableState(internal);
+    expect(internal.modalState).toMatchObject({
+      register: { type: "char", text: "unnamed" },
+      namedRegisters: { a: { type: "line", text: "named\n" } },
+      clipboardRegisters: { "+": { type: "char", text: "clipboard" } },
+      macros: { q: ["i", "x", "escape"] },
+      lastPlayedMacro: "q",
+      marks: { a: { line: 1, col: 2 } },
+      searchHistory: [{ query: "two", matcherMode: "literal" }],
+      exHistory: ["messages"],
+      visualAnchor: { line: 0, col: 0 },
+      lastVisualSelection: {
+        anchor: { line: 1, col: 3 },
+        cursor: { line: 0, col: 3 },
+      },
+    });
+    for (const field of [
+      "recordingSlot",
+      "pending",
+      "pendingMacro",
+      "pendingRegister",
+      "pendingMark",
+      "pendingSearch",
+      "pendingEx",
+      "pendingInsertEscape",
+      "pendingInsertEscapeInputs",
+      "pendingWorkbench",
+      "pendingEasymotion",
+    ] as const) {
+      expect(internal.modalState[field]).toBeUndefined();
+    }
+    expect(internal.redoStack).toEqual([{ text: "redo", cursor: { line: 0, col: 4 } }]);
     expect(writes.at(-1)).toBe("\x1b[4 q");
     expect(getRenderRequests()).toBeGreaterThan(renderRequests);
+  });
+
+  test("reconfigure clamps an out-of-bounds active cursor", () => {
+    const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
+    editor.setText("one\ntwo");
+    typeKeys(editor, ["G", "$"]);
+    editor.setText("x");
+
+    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+
+    expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
   });
 
   test("reconfigure removes EasyMotion labels without adding undo history", () => {

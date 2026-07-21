@@ -1,7 +1,7 @@
-# v0.8.1
+# v0.8.2
 
 ## What's new
 
 ## Bug fixes
 
-- Improved compatibility with other Pi editor extensions by preserving their editor behavior during Vim lifecycle changes. #16 @lucidfrontier45
+- Prevented `/quit` from hiding the shell cursor after using pi-vimmode's bar cursor. #53

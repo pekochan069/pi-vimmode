@@ -51,6 +51,7 @@ import {
   marksForOptions,
 } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
+import { appendMappingToken } from "../mapping-scopes.ts";
 import { scrollHelpPopup } from "../read-only-popup.ts";
 import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
 import {
@@ -145,8 +146,20 @@ function isPlainFastInsertText(data: string): boolean {
 }
 
 function clearPendingInsertEscape(state: ModalState): ModalState {
-  const { pendingInsertEscape: _pendingInsertEscape, ...rest } = state;
+  const {
+    pendingInsertEscape: _pendingInsertEscape,
+    pendingInsertEscapeInputs: _pendingInsertEscapeInputs,
+    ...rest
+  } = state;
   return rest;
+}
+
+function pendingInsertEscape(state: ModalState, sequence: string, input: string): ModalState {
+  return {
+    ...state,
+    pendingInsertEscape: sequence,
+    pendingInsertEscapeInputs: [...(state.pendingInsertEscapeInputs ?? []), input],
+  };
 }
 
 function escapeKey(data: string): string | undefined {
@@ -184,7 +197,7 @@ function matchInsertEscapeInput(
   const key = escapeKey(data);
   if (!key) return state.pendingInsertEscape ? { kind: "mismatched" } : { kind: "ignored" };
 
-  const sequence = `${state.pendingInsertEscape ?? ""}${key}`;
+  const sequence = appendMappingToken(state.pendingInsertEscape ?? "", key, aliases);
   if (aliases.includes(sequence)) return { kind: "matched" };
   if (aliases.some((alias) => aliasStartsWith(alias, sequence)))
     return { kind: "pending", sequence };
@@ -192,9 +205,9 @@ function matchInsertEscapeInput(
 }
 
 function delegateBufferedInsertEscape(state: ModalState, input: string): ModalUpdate {
-  const pending = state.pendingInsertEscape;
+  const pending = state.pendingInsertEscapeInputs ?? [state.pendingInsertEscape ?? ""];
   const effects: ModalEffect[] = [
-    ...Array.from(pending ?? "", (char) => ({ type: "delegate" as const, input: char })),
+    ...pending.filter(Boolean).map((input) => ({ type: "delegate" as const, input })),
     { type: "delegate", input },
   ];
   return withEffects(clearPendingInsertEscape(state), effects);
@@ -366,7 +379,7 @@ function handleInsertInput(
   if (match.kind === "matched")
     return modeUpdate(clearPendingInsertEscape(state), "normal", options);
   if (match.kind === "pending") {
-    return withEffects({ ...state, pendingInsertEscape: match.sequence }, []);
+    return withEffects(pendingInsertEscape(state, match.sequence, data), []);
   }
   if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
 
@@ -544,7 +557,6 @@ function remapUpdate(
   mode: "normal" | "visual" | "visualLine" | "visualBlock",
   key: string,
 ): ModalUpdate | undefined {
-  const sequence = `${state.pending ?? ""}${key}`;
   const keymap = keymapForOptions(options);
   const actionKeys = new Set(
     keymap.actions.accepted
@@ -553,6 +565,11 @@ function remapUpdate(
   );
   const remaps = keymap.remaps.accepted.filter(
     (remap) => (!remap.modes || remap.modes.includes(mode)) && !actionKeys.has(remap.key),
+  );
+  const sequence = appendMappingToken(
+    state.pending ?? "",
+    key,
+    remaps.map((remap) => remap.key),
   );
   const exact = remaps.find((remap) => remap.key === sequence);
   if (exact) {
@@ -718,7 +735,7 @@ function handleNormalInput(
     );
     if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
     if (escapeMatch.kind === "pending")
-      return withEffects({ ...state, pendingInsertEscape: escapeMatch.sequence }, []);
+      return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
     if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
   }
   if (isProtectedPiDelegateKey(data)) {
@@ -728,7 +745,13 @@ function handleNormalInput(
     }
   }
 
-  const scopedSequence = `${state.pending ?? ""}${key}`;
+  const scopedSequence = appendMappingToken(
+    state.pending ?? "",
+    key,
+    keymap.scoped
+      .filter((binding) => binding.modes.includes("normal"))
+      .map((binding) => binding.key),
+  );
   const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal");
   if (
     !state.pendingMacro &&
@@ -909,7 +932,7 @@ function handleVisualInput(
   if (escapeMatch.kind === "matched")
     return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
   if (escapeMatch.kind === "pending")
-    return withEffects({ ...state, pendingInsertEscape: escapeMatch.sequence }, []);
+    return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
   if (escapeMatch.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   const key = keySequence(data);
@@ -922,12 +945,13 @@ function handleVisualInput(
     }
   }
 
-  const scopedSequence = `${state.pending ?? ""}${key}`;
-  const scoped = scopedKeymapSequenceFor(
-    keymap,
-    scopedSequence,
-    state.mode as VimActionBindingMode,
+  const scope = state.mode as VimActionBindingMode;
+  const scopedSequence = appendMappingToken(
+    state.pending ?? "",
+    key,
+    keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
   );
+  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, scope);
   if (!state.pendingMark && !state.pendingRegister && (scoped.exact || scoped.isPrefix)) {
     if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
     return applyVisualResolution(

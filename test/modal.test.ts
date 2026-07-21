@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
 import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
+import { encodeMappingTokens } from "../src/mapping-scopes.ts";
 import { canFastDelegateInsertInput, handleModalInput } from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
@@ -2251,7 +2252,7 @@ describe("Ex command-line modal behavior", () => {
           mapping: {
             kind: "descriptor",
             actionId: "escape",
-            key: "ctrl+xz",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
             modes: ["visual", "visualLine", "visualBlock"],
           },
         },
@@ -2266,6 +2267,62 @@ describe("Ex command-line modal behavior", () => {
       descriptorOptions,
     );
     expect(result.state.mode).toBe("normal");
+  });
+
+  test("tokenized scoped insert escapes preserve terminal input on mismatch", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
+            modes: ["insert"],
+          },
+        },
+      ],
+    }).options;
+
+    const matched = applyModalKeys(
+      { mode: "insert" },
+      "hello",
+      p(0, 5),
+      ["\u001b[120;5u", "z"],
+      options,
+    );
+    expect(matched.state.mode).toBe("normal");
+
+    const pending = handleModalInput({ mode: "insert" }, snapshot, options, "\u001b[120;5u");
+    const mismatch = handleModalInput(pending.state, snapshot, options, "a");
+    expect(mismatch.effects).toEqual([
+      { type: "delegate", input: "\u001b[120;5u" },
+      { type: "delegate", input: "a" },
+    ]);
+  });
+
+  test("tokenized scoped remaps complete at runtime", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "remap",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
+            inputs: ["l"],
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+
+    const pending = handleModalInput({ mode: "normal" }, snapshot, options, "\u001b[120;5u");
+    const replay = handleModalInput(pending.state, snapshot, options, "z");
+    expect(replay.effects).toContainEqual({ type: "playMacro", slot: "remap", inputs: ["l"] });
   });
 
   test("scoped operator aliases repeat as linewise operations", () => {

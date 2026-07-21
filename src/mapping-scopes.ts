@@ -72,6 +72,21 @@ function mappingTokenLengthAt(sequence: string, offset: number): number | undefi
   return key ? modifiers.length + key.length : undefined;
 }
 
+export function appendMappingToken(
+  prefix: string,
+  key: string,
+  candidates: readonly string[],
+): string {
+  if (!prefix) return key;
+  const separated = `${prefix}${MAPPING_TOKEN_SEPARATOR}${key}`;
+  return candidates.some(
+    (candidate) =>
+      candidate === separated || mappingSequencePrefixes(candidate).includes(separated),
+  )
+    ? separated
+    : `${prefix}${key}`;
+}
+
 export function mappingSequencePrefixes(sequence: string): string[] {
   if (sequence.includes(MAPPING_TOKEN_SEPARATOR)) {
     const tokens = sequence.split(MAPPING_TOKEN_SEPARATOR);

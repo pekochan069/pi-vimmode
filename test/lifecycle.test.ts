@@ -47,8 +47,9 @@ type FakeEditor = {
   busyCalls: boolean[];
   reconfigureCalls: Array<[ResolvedVimEditorOptions, VimDiagnostics]>;
   resetCount: number;
+  resetOptions: Array<{ restoreHardwareCursorVisibility?: boolean } | undefined>;
   reconfigure: (options: ResolvedVimEditorOptions, diagnostics: VimDiagnostics) => void;
-  resetTerminalCursorStyle: () => void;
+  resetTerminalCursorStyle: (options?: { restoreHardwareCursorVisibility?: boolean }) => void;
   setAgentBusy: (active: boolean) => void;
 };
 
@@ -142,13 +143,15 @@ function createLifecycleHarness(
         busyCalls: [],
         reconfigureCalls: [],
         resetCount: 0,
+        resetOptions: [],
         reconfigure: (options, nextDiagnostics) => {
           editor.options = options;
           editor.diagnostics = nextDiagnostics;
           editor.reconfigureCalls.push([options, nextDiagnostics]);
         },
-        resetTerminalCursorStyle: () => {
+        resetTerminalCursorStyle: (options) => {
           editor.resetCount += 1;
+          editor.resetOptions.push(options);
         },
         setAgentBusy: (active) => {
           editor.busyCalls.push(active);
@@ -595,23 +598,37 @@ describe("vim extension lifecycle", () => {
     expect(() => hooks.get("agent_end")?.({}, ctx)).toThrow("startup failed");
   });
 
-  test("session shutdown resets tracked editors once and tolerates none", () => {
-    const { hooks, createdEditors } = createLifecycleHarness();
-    const ctx = createContext("/repo");
+  test("session shutdown routes cursor visibility restoration by reason", () => {
+    const cases = [
+      ["quit", false],
+      ["reload", true],
+      ["new", true],
+      ["resume", true],
+      ["fork", true],
+    ] as const;
 
-    expect(() => hooks.get("session_shutdown")?.({}, ctx)).not.toThrow();
+    for (const [reason, restoreHardwareCursorVisibility] of cases) {
+      const { hooks, createdEditors } = createLifecycleHarness();
+      const ctx = createContext("/repo");
 
-    hooks.get("agent_end")?.({}, ctx);
-    const factory = ctx.ui.setCalls[0]!;
-    factory({}, {}, {});
-    factory({}, {}, {});
-    hooks.get("agent_start")?.({}, ctx);
+      expect(() => hooks.get("session_shutdown")?.({ reason }, ctx)).not.toThrow();
 
-    hooks.get("session_shutdown")?.({}, ctx);
-    hooks.get("session_shutdown")?.({}, ctx);
+      hooks.get("agent_end")?.({}, ctx);
+      const factory = ctx.ui.setCalls[0]!;
+      factory({}, {}, {});
+      factory({}, {}, {});
+      hooks.get("agent_start")?.({}, ctx);
 
-    expect(createdEditors.map((editor) => editor.busyCalls)).toEqual([[true], [true]]);
-    expect(createdEditors.map((editor) => editor.resetCount)).toEqual([1, 1]);
+      hooks.get("session_shutdown")?.({ reason }, ctx);
+      hooks.get("session_shutdown")?.({ reason }, ctx);
+
+      expect(createdEditors.map((editor) => editor.busyCalls)).toEqual([[true], [true]]);
+      expect(createdEditors.map((editor) => editor.resetCount)).toEqual([1, 1]);
+      expect(createdEditors.map((editor) => editor.resetOptions)).toEqual([
+        [{ restoreHardwareCursorVisibility }],
+        [{ restoreHardwareCursorVisibility }],
+      ]);
+    }
   });
 
   test("vimmode command reloads options without toggling", async () => {

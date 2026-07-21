@@ -60,6 +60,20 @@ _Avoid_: Regex, Vim regex, prompt search query
 User-visible feedback that an Ex command could not be parsed or applied. An Ex error never edits the prompt buffer.
 _Avoid_: Silent no-op, validation warning
 
+### Cursor lifecycle
+
+**Hardware cursor visibility policy**:
+Pi's active preference for whether the terminal's hardware cursor is shown. It is independent from terminal cursor shape.
+_Avoid_: Cursor style, cursor shape
+
+**Runtime cursor cleanup**:
+pi-vimmode teardown while Pi remains active. It restores Pi's captured hardware cursor visibility policy.
+_Avoid_: Shutdown cleanup, exit cleanup
+
+**Terminal-exit cursor cleanup**:
+pi-vimmode teardown while Pi is exiting. It leaves final hardware cursor visibility to Pi while resetting pi-vimmode's cursor shape.
+_Avoid_: Runtime cleanup, session shutdown cleanup
+
 ## Example dialogue
 
 Developer: “Should this hardening change add search?”

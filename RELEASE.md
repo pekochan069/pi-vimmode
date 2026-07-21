@@ -62,3 +62,4 @@ export default (vim) => {
 
 - Fixed character-search repeats: `,` now keeps opposite original `f`, `F`, `t`, or `T` direction, and `;` now advances `t` and `T` searches.
 - Fixed normal-mode `a` crossing into the next logical line when invoked at end of line, including on wrapped prompts followed by a blank line.
+- Prevented `/quit` from hiding the shell cursor after using pi-vimmode's bar cursor. #53

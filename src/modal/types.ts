@@ -175,6 +175,7 @@ export type ModalState = {
   pendingSearch?: PendingSearchTarget;
   pendingEx?: PendingExCommand;
   pendingInsertEscape?: string;
+  pendingInsertEscapeInputs?: readonly string[];
   exHistory?: string[];
   lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;

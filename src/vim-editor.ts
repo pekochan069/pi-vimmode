@@ -36,6 +36,7 @@ import {
   cloneResolvedVimOptions,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
+  escapeAliasesForScope,
   keymapForOptions,
   promptTransformsForOptions,
   searchForOptions,
@@ -322,11 +323,12 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
+    const keymap = keymapForOptions(this.options);
     if (
       canFastDelegateInsertInput(this.modalState, data, {
         isAutocompleteOpen: this.isShowingAutocomplete(),
         isMacroReplaying: this.isMacroReplaying,
-        escape: keymapForOptions(this.options).escape,
+        escape: escapeAliasesForScope(keymap, "insert"),
       })
     ) {
       this.delegateDefaultInput(data);

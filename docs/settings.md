@@ -53,7 +53,7 @@ Common warning causes:
 
 `~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
 
-Use `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` for built-ins or `vim.keymap.set(mode, key, "keys")` for a literal key replay. The key is a string using the same key syntax as JSON settings. Built-in pi-vimmode actions are accessed through `vim.prompt.*`, not string action IDs.
+Use `vim.keymap.set(mode, key, rhs, options?)`. `rhs` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap that exact key in selected scopes. The key uses JSON key syntax; string RHS values are replayed keys, never internal action IDs.
 
 ```js
 export default (vim) => {
@@ -61,15 +61,17 @@ export default (vim) => {
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
   vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
   vim.keymap.set("v", "z>", vim.prompt.quote());
+  vim.keymap.set("n", "H", vim.action.motion.wordForward(), { desc: "Next word" });
   vim.keymap.set("n", "zz", "llll");
+  vim.keymap.set("n", "zq", null);
 };
 ```
 
-Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"` for all visual modes, or exact `"visual"`, `"visualLine"`, `"visualBlock"`. Arrays of modes are accepted.
+Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"`/`"x"`/`"visual"` for all visual modes, exact `"visualLine"` or `"visualBlock"`, and `"o"`/`"operatorPending"`/`"operator-pending"` while an operator awaits its target. Arrays of modes are accepted. Each descriptor declares allowed scopes; unsupported scope combinations warn and do not install that mapping.
 
-Prompt transform built-ins: `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, `reflow({ width })`.
+`vim.action` exposes finite operator, motion, command, macro, mark, insert, text-object, and prompt-transform descriptor factories. `vim.prompt.*` remains the compatible alias for prompt-transform and insert built-ins. Prompt transform factories are `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, and `reflow({ width })`; insert factories are `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, and `moveLineEnd`.
 
-Insert-mode built-ins: `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, `moveLineEnd`.
+Literal replay strings work only in normal or visual scopes, are bounded, and do not recursively expand mappings. `null` removes only the exact selected-scope mapping. `options` accepts only `allowProtected: true` and diagnostic `desc: string`; an override does not guarantee that Pi or terminal delivers that key. Same-scope exact mappings are source-ordered; same-scope executable prefix overlaps warn and are rejected because keymaps have no timeout.
 
 Set `vim.g.mapleader` to one printable character or `null`. Assignment affects every retained `<leader>` mapping after project settings apply, regardless of assignment order inside the JS file. Invalid assignments warn and preserve the last valid value.
 

@@ -1,3 +1,4 @@
+import type { VimMappingScope } from "./mapping-scopes.ts";
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 
 export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
@@ -152,6 +153,10 @@ export type VimActionKeyBindingEntry =
       key: string;
       args?: Readonly<Record<string, unknown>>;
       modes?: readonly VimActionBindingMode[];
+      allowProtected?: boolean;
+      desc?: string;
+      /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+      __sourceOrder?: number;
     };
 
 export type VimActionKeymapOptions = Partial<
@@ -162,6 +167,10 @@ export type VimKeySequenceRemap = {
   key: string;
   inputs: readonly string[];
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type VimKeySequenceRemapOptions = {
@@ -213,6 +222,10 @@ export type ResolvedVimActionBinding = {
   actionId: BindablePromptTransformActionId;
   args: PromptTransform;
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type ResolvedVimActionKeymap = {
@@ -232,6 +245,29 @@ export type ResolvedVimInsertKeymap = {
   moveLineEnd: readonly string[];
 };
 
+export type VimFiniteActionId =
+  | "escape"
+  | `operator.${VimOperatorAction}`
+  | `motion.${VimMotionAction}`
+  | `command.${VimCommandAction}`
+  | `macro.${keyof ResolvedVimMacroKeymap}`
+  | `mark.${keyof ResolvedVimMarkKeymap}`
+  | `insert.${keyof ResolvedVimInsertKeymap}`
+  | `textObject.kind.${VimTextObjectKind}`
+  | `textObject.target.${VimTextObjectTarget}`
+  | BindablePromptTransformActionId;
+
+export type VimScopedKeymapBinding = {
+  actionId: VimFiniteActionId;
+  key: string;
+  modes: readonly VimMappingScope[];
+  args?: Readonly<Record<string, unknown>>;
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
+};
+
 export type ResolvedVimKeymap = {
   leader?: string;
   escape: readonly string[];
@@ -245,6 +281,9 @@ export type ResolvedVimKeymap = {
   insert: ResolvedVimInsertKeymap;
   actions: ResolvedVimActionKeymap;
   remaps: VimKeySequenceRemapOptions;
+  scoped: readonly VimScopedKeymapBinding[];
+  /** Compiler tombstones. Keep scope-local unmaps from erasing sibling grammar. */
+  unmaps: readonly { key: string; modes: readonly VimMappingScope[] }[];
 };
 
 export type VimSearchOptions = {

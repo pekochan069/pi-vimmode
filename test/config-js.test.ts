@@ -1365,14 +1365,15 @@ export default (vim) => {
     }
   });
 
-  test("per-binding protected overrides survive prompt and insert descriptor compilation", async () => {
+  test("per-binding options survive descriptor and replay compilation", async () => {
     const f = fixture();
     try {
       f.write(`
 export default (vim) => {
-  vim.keymap.set("n", "<C-p>", vim.prompt.quote(), { allowProtected: true });
+  vim.keymap.set("n", "<C-p>", vim.prompt.quote(), { allowProtected: true, desc: "Quote" });
   vim.keymap.set("i", "<C-v>", vim.prompt.deleteWordBackward(), { allowProtected: true });
-  vim.keymap.set("n", "<C-t>", vim.prompt.reflow());
+  vim.keymap.set("n", "<C-t>", "j", { allowProtected: true, desc: "Replay down" });
+  vim.keymap.set("n", "<C-g>", vim.prompt.reflow());
 };`);
       const loaded = await loadVimJsConfig(f.path);
       const resolved = resolveVimOptions(undefined, undefined, loaded);
@@ -1383,14 +1384,23 @@ export default (vim) => {
           args: { action: "quote" },
           modes: ["normal"],
           allowProtected: true,
+          desc: "Quote",
         },
       ]);
       expect(resolved.options.keymap?.insert.deleteWordBackward).toContain("ctrl+v");
+      expect(resolved.options.keymap?.remaps.accepted).toContainEqual({
+        key: "ctrl+t",
+        inputs: ["j"],
+        modes: ["normal"],
+        allowProtected: true,
+        desc: "Replay down",
+      });
+      expect(resolved.plan.scopes.normal.exact["ctrl+t"]?.kind).toBe("remap");
       expect(resolved.warnings).toEqual(
-        expect.arrayContaining([expect.stringContaining("protected key ctrl+t")]),
+        expect.arrayContaining([expect.stringContaining("protected key ctrl+g")]),
       );
       expect(resolved.options.keymap?.actions.accepted).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ key: "ctrl+t" })]),
+        expect.arrayContaining([expect.objectContaining({ key: "ctrl+g" })]),
       );
     } finally {
       f.cleanup();

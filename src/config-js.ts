@@ -72,6 +72,8 @@ export type VimJsConfigMapOperation =
       key: string;
       inputs: readonly string[];
       modes: readonly VimActionBindingMode[];
+      allowProtected?: boolean;
+      desc?: string;
     }
   | {
       kind: "command";
@@ -501,7 +503,7 @@ function compileMapping(
     return;
   }
   if (typeof rhs === "string") {
-    recordStringRemap(session, key, rhs, modes);
+    recordStringRemap(session, key, rhs, modes, options);
     return;
   }
   const action = actionDescriptor(rhs);
@@ -519,6 +521,7 @@ function recordStringRemap(
   key: string,
   rhs: string,
   modes: readonly VimMappingScope[],
+  options: MappingOptions,
 ): void {
   const actionModes = modes.filter(
     (mode): mode is VimActionBindingMode =>
@@ -533,7 +536,14 @@ function recordStringRemap(
     session.warning("string rhs must contain supported key syntax");
     return;
   }
-  session.recordMap({ kind: "remap", key, inputs, modes: actionModes });
+  session.recordMap({
+    kind: "remap",
+    key,
+    inputs,
+    modes: actionModes,
+    ...(options.allowProtected ? { allowProtected: true } : {}),
+    ...(options.desc === undefined ? {} : { desc: options.desc }),
+  });
 }
 
 export function isPrintableLeader(value: unknown): value is string {

@@ -167,6 +167,8 @@ export type VimKeySequenceRemap = {
   key: string;
   inputs: readonly string[];
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
   /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
   __sourceOrder?: number;
 };

@@ -819,12 +819,18 @@ function parseActionBindingEntry(
   let rawArgs: unknown;
   let modes: VimActionBindingMode[] | undefined;
   let allowProtected = false;
+  let desc: string | undefined;
   let sourceOrder: number | undefined;
   if (typeof entry === "string") rawKey = entry;
   else if (isRecord(entry)) {
     rawKey = entry.key;
     rawArgs = entry.args;
     allowProtected = entry.allowProtected === true;
+    if (entry.desc !== undefined && typeof entry.desc !== "string") {
+      warnings.push(`${label} contains unsupported action binding description`);
+      return undefined;
+    }
+    desc = entry.desc;
     sourceOrder = typeof entry.__sourceOrder === "number" ? entry.__sourceOrder : undefined;
     if (entry.modes !== undefined) {
       if (!Array.isArray(entry.modes)) {
@@ -877,6 +883,7 @@ function parseActionBindingEntry(
     args: normalized.transform,
     modes,
     ...(allowProtected ? { allowProtected: true } : {}),
+    ...(desc === undefined ? {} : { desc }),
     ...(sourceOrder === undefined ? {} : { __sourceOrder: sourceOrder }),
   };
 }
@@ -2808,6 +2815,8 @@ function partialFromJsOperations(operations: readonly VimJsConfigOperation[]): V
         key: mapping.key,
         inputs: mapping.inputs,
         modes: mapping.modes,
+        allowProtected: mapping.allowProtected,
+        desc: mapping.desc,
         __sourceOrder: sourceOrder,
       },
     ];

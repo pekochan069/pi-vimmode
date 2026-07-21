@@ -8,7 +8,7 @@ import {
   type VimConfigLoadResult,
   type VimConfigPaths,
 } from "./config.ts";
-import { VimEditor } from "./vim-editor.ts";
+import { type ResetTerminalCursorStyleOptions, VimEditor } from "./vim-editor.ts";
 
 type VimEditorFactory = (
   tui: ConstructorParameters<typeof VimEditor>[0],
@@ -145,8 +145,8 @@ export function registerVimLifecycle(
     for (const editor of editors) editor.setAgentBusy(active);
   };
 
-  const resetKnownEditors = () => {
-    for (const editor of editors) editor.resetTerminalCursorStyle();
+  const resetKnownEditors = (options?: ResetTerminalCursorStyleOptions) => {
+    for (const editor of editors) editor.resetTerminalCursorStyle(options);
     editors.clear();
   };
 
@@ -211,8 +211,8 @@ export function registerVimLifecycle(
     void installEditor(ctx);
   });
 
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", (event) => {
     agentBusy = false;
-    resetKnownEditors();
+    resetKnownEditors({ restoreHardwareCursorVisibility: event.reason !== "quit" });
   });
 }

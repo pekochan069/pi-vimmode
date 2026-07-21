@@ -49,6 +49,7 @@ import {
   keymapForOptions,
   macrosForOptions,
   marksForOptions,
+  type VimConfigPlan,
 } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
 import { appendMappingToken } from "../mapping-scopes.ts";
@@ -252,26 +253,13 @@ function handleEasymotionInput(
 ): ModalUpdate {
   const key = keySequence(data);
   if (!key || matchesKey(data, "escape")) {
-    const { pendingEasymotion, ...rest } = state;
-    if (pendingEasymotion?.kind === "highlight") {
-      return withEffects(rest, [
-        {
-          type: "edit",
-          result: {
-            text: pendingEasymotion.originalText,
-            cursor: snapshot.cursor,
-            changed: true,
-          },
-        },
-        { type: "invalidate" },
-      ]);
-    }
+    const { pendingEasymotion: _, ...rest } = state;
     return invalidate(rest);
   }
 
   if (state.pendingEasymotion?.kind === "char") {
     // Transition to highlight state with case-insensitive matching
-    const targets: { label: string; line: number; character: number; original: string }[] = [];
+    const targets: { label: string; line: number; character: number }[] = [];
     const lines = snapshot.text.split("\n");
     const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
     let count = 0;
@@ -285,8 +273,7 @@ function handleEasymotionInput(
       while (pos !== -1 && count < labels.length) {
         const label = labels[count];
         if (label === undefined) break;
-        const original = line[pos] ?? key;
-        targets.push({ label, line: i, character: pos, original });
+        targets.push({ label, line: i, character: pos });
         count++;
         pos = line.toLowerCase().indexOf(targetChar, pos + 1);
       }
@@ -297,46 +284,19 @@ function handleEasymotionInput(
       return invalidate(rest);
     }
 
-    // Build text with address characters replacing matched characters
-    const nextLines = [...snapshot.lines];
-    for (const target of targets) {
-      const line = nextLines[target.line];
-      if (line === undefined) continue;
-      nextLines[target.line] =
-        line.slice(0, target.character) + target.label + line.slice(target.character + 1);
-    }
-    const nextText = nextLines.join("\n");
-
-    return withEffects(
-      {
-        ...state,
-        pendingEasymotion: { kind: "highlight", targets, originalText: snapshot.text },
-      },
-      [
-        {
-          type: "edit",
-          result: { text: nextText, cursor: snapshot.cursor, changed: nextText !== snapshot.text },
-        },
-      ],
-    );
+    return invalidate({
+      ...state,
+      pendingEasymotion: { kind: "highlight", targets },
+    });
   }
 
   if (state.pendingEasymotion?.kind === "highlight") {
-    // Address character input: jump to target and restore that character
+    // Address character input: jump to target.
     const target = state.pendingEasymotion.targets.find((t) => t.label === key);
 
     if (target) {
       const { pendingEasymotion: _, ...rest } = state;
-      // Restore full original text then place cursor on the target
       return withEffects(rest, [
-        {
-          type: "edit",
-          result: {
-            text: state.pendingEasymotion.originalText,
-            cursor: snapshot.cursor,
-            changed: true,
-          },
-        },
         { type: "restoreCursor", position: { line: target.line, col: target.character } },
         { type: "invalidate" },
       ]);
@@ -707,11 +667,83 @@ function applyNormalResolution(
   return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
 }
 
+function scopedInputSequence(
+  state: ModalState,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scope: VimActionBindingMode,
+  lookup?: VimConfigPlan["scopes"][VimActionBindingMode],
+) {
+  const sequence = appendMappingToken(
+    state.pending ?? "",
+    key,
+    keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
+  );
+  return { sequence, match: scopedKeymapSequenceFor(keymap, sequence, scope, lookup) };
+}
+
+function handleNormalScopedInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scopes?: VimConfigPlan["scopes"],
+): ModalUpdate | undefined {
+  const { sequence, match } = scopedInputSequence(state, key, keymap, "normal", scopes?.normal);
+  if (
+    state.pendingMacro ||
+    state.pendingMark ||
+    state.pendingRegister ||
+    (!match.exact && !match.isPrefix)
+  )
+    return;
+  if (!match.exact) return invalidate({ ...state, pending: sequence });
+  if (match.exact.actionId.startsWith("macro.") || match.exact.actionId.startsWith("mark.")) {
+    const handled = handleNormalMacroOrMark(
+      { ...state, pending: undefined },
+      snapshot,
+      options,
+      keymap,
+      sequence,
+    );
+    if (handled) return handled;
+  }
+  return applyNormalResolution(
+    state,
+    snapshot,
+    options,
+    keymap,
+    sequence,
+    resolveNormalCommand(sequence, undefined, keymap, "normal"),
+  );
+}
+
+function handlePendingTargetInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  startsLeader: boolean,
+): ModalUpdate | undefined {
+  if (state.pendingRegister === "awaitingSlot") {
+    const target = registerTargetForKey(key);
+    return invalidate(
+      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
+    );
+  }
+  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
+  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
+    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
+  }
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
   if (matchesKey(data, "escape")) {
     const nextState = clearPending(state);
@@ -745,53 +777,13 @@ function handleNormalInput(
     }
   }
 
-  const scopedSequence = appendMappingToken(
-    state.pending ?? "",
-    key,
-    keymap.scoped
-      .filter((binding) => binding.modes.includes("normal"))
-      .map((binding) => binding.key),
-  );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, "normal");
-  if (
-    !state.pendingMacro &&
-    !state.pendingMark &&
-    !state.pendingRegister &&
-    (scoped.exact || scoped.isPrefix)
-  ) {
-    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
-    if (scoped.exact.actionId.startsWith("macro.") || scoped.exact.actionId.startsWith("mark.")) {
-      const handled = handleNormalMacroOrMark(
-        { ...state, pending: undefined },
-        snapshot,
-        options,
-        keymap,
-        scopedSequence,
-      );
-      if (handled) return handled;
-    }
-    return applyNormalResolution(
-      state,
-      snapshot,
-      options,
-      keymap,
-      scopedSequence,
-      resolveNormalCommand(scopedSequence, undefined, keymap, "normal"),
-    );
-  }
+  const scopedUpdate = handleNormalScopedInput(state, snapshot, options, key, keymap, scopes);
+  if (scopedUpdate) return scopedUpdate;
 
-  if (state.pendingRegister === "awaitingSlot") {
-    const target = registerTargetForKey(key);
-    return invalidate(
-      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
-    );
-  }
-  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
-    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
-  }
+  const pendingTargetUpdate = handlePendingTargetInput(state, snapshot, options, key, startsLeader);
+  if (pendingTargetUpdate) return pendingTargetUpdate;
 
   if (!state.pending && !state.pendingRegister && !startsLeader) {
     const macroOrMark = handleNormalMacroOrMark(state, snapshot, options, keymap, key);
@@ -916,24 +908,56 @@ function applyVisualResolution(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
+function handleVisualScopedInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  scope: VimActionBindingMode,
+  scopes?: VimConfigPlan["scopes"],
+): ModalUpdate | undefined {
+  const { sequence, match } = scopedInputSequence(state, key, keymap, scope, scopes?.[scope]);
+  if (state.pendingMark || state.pendingRegister || (!match.exact && !match.isPrefix)) return;
+  if (!match.exact) return invalidate({ ...state, pending: sequence });
+  return applyVisualResolution(
+    state,
+    snapshot,
+    options,
+    keymap,
+    resolveNormalCommand(sequence, undefined, keymap, scope),
+  );
+}
+
+function handleVisualEscapeInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate | undefined {
+  if (matchesKey(data, "escape"))
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
+  const match = matchInsertEscapeInput(
+    state,
+    data,
+    escapeAliasesForScope(options, state.mode as "visual" | "visualLine" | "visualBlock"),
+  );
+  if (match.kind === "matched")
+    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
+  if (match.kind === "pending")
+    return withEffects(pendingInsertEscape(state, match.sequence, data), []);
+  if (match.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
+}
+
 function handleVisualInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   data: string,
+  scopes?: VimConfigPlan["scopes"],
 ): ModalUpdate {
-  if (matchesKey(data, "escape"))
-    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
-  const escapeMatch = matchInsertEscapeInput(
-    state,
-    data,
-    escapeAliasesForScope(options, state.mode as "visual" | "visualLine" | "visualBlock"),
-  );
-  if (escapeMatch.kind === "matched")
-    return captureBeforeVisualExit(state, snapshot, modeUpdate(state, "normal", options));
-  if (escapeMatch.kind === "pending")
-    return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
-  if (escapeMatch.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
+  const escapeUpdate = handleVisualEscapeInput(state, snapshot, options, data);
+  if (escapeUpdate) return escapeUpdate;
   if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
   const key = keySequence(data);
   if (!key) return delegate(state, data);
@@ -946,35 +970,21 @@ function handleVisualInput(
   }
 
   const scope = state.mode as VimActionBindingMode;
-  const scopedSequence = appendMappingToken(
-    state.pending ?? "",
+  const scopedUpdate = handleVisualScopedInput(
+    state,
+    snapshot,
+    options,
     key,
-    keymap.scoped.filter((binding) => binding.modes.includes(scope)).map((binding) => binding.key),
+    keymap,
+    scope,
+    scopes,
   );
-  const scoped = scopedKeymapSequenceFor(keymap, scopedSequence, scope);
-  if (!state.pendingMark && !state.pendingRegister && (scoped.exact || scoped.isPrefix)) {
-    if (!scoped.exact) return invalidate({ ...state, pending: scopedSequence });
-    return applyVisualResolution(
-      state,
-      snapshot,
-      options,
-      keymap,
-      resolveNormalCommand(scopedSequence, undefined, keymap, state.mode as VimActionBindingMode),
-    );
-  }
+  if (scopedUpdate) return scopedUpdate;
 
-  if (state.pendingRegister === "awaitingSlot") {
-    const target = registerTargetForKey(key);
-    return invalidate(
-      target ? { ...clearCommandPending(state), pendingRegister: target } : clearPending(state),
-    );
-  }
-  if (state.pendingMark) return handlePendingMarkTarget(state, snapshot, options, key);
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
-  if (!state.pending && !startsLeader && isRegisterPrefixKey(key)) {
-    return invalidate({ ...clearPending(state), pendingRegister: "awaitingSlot" });
-  }
+  const pendingTargetUpdate = handlePendingTargetInput(state, snapshot, options, key, startsLeader);
+  if (pendingTargetUpdate) return pendingTargetUpdate;
   if (!state.pending && !state.pendingRegister && !startsLeader && key === "u") {
     return transformVisualSelection(
       state,
@@ -1059,10 +1069,11 @@ function handleHelpPopupInput(state: ModalState, options: ModalOptions, data: st
 function routeModalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
-  options: ModalOptions,
+  plan: VimConfigPlan,
   data: string,
   diagnostics: VimDiagnostics,
 ): ModalUpdate {
+  const { options, scopes } = plan;
   const routedState = state.exMessage && !state.pendingEx ? clearExMessage(state) : state;
   if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
 
@@ -1080,9 +1091,9 @@ function routeModalInput(
     routedState.mode === "visualLine" ||
     routedState.mode === "visualBlock"
   ) {
-    return handleVisualInput(routedState, snapshot, options, data);
+    return handleVisualInput(routedState, snapshot, options, data, scopes);
   }
-  return handleNormalInput(routedState, snapshot, options, data);
+  return handleNormalInput(routedState, snapshot, options, data, scopes);
 }
 
 export function modalPendingDisplay(state: ModalState): string | undefined {
@@ -1104,12 +1115,12 @@ export function modalPendingDisplay(state: ModalState): string | undefined {
 export function handleModalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
-  options: ModalOptions,
+  plan: VimConfigPlan,
   data: string,
-  diagnostics: VimDiagnostics = { warnings: [] },
+  diagnostics: VimDiagnostics = plan.diagnostics,
 ): ModalUpdate {
-  const update = routeModalInput(state, snapshot, options, data, diagnostics);
-  if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, options, data))
+  const update = routeModalInput(state, snapshot, plan, data, diagnostics);
+  if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, plan.options, data))
     return update;
   return {
     ...update,

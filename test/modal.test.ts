@@ -1,12 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { ResolvedVimEditorOptions } from "../src/types.ts";
 
-import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
+import {
+  createVimConfigPlan,
+  DEFAULT_VIM_KEYMAP,
+  resolveVimOptions,
+  type VimConfigPlan,
+} from "../src/config.ts";
 import { encodeMappingTokens } from "../src/mapping-scopes.ts";
-import { canFastDelegateInsertInput, handleModalInput } from "../src/modal/engine.ts";
+import {
+  canFastDelegateInsertInput,
+  handleModalInput as handleModalInputWithPlan,
+} from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
+import { handleModalInputWithOptions as handleModalInput } from "./modal-test-helper.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 const cursor = { line: 0, col: 0 };
@@ -41,22 +51,22 @@ function applyModalKeys(
   initialText: string,
   initialCursor: { line: number; col: number },
   keys: readonly string[],
-  modalOptions: ModalOptions = options,
+  configuration: ModalOptions | VimConfigPlan = options,
   terminalRows?: number,
 ) {
   let state = initialState;
   let text = initialText;
   let cursor = initialCursor;
+  const plan = "scopes" in configuration ? configuration : undefined;
+  const modalOptions = "scopes" in configuration ? configuration.options : configuration;
 
   const effects: ModalEffect[] = [];
 
   for (const key of keys) {
-    const update = handleModalInput(
-      state,
-      { text, lines: text.split("\n"), cursor, terminalRows },
-      modalOptions,
-      key,
-    );
+    const editorSnapshot = { text, lines: text.split("\n"), cursor, terminalRows };
+    const update = plan
+      ? handleModalInputWithPlan(state, editorSnapshot, plan, key)
+      : handleModalInput(state, editorSnapshot, modalOptions, key);
     state = update.state;
     effects.push(...update.effects);
     for (const effect of update.effects) {
@@ -2549,13 +2559,11 @@ describe("Ex command-line modal behavior", () => {
       },
     };
 
-    const result = applyModalKeys(
-      { mode: "normal" },
-      "hello",
-      p(0, 0),
-      [",", "u"],
-      conflictingOptions,
-    );
+    const actionPlan = createVimConfigPlan(actionOptions, []);
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), [",", "u"], {
+      ...actionPlan,
+      options: conflictingOptions as ResolvedVimEditorOptions,
+    });
 
     expect(result.text).toBe("> hello");
     expect(result.effects.some((effect) => effect.type === "playMacro")).toBe(false);

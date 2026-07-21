@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import type { EditorSnapshot, ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 
 import { DEFAULT_VIM_KEYMAP, DEFAULT_VIM_OPTIONS } from "../src/config.ts";
-import { handleModalInput } from "../src/modal/engine.ts";
+import { handleModalInputWithOptions as handleModalInput } from "./modal-test-helper.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 const options: ModalOptions = {
@@ -38,7 +38,7 @@ function runGolden(
   const effects: unknown[] = [];
 
   for (const key of keys) {
-    const snapshot: EditorSnapshot = {
+    const snapshot = {
       text: currentText,
       lines: currentText.split("\n"),
       cursor: currentCursor,

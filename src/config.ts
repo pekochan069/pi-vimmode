@@ -25,6 +25,7 @@ import type {
   VimCommandAction,
   VimEditorOptions,
   ResolvedVimEditorOptions,
+  VimDiagnostics,
   VimFeedbackOptions,
   VimMode,
   VimMotionAction,
@@ -407,6 +408,11 @@ export type VimConfigPlan = {
   readonly options: ResolvedVimEditorOptions;
   readonly diagnostics: { readonly warnings: readonly string[] };
   readonly scopes: Readonly<Record<VimMappingScope, VimScopeLookup>>;
+};
+
+export type VimRuntimeConfiguration = {
+  readonly plan: VimConfigPlan;
+  readonly diagnostics: VimDiagnostics;
 };
 
 export type VimConfigLoadResult = {

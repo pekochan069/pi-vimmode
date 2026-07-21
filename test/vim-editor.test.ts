@@ -5,7 +5,13 @@ import type { ModalState } from "../src/modal/types.ts";
 import type { ResolvedVimEditorOptions, VimDiagnostics, VimMode } from "../src/types.ts";
 
 import { setClipboardTextReaderForTesting } from "../src/clipboard.ts";
-import { createVimConfigPlan, DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
+import {
+  createVimConfigPlan,
+  DEFAULT_VIM_OPTIONS,
+  resolveVimOptions,
+  type VimConfigPlan,
+  type VimRuntimeConfiguration,
+} from "../src/config.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
@@ -19,6 +25,19 @@ function ctrlVVisualBlockOptions(startMode: "insert" | "normal" = "insert") {
       },
     },
   }).options;
+}
+
+function runtimeConfiguration(
+  planOrOptions: VimConfigPlan | ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
+  diagnostics: VimDiagnostics = { warnings: [] },
+): VimRuntimeConfiguration {
+  return {
+    plan:
+      "scopes" in planOrOptions
+        ? planOrOptions
+        : createVimConfigPlan(planOrOptions, diagnostics.warnings),
+    diagnostics,
+  };
 }
 
 function createEditor(
@@ -94,7 +113,13 @@ function createEditor(
     },
   } as any;
   return {
-    editor: new VimEditor(tui, theme, keybindings, options, diagnostics, vimOptions),
+    editor: new VimEditor(
+      tui,
+      theme,
+      keybindings,
+      runtimeConfiguration(options, diagnostics),
+      vimOptions,
+    ),
     writes,
     hardwareCursorChanges,
     overlays,
@@ -310,7 +335,9 @@ describe("vim editor integration", () => {
     editor.handleInput("d");
     expect(editor.getPendingOperator()).toBe("d");
 
-    editor.reconfigure(createVimConfigPlan(options, []), { warnings: ["reloaded"] });
+    editor.reconfigure(
+      runtimeConfiguration(createVimConfigPlan(options, []), { warnings: ["reloaded"] }),
+    );
     expectEditorState(editor, { text: "one\ntwo", mode: "normal", pending: undefined });
     typeKeys(editor, ["g", "g", ",", "k"]);
 
@@ -375,7 +402,7 @@ describe("vim editor integration", () => {
       [],
     );
 
-    editor.reconfigure(plan, { warnings: ["reloaded"] });
+    editor.reconfigure(runtimeConfiguration(plan, { warnings: ["reloaded"] }));
 
     expectEditorState(editor, { text: "one\ntwo", cursor: beforeCursor, mode: "visual" });
     expect(internal.modalState).toMatchObject({
@@ -419,7 +446,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["G", "$"]);
     editor.setText("x");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(runtimeConfiguration());
 
     expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
   });
@@ -436,7 +463,7 @@ describe("vim editor integration", () => {
     };
     editor.setText("Xane");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(runtimeConfiguration());
     expect(editor.getText()).toBe("Xone");
     editor.handleInput("u");
 
@@ -449,7 +476,7 @@ describe("vim editor integration", () => {
     typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);
     expect(editor.getText()).toBe("draft");
 
-    editor.reconfigure(createVimConfigPlan(DEFAULT_VIM_OPTIONS, []), { warnings: [] });
+    editor.reconfigure(runtimeConfiguration());
     editor.handleInput("\x12");
 
     expect(editor.getText()).toBe("xdraft");

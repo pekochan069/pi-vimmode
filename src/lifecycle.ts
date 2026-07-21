@@ -1,6 +1,6 @@
 import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import type { ResolvedVimEditorOptions, VimDiagnostics } from "./types.ts";
+import type { ResolvedVimEditorOptions } from "./types.ts";
 
 import {
   createVimConfigPlan,
@@ -8,7 +8,7 @@ import {
   loadVimOptions,
   type VimConfigLoadResult,
   type VimConfigPaths,
-  type VimConfigPlan,
+  type VimRuntimeConfiguration,
 } from "./config.ts";
 import { type ResetTerminalCursorStyleOptions, VimEditor } from "./vim-editor.ts";
 
@@ -30,8 +30,7 @@ type CreateEditor = (
   tui: ConstructorParameters<typeof VimEditor>[0],
   theme: ConstructorParameters<typeof VimEditor>[1],
   keybindings: ConstructorParameters<typeof VimEditor>[2],
-  plan: VimConfigPlan,
-  diagnostics: VimDiagnostics,
+  configuration: VimRuntimeConfiguration,
   vimOptions?: { onShutdown?: () => void },
 ) => TrackedEditor;
 type Schedule = (callback: () => void) => void;
@@ -44,43 +43,53 @@ export type VimLifecycleDependencies = {
 };
 
 type ConfigState = {
-  plan: () => VimConfigPlan;
-  diagnostics: () => VimDiagnostics;
+  configuration: () => VimRuntimeConfiguration;
   refresh: (ctx: ExtensionContext) => boolean | Promise<boolean>;
 };
 
-function serializeConfig(plan: VimConfigPlan, diagnostics: VimDiagnostics): string {
-  return JSON.stringify([plan.options, plan.scopes, diagnostics]);
+function serializeConfig(configuration: VimRuntimeConfiguration): string {
+  return JSON.stringify([
+    configuration.plan.options,
+    configuration.plan.scopes,
+    configuration.diagnostics,
+  ]);
 }
 
 function createConfigState(
   dependencies: VimLifecycleDependencies,
-  onUpdate: (plan: VimConfigPlan | undefined, diagnostics: VimDiagnostics) => void,
+  onUpdate: (configuration: VimRuntimeConfiguration, committed: boolean) => void,
 ): ConfigState {
-  let currentPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
-  let currentDiagnostics: VimDiagnostics = currentPlan.diagnostics;
+  const initialPlan = createVimConfigPlan(dependencies.defaultOptions ?? DEFAULT_VIM_OPTIONS, []);
+  let currentConfiguration: VimRuntimeConfiguration = {
+    plan: initialPlan,
+    diagnostics: initialPlan.diagnostics,
+  };
   let hasCommittedLoad = false;
   let refreshGeneration = 0;
   const loadOptions = dependencies.loadOptions ?? loadVimOptions;
 
   const apply = (ctx: ExtensionContext, loaded: VimConfigLoadResult) => {
-    const previousConfig = serializeConfig(currentPlan, currentDiagnostics);
+    const previousConfig = serializeConfig(currentConfiguration);
     const committed = !loaded.fatal || !hasCommittedLoad;
-    if (committed) {
-      currentPlan = loaded.plan;
-      hasCommittedLoad = true;
-    }
-    currentDiagnostics = loaded.fatal ? loaded.plan.diagnostics : currentPlan.diagnostics;
-    const configChanged = serializeConfig(currentPlan, currentDiagnostics) !== previousConfig;
-    if (configChanged) onUpdate(committed ? currentPlan : undefined, currentDiagnostics);
-    ctx.ui.setStatus("pi-vimmode", currentDiagnostics.warnings.length > 0 ? "vim ⚠" : "vim");
+    const plan = committed ? loaded.plan : currentConfiguration.plan;
+    if (committed) hasCommittedLoad = true;
+    currentConfiguration = {
+      plan,
+      diagnostics: loaded.fatal ? loaded.plan.diagnostics : plan.diagnostics,
+    };
+    const configChanged = serializeConfig(currentConfiguration) !== previousConfig;
+    if (configChanged) onUpdate(currentConfiguration, committed);
+    ctx.ui.setStatus(
+      "pi-vimmode",
+      currentConfiguration.diagnostics.warnings.length > 0 ? "vim ⚠" : "vim",
+    );
   };
   const applyFailure = (ctx: ExtensionContext, error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     const warnings = [`global JS config: failed to load (${message})`];
     apply(ctx, {
-      plan: createVimConfigPlan(currentPlan.options, warnings),
-      options: currentPlan.options,
+      plan: createVimConfigPlan(currentConfiguration.plan.options, warnings),
+      options: currentConfiguration.plan.options,
       warnings,
       fatal: true,
     });
@@ -111,8 +120,7 @@ function createConfigState(
   };
 
   return {
-    plan: () => currentPlan,
-    diagnostics: () => currentDiagnostics,
+    configuration: () => currentConfiguration,
     refresh,
   };
 }
@@ -177,19 +185,19 @@ function resetKnownEditors(state: EditorState, options?: ResetTerminalCursorStyl
 
 function createEditorState(dependencies: VimLifecycleDependencies): EditorState {
   let state: EditorState;
-  const config = createConfigState(dependencies, (plan, diagnostics) => {
+  const config = createConfigState(dependencies, (configuration, committed) => {
     if (!state?.enabled) return;
     for (const editor of state.editors) {
-      if (plan) editor.reconfigure(plan, diagnostics);
-      else editor.updateDiagnostics(diagnostics);
+      if (committed) editor.reconfigure(configuration);
+      else editor.updateDiagnostics(configuration.diagnostics);
     }
   });
   state = {
     config,
     createEditor:
       dependencies.createEditor ??
-      ((tui, theme, keybindings, plan, diagnostics, vimOptions) =>
-        new VimEditor(tui, theme, keybindings, plan, diagnostics, vimOptions)),
+      ((tui, theme, keybindings, configuration, vimOptions) =>
+        new VimEditor(tui, theme, keybindings, configuration, vimOptions)),
     schedule: dependencies.schedule ?? ((callback) => setTimeout(callback, 0)),
     editors: new Set<TrackedEditor>(),
     editorFactory: undefined as unknown as VimEditorFactory,
@@ -198,14 +206,9 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
     hasInstalledFactory: false,
   };
   state.editorFactory = (tui, theme, keybindings) => {
-    const editor = state.createEditor(
-      tui,
-      theme,
-      keybindings,
-      state.config.plan(),
-      state.config.diagnostics(),
-      { onShutdown: state.currentShutdown },
-    );
+    const editor = state.createEditor(tui, theme, keybindings, state.config.configuration(), {
+      onShutdown: state.currentShutdown,
+    });
     state.editors.add(editor);
     if (state.agentBusy) editor.setAgentBusy(true);
     return editor as VimEditor;

@@ -8,6 +8,7 @@ import {
   resolveVimOptions,
   type VimConfigLoadResult,
   type VimConfigPlan,
+  type VimRuntimeConfiguration,
 } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
 
@@ -48,11 +49,11 @@ type FakeEditor = {
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
-  reconfigureCalls: Array<[VimConfigPlan, VimDiagnostics]>;
+  reconfigureCalls: VimRuntimeConfiguration[];
   diagnosticsCalls: VimDiagnostics[];
   resetCount: number;
   resetOptions: Array<{ restoreHardwareCursorVisibility?: boolean } | undefined>;
-  reconfigure: (plan: VimConfigPlan, diagnostics: VimDiagnostics) => void;
+  reconfigure: (configuration: VimRuntimeConfiguration) => void;
   updateDiagnostics: (diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: (options?: { restoreHardwareCursorVisibility?: boolean }) => void;
   setAgentBusy: (active: boolean) => void;
@@ -90,21 +91,21 @@ function createContext(cwd = "/workspace"): FakeContext {
   return ctx;
 }
 
-function createFakeEditor(plan: VimConfigPlan, diagnostics: VimDiagnostics): FakeEditor {
+function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
   const editor: FakeEditor = {
-    plan,
-    options: plan.options,
-    diagnostics,
+    plan: configuration.plan,
+    options: configuration.plan.options,
+    diagnostics: configuration.diagnostics,
     busyCalls: [],
     reconfigureCalls: [],
     diagnosticsCalls: [],
     resetCount: 0,
     resetOptions: [],
-    reconfigure: (nextPlan, nextDiagnostics) => {
-      editor.plan = nextPlan;
-      editor.options = nextPlan.options;
-      editor.diagnostics = nextDiagnostics;
-      editor.reconfigureCalls.push([nextPlan, nextDiagnostics]);
+    reconfigure: (nextConfiguration) => {
+      editor.plan = nextConfiguration.plan;
+      editor.options = nextConfiguration.plan.options;
+      editor.diagnostics = nextConfiguration.diagnostics;
+      editor.reconfigureCalls.push(nextConfiguration);
     },
     updateDiagnostics: (nextDiagnostics) => {
       editor.diagnostics = nextDiagnostics;
@@ -171,9 +172,9 @@ function createLifecycleHarness(
       }
       return asyncLoads.has(load) ? Promise.resolve(result) : result;
     },
-    createEditor: (_tui, _theme, _keybindings, plan, diagnostics, vimOptions) => {
+    createEditor: (_tui, _theme, _keybindings, configuration, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
-      const editor = createFakeEditor(plan, diagnostics);
+      const editor = createFakeEditor(configuration);
       createdEditors.push(editor);
       return editor;
     },
@@ -484,7 +485,9 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([
+      { plan: newestPlan, diagnostics: { warnings: [] } },
+    ]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
     ctx.ui.component?.({}, {}, {});
     expect(createdEditors[1]?.plan).toBe(newestPlan);
@@ -527,7 +530,9 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]?.reconfigureCalls).toEqual([[newestPlan, { warnings: [] }]]);
+    expect(createdEditors[0]?.reconfigureCalls).toEqual([
+      { plan: newestPlan, diagnostics: { warnings: [] } },
+    ]);
     expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
   });
 
@@ -564,7 +569,9 @@ describe("vim extension lifecycle", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(createdEditors[0]!.reconfigureCalls).toEqual([[lookupOnlyPlan, { warnings: [] }]]);
+    expect(createdEditors[0]!.reconfigureCalls).toEqual([
+      { plan: lookupOnlyPlan, diagnostics: { warnings: [] } },
+    ]);
   });
 
   test("stale async refresh cannot install into an older context", async () => {

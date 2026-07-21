@@ -42,7 +42,7 @@ import {
   searchForOptions,
   uiForOptions,
   easymotionForOptions,
-  type VimConfigPlan,
+  type VimRuntimeConfiguration,
 } from "./config.ts";
 import { suggestExCommands } from "./ex.ts";
 import {
@@ -230,7 +230,7 @@ export type ResetTerminalCursorStyleOptions = {
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private configuration: { plan: VimConfigPlan; diagnostics: VimDiagnostics };
+  private configuration: VimRuntimeConfiguration;
   private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
@@ -245,16 +245,15 @@ export class VimEditor extends CustomEditor {
     tui: TUI,
     theme: EditorTheme,
     keybindings: KeybindingsManager,
-    planOrOptions: VimConfigPlan | ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
-    diagnostics: VimDiagnostics = { warnings: [] },
+    configuration?: VimRuntimeConfiguration,
     vimOptions?: VimEditorOptions,
   ) {
     super(tui, theme, keybindings);
-    const plan =
-      "scopes" in planOrOptions
-        ? planOrOptions
-        : createVimConfigPlan(planOrOptions, diagnostics.warnings);
-    this.configuration = { plan, diagnostics: { warnings: [...diagnostics.warnings] } };
+    const plan = configuration?.plan ?? createVimConfigPlan(DEFAULT_VIM_OPTIONS, []);
+    this.configuration = {
+      plan,
+      diagnostics: { warnings: [...(configuration?.diagnostics.warnings ?? [])] },
+    };
     this.overlayTheme = theme;
     this.onShutdown = vimOptions?.onShutdown;
     this.modalState = createModalState(this.options.startMode);
@@ -298,8 +297,11 @@ export class VimEditor extends CustomEditor {
     return cursorStyleForMode(this.options, this.modalState.mode);
   }
 
-  reconfigure(plan: VimConfigPlan, diagnostics: VimDiagnostics): void {
-    this.configuration = { plan, diagnostics: { warnings: [...diagnostics.warnings] } };
+  reconfigure(configuration: VimRuntimeConfiguration): void {
+    this.configuration = {
+      plan: configuration.plan,
+      diagnostics: { warnings: [...configuration.diagnostics.warnings] },
+    };
     const { recordingSlot: _recordingSlot, ...reset } = resetTransientState(
       this.modalState,
       this.modalState.mode,
@@ -359,10 +361,9 @@ export class VimEditor extends CustomEditor {
     const update = handleModalInput(
       this.modalState,
       this.snapshot(),
-      this.options,
+      this.configuration.plan,
       data,
       this.diagnostics,
-      this.configuration.plan.scopes,
     );
     this.modalState = update.state;
     this.applyEffects(update.effects);

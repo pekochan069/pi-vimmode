@@ -9,8 +9,14 @@ export const REQUIRED_PACKAGE_FILES = [
   "package.json",
   "LICENSE",
   "README.md",
+  "docs/config.md",
   "docs/features.md",
   "docs/settings.md",
+  "examples/pi-vimmode.config.js",
+  "examples/keymaps.config.js",
+  "examples/async.config.js",
+  "examples/imported-preset.config.js",
+  "examples/presets/markdown.js",
 ] as const;
 
 const FORBIDDEN_PACKAGE_PREFIXES = ["benchmark", "corpus", "profile", "result"];
@@ -65,7 +71,9 @@ export async function verifyPackageInventory(
     ? manifest.files.filter((file): file is string => typeof file === "string")
     : [];
   const manifestMissing = REQUIRED_PACKAGE_FILES.filter(
-    (file) => file !== "package.json" && !manifestFiles.includes(file),
+    (file) =>
+      file !== "package.json" &&
+      !manifestFiles.some((entry) => file === entry || file.startsWith(`${entry}/`)),
   );
   const manifestForbidden = manifestFiles.filter((file) =>
     file
@@ -184,7 +192,10 @@ const TYPE_CONSUMER = `import type {
   VimConfigApi,
   VimActionDescriptor,
 } from "pi-vimmode/config";
-import example from "./basic.config.js";
+import basicExample from "./examples/pi-vimmode.config.js";
+import keymapExample from "./examples/keymaps.config.js";
+import asyncExample from "./examples/async.config.js";
+import importedPresetExample from "./examples/imported-preset.config.js";
 
 const helper = (vim: VimConfigApi): void => {
   vim.preset = "prompt-safe";
@@ -203,10 +214,15 @@ const asyncConfig: VimConfig = async (vim) => {
   helper(vim);
   vim.prompt.fence({ language: "ts" });
 };
-const checkedExample: VimConfig = example;
+const checkedExamples: VimConfig[] = [
+  basicExample,
+  keymapExample,
+  asyncExample,
+  importedPresetExample,
+];
 void syncConfig;
 void asyncConfig;
-void checkedExample;
+void checkedExamples;
 `;
 
 async function verifyPackageTypesForMode(
@@ -216,10 +232,7 @@ async function verifyPackageTypesForMode(
   moduleResolution: "Bundler" | "NodeNext",
   repositoryRoot: string,
 ): Promise<void> {
-  await symlink(
-    join(repositoryRoot, "examples/pi-vimmode.config.js"),
-    join(cwd, "basic.config.js"),
-  );
+  await symlink(join(cwd, "node_modules/pi-vimmode/examples"), join(cwd, "examples"));
   await writeFile(join(cwd, "consumer.ts"), TYPE_CONSUMER);
   await writeFile(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
   await writeFile(
@@ -235,7 +248,14 @@ async function verifyPackageTypesForMode(
         checkJs: true,
         skipLibCheck: true,
       },
-      files: ["consumer.ts", "basic.config.js"],
+      files: [
+        "consumer.ts",
+        "examples/pi-vimmode.config.js",
+        "examples/keymaps.config.js",
+        "examples/async.config.js",
+        "examples/imported-preset.config.js",
+        "examples/presets/markdown.js",
+      ],
     }),
   );
   await run([

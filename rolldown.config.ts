@@ -12,7 +12,14 @@ const piCorePackages = [
   "typebox",
 ];
 const distDir = "dist";
-const distDocs = ["docs/features.md", "docs/settings.md"];
+const distDocs = ["docs/config.md", "docs/features.md", "docs/settings.md"];
+const distExamples = [
+  "examples/pi-vimmode.config.js",
+  "examples/keymaps.config.js",
+  "examples/async.config.js",
+  "examples/imported-preset.config.js",
+  "examples/presets/markdown.js",
+];
 
 const isExternal = (id: string) =>
   nodeBuiltins.has(id) || piCorePackages.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
@@ -36,9 +43,8 @@ export default defineConfig({
     {
       name: "dist-package-files",
       async writeBundle() {
-        const docsDir = join(distDir, "docs");
-        if (!existsSync(docsDir)) {
-          await this.fs.mkdir(docsDir, { recursive: true });
+        for (const directory of [join(distDir, "docs"), join(distDir, "examples/presets")]) {
+          if (!existsSync(directory)) await this.fs.mkdir(directory, { recursive: true });
         }
 
         const packageJson = await JSON.parse(
@@ -61,8 +67,10 @@ export default defineConfig({
           "config.d.ts",
           "README.md",
           "LICENSE",
+          "docs/config.md",
           "docs/features.md",
           "docs/settings.md",
+          "examples",
         ];
         packageJson.pi = { extensions: ["./index.js"] };
 
@@ -74,7 +82,8 @@ export default defineConfig({
           this.fs.copyFile("README.md", join(distDir, "README.md")),
           this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
           this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
-          distDocs.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
+          ...distDocs.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
+          ...distExamples.map((example) => this.fs.copyFile(example, join(distDir, example))),
         ]);
       },
     },

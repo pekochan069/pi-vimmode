@@ -19,7 +19,7 @@
 
 - [ ] 4.1 Implement [#41](https://github.com/pekochan069/pi-vimmode/issues/41): publish declaration-only `pi-vimmode/config` types with checked basic example and built-package Bundler/NodeNext consumers, without runtime helper API. **Blocked by:** #34, #38, and #39.
 - [ ] 4.2 Implement [#42](https://github.com/pekochan069/pi-vimmode/issues/42): generate committed complete property/action references from canonical metadata with stable anchors and clean-tree drift checks. **Blocked by:** #35 and #41.
-- [ ] 4.3 Implement [#43](https://github.com/pekochan069/pi-vimmode/issues/43): ship complete trusted-config guide, checked basic/keymap/async/imported-preset workflows, negative fixtures, ADR/discovery links, and built-package content gates. **Blocked by:** #40 and #42.
+- [x] 4.3 Implement [#43](https://github.com/pekochan069/pi-vimmode/issues/43): ship complete trusted-config guide, checked basic/keymap/async/imported-preset workflows, negative fixtures, ADR/discovery links, and built-package content gates. **Blocked by:** #40 and #42.
 
 ## 5. Packaged Current-Version Changelog
 

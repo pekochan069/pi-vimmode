@@ -175,9 +175,9 @@ const ENTRIES = [
     category: "settings",
     topics: ["settings", "config", "piVimMode", "options"],
     summary:
-      "piVimMode settings control start mode, cursor, keymap, UI including workbench rows, search, feedback, macros, marks, structures, and transforms",
-    examples: ["piVimMode.preset", "piVimMode.keymap", "piVimMode.ui.workbench.reservedRows"],
-    limits: ["field-by-field validation", "invalid fields warn", "valid siblings are preserved"],
+      "piVimMode JSON settings control finite editor options; trusted global JavaScript setup and API: https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md#basic-setup",
+    examples: ["piVimMode.preset", "piVimMode.keymap", "/vimmode reload"],
+    limits: ["field-by-field validation", "trusted JavaScript is global and unsandboxed"],
     docsAnchor: "runtime-help:settings",
     specAnchor: "openspec/specs/pi-vimmode-documentation/spec.md",
     testAnchors: ["test/config.test.ts"],

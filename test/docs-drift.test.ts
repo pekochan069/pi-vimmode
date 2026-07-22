@@ -13,16 +13,18 @@ import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
 } from "../src/prompt-transform-actions.ts";
-import { runtimeHelpEntries } from "../src/runtime-help.ts";
+import { runtimeHelpEntries, runtimeHelpMessage } from "../src/runtime-help.ts";
 import {
   ACTION_RECIPE_DOCS_METADATA,
   DIAGNOSTIC_ACTION_DOCS_METADATA,
   POPUP_COMMAND_DOCS_METADATA,
 } from "./support/runtime-docs-metadata.ts";
 
+const readme = readFileSync("README.md", "utf8");
+const configDoc = readFileSync("docs/config.md", "utf8");
 const featuresDoc = readFileSync("docs/features.md", "utf8");
 const settingsDoc = readFileSync("docs/settings.md", "utf8");
-const allUserDocs = `${featuresDoc}\n${settingsDoc}`;
+const allUserDocs = `${configDoc}\n${featuresDoc}\n${settingsDoc}`;
 
 function expectSameIds(actual: readonly string[], expected: readonly string[]) {
   expect([...actual].sort()).toEqual([...expected].sort());
@@ -31,6 +33,20 @@ function expectSameIds(actual: readonly string[], expected: readonly string[]) {
 }
 
 describe("documentation drift guard", () => {
+  test("trusted config guide order and discovery links stay stable", () => {
+    const sections = ["basic-setup", "generated-properties", "advanced-setup", "safety-semantics"];
+    const positions = sections.map((anchor) => configDoc.indexOf(`id="${anchor}"`));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual(positions.toSorted((a, b) => a - b));
+    expect(configDoc).toContain("unsandboxed trusted code");
+    expect(configDoc).toContain("full Pi process privileges");
+    expect(readme).toContain("docs/config.md#basic-setup");
+    expect(settingsDoc).toContain("config.md#basic-setup");
+    expect(runtimeHelpMessage("settings", { options: DEFAULT_VIM_OPTIONS })).toContain(
+      "docs/config.md#basic-setup",
+    );
+  });
+
   test("runtime help registry entries carry drift anchors", () => {
     const entries = runtimeHelpEntries({ options: DEFAULT_VIM_OPTIONS });
     for (const entry of entries) {

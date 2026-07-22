@@ -164,7 +164,7 @@ When you trigger character search (e.g. `f`, `t`, `F`, `T`), matching characters
 
 Common ANSI color codes: `\u001b[31m` (red), `\u001b[32m` (green), `\u001b[33m` (yellow), `\u001b[34m` (blue), `\u001b[35m` (magenta), `\u001b[36m` (cyan), `\u001b[37m` (white). Default is red (`\u001b[31m`).
 
-Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as local code with Pi process privileges:
+Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as unsandboxed local code with full Pi process privileges. See [trusted JavaScript config guide](https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md#basic-setup):
 
 ```js
 /** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
@@ -176,7 +176,7 @@ export default (vim) => {
 };
 ```
 
-Run `/vimmode reload` after editing JS config. See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for the full default reference, JS config boundaries, and all settings.
+Run `/vimmode reload` after editing root JS config. See [`docs/config.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md) for complete trusted JavaScript API, workflows, reload, and safety contract. See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for canonical JSON defaults and settings.
 
 ## Recover or disable
 

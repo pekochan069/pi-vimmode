@@ -12,11 +12,21 @@ import {
 } from "../scripts/verify-package.ts";
 
 const requiredFiles = {
-  "index.js": "export {};\n",
+  "index.js": `export function loadCurrentRelease() {
+  return {
+    available: true,
+    content: "## Added\\n\\nText",
+    releaseUrl: "https://github.com/pekochan069/pi-vimmode/releases/tag/v0.9.0",
+    version: "0.9.0",
+  };
+}
+`,
   "config.d.ts": await Bun.file(join(import.meta.dir, "../src/vim-config.d.ts")).text(),
   "package.json": JSON.stringify({ version: "0.9.0" }),
   LICENSE: "MIT\n",
   "README.md": "README\n",
+  "RELEASE.md": "# v0.9.0\n\n## Added\n\nText\n",
+  "release-notes.json": '{"version":"0.9.0","content":"## Added\\n\\nText"}\n',
   "docs/config.md": "Config\n",
   "docs/features.md": "Features\n",
   "docs/settings.md": "Settings\n",
@@ -26,6 +36,8 @@ const requiredManifestFiles = [
   "config.d.ts",
   "README.md",
   "LICENSE",
+  "RELEASE.md",
+  "release-notes.json",
   "docs/config.md",
   "docs/features.md",
   "docs/settings.md",

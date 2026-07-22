@@ -5,6 +5,8 @@ export const PACKAGE_MANIFEST_FILES = [
   "config.d.ts",
   "README.md",
   "LICENSE",
+  "RELEASE.md",
+  "release-notes.json",
   ...PACKAGE_DOCS,
 ] as const;
 
@@ -14,5 +16,7 @@ export const REQUIRED_PACKAGE_FILES = [
   "package.json",
   "LICENSE",
   "README.md",
+  "RELEASE.md",
+  "release-notes.json",
   ...PACKAGE_DOCS,
 ] as const;

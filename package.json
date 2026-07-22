@@ -25,10 +25,10 @@
     "dist",
     "README.md",
     "LICENSE",
+    "RELEASE.md",
     "docs/config.md",
     "docs/features.md",
-    "docs/settings.md",
-    "examples"
+    "docs/settings.md"
   ],
   "type": "module",
   "module": "index.ts",

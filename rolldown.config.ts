@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { defineConfig } from "rolldown";
 
 import { PACKAGE_DOCS, PACKAGE_MANIFEST_FILES } from "./scripts/package-inventory.ts";
+import { currentReleaseAsset, RELEASE_ASSET_FILE } from "./src/release-notes.ts";
 
 const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 const piCorePackages = [
@@ -45,6 +46,10 @@ export default defineConfig({
             encoding: "utf8",
           }),
         );
+        const releaseSource = await this.fs.readFile("RELEASE.md", { encoding: "utf8" });
+        if (typeof packageJson.version !== "string")
+          throw new Error("Root package.json has no version");
+        const releaseAsset = currentReleaseAsset(releaseSource, packageJson.version);
         delete packageJson.scripts;
         delete packageJson.devDependencies;
 
@@ -66,6 +71,8 @@ export default defineConfig({
           this.fs.copyFile("README.md", join(distDir, "README.md")),
           this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
           this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
+          this.fs.copyFile("RELEASE.md", join(distDir, "RELEASE.md")),
+          this.fs.writeFile(join(distDir, RELEASE_ASSET_FILE), releaseAsset),
           ...PACKAGE_DOCS.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
         ]);
       },

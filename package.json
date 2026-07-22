@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -35,6 +35,8 @@
   },
   "scripts": {
     "build": "rolldown -c",
+    "verify-package": "bun scripts/verify-package.ts",
+    "prepublish": "bun run build && bun run verify-package",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
@@ -47,11 +49,11 @@
     "@earendil-works/pi-coding-agent": "^0.77.0",
     "@earendil-works/pi-tui": "^0.77.0",
     "bun-types": "^1.3.14",
-    "lefthook": "^2.1.9",
-    "oxfmt": "^0.56.0",
-    "oxlint": "^1.71.0",
-    "rolldown": "^1.1.3",
-    "typescript": "^7.0.1-rc"
+    "lefthook": "^2.1.10",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
+    "rolldown": "^1.2.0",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",

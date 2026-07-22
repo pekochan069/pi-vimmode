@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,11 +180,6 @@ const TYPE_CONSUMER = `import type {
   VimConfigApi,
   VimActionDescriptor,
 } from "pi-vimmode/config";
-import basicExample from "./agent/pi-vimmode.config.js";
-import keymapExample from "./agent/keymaps.config.js";
-import asyncExample from "./agent/async.config.js";
-import importedPresetExample from "./agent/imported-preset.config.js";
-
 const helper = (vim: VimConfigApi): void => {
   vim.preset = "prompt-safe";
   vim.g.mapleader = " ";
@@ -202,15 +197,8 @@ const asyncConfig: VimConfig = async (vim) => {
   helper(vim);
   vim.prompt.fence({ language: "ts" });
 };
-const checkedExamples: VimConfig[] = [
-  basicExample,
-  keymapExample,
-  asyncExample,
-  importedPresetExample,
-];
 void syncConfig;
 void asyncConfig;
-void checkedExamples;
 `;
 
 async function verifyPackageTypesForMode(
@@ -220,13 +208,6 @@ async function verifyPackageTypesForMode(
   moduleResolution: "Bundler" | "NodeNext",
   repositoryRoot: string,
 ): Promise<void> {
-  const agentDir = join(cwd, "agent");
-  await cp(join(cwd, "node_modules/pi-vimmode/examples"), agentDir, { recursive: true });
-  await mkdir(join(agentDir, "npm/node_modules"), { recursive: true });
-  await symlink(
-    join(cwd, "node_modules/pi-vimmode"),
-    join(agentDir, "npm/node_modules/pi-vimmode"),
-  );
   await writeFile(join(cwd, "consumer.ts"), TYPE_CONSUMER);
   await writeFile(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
   await writeFile(
@@ -242,14 +223,7 @@ async function verifyPackageTypesForMode(
         checkJs: moduleResolution === "Bundler",
         skipLibCheck: true,
       },
-      files: [
-        "consumer.ts",
-        "agent/pi-vimmode.config.js",
-        "agent/keymaps.config.js",
-        "agent/async.config.js",
-        "agent/imported-preset.config.js",
-        "agent/presets/markdown.js",
-      ],
+      files: ["consumer.ts"],
     }),
   );
   await run([

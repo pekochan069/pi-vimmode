@@ -3,11 +3,7 @@ import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
 
-import {
-  PACKAGE_DOCS,
-  PACKAGE_EXAMPLES,
-  PACKAGE_MANIFEST_FILES,
-} from "./scripts/package-inventory.ts";
+import { PACKAGE_DOCS, PACKAGE_MANIFEST_FILES } from "./scripts/package-inventory.ts";
 
 const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 const piCorePackages = [
@@ -40,7 +36,7 @@ export default defineConfig({
     {
       name: "dist-package-files",
       async writeBundle() {
-        for (const directory of [join(distDir, "docs"), join(distDir, "examples/presets")]) {
+        for (const directory of [join(distDir, "docs")]) {
           if (!existsSync(directory)) await this.fs.mkdir(directory, { recursive: true });
         }
 
@@ -71,7 +67,6 @@ export default defineConfig({
           this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
           this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
           ...PACKAGE_DOCS.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
-          ...PACKAGE_EXAMPLES.map((example) => this.fs.copyFile(example, join(distDir, example))),
         ]);
       },
     },

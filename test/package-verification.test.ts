@@ -20,11 +20,6 @@ const requiredFiles = {
   "docs/config.md": "Config\n",
   "docs/features.md": "Features\n",
   "docs/settings.md": "Settings\n",
-  "examples/pi-vimmode.config.js": "export default () => {};\n",
-  "examples/keymaps.config.js": "export default () => {};\n",
-  "examples/async.config.js": "export default async () => {};\n",
-  "examples/imported-preset.config.js": "export default () => {};\n",
-  "examples/presets/markdown.js": "export default () => {};\n",
 };
 const requiredManifestFiles = [
   "index.js",
@@ -34,7 +29,6 @@ const requiredManifestFiles = [
   "docs/config.md",
   "docs/features.md",
   "docs/settings.md",
-  "examples",
 ];
 const requiredExports = { ".": "./index.js", "./config": { types: "./config.d.ts" } };
 

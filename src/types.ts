@@ -428,6 +428,12 @@ export type Position = {
   col: number;
 };
 
+export type EasymotionTarget = {
+  label: string;
+  line: number;
+  character: number;
+};
+
 export type TextRange = {
   start: Position;
   end: Position;

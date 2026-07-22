@@ -1,6 +1,6 @@
 import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { CursorStyle, Position, TextRange, VimMode } from "./types.ts";
+import type { CursorStyle, EasymotionTarget, Position, TextRange, VimMode } from "./types.ts";
 
 import { findSearchHighlightRanges } from "./buffer.ts";
 import { isVisualCellSelected, isVisualLineSelected } from "./visual-selection.ts";
@@ -37,7 +37,7 @@ export type SearchHighlightRenderInput = {
 };
 
 export type EasymotionRenderInput = {
-  targets: { line: number; character: number; label: string }[];
+  targets: EasymotionTarget[];
   labelColor: string;
 };
 

@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import type {
-  EasymotionTarget,
-  ModalEffect,
-  ModalOptions,
-  ModalState,
-} from "../src/modal/types.ts";
-import type { ResolvedVimEditorOptions } from "../src/types.ts";
+import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { EasymotionTarget, ResolvedVimEditorOptions } from "../src/types.ts";
 
 import {
   createVimConfigPlan,

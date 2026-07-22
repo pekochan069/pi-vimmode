@@ -1,6 +1,7 @@
 import { matchesKey, parseKey } from "@earendil-works/pi-tui";
 
 import type {
+  EasymotionTarget,
   ResolvedVimKeymap,
   VimActionBindingMode,
   VimDiagnostics,
@@ -8,7 +9,6 @@ import type {
 } from "../types.ts";
 import type {
   EditorSnapshot,
-  EasymotionTarget,
   FastInsertDelegateContext,
   ModalEffect,
   ModalOptions,

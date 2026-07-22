@@ -1,6 +1,7 @@
 import type { ReadOnlyPopup } from "../read-only-popup.ts";
 import type {
   CursorStyle,
+  EasymotionTarget,
   EditResult,
   LineRange,
   PendingOperator,
@@ -59,12 +60,6 @@ export type BlockInsertState = {
   placement: "start" | "end";
   previewLine: number;
   text: string;
-};
-
-export type EasymotionTarget = {
-  label: string;
-  line: number;
-  character: number;
 };
 
 export type CharSearchState = {

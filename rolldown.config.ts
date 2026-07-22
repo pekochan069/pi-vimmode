@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
@@ -16,39 +16,6 @@ const distDocs = ["docs/features.md", "docs/settings.md"];
 
 const isExternal = (id: string) =>
   nodeBuiltins.has(id) || piCorePackages.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
-
-async function writeDistPackageJson() {
-  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-
-  delete packageJson.scripts;
-  delete packageJson.devDependencies;
-
-  packageJson.type = "module";
-  packageJson.main = "./index.js";
-  packageJson.module = "./index.js";
-  packageJson.exports = {
-    ".": "./index.js",
-    "./config": { types: "./config.d.ts" },
-  };
-  packageJson.files = [
-    "index.js",
-    "config.d.ts",
-    "README.md",
-    "LICENSE",
-    "docs/features.md",
-    "docs/settings.md",
-  ];
-  packageJson.pi = { extensions: ["./index.js"] };
-
-  await writeFile(join(distDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
-}
-
-async function copyDistDocs() {
-  await mkdir(join(distDir, "docs"), { recursive: true });
-  await cp("README.md", join(distDir, "README.md"));
-  await cp("LICENSE", join(distDir, "LICENSE"));
-  await Promise.all(distDocs.map((doc) => cp(doc, join(distDir, doc))));
-}
 
 export default defineConfig({
   input: "./src/index.ts",
@@ -69,10 +36,45 @@ export default defineConfig({
     {
       name: "dist-package-files",
       async writeBundle() {
+        const docsDir = join(distDir, "docs");
+        if (!existsSync(docsDir)) {
+          await this.fs.mkdir(docsDir, { recursive: true });
+        }
+
+        const packageJson = await JSON.parse(
+          await this.fs.readFile("package.json", {
+            encoding: "utf8",
+          }),
+        );
+        delete packageJson.scripts;
+        delete packageJson.devDependencies;
+
+        packageJson.type = "module";
+        packageJson.main = "./index.js";
+        packageJson.module = "./index.js";
+        packageJson.exports = {
+          ".": "./index.js",
+          "./config": { types: "./config.d.ts" },
+        };
+        packageJson.files = [
+          "index.js",
+          "config.d.ts",
+          "README.md",
+          "LICENSE",
+          "docs/features.md",
+          "docs/settings.md",
+        ];
+        packageJson.pi = { extensions: ["./index.js"] };
+
         await Promise.all([
-          writeDistPackageJson(),
-          copyDistDocs(),
-          cp("src/vim-config.d.ts", join(distDir, "config.d.ts")),
+          this.fs.writeFile(
+            join(distDir, "package.json"),
+            `${JSON.stringify(packageJson, null, 2)}\n`,
+          ),
+          this.fs.copyFile("README.md", join(distDir, "README.md")),
+          this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
+          this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
+          distDocs.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
         ]);
       },
     },

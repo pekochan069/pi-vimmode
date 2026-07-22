@@ -11,6 +11,7 @@ import type {
   VimPreset,
 } from "./types.ts";
 
+import { TRUSTED_JS_OPTION_PATHS } from "./config-property-paths.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   KEYMAP_COMMAND_DESCRIPTORS,
@@ -206,44 +207,7 @@ function frozenSnapshot<T>(value: T): T {
 
 type OptionEntry = { path: string };
 
-const OPTION_ENTRIES: readonly OptionEntry[] = [
-  { path: "leader" },
-  { path: "startMode" },
-  ...["insert", "normal", "visual", "visualLine", "visualBlock"].map((mode) => ({
-    path: `cursor.${mode}`,
-  })),
-  { path: "keymap.actionPresets" },
-  { path: "keymap.operatorMotions" },
-  { path: "ui.status.enabled" },
-  { path: "ui.status.position" },
-  { path: "ui.status.items" },
-  { path: "ui.mode.enabled" },
-  { path: "ui.mode.labels" },
-  { path: "ui.mode.narrowLabels" },
-  { path: "ui.selection.enabled" },
-  { path: "ui.selection.previewMaxChars" },
-  { path: "ui.cursorPosition.enabled" },
-  { path: "ui.cursorPosition.base" },
-  { path: "ui.cursorPosition.format" },
-  { path: "ui.workbench.reservedRows" },
-  { path: "macros.enabled" },
-  { path: "macros.slots" },
-  { path: "macros.maxReplaySteps" },
-  { path: "marks.enabled" },
-  { path: "marks.slots" },
-  { path: "search.highlight" },
-  { path: "search.highlightCurrent" },
-  { path: "search.clearOnCancel" },
-  { path: "search.clearOnInsert" },
-  { path: "search.maxHighlights" },
-  { path: "exCommand.autocomplete" },
-  { path: "feedback.noop" },
-  { path: "promptStructures.enabled" },
-  { path: "promptStructures.targets" },
-  { path: "promptTransforms.enabled" },
-  { path: "promptTransforms.actions" },
-  { path: "promptTransforms.commands" },
-];
+const OPTION_ENTRIES: readonly OptionEntry[] = TRUSTED_JS_OPTION_PATHS.map((path) => ({ path }));
 
 function optionPath(prefix: string, property: string): string {
   return prefix ? `${prefix}.${property}` : property;

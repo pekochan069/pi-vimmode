@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { VimMode } from "../src/types.ts";
 
-import { CONFIG_LEAVES, VIM_ACTION_METADATA, VIM_MAPPING_SCOPES } from "../src/config-metadata.ts";
+import {
+  CONFIG_LEAVES,
+  VIM_ACTION_METADATA,
+  VIM_CONFIG_PROPERTY_METADATA,
+  VIM_MAPPING_SCOPES,
+} from "../src/config-metadata.ts";
 import { DEFAULT_VIM_OPTIONS } from "../src/config.ts";
 import { PROTECTED_SHORTCUTS } from "../src/customization.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
@@ -32,6 +37,7 @@ const valueAtPath = (path: string): unknown =>
 describe("canonical config metadata", () => {
   test("catalogs every existing semantic action from its current source", () => {
     const expected = [
+      "escape",
       ...descriptorIds("operator", KEYMAP_OPERATOR_DESCRIPTORS),
       ...descriptorIds("motion", KEYMAP_MOTION_DESCRIPTORS),
       ...descriptorIds("command", KEYMAP_COMMAND_DESCRIPTORS),
@@ -80,6 +86,106 @@ describe("canonical config metadata", () => {
       "visualBlock",
       "operatorPending",
     ]);
+  });
+
+  test("covers every trusted JavaScript property exactly once with docs facts", () => {
+    expect(VIM_CONFIG_PROPERTY_METADATA.map(({ configPath }) => configPath)).toEqual([
+      "preset",
+      "leader",
+      "startMode",
+      "cursor.insert",
+      "cursor.normal",
+      "cursor.visual",
+      "cursor.visualLine",
+      "cursor.visualBlock",
+      "keymap.actionPresets",
+      "keymap.operatorMotions",
+      "ui.status.enabled",
+      "ui.status.position",
+      "ui.status.items",
+      "ui.mode.enabled",
+      "ui.mode.labels",
+      "ui.mode.narrowLabels",
+      "ui.selection.enabled",
+      "ui.selection.previewMaxChars",
+      "ui.cursorPosition.enabled",
+      "ui.cursorPosition.base",
+      "ui.cursorPosition.format",
+      "ui.workbench.reservedRows",
+      "macros.enabled",
+      "macros.slots",
+      "macros.maxReplaySteps",
+      "marks.enabled",
+      "marks.slots",
+      "search.highlight",
+      "search.highlightCurrent",
+      "search.clearOnCancel",
+      "search.clearOnInsert",
+      "search.maxHighlights",
+      "exCommand.autocomplete",
+      "feedback.noop",
+      "promptStructures.enabled",
+      "promptStructures.targets",
+      "promptTransforms.enabled",
+      "promptTransforms.actions",
+      "promptTransforms.commands",
+    ]);
+    expect(new Set(VIM_CONFIG_PROPERTY_METADATA.map(({ anchor }) => anchor)).size).toBe(
+      VIM_CONFIG_PROPERTY_METADATA.length,
+    );
+    for (const entry of VIM_CONFIG_PROPERTY_METADATA) {
+      expect(entry.path).toBe(`vim.${entry.configPath}`);
+      expect(entry.acceptedShape).not.toBe("");
+      expect(entry.assignment).not.toBe("");
+      expect(entry.jsonPaths).toContain(`piVimMode.${entry.configPath}`);
+    }
+    expect(VIM_CONFIG_PROPERTY_METADATA.find(({ configPath }) => configPath === "leader")).toEqual(
+      expect.objectContaining({ aliases: ["vim.g.mapleader"] }),
+    );
+  });
+
+  test("covers trusted actions once and excludes diagnostic IDs", () => {
+    const bindable = VIM_ACTION_METADATA.filter(({ bindable }) => bindable);
+    const expected = [
+      "escape",
+      ...descriptorIds("operator", KEYMAP_OPERATOR_DESCRIPTORS),
+      ...descriptorIds("motion", KEYMAP_MOTION_DESCRIPTORS),
+      ...descriptorIds("command", KEYMAP_COMMAND_DESCRIPTORS),
+      ...descriptorIds("macro", KEYMAP_MACRO_DESCRIPTORS),
+      ...descriptorIds("mark", KEYMAP_MARK_DESCRIPTORS),
+      ...descriptorIds("insert", KEYMAP_INSERT_DESCRIPTORS),
+      ...descriptorIds("textObject.kind", KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS),
+      ...descriptorIds("textObject.target", KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS),
+      ...PROMPT_TRANSFORM_ACTIONS.map(({ id }) => id),
+    ].sort();
+    expect(bindable.map(({ id }) => id).sort()).toEqual(expected);
+    expect(new Set(bindable.map(({ anchor }) => anchor)).size).toBe(bindable.length);
+    expect(bindable.find(({ id }) => id === "escape")).toEqual(
+      expect.objectContaining({ factoryPath: "vim.action.escape()" }),
+    );
+    expect(bindable.find(({ id }) => id === "mark.jumpExact")?.publicScopes).not.toContain(
+      "operatorPending",
+    );
+    for (const entry of VIM_ACTION_METADATA.filter(({ bindable }) => !bindable)) {
+      expect(bindable.map(({ id }) => id)).not.toContain(entry.id);
+    }
+  });
+
+  test("derives public scopes and prompt arguments without duplicate mappings", () => {
+    for (const action of VIM_ACTION_METADATA.filter(({ bindable }) => bindable)) {
+      const expectedScopes =
+        action.id === "escape"
+          ? VIM_MAPPING_SCOPES.filter((scope) => scope !== "normal")
+          : action.scopes.filter(
+              (scope) => !action.id.startsWith("mark.") || scope !== "operatorPending",
+            );
+      expect(action.publicScopes).toEqual(expectedScopes);
+      if (action.id.startsWith("prompt.transform.")) {
+        expect(action.args).toEqual(
+          PROMPT_TRANSFORM_ACTIONS.find(({ id }) => id === action.id)?.args ?? [],
+        );
+      }
+    }
   });
 
   test("has one source-backed default for every catalogued config leaf", () => {

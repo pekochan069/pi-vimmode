@@ -3,21 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const REQUIRED_PACKAGE_FILES = [
-  "index.js",
-  "config.d.ts",
-  "package.json",
-  "LICENSE",
-  "README.md",
-  "docs/config.md",
-  "docs/features.md",
-  "docs/settings.md",
-  "examples/pi-vimmode.config.js",
-  "examples/keymaps.config.js",
-  "examples/async.config.js",
-  "examples/imported-preset.config.js",
-  "examples/presets/markdown.js",
-] as const;
+import { REQUIRED_PACKAGE_FILES } from "./package-inventory.ts";
+
+export { REQUIRED_PACKAGE_FILES } from "./package-inventory.ts";
 
 const FORBIDDEN_PACKAGE_PREFIXES = ["benchmark", "corpus", "profile", "result"];
 

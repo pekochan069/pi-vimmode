@@ -3,6 +3,12 @@ import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
 
+import {
+  PACKAGE_DOCS,
+  PACKAGE_EXAMPLES,
+  PACKAGE_MANIFEST_FILES,
+} from "./scripts/package-inventory.ts";
+
 const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 const piCorePackages = [
   "@earendil-works/pi-coding-agent",
@@ -12,15 +18,6 @@ const piCorePackages = [
   "typebox",
 ];
 const distDir = "dist";
-const distDocs = ["docs/config.md", "docs/features.md", "docs/settings.md"];
-const distExamples = [
-  "examples/pi-vimmode.config.js",
-  "examples/keymaps.config.js",
-  "examples/async.config.js",
-  "examples/imported-preset.config.js",
-  "examples/presets/markdown.js",
-];
-
 const isExternal = (id: string) =>
   nodeBuiltins.has(id) || piCorePackages.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
 
@@ -62,16 +59,7 @@ export default defineConfig({
           ".": "./index.js",
           "./config": { types: "./config.d.ts" },
         };
-        packageJson.files = [
-          "index.js",
-          "config.d.ts",
-          "README.md",
-          "LICENSE",
-          "docs/config.md",
-          "docs/features.md",
-          "docs/settings.md",
-          "examples",
-        ];
+        packageJson.files = PACKAGE_MANIFEST_FILES;
         packageJson.pi = { extensions: ["./index.js"] };
 
         await Promise.all([
@@ -82,8 +70,8 @@ export default defineConfig({
           this.fs.copyFile("README.md", join(distDir, "README.md")),
           this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
           this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
-          ...distDocs.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
-          ...distExamples.map((example) => this.fs.copyFile(example, join(distDir, example))),
+          ...PACKAGE_DOCS.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
+          ...PACKAGE_EXAMPLES.map((example) => this.fs.copyFile(example, join(distDir, example))),
         ]);
       },
     },

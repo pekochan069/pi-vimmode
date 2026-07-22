@@ -32,7 +32,7 @@ function expectSameIds(actual: readonly string[], expected: readonly string[]) {
   expect(new Set(expected).size).toBe(expected.length);
 }
 
-describe("documentation drift guard", () => {
+describe("config guide documentation", () => {
   test("trusted config guide order and discovery links stay stable", () => {
     const sections = ["basic-setup", "generated-properties", "advanced-setup", "safety-semantics"];
     const positions = sections.map((anchor) => configDoc.indexOf(`id="${anchor}"`));
@@ -45,6 +45,22 @@ describe("documentation drift guard", () => {
     expect(runtimeHelpMessage("settings", { options: DEFAULT_VIM_OPTIONS })).toContain(
       "docs/config.md#basic-setup",
     );
+  });
+
+  test("reload docs name every preserved and cleared lifecycle state", () => {
+    const reloadSemantics =
+      configDoc.match(/Reload preserves[^\n]+cursor style apply immediately\./)?.[0] ?? "";
+    for (const state of [
+      "pending count",
+      "key prefix",
+      "character target",
+      "register target",
+      "mark target",
+      "macro target",
+    ]) {
+      expect(reloadSemantics).toContain(state);
+    }
+    expect(reloadSemantics).toContain("It clears");
   });
 
   test("runtime help registry entries carry drift anchors", () => {
@@ -63,7 +79,9 @@ describe("documentation drift guard", () => {
       for (const testAnchor of entry.testAnchors) expect(existsSync(testAnchor)).toBe(true);
     }
   });
+});
 
+describe("diagnostic action documentation", () => {
   test("diagnostic action metadata covers every runtime entry both directions", () => {
     const runtimeIds = DIAGNOSTIC_ACTIONS.map((entry) => entry.id);
     const metadataIds = DIAGNOSTIC_ACTION_DOCS_METADATA.map((entry) => entry.id);
@@ -90,7 +108,9 @@ describe("documentation drift guard", () => {
     const bindableIds = bindablePromptTransformActionIds();
     for (const entry of DIAGNOSTIC_ACTIONS) expect(bindableIds).not.toContain(entry.id);
   });
+});
 
+describe("documentation behavior", () => {
   test("feature docs describe every popup-backed read-only Ex command", () => {
     for (const entry of POPUP_COMMAND_DOCS_METADATA) {
       expect(featuresDoc).toContain(entry.command);
@@ -159,7 +179,9 @@ describe("documentation drift guard", () => {
     expect(featuresDoc).toContain(":nohlsearch");
     expect(settingsDoc).toContain(":noh");
   });
+});
 
+describe("documentation data contracts", () => {
   test("settings docs stay aligned with source-backed defaults", () => {
     const defaults: Record<string, string> = {
       "piVimMode.startMode": `"${DEFAULT_VIM_OPTIONS.startMode}"`,
@@ -212,7 +234,9 @@ describe("documentation drift guard", () => {
     );
     expect(allUserDocs).not.toMatch(/promptTransform\.\*[^\n]*(diagnostic|search|config)/i);
   });
+});
 
+describe("keybinding popup documentation", () => {
   test("read-only popup docs and registry-backed action IDs stay aligned", () => {
     const popup = keybindingDiscoveryPopup(DEFAULT_VIM_OPTIONS);
     const dedicatedPopup = keybindingsPopup(DEFAULT_VIM_OPTIONS);
@@ -258,7 +282,9 @@ describe("documentation drift guard", () => {
       expect(allUserDocs).toContain(id);
     }
   });
+});
 
+describe("action keybinding documentation", () => {
   test("action keybinding recipe docs anchors and configs stay aligned", () => {
     for (const recipe of ACTION_KEYBINDING_RECIPES) {
       const docs = ACTION_RECIPE_DOCS_METADATA.find((entry) => entry.id === recipe.id)!;

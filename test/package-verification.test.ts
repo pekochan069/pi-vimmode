@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { PACKAGE_MANIFEST_FILES, REQUIRED_PACKAGE_FILES } from "../scripts/package-inventory.ts";
 import {
   verifyPackageInventory,
   verifyPackageSmoke,
@@ -66,7 +67,14 @@ async function exists(path: string) {
   }
 }
 
-describe("package artifact verification", () => {
+describe("package inventory", () => {
+  test("keeps production package inventory aligned with independent test contract", () => {
+    expect([...REQUIRED_PACKAGE_FILES].sort() as string[]).toEqual(
+      Object.keys(requiredFiles).sort(),
+    );
+    expect([...PACKAGE_MANIFEST_FILES] as string[]).toEqual(requiredManifestFiles);
+  });
+
   test("accepts complete baseline inventory", async () => {
     const directory = await fixture();
     try {
@@ -127,7 +135,9 @@ describe("package artifact verification", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
 
+describe("package manifest constraints", () => {
   test("reports inconsistent declaration export", async () => {
     const directory = await fixture(requiredFiles, "0.9.0", requiredManifestFiles, {
       ".": "./index.js",
@@ -190,7 +200,9 @@ describe("package artifact verification", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
 
+describe("package consumers", () => {
   test("reports consumer command failures and cleans temporary consumer", async () => {
     const sourceDirectory = await fixture();
     let consumerCwd = "";

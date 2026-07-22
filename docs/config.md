@@ -1611,7 +1611,7 @@ Invalid known leaves and unknown writes produce field-local warnings: prior stag
 
 Fresh startup with fatal JavaScript still compiles defaults plus valid global/project JSON. Fatal reload keeps last-known-good active plan and updates diagnostics. Successful reload compiles complete immutable plan before applying it. Generation guards prevent older async loads from replacing newer results.
 
-Reload preserves prompt text, cursor and mode, undo/redo, registers, marks, recorded macros, search/Ex history, and valid visual selection. It clears pending operators, macro/register/mark capture, pending search/Ex/workbench input, partial insert escape, active macro recording, and EasyMotion labels. New keymaps, UI, diagnostics, and cursor style apply immediately.
+Reload preserves prompt text, bounds-clamped cursor, stable mode, undo/redo, registers, marks, recorded macros, search/Ex history, and valid visual selection. It clears pending count, operator, key prefix, character target, register target, mark target, macro target, pending search/Ex/workbench input, partial insert escape, active macro recording, and EasyMotion labels. New keymaps, UI, diagnostics, and cursor style apply immediately.
 
 ### Compatibility and non-goals
 

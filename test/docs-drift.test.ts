@@ -25,6 +25,12 @@ const configDoc = readFileSync("docs/config.md", "utf8");
 const featuresDoc = readFileSync("docs/features.md", "utf8");
 const settingsDoc = readFileSync("docs/settings.md", "utf8");
 const allUserDocs = `${configDoc}\n${featuresDoc}\n${settingsDoc}`;
+const globalConfigExamples = [
+  "examples/pi-vimmode.config.js",
+  "examples/keymaps.config.js",
+  "examples/async.config.js",
+  "examples/imported-preset.config.js",
+].map((path) => readFileSync(path, "utf8"));
 
 function expectSameIds(actual: readonly string[], expected: readonly string[]) {
   expect([...actual].sort()).toEqual([...expected].sort());
@@ -45,6 +51,11 @@ describe("config guide documentation", () => {
     expect(runtimeHelpMessage("settings", { options: DEFAULT_VIM_OPTIONS })).toContain(
       "docs/config.md#basic-setup",
     );
+  });
+
+  test("global config examples resolve types from Pi's installed package", () => {
+    const annotation = '/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */';
+    for (const example of globalConfigExamples) expect(example).toContain(annotation);
   });
 
   test("reload docs name every preserved and cleared lifecycle state", () => {

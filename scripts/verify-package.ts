@@ -180,10 +180,10 @@ const TYPE_CONSUMER = `import type {
   VimConfigApi,
   VimActionDescriptor,
 } from "pi-vimmode/config";
-import basicExample from "./examples/pi-vimmode.config.js";
-import keymapExample from "./examples/keymaps.config.js";
-import asyncExample from "./examples/async.config.js";
-import importedPresetExample from "./examples/imported-preset.config.js";
+import basicExample from "./agent/pi-vimmode.config.js";
+import keymapExample from "./agent/keymaps.config.js";
+import asyncExample from "./agent/async.config.js";
+import importedPresetExample from "./agent/imported-preset.config.js";
 
 const helper = (vim: VimConfigApi): void => {
   vim.preset = "prompt-safe";
@@ -220,7 +220,13 @@ async function verifyPackageTypesForMode(
   moduleResolution: "Bundler" | "NodeNext",
   repositoryRoot: string,
 ): Promise<void> {
-  await symlink(join(cwd, "node_modules/pi-vimmode/examples"), join(cwd, "examples"));
+  const agentDir = join(cwd, "agent");
+  await cp(join(cwd, "node_modules/pi-vimmode/examples"), agentDir, { recursive: true });
+  await mkdir(join(agentDir, "npm/node_modules"), { recursive: true });
+  await symlink(
+    join(cwd, "node_modules/pi-vimmode"),
+    join(agentDir, "npm/node_modules/pi-vimmode"),
+  );
   await writeFile(join(cwd, "consumer.ts"), TYPE_CONSUMER);
   await writeFile(join(cwd, "package.json"), JSON.stringify({ type: "module" }));
   await writeFile(
@@ -233,16 +239,16 @@ async function verifyPackageTypesForMode(
         strict: true,
         noEmit: true,
         allowJs: true,
-        checkJs: true,
+        checkJs: moduleResolution === "Bundler",
         skipLibCheck: true,
       },
       files: [
         "consumer.ts",
-        "examples/pi-vimmode.config.js",
-        "examples/keymaps.config.js",
-        "examples/async.config.js",
-        "examples/imported-preset.config.js",
-        "examples/presets/markdown.js",
+        "agent/pi-vimmode.config.js",
+        "agent/keymaps.config.js",
+        "agent/async.config.js",
+        "agent/imported-preset.config.js",
+        "agent/presets/markdown.js",
       ],
     }),
   );

@@ -1,4 +1,4 @@
-/** @type {import("pi-vimmode/config").VimConfig} */
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
   vim.preset = "prompt-safe";
   vim.g.mapleader = " ";

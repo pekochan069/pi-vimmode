@@ -27,6 +27,12 @@ function ctrlVVisualBlockOptions(startMode: "insert" | "normal" = "insert") {
   }).options;
 }
 
+function easyMotionOptions() {
+  return resolveVimOptions({
+    piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
+  }).options;
+}
+
 function runtimeConfiguration(
   planOrOptions: VimConfigPlan | ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
@@ -470,9 +476,7 @@ describe("vim editor integration", () => {
   });
 
   test("EasyMotion labels render without editing prompt text", () => {
-    const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
-    }).options;
+    const options = easyMotionOptions();
     const { editor } = createEditor(options);
     editor.setText("xone");
     typeKeys(editor, ["e", "o"]);
@@ -486,9 +490,7 @@ describe("vim editor integration", () => {
   });
 
   test("EasyMotion cancel, invalid labels, and misses preserve prompt text", () => {
-    const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
-    }).options;
+    const options = easyMotionOptions();
     const { editor } = createEditor(options);
     editor.setText("xone\ntwo");
 
@@ -503,10 +505,21 @@ describe("vim editor integration", () => {
     expect(editor.render(20).join("\n")).toContain("\x1b[31ma\x1b[0m");
   });
 
+  test("undo after EasyMotion reverses prior real edit", () => {
+    const { editor } = createEditor(easyMotionOptions());
+    editor.setText("draft");
+    typeKeys(editor, ["g", "g", "i", "x", "\x1b"]);
+    expect(editor.getText()).toBe("xdraft");
+
+    typeKeys(editor, ["e", "d", "a"]);
+    expect(editor.getText()).toBe("xdraft");
+    editor.handleInput("u");
+
+    expect(editor.getText()).toBe("draft");
+  });
+
   test("EasyMotion preserves undo and redo history", () => {
-    const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
-    }).options;
+    const options = easyMotionOptions();
     const { editor } = createEditor(options);
     editor.setText("draft");
     typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);

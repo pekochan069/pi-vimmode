@@ -61,6 +61,12 @@ export type BlockInsertState = {
   text: string;
 };
 
+export type EasymotionTarget = {
+  label: string;
+  line: number;
+  character: number;
+};
+
 export type CharSearchState = {
   command: "findCharForward" | "findCharBackward" | "tillCharForward" | "tillCharBackward";
   target: string;
@@ -196,7 +202,7 @@ export type ModalState = {
     | { kind: "char" }
     | {
         kind: "highlight";
-        targets: { label: string; line: number; character: number }[];
+        targets: EasymotionTarget[];
       };
 };
 

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type {
+  EasymotionTarget,
+  ModalEffect,
+  ModalOptions,
+  ModalState,
+} from "../src/modal/types.ts";
 import type { ResolvedVimEditorOptions } from "../src/types.ts";
 
 import {
@@ -6090,9 +6095,7 @@ describe("gv visual reselection", () => {
 });
 
 describe("EasyMotion modal effects", () => {
-  const highlight = (
-    targets: { label: string; line: number; character: number }[],
-  ): ModalState => ({
+  const highlight = (targets: EasymotionTarget[]): ModalState => ({
     mode: "normal",
     pendingEasymotion: { kind: "highlight", targets },
   });
@@ -6116,6 +6119,23 @@ describe("EasyMotion modal effects", () => {
     });
     expect(update.effects).toEqual([{ type: "invalidate" }]);
     expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+  });
+
+  test("preserves source offsets when case folding expands characters", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEasymotion: { kind: "char" } },
+      { text: "İI", lines: ["İI"], cursor },
+      options,
+      "i",
+    );
+
+    expect(update.state.pendingEasymotion).toEqual({
+      kind: "highlight",
+      targets: [
+        { label: "a", line: 0, character: 0 },
+        { label: "b", line: 0, character: 1 },
+      ],
+    });
   });
 
   test("caps targets at 52 labels", () => {
@@ -6210,11 +6230,27 @@ describe("EasyMotion modal effects", () => {
       lastVisualSelection: { mode: "visual", anchor: p(0, 0), cursor: p(0, 1), text: "ab" },
       messageHistory: [{ kind: "info", text: "kept" }],
     };
-    const update = handleModalInput(initial, { text: "abc", lines: ["abc"], cursor }, options, "a");
+    const entered = handleModalInput(
+      initial,
+      { text: "abc", lines: ["abc"], cursor },
+      options,
+      "a",
+    );
+    const states = [
+      entered,
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "\x1b"),
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "Z"),
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "a"),
+    ];
 
     const { pendingEasymotion: _pending, ...durable } = initial;
-    expect(update.state).toMatchObject(durable);
-    expect(update.state.pendingEasymotion?.kind).toBe("highlight");
-    expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+    for (const update of states) {
+      expect(update.state).toMatchObject(durable);
+      expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+    }
+    expect(entered.state.pendingEasymotion?.kind).toBe("highlight");
+    expect(states[1]?.state.pendingEasymotion).toBeUndefined();
+    expect(states[2]?.state.pendingEasymotion?.kind).toBe("highlight");
+    expect(states[3]?.state.pendingEasymotion).toBeUndefined();
   });
 });

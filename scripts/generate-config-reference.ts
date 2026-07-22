@@ -57,7 +57,7 @@ function stableValue(value: unknown): string {
 function inlineCode(value: string): string {
   const longestRun = Math.max(...(value.match(/`+/g) ?? []).map((run) => run.length), 0);
   const delimiter = "`".repeat(longestRun + 1);
-  const padding = value.startsWith(" ") || value.endsWith(" ") ? " " : "";
+  const padding = value.includes("`") || value.startsWith(" ") || value.endsWith(" ") ? " " : "";
   return `${delimiter}${padding}${value}${padding}${delimiter}`;
 }
 
@@ -125,6 +125,11 @@ export function validateMetadata(
     if (!action.factoryPath) errors.push(`missing factory path: ${action.id}`);
     if (!action.publicScopes) errors.push(`missing public scopes: ${action.id}`);
     if (!action.args) errors.push(`missing argument metadata: ${action.id}`);
+    if (action.args) {
+      for (const name of duplicates(action.args.map(({ name }) => name))) {
+        errors.push(`duplicate argument name for ${action.id}: ${name}`);
+      }
+    }
     if (!action.anchor) errors.push(`missing action anchor: ${action.id}`);
   }
 

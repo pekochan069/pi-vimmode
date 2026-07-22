@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import type { VimConfigPropertyMetadata } from "../src/config-metadata.ts";
+import type { VimActionMetadata, VimConfigPropertyMetadata } from "../src/config-metadata.ts";
 
 import {
   ACTION_MARKERS,
@@ -26,7 +26,7 @@ describe("generated config reference", () => {
     expect(first.match(/<a id="config-property-/g)).toHaveLength(39);
     expect(first.match(/<a id="config-action-/g)).toHaveLength(109);
     expect(first).not.toContain("vimmode.keybindings");
-    expect(first).toContain(`- Default keys: ${"`".repeat(5)}`);
+    expect(first).toContain("- Default keys: `` ` ``");
   });
 
   test("sorts property and action entries by canonical ID", () => {
@@ -65,6 +65,14 @@ describe("generated config reference", () => {
         VIM_ACTION_METADATA.filter(({ id }) => id !== "escape"),
       ),
     ).toThrow(/missing public action metadata: escape/);
+    const duplicateArguments = VIM_ACTION_METADATA.map((action) =>
+      action.id === "prompt.transform.fence"
+        ? { ...action, args: [...(action.args ?? []), ...(action.args ?? [])] }
+        : action,
+    ) as VimActionMetadata[];
+    expect(() => validateMetadata(VIM_CONFIG_PROPERTY_METADATA, duplicateArguments)).toThrow(
+      /duplicate argument name for prompt\.transform\.fence: language/,
+    );
     expect(() =>
       validateMetadata(
         VIM_CONFIG_PROPERTY_METADATA.map((property) =>

@@ -993,7 +993,7 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Canonical factory: `vim.action.mark.jumpExact()`
 - Supported mapping scopes: `normal`, `visual`, `visualLine`, `visualBlock`
 - Arguments: none
-- Default keys: `````
+- Default keys: `` ` ``
 - Compatibility aliases: none
 
 #### `mark.jumpLine`

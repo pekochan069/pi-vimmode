@@ -1,5 +1,6 @@
 import type { VimFiniteActionId } from "./types.ts";
 
+import { TRUSTED_JS_OPTION_PATHS, type TrustedJsOptionPath } from "./config-property-paths.ts";
 import { DEFAULT_VIM_OPTIONS, VIM_MOTION_OPERATOR_ACTIONS } from "./config.ts";
 import { PROTECTED_SHORTCUTS } from "./customization.ts";
 import { DIAGNOSTIC_ACTIONS } from "./diagnostic-actions.ts";
@@ -483,9 +484,7 @@ const PROPERTY_FACTS = {
     jsonPaths: ["piVimMode.promptTransforms.commands"],
     aliases: [],
   },
-} as const satisfies Record<string, PropertyFacts>;
-
-export type TrustedJsOptionPath = keyof typeof PROPERTY_FACTS;
+} as const satisfies Record<TrustedJsOptionPath, PropertyFacts>;
 
 type PropertyMetadataFor<Path extends TrustedJsOptionPath> = {
   id: Path;
@@ -503,19 +502,18 @@ function propertyAnchor(path: string): string {
   return `config-property-${path.replaceAll(".", "-")}`;
 }
 
-export const VIM_CONFIG_PROPERTY_METADATA: readonly VimConfigPropertyMetadata[] = Object.keys(
-  PROPERTY_FACTS,
-).map((rawPath) => {
-  const configPath = rawPath as TrustedJsOptionPath;
-  return {
-    id: configPath,
-    path: `vim.${configPath}` as `vim.${TrustedJsOptionPath}`,
-    configPath,
-    anchor: propertyAnchor(configPath),
-    defaultValue: valueAtPath(configPath),
-    ...PROPERTY_FACTS[configPath],
-  } as VimConfigPropertyMetadata;
-});
+export const VIM_CONFIG_PROPERTY_METADATA: readonly VimConfigPropertyMetadata[] =
+  TRUSTED_JS_OPTION_PATHS.map(
+    (configPath) =>
+      ({
+        id: configPath,
+        path: `vim.${configPath}` as `vim.${TrustedJsOptionPath}`,
+        configPath,
+        anchor: propertyAnchor(configPath),
+        defaultValue: valueAtPath(configPath),
+        ...PROPERTY_FACTS[configPath],
+      }) as VimConfigPropertyMetadata,
+  );
 
 export type ConfigLeaf = {
   path: string;

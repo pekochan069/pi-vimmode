@@ -88,7 +88,7 @@ type ExpectedPropertyShape<Path extends DeclaredPropertyPaths> = Path extends "p
                                       ? "string"
                                       : "boolean";
 type ExpectedPropertyAliases<Path extends DeclaredPropertyPaths> = Path extends "leader"
-  ? readonly ["vim.g.mapleader"]
+  ? readonly [`vim.g.${keyof VimConfigApi["g"] & string}`]
   : readonly [];
 type PropertyShapeCoverage = Assert<
   Equal<
@@ -104,6 +104,12 @@ type PropertyAliasCoverage = Assert<
     { [Path in DeclaredPropertyPaths]: ExpectedPropertyAliases<Path> }
   >
 >;
+type DeclaredGlobalAliases = `vim.g.${keyof VimConfigApi["g"] & string}`;
+type MetadataGlobalAliases = Extract<
+  VimConfigPropertyMetadata["aliases"][number],
+  `vim.g.${string}`
+>;
+type GlobalAliasCoverage = Assert<Equal<MetadataGlobalAliases, DeclaredGlobalAliases>>;
 type PropertyValueCoverage = Assert<
   Equal<
     {
@@ -174,7 +180,9 @@ type ExpectedFactory<Id extends DeclaredActionIds> = Id extends "command.easymot
 type ExpectedAlias<Id extends DeclaredActionIds> = Id extends "command.easymotion"
   ? readonly ["vim.action.command.easymotion()"]
   : Id extends `insert.${infer Action}` | `prompt.transform.${infer Action}`
-    ? readonly [`vim.prompt.${Action}()`]
+    ? Action extends keyof VimPromptApi & string
+      ? readonly [`vim.prompt.${Action}()`]
+      : readonly []
     : readonly [];
 type ExpectedArgs<Id extends DeclaredActionIds> = Id extends "prompt.transform.fence"
   ? readonly [{ name: "language"; type: "string"; required: false; description: string }]
@@ -239,6 +247,12 @@ type AliasCoverage = Assert<
     { [Id in DeclaredActionIds]: ExpectedAlias<Id> }
   >
 >;
+type DeclaredPromptAliases = `vim.prompt.${keyof VimPromptApi & string}()`;
+type MetadataPromptAliases = Extract<
+  VimPublicActionMetadata["aliases"][number],
+  `vim.prompt.${string}()`
+>;
+type PromptAliasCoverage = Assert<Equal<MetadataPromptAliases, DeclaredPromptAliases>>;
 type ArgumentCoverage = Assert<
   Equal<
     { [Id in DeclaredActionIds]: MetadataAction<Id>["args"] },
@@ -277,10 +291,12 @@ void (null as unknown as
   | PropertyCoverage
   | PropertyShapeCoverage
   | PropertyAliasCoverage
+  | GlobalAliasCoverage
   | PropertyValueCoverage
   | ActionCoverage
   | FactoryCoverage
   | AliasCoverage
+  | PromptAliasCoverage
   | ArgumentCoverage
   | ScopeCoverage
   | ScopeCompatibility

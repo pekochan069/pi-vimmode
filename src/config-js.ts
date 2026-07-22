@@ -11,6 +11,7 @@ import type {
   VimPreset,
 } from "./types.ts";
 
+import { TRUSTED_JS_OPTION_PATHS } from "./config-property-paths.ts";
 import { protectedShortcutForKey } from "./customization.ts";
 import {
   KEYMAP_COMMAND_DESCRIPTORS,
@@ -205,48 +206,6 @@ function frozenSnapshot<T>(value: T): T {
 }
 
 type OptionEntry = { path: string };
-
-const TRUSTED_JS_OPTION_PATHS = [
-  "preset",
-  "leader",
-  "startMode",
-  "cursor.insert",
-  "cursor.normal",
-  "cursor.visual",
-  "cursor.visualLine",
-  "cursor.visualBlock",
-  "keymap.actionPresets",
-  "keymap.operatorMotions",
-  "ui.status.enabled",
-  "ui.status.position",
-  "ui.status.items",
-  "ui.mode.enabled",
-  "ui.mode.labels",
-  "ui.mode.narrowLabels",
-  "ui.selection.enabled",
-  "ui.selection.previewMaxChars",
-  "ui.cursorPosition.enabled",
-  "ui.cursorPosition.base",
-  "ui.cursorPosition.format",
-  "ui.workbench.reservedRows",
-  "macros.enabled",
-  "macros.slots",
-  "macros.maxReplaySteps",
-  "marks.enabled",
-  "marks.slots",
-  "search.highlight",
-  "search.highlightCurrent",
-  "search.clearOnCancel",
-  "search.clearOnInsert",
-  "search.maxHighlights",
-  "exCommand.autocomplete",
-  "feedback.noop",
-  "promptStructures.enabled",
-  "promptStructures.targets",
-  "promptTransforms.enabled",
-  "promptTransforms.actions",
-  "promptTransforms.commands",
-] as const;
 
 const OPTION_ENTRIES: readonly OptionEntry[] = TRUSTED_JS_OPTION_PATHS.map((path) => ({ path }));
 

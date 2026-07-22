@@ -41,6 +41,7 @@
     "verify-package": "bun scripts/verify-package.ts",
     "generate:config-reference": "bun scripts/generate-config-reference.ts",
     "check:config-reference": "bun scripts/generate-config-reference.ts --check",
+    "benchmark:baseline": "bun benchmark/perf-baseline.ts",
     "prepublish": "bun run build && bun run verify-package",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

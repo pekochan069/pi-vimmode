@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { PACKAGE_MANIFEST_FILES, REQUIRED_PACKAGE_FILES } from "../scripts/package-inventory.ts";
 import {
   verifyPackageInventory,
   verifyPackageSmoke,
@@ -16,10 +17,25 @@ const requiredFiles = {
   "package.json": JSON.stringify({ version: "0.9.0" }),
   LICENSE: "MIT\n",
   "README.md": "README\n",
+  "docs/config.md": "Config\n",
   "docs/features.md": "Features\n",
   "docs/settings.md": "Settings\n",
+  "examples/pi-vimmode.config.js": "export default () => {};\n",
+  "examples/keymaps.config.js": "export default () => {};\n",
+  "examples/async.config.js": "export default async () => {};\n",
+  "examples/imported-preset.config.js": "export default () => {};\n",
+  "examples/presets/markdown.js": "export default () => {};\n",
 };
-const requiredManifestFiles = Object.keys(requiredFiles).filter((file) => file !== "package.json");
+const requiredManifestFiles = [
+  "index.js",
+  "config.d.ts",
+  "README.md",
+  "LICENSE",
+  "docs/config.md",
+  "docs/features.md",
+  "docs/settings.md",
+  "examples",
+];
 const requiredExports = { ".": "./index.js", "./config": { types: "./config.d.ts" } };
 
 async function fixture(
@@ -51,7 +67,14 @@ async function exists(path: string) {
   }
 }
 
-describe("package artifact verification", () => {
+describe("package inventory", () => {
+  test("keeps production package inventory aligned with independent test contract", () => {
+    expect([...REQUIRED_PACKAGE_FILES].sort() as string[]).toEqual(
+      Object.keys(requiredFiles).sort(),
+    );
+    expect([...PACKAGE_MANIFEST_FILES] as string[]).toEqual(requiredManifestFiles);
+  });
+
   test("accepts complete baseline inventory", async () => {
     const directory = await fixture();
     try {
@@ -86,13 +109,11 @@ describe("package artifact verification", () => {
   });
 
   test("reports required files omitted from manifest packaging", async () => {
-    const directory = await fixture(requiredFiles, "0.9.0", [
-      "index.js",
-      "config.d.ts",
-      "README.md",
-      "LICENSE",
-      "docs/features.md",
-    ]);
+    const directory = await fixture(
+      requiredFiles,
+      "0.9.0",
+      requiredManifestFiles.filter((file) => file !== "docs/settings.md"),
+    );
     try {
       await expect(verifyPackageInventory(directory, "0.9.0")).rejects.toThrow(
         "Manifest missing packaged files: docs/settings.md",
@@ -114,7 +135,9 @@ describe("package artifact verification", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
 
+describe("package manifest constraints", () => {
   test("reports inconsistent declaration export", async () => {
     const directory = await fixture(requiredFiles, "0.9.0", requiredManifestFiles, {
       ".": "./index.js",
@@ -177,7 +200,9 @@ describe("package artifact verification", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
 
+describe("package consumers", () => {
   test("reports consumer command failures and cleans temporary consumer", async () => {
     const sourceDirectory = await fixture();
     let consumerCwd = "";

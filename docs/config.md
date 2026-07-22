@@ -1,8 +1,25 @@
 # pi-vimmode trusted JavaScript config
 
-Trusted JavaScript config is executable local code. Use it only for config you trust. See `docs/settings.md` for canonical detailed JSON configuration behavior, settings precedence, validation, and runtime boundaries.
+<a id="basic-setup"></a>
 
-Generated reference blocks below come from canonical source metadata. Regenerate with `bun run generate:config-reference`; check committed output with `bun run check:config-reference`.
+## Basic setup
+
+> **Warning:** `~/.pi/agent/pi-vimmode.config.js` is unsandboxed trusted code. It runs with full Pi process privileges. Only put code and imports you trust in this file.
+
+Create exactly `~/.pi/agent/pi-vimmode.config.js`:
+
+```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
+export default (vim) => {
+  vim.startMode = "normal";
+};
+```
+
+`vim.startMode` is validated: only `"insert"` or `"normal"` is accepted. Run `/vimmode reload` after editing root config. See checked [`examples/pi-vimmode.config.js`](../examples/pi-vimmode.config.js) for a larger basic workflow.
+
+Generated reference blocks below come from canonical source metadata. Regenerate with `bun run generate:config-reference`; check committed output with `bun run check:config-reference`. Corresponding JSON behavior remains canonical in [`docs/settings.md`](settings.md).
+
+<a id="generated-properties"></a>
 
 ## Properties
 
@@ -421,6 +438,8 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Compatibility aliases: none
 
 <!-- END GENERATED CONFIG PROPERTIES -->
+
+<a id="generated-actions"></a>
 
 ## Actions
 
@@ -1535,3 +1554,67 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Compatibility aliases: none
 
 <!-- END GENERATED CONFIG ACTIONS -->
+
+<a id="advanced-setup"></a>
+
+## Advanced setup
+
+### Exports, async config, and imported presets
+
+Root config must default-export a synchronous or asynchronous function. Raw object exports and TypeScript config files are unsupported. Async exports commit only after their returned promise fulfills; thrown errors and rejected promises discard that evaluation.
+
+Checked workflows:
+
+- [Basic properties](../examples/pi-vimmode.config.js)
+- [Keymaps](../examples/keymaps.config.js)
+- [Async config](../examples/async.config.js)
+- [Imported preset](../examples/imported-preset.config.js) using typed [`VimConfigApi` helper](../examples/presets/markdown.js)
+
+`/vimmode reload` always imports a fresh root module. Native ESM caching can retain imported helpers, including `examples/presets/markdown.js`; restart Pi after editing an imported helper. No file watcher reloads either file.
+
+### Keymaps
+
+`vim.keymap.set(mode, keys, target, options?)` accepts one mode or nested arrays of modes:
+
+- `"i"` / `"insert"`
+- `"n"` / `"normal"`
+- `"v"` / `"x"` / `"visual"` for all visual scopes
+- exact `"visualLine"` or `"visualBlock"`
+- `"o"` / `"operatorPending"` / `"operator-pending"`
+
+Targets are opaque [`vim.action.*`](#generated-actions) descriptors, compatible `vim.prompt.*` aliases, literal replay strings, or `null`. Action reference lists each factory's supported scopes and arguments. Existing `vim.prompt.*`, `vim.g.mapleader`, and three-argument `vim.keymap.set` calls remain supported.
+
+Mappings use source order. Exact later mappings replace earlier same-scope mappings. Executable same-scope prefix conflicts warn and reject conflicting mapping because no timeout exists. Literal replay works only in normal/visual scopes, stays within macro replay limit, and never recursively expands mappings. `null` unmaps exact keys in selected scopes.
+
+Options accept only `{ allowProtected?: boolean, desc?: string }`. Protected Pi shortcuts warn unless mapping sets `allowProtected: true`; override only claims pi-vimmode ownership and cannot make terminal or Pi deliver an indistinguishable key. Insert mappings accept finite insert actions only and defer to Pi while autocomplete is active.
+
+Set `vim.g.mapleader` or `vim.leader` to one printable character or `null`. `<leader>` is supported only at mapping-key start. Final leader resolves after project JSON, then expands every retained leader mapping. Replay targets never expand `<leader>`.
+
+<a id="safety-semantics"></a>
+
+## Safety and configuration semantics
+
+### Trust boundary and precedence
+
+Executable config is global-only at `~/.pi/agent/pi-vimmode.config.js`. Project-local executable config is never loaded. Resolution order:
+
+1. Built-in defaults
+2. Global `~/.pi/agent/settings.json`
+3. Global trusted JavaScript operations
+4. Project `.pi/settings.json`
+
+Getters initially expose frozen snapshots of defaults plus valid global JSON, never project JSON. Assignments stage source-ordered operations. Presets apply at assignment position; later leaf writes override preset values, while later presets can replace earlier leaves. Arrays and records replace whole values instead of merging through mutation. See [`docs/settings.md#settings-files-and-precedence`](settings.md#settings-files-and-precedence) for canonical JSON rules.
+
+### Warnings, failures, and reload
+
+Invalid known leaves and unknown writes produce field-local warnings: prior staged values and valid siblings survive. Syntax/import errors, invalid default exports, thrown errors, and rejected promises are fatal transactions; no JavaScript operation from failed evaluation commits.
+
+Fresh startup with fatal JavaScript still compiles defaults plus valid global/project JSON. Fatal reload keeps last-known-good active plan and updates diagnostics. Successful reload compiles complete immutable plan before applying it. Generation guards prevent older async loads from replacing newer results.
+
+Reload preserves prompt text, bounds-clamped cursor, stable mode, undo/redo, registers, marks, recorded macros, search/Ex history, and valid visual selection. It clears pending count, operator, key prefix, character target, register target, mark target, macro target, pending search/Ex/workbench input, partial insert escape, active macro recording, and EasyMotion labels. New keymaps, UI, diagnostics, and cursor style apply immediately.
+
+### Compatibility and non-goals
+
+Valid pre-0.9.0 `vim.g.mapleader`, `vim.prompt.*`, and three-argument `vim.keymap.set` calls remain compatible. Breaking trusted-config changes require a major release; removals should warn for at least one minor release when feasible.
+
+No sandbox, project JavaScript config, TypeScript config, runtime `pi-vimmode/config` module, `defineConfig`, file watching, plugin discovery, arbitrary custom action execution, recursive mappings, timeout-based prefix resolution, Vimscript, `.vimrc`, Neovim Lua, or full Vim/Neovim parity.

@@ -51,7 +51,9 @@ Common warning causes:
 
 ## Global JS config
 
-`~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
+Canonical setup, generated API reference, checked workflows, reload behavior, and safety contract live in [`docs/config.md`](config.md#basic-setup).
+
+`~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with full Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
 
 Use `vim.keymap.set(mode, keys, target, options?)`. `target` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap those exact keys in selected scopes. `keys` uses JSON key syntax; string targets are replayed keys, never internal action IDs.
 
@@ -78,7 +80,7 @@ Set `vim.g.mapleader` to one printable character or `null`. Assignment affects e
 
 JS config boundaries: no raw object export, no string target that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String targets are replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping keys, never in replay target strings.
 
-Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results.
+Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results. Imported helpers follow native ESM caching; see [`docs/config.md#exports-async-config-and-imported-presets`](config.md#exports-async-config-and-imported-presets).
 
 ## Key sequence syntax
 

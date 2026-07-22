@@ -289,6 +289,55 @@ describe("EasyMotion rendering", () => {
     expect(visibleWidth(lines[1]!)).toBe(10);
     expect(lines.join("\n")).toContain("a ");
   });
+
+  test("substitutes labels across multiline prompt with configured color and reset", () => {
+    const labelColor = "\x1b[32m";
+    const lines = renderPromptEditor({
+      snapshot: { text: "one\ntwo", lines: ["one", "two"], cursor: p(0, 0) },
+      cursorStyle: "block",
+      viewport: { width: 10, focused: false },
+      easymotion: { targets: [{ line: 1, character: 1, label: "x" }], labelColor },
+    });
+
+    expect(lines.join("\n")).toContain(`${labelColor}x${ANSI_RESET}`);
+    expect(stripAnsi(lines.join("\n")).replaceAll(labelColor, "")).toContain("txo");
+  });
+
+  test("cursor and visual selection styling take precedence over EasyMotion color", () => {
+    const labelColor = "\x1b[32m";
+    const cursorLines = renderPromptEditor({
+      snapshot: { text: "one", lines: ["one"], cursor: p(0, 1) },
+      cursorStyle: "block",
+      viewport: { width: 10, focused: true },
+      easymotion: { targets: [{ line: 0, character: 1, label: "x" }], labelColor },
+    });
+    const selectedLines = renderVisualEditor({
+      snapshot: { text: "one", lines: ["one"], cursor: p(0, 2) },
+      visual: { mode: "visual", anchor: p(0, 0) },
+      cursorStyle: "block",
+      viewport: { width: 10, focused: false },
+      easymotion: { targets: [{ line: 0, character: 1, label: "x" }], labelColor },
+    });
+
+    expect(cursorLines.join("\n")).toContain(`${CURSOR_BLOCK_START}x${ANSI_RESET}`);
+    expect(cursorLines.join("\n")).not.toContain(`${labelColor}x${ANSI_RESET}`);
+    expect(selectedLines.join("\n")).toContain(`${SELECTION_START}x${ANSI_RESET}`);
+    expect(selectedLines.join("\n")).not.toContain(`${labelColor}x${ANSI_RESET}`);
+  });
+
+  test("EasyMotion label takes precedence over search highlight", () => {
+    const labelColor = "\x1b[32m";
+    const lines = renderPromptEditor({
+      snapshot: { text: "one one", lines: ["one one"], cursor: p(0, 6) },
+      cursorStyle: "block",
+      viewport: { width: 20, focused: false },
+      search: { query: "one", current: p(0, 0), highlightCurrent: true, maxHighlights: 20 },
+      easymotion: { targets: [{ line: 0, character: 0, label: "x" }], labelColor },
+    });
+
+    expect(lines.join("\n")).toContain(`${labelColor}x${ANSI_RESET}`);
+    expect(lines.join("\n")).not.toContain(`${SEARCH_CURRENT_START}x${ANSI_RESET}`);
+  });
 });
 
 describe("cursor rendering", () => {

@@ -248,7 +248,6 @@ export function canFastDelegateInsertInput(
 function handleEasymotionInput(
   state: ModalState,
   snapshot: EditorSnapshot,
-  _options: ModalOptions,
   data: string,
 ): ModalUpdate {
   const key = keySequence(data);
@@ -302,19 +301,6 @@ function handleEasymotionInput(
       ]);
     }
     return invalidate(state);
-  }
-
-  if (state.pendingEasymotion?.kind === "jump") {
-    const target = state.pendingEasymotion.targets.find((t: any) => t.label === key);
-    const { pendingEasymotion: _, ...rest } = state;
-
-    if (target) {
-      return withEffects(rest, [
-        { type: "restoreCursor", position: { line: target.line, col: target.character } },
-        { type: "invalidate" },
-      ]);
-    }
-    return invalidate(rest);
   }
 
   return invalidate(state);
@@ -1078,8 +1064,7 @@ function routeModalInput(
   if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
 
   // Easymotion routing
-  if (routedState.pendingEasymotion)
-    return handleEasymotionInput(routedState, snapshot, options, data);
+  if (routedState.pendingEasymotion) return handleEasymotionInput(routedState, snapshot, data);
 
   if (routedState.pendingEx)
     return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
@@ -1101,10 +1086,6 @@ export function modalPendingDisplay(state: ModalState): string | undefined {
   if (state.pendingEasymotion?.kind === "highlight") {
     return `Jump [${state.pendingEasymotion.targets.map((t) => t.label).join("")}]: `;
   }
-  if (state.pendingEasymotion?.kind === "jump") {
-    return `Jump [${state.pendingEasymotion.targets.map((t: any) => t.label).join("")}]: `;
-  }
-
   return (
     exDisplay(state.pendingEx) ??
     pendingSearchDisplay(state.pendingSearch) ??

@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -35,6 +35,8 @@
   },
   "scripts": {
     "build": "rolldown -c",
+    "verify-package": "bun scripts/verify-package.ts",
+    "prepublish": "bun run build && bun run verify-package",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",

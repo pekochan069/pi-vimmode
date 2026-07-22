@@ -218,6 +218,7 @@ bun run check-types
 bun run lint
 bun run format:check
 bun run build
+bun run verify-package
 bun pm pack --dry-run
 ```
 

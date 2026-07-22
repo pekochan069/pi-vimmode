@@ -34,3 +34,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 .pi-subagents/
+
+# benchmark-generated profiles and ad-hoc result snapshots
+*.cpuprofile
+benchmark/results/*.json

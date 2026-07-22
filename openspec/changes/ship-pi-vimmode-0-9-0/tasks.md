@@ -1,6 +1,6 @@
 ## 1. Release Foundations
 
-- [ ] 1.1 Implement [#33](https://github.com/pekochan069/pi-vimmode/issues/33): capture reproducible 0.9.0 production-path benchmark baseline, committed pre-change evidence, profiling instructions, and unpublished generated corpora. **Blocked by:** none.
+- [x] 1.1 Implement [#33](https://github.com/pekochan069/pi-vimmode/issues/33): capture reproducible 0.9.0 production-path benchmark baseline, committed pre-change evidence, profiling instructions, and unpublished generated corpora. **Blocked by:** none.
 - [x] 1.2 Implement [#34](https://github.com/pekochan069/pi-vimmode/issues/34): bump package to 0.9.0 without publishing and add built-`dist`/tarball inventory plus temporary-consumer smoke foundation outside repository cwd. **Blocked by:** none.
 - [x] 1.3 Implement [#35](https://github.com/pekochan069/pi-vimmode/issues/35): establish canonical finite option/action metadata and normal, visual, insert, and operator-pending mapping scopes with existing behavior equivalence tests. **Blocked by:** none.
 

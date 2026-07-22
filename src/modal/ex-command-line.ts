@@ -31,6 +31,7 @@ import {
 import { keymapForOptions, promptTransformsForOptions } from "../config.ts";
 import { parseExCommand, suggestExCommands, type ParsedExSubstitution } from "../ex.ts";
 import {
+  changelogPopup,
   diagnosticPopup,
   inspectPopup,
   keybindingsPopup,
@@ -176,9 +177,16 @@ function cancelExCommand(state: ModalState): ModalUpdate {
 }
 
 function openReadOnlyPopup(state: ModalState, popup: ReadOnlyPopup): ModalUpdate {
+  const command = state.pendingEx?.command;
   const restored = restoreVisualExState(state);
   return {
-    state: { ...restored.state, helpPopup: popup },
+    state: {
+      ...restored.state,
+      helpPopup: popup,
+      exHistory: command
+        ? addExHistory(restored.state.exHistory, command)
+        : restored.state.exHistory,
+    },
     effects: [...restored.effects, { type: "openReadOnlyPopup", popup }],
   };
 }
@@ -333,6 +341,10 @@ function executeExCommand(
 
   if (parsed.type === "inspect") {
     return openReadOnlyPopup(state, inspectPopup({ state, snapshot, options, diagnostics }));
+  }
+
+  if (parsed.type === "changelog") {
+    return openReadOnlyPopup(state, changelogPopup());
   }
 
   if (parsed.type === "transform") {

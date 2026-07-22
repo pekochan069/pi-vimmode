@@ -138,9 +138,12 @@ function packageVersion(packageDirectory: string): string | undefined {
   }
 }
 
-export function loadCurrentRelease(
-  packageDirectory = dirname(fileURLToPath(import.meta.url)),
-): CurrentRelease {
+function defaultPackageDirectory(): string {
+  const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+  return packageVersion(moduleDirectory) ? moduleDirectory : dirname(moduleDirectory);
+}
+
+export function loadCurrentRelease(packageDirectory = defaultPackageDirectory()): CurrentRelease {
   const version = packageVersion(packageDirectory);
   if (!version) return unavailable();
 

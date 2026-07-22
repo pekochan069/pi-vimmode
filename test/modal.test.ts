@@ -1139,6 +1139,32 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.doctor");
   });
 
+  test("changelog Ex command preserves prompt state and records successful history", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), [":", ..."changelog", "\r"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.exHistory).toEqual(["changelog"]);
+    expect(result.state.helpPopup).toMatchObject({
+      title: "pi-vimmode v0.9.0 changes",
+      source: "changelog",
+    });
+    expect(result.state.helpPopup?.markdown).toContain("Changelog unavailable for v0.9.0");
+  });
+
   test("visual features keybindings popup restores visual state after marker deletion", () => {
     const opened = handleModalInput(
       { mode: "visual", visualAnchor: p(0, 1) },

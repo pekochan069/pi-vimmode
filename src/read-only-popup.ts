@@ -9,7 +9,8 @@ export type ReadOnlyPopupSource =
   | "mapcheck"
   | "vimdoctor"
   | "messages"
-  | "inspect";
+  | "inspect"
+  | "changelog";
 
 export type ReadOnlyPopup = {
   title: string;
@@ -17,6 +18,7 @@ export type ReadOnlyPopup = {
   source: ReadOnlyPopupSource;
   query?: string;
   scrollOffset: number;
+  markdown?: string;
 };
 
 export type HelpPopup = ReadOnlyPopup;

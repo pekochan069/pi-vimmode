@@ -1833,11 +1833,18 @@ function charSearchOperatorOffsetRange(
   kind: CharSearchKind,
   target: string,
   count = 1,
+  searchCursorOffset = 0,
 ): { start: number; end: number; cursor: Position } | undefined {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
   const bounds = lineBoundsForPosition(text, pos);
-  const found = charSearchMatchColumn(bounds.line, pos.col, kind, target, count);
+  const found = charSearchMatchColumn(
+    bounds.line,
+    pos.col + searchCursorOffset,
+    kind,
+    target,
+    count,
+  );
   if (found === undefined) return undefined;
 
   if (kind === "tillForward" && found === pos.col + 1) return undefined;
@@ -1861,8 +1868,16 @@ export function deleteByCharSearch(
   kind: CharSearchKind,
   target: string,
   count = 1,
+  searchCursorOffset = 0,
 ): EditResult {
-  const range = charSearchOperatorOffsetRange(text, cursor, kind, target, count);
+  const range = charSearchOperatorOffsetRange(
+    text,
+    cursor,
+    kind,
+    target,
+    count,
+    searchCursorOffset,
+  );
   if (!range) return { text, cursor: clampPosition(splitText(text), cursor), changed: false };
   return deleteOffsetRange(text, range.start, range.end);
 }
@@ -1873,8 +1888,16 @@ export function yankByCharSearch(
   kind: CharSearchKind,
   target: string,
   count = 1,
+  searchCursorOffset = 0,
 ): VimRegister | undefined {
-  const range = charSearchOperatorOffsetRange(text, cursor, kind, target, count);
+  const range = charSearchOperatorOffsetRange(
+    text,
+    cursor,
+    kind,
+    target,
+    count,
+    searchCursorOffset,
+  );
   if (!range) return undefined;
   const selected = text.slice(range.start, range.end);
   return selected.length > 0 ? { type: "char", text: selected } : undefined;

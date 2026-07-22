@@ -8,9 +8,7 @@
 
 ## Testing
 
-- [ ] `bun test` passes
-- [ ] `bun run check-types` passes
-- [ ] `bun run lint` passes
+- [ ] `bun run verify` passes
 - [ ] Manually tested in Pi
 
 ## Related Issues

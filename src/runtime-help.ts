@@ -83,8 +83,18 @@ const ENTRIES = [
     category: "ex",
     topics: ["ex", ":", "substitute", "s", "commands", "repeat", "register", "line", "quit", "q"],
     summary:
-      "finite Ex command-line supports :s substitution, :& repeat substitution, bare line jumps, line commands with register operands, transforms, diagnostics, runtime help, and :q/:quit Pi shutdown",
-    examples: [":3", ":$", ":s/old/new/", ":%s/old/new/gn", ":&", ":delete a", ":q", ":help ex"],
+      "finite Ex command-line supports :s substitution, :& repeat substitution, bare line jumps, line commands with register operands, transforms, diagnostics, runtime help, packaged :changelog, and :q/:quit Pi shutdown",
+    examples: [
+      ":3",
+      ":$",
+      ":s/old/new/",
+      ":%s/old/new/gn",
+      ":&",
+      ":delete a",
+      ":changelog",
+      ":q",
+      ":help ex",
+    ],
     limits: [
       "no Vimscript",
       "no confirmation flag",
@@ -175,9 +185,9 @@ const ENTRIES = [
     category: "settings",
     topics: ["settings", "config", "piVimMode", "options"],
     summary:
-      "piVimMode settings control start mode, cursor, keymap, UI including workbench rows, search, feedback, macros, marks, structures, and transforms",
-    examples: ["piVimMode.preset", "piVimMode.keymap", "piVimMode.ui.workbench.reservedRows"],
-    limits: ["field-by-field validation", "invalid fields warn", "valid siblings are preserved"],
+      "piVimMode JSON settings control finite editor options; trusted global JavaScript setup and API: https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md#basic-setup",
+    examples: ["piVimMode.preset", "piVimMode.keymap", "/vimmode reload"],
+    limits: ["field-by-field validation", "trusted JavaScript is global and unsandboxed"],
     docsAnchor: "runtime-help:settings",
     specAnchor: "openspec/specs/pi-vimmode-documentation/spec.md",
     testAnchors: ["test/config.test.ts"],

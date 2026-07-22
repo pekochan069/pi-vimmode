@@ -16,6 +16,7 @@ import {
   diagnosticActionMessage,
   type DiagnosticActionEntry,
 } from "./diagnostic-actions.ts";
+import { displayMappingSequence } from "./mapping-scopes.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   canonicalPromptTransformActionIdForShortName,
@@ -121,6 +122,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   redo: "redo prompt edit",
   showKeybindings: "show keybindings popup",
   reselectVisual: "reselect last visual selection",
+  easymotion: "jump to character on current file (EasyMotion)",
 };
 
 const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {
@@ -392,7 +394,10 @@ export function actionEntriesForKeymap(
     }
   }
   entries.push(...diagnosticActionEntries().map(diagnosticActionEntry));
-  return entries;
+  return entries.map((entry) => ({
+    ...entry,
+    keys: entry.keys.map(displayMappingSequence),
+  }));
 }
 
 export function searchActions(

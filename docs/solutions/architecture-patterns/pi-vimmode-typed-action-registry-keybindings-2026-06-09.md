@@ -1,7 +1,7 @@
 ---
 title: Pi vimmode typed action registry keybindings
 date: 2026-06-09
-last_updated: 2026-07-01
+last_updated: 2026-07-14
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -371,3 +371,8 @@ openspec validate --specs --strict
 ```
 
 Final result: 463 tests passed, OpenSpec specs validated 20/20, and both active OpenSpec changes were archived.
+
+## Related
+
+- `docs/solutions/architecture-patterns/pi-vimmode-final-leader-resolution-2026-07-14.md` — applies the typed action registry to symbolic leader-prefixed mappings after final config overlay.
+- `docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md` — precedence and conflict-removal rules used by resolved action bindings.

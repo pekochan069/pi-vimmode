@@ -1,6 +1,7 @@
 import type { ReadOnlyPopup } from "../read-only-popup.ts";
 import type {
   CursorStyle,
+  EasymotionTarget,
   EditResult,
   LineRange,
   PendingOperator,
@@ -175,6 +176,7 @@ export type ModalState = {
   pendingSearch?: PendingSearchTarget;
   pendingEx?: PendingExCommand;
   pendingInsertEscape?: string;
+  pendingInsertEscapeInputs?: readonly string[];
   exHistory?: string[];
   lastExSubstitution?: LastExSubstitution;
   exMessage?: ExMessage;
@@ -191,6 +193,12 @@ export type ModalState = {
     cursor: Position;
     text: string;
   };
+  pendingEasymotion?:
+    | { kind: "char" }
+    | {
+        kind: "highlight";
+        targets: EasymotionTarget[];
+      };
 };
 
 export type FastInsertDelegateContext = {

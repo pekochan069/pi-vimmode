@@ -66,6 +66,23 @@ Pi discovers the extension through `package.json`:
 
 For local testing, load this package as a Pi extension using Pi's normal extension loading flow.
 
+### Compatibility with extensions that modifies editor
+
+Pi currently exposes a single custom-editor factory which makes last extension could overrides previous editor factories.\
+Currently, `pi-vimmode` is implemented with `CustomEditor` which cannot decorate an arbitrary editor instances provided by other extensions.
+This means editor extensions that maintain per-instance state, such as history or additional editor behavior, may lose that state when their factory is replaced.
+
+Until pi supports composable order independant editor extension api, you should load pi-vimmode in front of other extensions that set editor component, like `@zigai/pi-prompt-history`.
+Load `pi-vimmode` before other extensions in `settings.json`:
+
+```json
+{
+  "packages": ["pi-vimmode", "another-editor-extension"]
+}
+```
+
+See issue #16 for more information.
+
 ## Quick start
 
 1. Start Pi with the extension loaded.
@@ -111,13 +128,15 @@ Example keymap/UI override:
 ```json
 {
   "piVimMode": {
+    "leader": " ",
     "cursor": {
       "normal": "block",
       "insert": "bar"
     },
     "keymap": {
       "commands": {
-        "startSearch": ["/"]
+        "startSearch": ["/"],
+        "showKeybindings": ["<leader>k"]
       }
     },
     "ui": {
@@ -129,17 +148,35 @@ Example keymap/UI override:
 }
 ```
 
-Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as local code with Pi process privileges:
+### EasyMotion
+
+EasyMotion has no default binding. Bind `command.easymotion`, type a target character, then press its label to move the cursor. Matching is case-insensitive and prompt-wide, with up to 52 labels (lowercase, then uppercase). Labels are render-only substitutions, so prompt text and undo/redo history stay unchanged. Configure label color with `piVimMode.easymotion.labelColor`:
+
+```json
+{
+  "piVimMode": {
+    "easymotion": {
+      "labelColor": "\u001b[31m"
+    }
+  }
+}
+```
+
+Common ANSI color codes: `\u001b[31m` (red), `\u001b[32m` (green), `\u001b[33m` (yellow), `\u001b[34m` (blue), `\u001b[35m` (magenta), `\u001b[36m` (cyan), `\u001b[37m` (white). Default is red (`\u001b[31m`).
+
+Trusted global JS keybindings live at `~/.pi/agent/pi-vimmode.config.js` and run as unsandboxed local code with full Pi process privileges. See [trusted JavaScript config guide](https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md#basic-setup):
 
 ```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
+  vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
-  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
   vim.keymap.set("n", "ZD", ":vimdoctor<CR>");
 };
 ```
 
-Run `/vimmode reload` after editing JS config. See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for the full default reference, JS config boundaries, and all settings.
+Run `/vimmode reload` after editing root JS config. See [`docs/config.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/config.md) for complete trusted JavaScript API, workflows, reload, and safety contract. See [`docs/settings.md`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/settings.md) for canonical JSON defaults and settings.
 
 ## Recover or disable
 
@@ -182,6 +219,7 @@ bun run check-types
 bun run lint
 bun run format:check
 bun run build
+bun run verify-package
 bun pm pack --dry-run
 ```
 

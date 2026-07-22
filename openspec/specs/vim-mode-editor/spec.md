@@ -80,7 +80,22 @@ The Vim editor SHALL support practical normal-mode editing commands using an ext
 #### Scenario: Enter insert from normal mode
 
 - **WHEN** the editor is in normal mode and the user presses `i`, `a`, `I`, or `A`
-- **THEN** the editor enters insert mode at the current cursor, after the current cursor, at line start, or at line end respectively
+- **THEN** the editor enters insert mode at the current cursor, after the current cursor within the same logical line, at line start, or at line end respectively
+
+#### Scenario: Append after an existing character
+
+- **WHEN** the editor is in normal mode, the cursor points at an existing character, and the user presses `a`
+- **THEN** the editor enters insert mode immediately after that character
+
+#### Scenario: Append at logical line end
+
+- **WHEN** the editor is in normal mode, the cursor is already at the current logical line's end, another logical line follows, and the user presses `a`
+- **THEN** the editor enters insert mode at the current line's end and MUST NOT move to the following line
+
+#### Scenario: Append in a wrapped prompt
+
+- **WHEN** a logical line spans multiple terminal rows, the cursor is at that logical line's end before a following blank line, and the user presses `a`
+- **THEN** terminal wrapping and prompt scrolling do not cause the cursor to cross into the following logical line
 
 #### Scenario: Delete character under cursor
 
@@ -150,10 +165,15 @@ The Vim editor SHALL render Vim status feedback according to the resolved UI con
 - **WHEN** the editor switches modes and `piVimMode.ui.mode.labels` configures labels for those modes
 - **THEN** the rendered editor shows the configured active-mode label where the mode status item is enabled and width permits
 
+#### Scenario: Status group can be right-aligned
+
+- **WHEN** `piVimMode.ui.status.position` is set to `"right"`
+- **THEN** the complete ordered status group, including mode, pending state, visual selection status, cursor position, and macro recording, renders at the right edge
+
 #### Scenario: Mode status can be hidden by config
 
 - **WHEN** `piVimMode.ui.mode.enabled` is set to `false` or the status item list omits `mode`
-- **THEN** the rendered editor omits mode feedback while preserving prompt editing behavior
+- **THEN** the rendered editor omits mode feedback from both border slots while preserving prompt editing behavior
 
 #### Scenario: Render width respected
 

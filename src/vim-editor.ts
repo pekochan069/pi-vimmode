@@ -33,13 +33,17 @@ import { normalizeBufferPosition, pasteRegister, pasteRegisterBefore } from "./b
 import { readClipboardText } from "./clipboard.ts";
 import { pendingDisplay } from "./commands.ts";
 import {
-  cloneResolvedVimOptions,
+  createVimConfigPlan,
   cursorStyleForMode,
   DEFAULT_VIM_OPTIONS,
+  escapeAliasesForScope,
   keymapForOptions,
   promptTransformsForOptions,
   searchForOptions,
   uiForOptions,
+  easymotionForOptions,
+  type VimConfigPlan,
+  type VimRuntimeConfiguration,
 } from "./config.ts";
 import { suggestExCommands } from "./ex.ts";
 import {
@@ -53,7 +57,7 @@ import {
   modalPendingDisplay,
 } from "./modal/engine.ts";
 import { appendMessageHistory } from "./modal/inspect.ts";
-import { createModalState } from "./modal/state.ts";
+import { createModalState, resetTransientState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import {
   cursorShapeEscape,
@@ -174,7 +178,7 @@ export function fitStatusBorder(
   border: (text: string) => string = (text) => text,
 ): string {
   if (width <= 0) return "";
-  if (width === 1) return border("─");
+  if (width <= 2) return border("─".repeat(width));
 
   let leftText = left;
   let rightText = right;
@@ -202,10 +206,6 @@ export function fitStatusBorder(
   return `${border("─")}${leftText}${border("─".repeat(gapWidth))}${rightText}${border("─")}`;
 }
 
-function cloneOptions(options: ResolvedVimEditorOptions): ResolvedVimEditorOptions {
-  return cloneResolvedVimOptions(options);
-}
-
 type RedoSnapshot = {
   text: string;
   cursor: Position;
@@ -213,6 +213,12 @@ type RedoSnapshot = {
 
 function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
   return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
+}
+
+function clampToText(text: string, position: Position): Position {
+  const lines = text.split("\n");
+  const line = Math.max(0, Math.min(position.line, lines.length - 1));
+  return { line, col: Math.max(0, Math.min(position.col, lines[line]!.length)) };
 }
 
 export type VimEditorOptions = {
@@ -225,8 +231,7 @@ export type ResetTerminalCursorStyleOptions = {
 
 export class VimEditor extends CustomEditor {
   private modalState: ModalState;
-  private readonly options: ResolvedVimEditorOptions;
-  private readonly diagnostics: VimDiagnostics;
+  private configuration: VimRuntimeConfiguration;
   private readonly overlayTheme: EditorTheme;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
@@ -241,18 +246,28 @@ export class VimEditor extends CustomEditor {
     tui: TUI,
     theme: EditorTheme,
     keybindings: KeybindingsManager,
-    options: ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
-    diagnostics: VimDiagnostics = { warnings: [] },
+    configuration?: VimRuntimeConfiguration,
     vimOptions?: VimEditorOptions,
   ) {
     super(tui, theme, keybindings);
-    this.options = cloneOptions(options);
-    this.diagnostics = { warnings: [...diagnostics.warnings] };
+    const plan = configuration?.plan ?? createVimConfigPlan(DEFAULT_VIM_OPTIONS, []);
+    this.configuration = {
+      plan,
+      diagnostics: { warnings: [...(configuration?.diagnostics.warnings ?? [])] },
+    };
     this.overlayTheme = theme;
     this.onShutdown = vimOptions?.onShutdown;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
+  }
+
+  private get options(): ResolvedVimEditorOptions {
+    return this.configuration.plan.options;
+  }
+
+  private get diagnostics(): VimDiagnostics {
+    return this.configuration.diagnostics;
   }
 
   getVimMode(): VimMode {
@@ -283,6 +298,45 @@ export class VimEditor extends CustomEditor {
     return cursorStyleForMode(this.options, this.modalState.mode);
   }
 
+  reconfigure(plan: VimConfigPlan, diagnostics: VimDiagnostics): void {
+    this.configuration = {
+      plan,
+      diagnostics: { warnings: [...diagnostics.warnings] },
+    };
+    const { recordingSlot: _recordingSlot, ...reset } = resetTransientState(
+      this.modalState,
+      this.modalState.mode,
+    );
+    if (this.modalState.blockInsert) reset.blockInsert = this.modalState.blockInsert;
+    const currentCursor = this.getCursor();
+    const text = this.getText();
+    const cursor = clampToText(text, currentCursor);
+    if (this.modalState.visualAnchor && this.modalState.mode.startsWith("visual")) {
+      reset.visualAnchor = clampToText(text, this.modalState.visualAnchor);
+    }
+    if (reset.lastVisualSelection) {
+      reset.lastVisualSelection = {
+        ...reset.lastVisualSelection,
+        anchor: clampToText(text, reset.lastVisualSelection.anchor),
+        cursor: clampToText(text, reset.lastVisualSelection.cursor),
+      };
+    }
+    this.modalState = reset;
+    this.restoreCursor(cursor);
+    this.helpOverlay?.hide();
+    this.helpOverlay = undefined;
+    this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
+    this.invalidate();
+    this.tui.requestRender();
+  }
+
+  updateDiagnostics(diagnostics: VimDiagnostics): void {
+    this.configuration = {
+      plan: this.configuration.plan,
+      diagnostics: { warnings: [...diagnostics.warnings] },
+    };
+  }
+
   setAgentBusy(active: boolean): void {
     if (this.agentBusy === active) return;
     this.agentBusy = active;
@@ -290,11 +344,12 @@ export class VimEditor extends CustomEditor {
   }
 
   override handleInput(data: string): void {
+    const keymap = keymapForOptions(this.options);
     if (
       canFastDelegateInsertInput(this.modalState, data, {
         isAutocompleteOpen: this.isShowingAutocomplete(),
         isMacroReplaying: this.isMacroReplaying,
-        escape: keymapForOptions(this.options).escape,
+        escape: escapeAliasesForScope(keymap, "insert"),
       })
     ) {
       this.delegateDefaultInput(data);
@@ -304,7 +359,7 @@ export class VimEditor extends CustomEditor {
     const update = handleModalInput(
       this.modalState,
       this.snapshot(),
-      this.options,
+      this.configuration.plan,
       data,
       this.diagnostics,
     );
@@ -377,6 +432,20 @@ export class VimEditor extends CustomEditor {
       maxHighlights: search.maxHighlights,
     };
   }
+  private easymotionRenderInput() {
+    const easymotion = easymotionForOptions(this.options);
+    if (!easymotion) return undefined;
+    const pending = this.modalState.pendingEasymotion;
+    if (pending?.kind !== "highlight") return undefined;
+    return {
+      targets: pending.targets.map((t) => ({
+        line: t.line,
+        character: t.character,
+        label: t.label,
+      })),
+      labelColor: easymotion.labelColor,
+    };
+  }
 
   private renderEditorLines(
     width: number,
@@ -410,6 +479,7 @@ export class VimEditor extends CustomEditor {
           },
         },
         search: this.searchRenderInput(),
+        easymotion: this.easymotionRenderInput(),
         display: {
           borderColor: this.borderColor,
         },
@@ -446,6 +516,7 @@ export class VimEditor extends CustomEditor {
           },
         },
         search: this.searchRenderInput(),
+        easymotion: this.easymotionRenderInput(),
         display: {
           borderColor: this.borderColor,
         },
@@ -664,8 +735,15 @@ export class VimEditor extends CustomEditor {
       for (let i = current.line; i < target.line; i++) super.handleInput(KEY.down);
     }
 
-    super.handleInput(KEY.lineStart);
-    for (let i = 0; i < target.col; i++) super.handleInput(KEY.right);
+    const lineLength = this.getLines()[target.line]?.length ?? 0;
+    const fromStart = target.col;
+    const fromEnd = lineLength - target.col;
+    const [boundaryKey, movementKey, distance] =
+      fromStart <= fromEnd
+        ? [KEY.lineStart, KEY.right, fromStart]
+        : [KEY.lineEnd, KEY.left, fromEnd];
+    super.handleInput(boundaryKey);
+    for (let index = 0; index < distance; index++) super.handleInput(movementKey);
   }
 
   private terminalRows(): number | undefined {

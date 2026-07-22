@@ -71,6 +71,46 @@ describe("read-only popup overlay", () => {
     expect(renders.length).toBeGreaterThanOrEqual(4);
   });
 
+  test("renders Markdown semantically, wraps prose, and preserves code indentation", () => {
+    const input = popup([]);
+    input.source = "changelog";
+    input.markdown = [
+      "## Added",
+      "",
+      "- Long **bold** prose with [`link`](https://example.com) that wraps across rows.",
+      "",
+      "```js",
+      "  const value = 1;",
+      "```",
+    ].join("\n");
+    const { component } = createComponent(input);
+    const rows = component.render(48);
+    const text = rows.join("\n");
+
+    expect(text).toContain("Added");
+    expect(text).toContain("• Long bold prose");
+    expect(text).toContain("link");
+    expect(text).toContain("(https://example.com)");
+    expect(text).toContain("  const value = 1;");
+    expect(text).not.toContain("```js");
+    expect(text).toContain("1-7/7");
+    for (const row of rows) expect(visibleWidth(row)).toBeLessThanOrEqual(48);
+  });
+
+  test("counts wrapped Markdown rows for scrolling", () => {
+    const input = popup([]);
+    input.source = "changelog";
+    input.markdown = Array.from(
+      { length: 6 },
+      () => "Long prose that wraps onto another rendered row.",
+    ).join("\n");
+    const { component } = createComponent(input);
+
+    expect(component.render(40).join("\n")).toContain("1-10/12 ↓2");
+    component.handleInput("j");
+    expect(component.render(40).join("\n")).toContain("2-11/12 ↑1 ↓1");
+  });
+
   test("close controls are local to overlay", () => {
     for (const key of ["\x1b", "\x03", "\x07"]) {
       const { component, closed } = createComponent(popup(["output"]));

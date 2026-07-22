@@ -18,8 +18,10 @@ export function resetTransientState(state: ModalState, mode: VimMode): ModalStat
   if (state.marks) nextState.marks = state.marks;
   if (state.lastCharSearch) nextState.lastCharSearch = state.lastCharSearch;
   if (state.lastSearch) nextState.lastSearch = state.lastSearch;
+  if (state.searchHistory) nextState.searchHistory = state.searchHistory;
   if (state.searchHighlight) nextState.searchHighlight = state.searchHighlight;
   if (state.messageHistory) nextState.messageHistory = state.messageHistory;
+  if (state.exHistory) nextState.exHistory = state.exHistory;
   if (state.lastExSubstitution) nextState.lastExSubstitution = state.lastExSubstitution;
   if (state.lastRepeatableChange) nextState.lastRepeatableChange = state.lastRepeatableChange;
   if (state.lastVisualSelection) nextState.lastVisualSelection = state.lastVisualSelection;

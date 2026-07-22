@@ -1,7 +1,7 @@
 ---
 title: Finite Vim keybinding parser with pure buffer helpers
 date: 2026-05-26
-last_updated: 2026-06-19
+last_updated: 2026-07-14
 category: docs/solutions/architecture-patterns
 module: pi-vimmode
 problem_type: architecture_pattern
@@ -445,7 +445,8 @@ Validation for the buffer helper deduplication used `bun test`, `bun test test/b
 - `src/vim-editor.ts` — Pi `CustomEditor` adapter and effect interpreter
 - `test/commands.test.ts`, `test/buffer.test.ts`, `test/modal.test.ts`, `test/vim-editor.test.ts` — layered test coverage
 - `scripts/measure-insert-fast-path.ts` — local insert-path measurement for snapshot and delegation cost
-- `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — concrete bug where line-command repeat state and live option cloning drifted from this architecture
+- `docs/solutions/logic-errors/vim-behavior-contract-drift-2026-05-28.md` — concrete bugs where line-command repeat state, live option cloning, and `a` logical-line movement drifted from this architecture
 - `docs/solutions/logic-errors/pi-vimmode-config-keymap-precedence-2026-06-17.md` — descriptor/config precedence guardrails for semantic keymaps
 - `docs/solutions/developer-experience/pi-vimmode-ctrl-d-ctrl-u-half-page-scroll-2026-06-18.md` — recent motion-addition recipe using descriptor entries, buffer helpers, modal wiring, docs, and drift tests
 - `docs/solutions/developer-experience/pi-vimmode-auto-activation-2026-05-26.md` — same editor component, focused on lifecycle/activation reliability rather than keybinding behavior
+- `docs/solutions/architecture-patterns/pi-vimmode-final-leader-resolution-2026-07-14.md` — late-bound symbolic prefixes, conditional grammar reservation, and silent invalid-continuation handling

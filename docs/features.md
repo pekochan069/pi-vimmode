@@ -201,7 +201,7 @@ W moves to --flag=value; E moves to the end of that WORD; gE from /tmp/a-b moves
 | Key                 | Action                                                                  |
 | ------------------- | ----------------------------------------------------------------------- |
 | `i`                 | enter insert at cursor                                                  |
-| `a`                 | move right, then insert                                                 |
+| `a`                 | insert after cursor without crossing current logical line               |
 | `I` / `A`           | move to line start/end, then insert                                     |
 | `o` / `O`           | open blank line below/above, then insert                                |
 | `x` / `X`           | delete character under/before cursor                                    |
@@ -342,6 +342,12 @@ Limitations:
 - Paragraph objects use the same blank-line paragraph model as `{` and `}`. `ip` selects the paragraph body only; `ap` adds one adjacent blank separator group when present (following, otherwise preceding) so deleting a paragraph does not leave double blank separators.
 - XML-ish tags support matching `<name ...>` / `</name>` pairs and ignore self-closing tags.
 - Error block detection is heuristic and stops at blank or unrelated prose lines.
+
+## EasyMotion
+
+EasyMotion is opt-in; it has no default binding. Bind `command.easymotion`, type a target character, then press its label to move the cursor. Matching is case-insensitive and prompt-wide. Up to 52 targets receive deterministic labels: `a` through `z`, then `A` through `Z`.
+
+Labels are render-only substitutions over unchanged prompt cells. Escape, invalid labels, and missing matches leave prompt text and undo/redo history unchanged. Valid labels move the cursor without creating an edit. Configure label color with `piVimMode.easymotion.labelColor`.
 
 ## Character search
 
@@ -608,6 +614,7 @@ Important semantics:
 - `:help [topic]` opens a read-only popup with source-backed runtime help for finite pi-vimmode topics, e.g. `:help search` or `:help ex`.
 - `:features [query]` opens a read-only popup listing/searching supported feature areas, commands, actions, limits, and effective runtime state, e.g. `:features nohlsearch` or `:features redo`.
 - `:messages` opens a read-only popup with a bounded prompt-local summary of retained recent runtime messages without opening a pager.
+- `:changelog` opens packaged current-version release notes as width-safe Markdown in the same read-only popup; it never reads the working directory or network.
 - `:q` and `:quit` request graceful Pi shutdown through the Pi extension runtime without editing prompt text, registers, marks, search state, macros, cursor, or dot-repeat.
 - `:q!`, `:quit!`, `:wq`, `:x`, `:qa`, `:write`, `:edit`, `:shell`, and other file/window/shell Ex commands are intentionally unsupported.
 - `Esc` cancels command-line input. Normal Ex returns to normal mode; visual Ex restores the original visual mode, anchor, cursor, and highlight.
@@ -621,7 +628,7 @@ Important semantics:
 - Unsupported command, range, destination, delimiter, argument, flag, register operand, invalid regex, too-large regex input, or zero-length regex match produces transient Ex error text.
 - Unsupported range syntax includes repeated offsets such as `.+1-2`, repeated range separators, expression ranges, search addresses, mark addresses, `+cmd` suffixes, and broader Vimscript grammar.
 - Successful mutating/editing commands show transient count text such as `2 substitutions`, `1 line deleted`, `3 lines moved`, or `2 lines transformed`.
-- Valid read-only help/diagnostic commands open a bounded popup: `:help`, `:help <topic>`, `:features`, `:features <query>`, `:keybindings`, `:keybindings <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:vimmode inspect`, and `:vimdoctor`.
+- Valid read-only help/diagnostic commands open a bounded popup: `:help`, `:help <topic>`, `:features`, `:features <query>`, `:keybindings`, `:keybindings <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:changelog`, `:vimmode inspect`, and `:vimdoctor`.
 - Popup-backed commands do not edit prompt text, registers, marks, search state, visual state, macros, or dot-repeat.
 - Mutating command success/error feedback, parser errors, invalid command feedback, substitution preview/apply messages, `:noh`, prompt transforms, and optional no-op feedback stay in the compact Ex/workbench row.
 - Compact success/error/info messages stay in the Ex row until the next handled input.
@@ -664,7 +671,7 @@ Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.act
 
 ### Read-only Ex popup and keybinding discovery
 
-Valid read-only Ex help and diagnostic commands open a dedicated bounded read-only overlay popup, similar to Pi picker-style overlay UIs. Popup-backed commands include `:help`, `:help <topic>`, `:features`, `:features <query>`, `:features keybindings`, `:keybindings`, `:keybindings <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:vimmode inspect`, and `:vimdoctor`.
+Valid read-only Ex help and diagnostic commands open a dedicated bounded read-only overlay popup, similar to Pi picker-style overlay UIs. Popup-backed commands include `:help`, `:help <topic>`, `:features`, `:features <query>`, `:features keybindings`, `:keybindings`, `:keybindings <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:changelog`, `:vimmode inspect`, and `:vimdoctor`.
 
 `:keybindings` is the direct keybinding discovery entry point. It lists effective pi-vimmode bindings from resolved settings by finite category: commands, motions, operators, text objects, macros, marks, searches, prompt transform actions, and protected Pi shortcuts. Each binding row shows key, supported mode scope, action ID, and description in a fixed grid. `:keybindings <query>` shows focused detail for action IDs (`redo`, `wordForward`, `prompt.transform.reflow`), descriptions, current keys, protected shortcuts such as `ctrl+p`, rejected metadata/action binding warnings, and bounded no-match output. Ex commands and diagnostic/help metadata IDs are excluded from the catalog because they are not keybindings. It is read-only discovery: it does not edit settings, create mappings, run a command palette, or dispatch metadata actions.
 
@@ -861,8 +868,9 @@ Optional status item:
 
 Rendering behavior:
 
-- Narrow widths use narrow labels: `I`, `N`, `V`, `VL`, `VB`.
-- Active macro recording shows `REC {slot}`.
+- Status items are left-aligned by default; `piVimMode.ui.status.position: "right"` moves the complete ordered status group to the far-right border slot.
+- Mode, pending state, selection, cursor position, and active macro recording (`REC {slot}`) always move together.
+- Narrow widths use narrow labels: `I`, `N`, `V`, `VL`, `VB`, and truncate the aligned status group to fit.
 - Visual selections are highlighted inline.
 - Selected empty lines in visual line mode render a highlighted blank cell when width permits.
 - Insert-mode autocomplete rows remain Pi-owned and visible; Vim status feedback renders on a separate row while completion UI is open.
@@ -896,7 +904,7 @@ Pi remains owner of app-level shortcuts.
 
 ## Configuration features
 
-Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
+Most keys map to semantic actions through `piVimMode.keymap`; settings do not add arbitrary Vim grammar. Optional `piVimMode.leader` and trusted `vim.g.mapleader` settings expand leading `<leader>` mapping keys with one final global/JS/project value. Advanced users can add trusted global JS keybindings in `~/.pi/agent/pi-vimmode.config.js` with `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` or simple replay mappings such as `vim.keymap.set("n", "zz", "llll")`.
 
 Examples of configurable features:
 
@@ -904,6 +912,7 @@ Examples of configurable features:
 - cursor style per mode
 - presets (`minimal`, `prompt-safe`, `vim-heavy`) that apply before explicit fields
 - semantic key bindings for supported actions
+- optional leader prefix for JSON and trusted JS normal/visual mappings
 - trusted global JS keybinding additions via `vim.prompt.*` built-ins
 - opt-in protected shortcut override list per settings layer
 - text object kind/target keys

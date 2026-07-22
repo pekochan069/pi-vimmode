@@ -1,6 +1,6 @@
 import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { CursorStyle, Position, TextRange, VimMode } from "./types.ts";
+import type { CursorStyle, EasymotionTarget, Position, TextRange, VimMode } from "./types.ts";
 
 import { findSearchHighlightRanges } from "./buffer.ts";
 import { isVisualCellSelected, isVisualLineSelected } from "./visual-selection.ts";
@@ -36,6 +36,11 @@ export type SearchHighlightRenderInput = {
   maxHighlights: number;
 };
 
+export type EasymotionRenderInput = {
+  targets: EasymotionTarget[];
+  labelColor: string;
+};
+
 export type PromptRenderInput = {
   snapshot: {
     lines: string[];
@@ -54,6 +59,7 @@ export type PromptRenderInput = {
   display?: {
     borderColor?: (text: string) => string;
   };
+  easymotion?: EasymotionRenderInput;
 };
 
 export type ActiveVisualRenderInput = {
@@ -78,6 +84,7 @@ export type ActiveVisualRenderInput = {
   display?: {
     borderColor?: (text: string) => string;
   };
+  easymotion?: EasymotionRenderInput;
 };
 
 type VisualRenderView = {
@@ -94,6 +101,7 @@ type VisualRenderView = {
   borderColor?: (text: string) => string;
   search?: SearchHighlightRenderInput;
   searchRanges: TextRange[];
+  easymotion: EasymotionRenderInput | undefined;
 };
 
 function styleSelection(text: string): string {
@@ -106,6 +114,11 @@ function styleSearch(text: string): string {
 
 function styleCurrentSearch(text: string): string {
   return `${SEARCH_CURRENT_START}${text}${ANSI_RESET}`;
+}
+
+function fitEasymotionLabel(label: string, width: number): string {
+  const truncated = truncateToWidth(label, width, "");
+  return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
 export function renderCursorCell(cell: string, style: CursorStyle): string {
@@ -264,10 +277,17 @@ function renderLayoutLine(
     const cell = Array.from(chunk.text.slice(offset))[0] ?? "";
     const cellStart = chunk.startIndex + offset;
     const cellWidth = visibleWidth(cell);
+    const easymotionTarget = options.easymotion?.targets.find(
+      (target) => target.line === chunk.lineIndex && target.character === cellStart,
+    );
+    const displayCell =
+      easymotionTarget && options.easymotion
+        ? fitEasymotionLabel(easymotionTarget.label, cellWidth)
+        : cell;
     const isCursor = options.cursor.line === chunk.lineIndex && options.cursor.col === cellStart;
 
     if (isCursor) {
-      output += marker + renderCursorCell(cell, options.cursorStyle);
+      output += marker + renderCursorCell(displayCell, options.cursorStyle);
       cursorRendered = true;
     } else if (
       isSelectedCell(
@@ -279,7 +299,9 @@ function renderLayoutLine(
         cellStart,
       )
     ) {
-      output += styleSelection(cell);
+      output += styleSelection(displayCell);
+    } else if (easymotionTarget && options.easymotion) {
+      output += options.easymotion.labelColor + displayCell + ANSI_RESET;
     } else {
       const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
       if (searchStyle === "current") output += styleCurrentSearch(cell);
@@ -364,6 +386,7 @@ function createPromptRenderView(input: PromptRenderInput): VisualRenderView {
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(input.snapshot.text, input.search),
+    easymotion: input.easymotion,
   };
 }
 
@@ -383,6 +406,7 @@ function createVisualRenderView(input: ActiveVisualRenderInput): VisualRenderVie
     borderColor: input.display?.borderColor,
     search: input.search,
     searchRanges: createSearchRanges(text, input.search),
+    easymotion: input.easymotion,
   };
 }
 

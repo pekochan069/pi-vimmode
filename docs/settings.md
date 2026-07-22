@@ -16,7 +16,7 @@ pi-vimmode loads settings from:
 2. Trusted global JS config: `~/.pi/agent/pi-vimmode.config.js`
 3. Project settings: `.pi/settings.json` in the current project
 
-Global JS config applies after global settings and before project settings. Project settings apply last. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply. JS `vim.keymap.set(...)` calls add keybindings to inherited global settings instead of replacing preset or JSON bindings for the same built-in action; project JSON can still clear an action with an explicit empty array.
+Global JS config applies after global settings and before project settings. Project settings apply last. Objects merge field by field. Arrays replace that specific setting when valid. Invalid fields are ignored while valid sibling fields still apply. JS `vim.keymap.set(...)` calls add keybindings to inherited global settings instead of replacing preset or JSON bindings for the same built-in action; project JSON can still clear an action with an explicit empty array. Leader mappings use one final effective leader after all three layers resolve.
 
 Example:
 
@@ -39,6 +39,7 @@ Common warning causes:
 - Invalid JSON in a settings file.
 - `piVimMode` is not an object.
 - Unsupported startup mode or cursor style.
+- Invalid leader value or `<leader>` mapping without an effective leader.
 - Unknown keymap action name.
 - Protected Pi shortcut used in keymap.
 - Unsupported operator motion.
@@ -46,32 +47,40 @@ Common warning causes:
 - Invalid UI/search/macro/mark/feedback field type.
 - Invalid `piVimMode.ui.workbench.reservedRows` value outside `0` through `5`.
 - Legacy `piVimMode.vimOptions` present.
-- Invalid global JS config import, export shape, mode, key string, or RHS.
+- Invalid global JS config import, export shape, mode, key string, or mapping target.
 
 ## Global JS config
 
-`~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
+Canonical setup, generated API reference, checked workflows, reload behavior, and safety contract live in [`docs/config.md`](config.md#basic-setup).
 
-Use `vim.keymap.set(mode, key, vim.prompt.<builtin>(args?))` for built-ins or `vim.keymap.set(mode, key, "keys")` for a literal key replay. The key is a string using the same key syntax as JSON settings. Built-in pi-vimmode actions are accessed through `vim.prompt.*`, not string action IDs.
+`~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with full Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
+
+Use `vim.keymap.set(mode, keys, target, options?)`. `target` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap those exact keys in selected scopes. `keys` uses JSON key syntax; string targets are replayed keys, never internal action IDs.
 
 ```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
+  vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
-  vim.keymap.set("n", "zq", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
   vim.keymap.set("v", "z>", vim.prompt.quote());
+  vim.keymap.set("n", "H", vim.action.motion.wordForward(), { desc: "Next word" });
   vim.keymap.set("n", "zz", "llll");
+  vim.keymap.set("n", "zq", null);
 };
 ```
 
-Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"` for all visual modes, or exact `"visual"`, `"visualLine"`, `"visualBlock"`. Arrays of modes are accepted.
+Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"`/`"x"`/`"visual"` for all visual modes, exact `"visualLine"` or `"visualBlock"`, and `"o"`/`"operatorPending"`/`"operator-pending"` while an operator awaits its target. Arrays of modes are accepted. Each descriptor declares allowed scopes; unsupported scope combinations warn and do not install that mapping.
 
-Prompt transform built-ins: `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, `reflow({ width })`.
+`vim.action` exposes finite operator, motion, command, macro, mark, insert, text-object, and prompt-transform descriptor factories. `vim.prompt.*` remains the compatible alias for prompt-transform and insert built-ins. Prompt transform factories are `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, and `reflow({ width })`; insert factories are `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, and `moveLineEnd`.
 
-Insert-mode built-ins: `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, `moveLineEnd`.
+Literal replay strings work only in normal or visual scopes, are bounded, and do not recursively expand mappings. `null` removes only the exact selected-scope mapping. `options` accepts only `allowProtected: true` and diagnostic `desc: string`; an override does not guarantee that Pi or terminal delivers that key. Same-scope exact mappings are source-ordered; same-scope executable prefix overlaps warn and are rejected because keymaps have no timeout.
 
-JS config boundaries: no raw object export, no string RHS that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String RHS is replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit.
+Set `vim.g.mapleader` to one printable character or `null`. Assignment affects every retained `<leader>` mapping after project settings apply, regardless of assignment order inside the JS file. Invalid assignments warn and preserve the last valid value.
 
-Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results.
+JS config boundaries: no raw object export, no string target that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String targets are replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping keys, never in replay target strings.
+
+Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results. Imported helpers follow native ESM caching; see [`docs/config.md#exports-async-config-and-imported-presets`](config.md#exports-async-config-and-imported-presets).
 
 ## Key sequence syntax
 
@@ -103,6 +112,7 @@ Rules:
   - `<S-tab>` / `<Shift-tab>` -> `shift+tab`
   - `<D-x>` / `<Cmd-x>` / `<Super-x>` -> `super+x`
 - Prefer lowercase normalized names such as `ctrl+a` for raw modifier strings.
+- A mapping may begin with case-insensitive `<leader>` when `piVimMode.leader` is configured. `<leader><leader>` is valid; a lone `<leader>` or `g<leader>x` is rejected.
 - Empty arrays do not override existing/default bindings for classic keymap groups. In `piVimMode.keymap.actions`, an empty array unbinds that action in the current settings scope.
 - `piVimMode.keymap.escape` defaults to `[]` and replaces the inherited escape alias list when set.
 - Escape aliases are key aliases such as `<D-j>` or `<C-j>`, not raw text chords such as `jk` or `jj`.
@@ -132,6 +142,7 @@ Protected keys can be overridden by listing them in `piVimMode.keymap.allowProte
 | ---------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
 | `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                |
+| `piVimMode.leader`     | absent      | one printable character or `null`           | Replaces leading `<leader>` tokens after all settings layers resolve. `null` clears an inherited leader.                                                           |
 | `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
 | `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
 
@@ -156,6 +167,36 @@ Example explicit override:
 ```
 
 Here `vim-heavy` supplies its baseline, then `startMode` and `visualBlock` override those fields.
+
+### Leader key
+
+Leader is optional and has no default. Global JSON, trusted JS, and project JSON resolve in that order; the final value expands every retained mapping key beginning with `<leader>`. Omit the field to inherit, or use `null` to clear an inherited leader.
+
+```json
+{
+  "piVimMode": {
+    "leader": " ",
+    "keymap": {
+      "actions": {
+        "prompt.transform.reflow": ["<leader>q"]
+      },
+      "commands": {
+        "showKeybindings": ["<leader>k"]
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+- Value must be exactly one printable character, including space, comma, or backslash. Empty, multi-character, control, and non-string values warn and are ignored.
+- `<leader>` is case-insensitive but must start mapping key. A lone `<leader>` warns and is ignored; repeated leading tokens such as `<leader><leader>` are valid.
+- Missing or cleared leader drops affected mappings with warnings while valid sibling mappings remain.
+- Any retained normal/visual leader mapping reserves selected prefix across normal and all visual modes. Existing grammar on that prefix becomes unavailable, including counts for digit leaders, named-register entry for `"`, macro/mark keys, and direct visual `u`/`U` transforms.
+- Leader setting alone changes no key behavior. Insert escape/action and multi-key text-object bindings retain existing validation and do not activate normal/visual prefix reservation.
+- Runtime keybinding views show expanded physical keys, not `<leader>` source notation.
+- No timeout fallback, recursive expansion, runtime `:map`, target substitution, Vimscript, or Neovim Lua support.
 
 ## Cursor settings
 
@@ -636,6 +677,14 @@ These settings control search highlighting, not search motion semantics.
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
+## EasyMotion settings
+
+These settings control the visual appearance of EasyMotion character-search labels.
+
+| Path                              | Default    | Accepted values         | Effect                                                                                        |
+| --------------------------------- | ---------- | ----------------------- | --------------------------------------------------------------------------------------------- |
+| `piVimMode.easymotion.labelColor` | `\x1b[31m` | ANSI escape code string | Color applied to EasyMotion label characters (e.g. `\x1b[31m` for red, `\x1b[32m` for green). |
+
 Search is literal by default and prompt-local. `?` starts backward search, empty `/` or `?` recalls the previous successful query, and `Up` / `Down` navigate in-memory history while a search is pending. Prefix a pending query with `\r` for bounded regex search. Vim highlight groups, offsets, and cross-prompt history are not supported. `:noh` / `:nohlsearch` clear current prompt search highlights without changing text or registers.
 
 ## Feedback settings
@@ -710,19 +759,22 @@ Example:
 
 ### Status
 
-| Path                          | Default                                                      | Accepted values                                                   | Effect                                                                |
-| ----------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `piVimMode.ui.status.enabled` | `true`                                                       | boolean                                                           | Enables/disables all status text in the editor border.                |
-| `piVimMode.ui.status.items`   | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
+| Path                           | Default                                                      | Accepted values                                                   | Effect                                                                |
+| ------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `piVimMode.ui.status.enabled`  | `true`                                                       | boolean                                                           | Enables/disables all status text in the editor border.                |
+| `piVimMode.ui.status.position` | `"left"`                                                     | `"left"`, `"right"`                                               | Aligns the complete ordered status group at the selected border edge. |
+| `piVimMode.ui.status.items`    | `["mode", "pendingOperator", "selection", "cursorPosition"]` | array of `mode`, `pendingOperator`, `selection`, `cursorPosition` | Ordered status items to render. Empty/invalid arrays do not override. |
 
 Status item meanings:
 
-| Item              | Shows                                                                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | Mode label when enabled. Active macro recording shows `REC {slot}` whenever status is enabled, next to mode when present and prepended otherwise. |
-| `pendingOperator` | Pending prefixes with an ellipsis, such as `d…`, `g…`, `/query…`, `m…`, or `:command…`.                                                           |
-| `selection`       | Visual selection summary and preview when enabled.                                                                                                |
-| `cursorPosition`  | Cursor position when `ui.cursorPosition.enabled` is true.                                                                                         |
+| Item              | Shows                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`            | Mode label when enabled. Active macro recording shows `REC {slot}` at the mode item's order position when present and prepended otherwise. |
+| `pendingOperator` | Pending prefixes with an ellipsis, such as `d…`, `g…`, `/query…`, `m…`, or `:command…`.                                                    |
+| `selection`       | Visual selection summary and preview when enabled.                                                                                         |
+| `cursorPosition`  | Cursor position when `ui.cursorPosition.enabled` is true.                                                                                  |
+
+`position` aligns the complete status sequence, so mode, pending state, selection, cursor position, and macro recording always move together. The aligned group is truncated as needed to preserve terminal width.
 
 ### Mode labels
 
@@ -1018,6 +1070,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
     "ui": {
       "status": {
         "enabled": true,
+        "position": "left",
         "items": ["mode", "pendingOperator", "selection", "cursorPosition"]
       },
       "mode": {
@@ -1177,12 +1230,15 @@ Now delete only accepts `d{wordForward}` and `d{lineEnd}` among finite operator 
 }
 ```
 
-### Custom mode labels
+### Custom right-aligned mode labels
 
 ```json
 {
   "piVimMode": {
     "ui": {
+      "status": {
+        "position": "right"
+      },
       "mode": {
         "labels": {
           "normal": "COMMAND",

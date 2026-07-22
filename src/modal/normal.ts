@@ -390,10 +390,14 @@ export function applyCommand(
     case "insertBefore":
       return modeUpdate(nextState, "insert", options);
     case "insertAfter":
-      return modeUpdate(nextState, "insert", options, [
-        { type: "adapterCommand", command: "right" },
-        { type: "invalidate" },
-      ]);
+      return modeUpdate(
+        nextState,
+        "insert",
+        options,
+        snapshot.cursor.col < (snapshot.lines[snapshot.cursor.line] ?? "").length
+          ? [{ type: "adapterCommand", command: "right" }, { type: "invalidate" }]
+          : [],
+      );
     case "insertLineStart":
       return modeUpdate(nextState, "insert", options, [
         { type: "adapterCommand", command: "lineStart" },
@@ -578,6 +582,9 @@ export function applyCommand(
         { type: "invalidate" },
       ]);
     }
+    // easymotion is intercepted in handleNormalInput before reaching applyCommand
+    default:
+      return invalidate(nextState);
   }
 }
 
@@ -600,12 +607,29 @@ function oppositeCharSearch(command: CharSearchCommand): CharSearchCommand {
   return "tillCharForward";
 }
 
+function repeatCharSearchOffset(command: CharSearchCommand): number {
+  if (command === "tillCharForward") return 1;
+  if (command === "tillCharBackward") return -1;
+  return 0;
+}
+
+function repeatCharSearchSnapshot(
+  snapshot: EditorSnapshot,
+  command: CharSearchCommand,
+): EditorSnapshot {
+  const cursorOffset = repeatCharSearchOffset(command);
+  return cursorOffset
+    ? { ...snapshot, cursor: { ...snapshot.cursor, col: snapshot.cursor.col + cursorOffset } }
+    : snapshot;
+}
+
 function applyCharSearch(
   state: ModalState,
   snapshot: EditorSnapshot,
   command: CharSearchCommand,
   target: string,
   count = 1,
+  recordLastCharSearch = true,
 ): ModalUpdate {
   const position = findCharOnLine(
     snapshot.text,
@@ -615,20 +639,13 @@ function applyCharSearch(
     count,
   );
   if (!position) return invalidate(state);
-  return withEffects(
-    {
-      ...state,
-      lastCharSearch: {
-        command: command as
-          | "findCharForward"
-          | "findCharBackward"
-          | "tillCharForward"
-          | "tillCharBackward",
-        target,
-      },
-    },
-    [{ type: "restoreCursor", position }, { type: "invalidate" }],
-  );
+  const searchedState = recordLastCharSearch
+    ? {
+        ...state,
+        lastCharSearch: { command, target },
+      }
+    : state;
+  return withEffects(searchedState, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
 }
 
 function repeatCharSearch(
@@ -641,7 +658,14 @@ function repeatCharSearch(
   const command = reverse
     ? oppositeCharSearch(state.lastCharSearch.command)
     : state.lastCharSearch.command;
-  return applyCharSearch(state, snapshot, command, state.lastCharSearch.target, count);
+  return applyCharSearch(
+    state,
+    repeatCharSearchSnapshot(snapshot, command),
+    command,
+    state.lastCharSearch.target,
+    count,
+    false,
+  );
 }
 
 export function applyOperatorCharSearchRepeat(
@@ -664,6 +688,9 @@ export function applyOperatorCharSearchRepeat(
     state.lastCharSearch.target,
     options,
     count,
+    true,
+    false,
+    repeatCharSearchOffset(command),
   );
 }
 
@@ -676,20 +703,35 @@ export function applyOperatorCharSearch(
   options: ModalOptions,
   count = 1,
   recordRepeat = true,
+  recordLastCharSearch = true,
+  searchCursorOffset = 0,
 ): ModalUpdate {
   const baseState = clearCommandPending(state);
-  const lastCharSearch = { command, target };
+  const searchedState = recordLastCharSearch
+    ? { ...baseState, lastCharSearch: { command, target } }
+    : baseState;
   const kind = charSearchKind(command);
   if (operator === "yank") {
-    const register = yankByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
-    return yankUpdate(register ? { ...baseState, lastCharSearch } : baseState, register);
+    const register = yankByCharSearch(
+      snapshot.text,
+      snapshot.cursor,
+      kind,
+      target,
+      count,
+      searchCursorOffset,
+    );
+    return yankUpdate(register ? searchedState : baseState, register);
   }
 
-  const result = deleteByCharSearch(snapshot.text, snapshot.cursor, kind, target, count);
-  const written = editStateAndEffects(
-    result.changed ? { ...baseState, lastCharSearch } : baseState,
-    result,
+  const result = deleteByCharSearch(
+    snapshot.text,
+    snapshot.cursor,
+    kind,
+    target,
+    count,
+    searchCursorOffset,
   );
+  const written = editStateAndEffects(result.changed ? searchedState : baseState, result);
   let edited = written.state;
   if (recordRepeat) {
     edited = withRepeatableChange(

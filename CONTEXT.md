@@ -32,6 +32,10 @@ _Avoid_: Prompt transform command, generic Vim action, plugin action
 A configured normal/visual-mode key sequence that invokes a prompt transform action. It is not a command alias and does not imply runtime mapping support.
 _Avoid_: Ex command name, `:map`, recursive mapping
 
+**Leader key**:
+An optional configured key that replaces a leading `<leader>` token as a reusable mapping prefix. When used by normal or visual mappings, it reserves that prefix across normal and visual keymap grammar; it is unset by default and is not itself an action.
+_Avoid_: Leader action, leader map
+
 **Keymap grammar**:
 The finite set of modal key sequences and prefix/exact matching rules that decide whether prompt input is complete, pending more keys, or invalid. It is not recursive mapping or Vimscript.
 _Avoid_: Runtime mapping, `.vimrc`, keybinding parser

@@ -99,12 +99,17 @@ The Vim extension lifecycle SHALL tolerate stale context failures from delayed r
 
 ### Requirement: Session shutdown resets tracked terminal cursor styles
 
-The Vim extension lifecycle SHALL reset terminal cursor style for tracked Vim editor instances when Pi emits `session_shutdown`.
+The Vim extension lifecycle SHALL reset terminal cursor shape for tracked Vim editor instances when Pi emits `session_shutdown`. For terminal exit with reason `quit`, cleanup MUST leave final hardware cursor visibility to Pi; for runtime transition reasons, cleanup SHALL restore each editor's captured Pi hardware cursor visibility policy.
 
-#### Scenario: Shutdown resets all tracked editors
+#### Scenario: Quit resets shape without restoring visibility policy
 
-- **WHEN** Pi emits `session_shutdown` after the lifecycle factory created one or more Vim editors
-- **THEN** the lifecycle calls `resetTerminalCursorStyle()` on each tracked editor
+- **WHEN** Pi emits `session_shutdown` with reason `quit` after the lifecycle factory created one or more Vim editors
+- **THEN** the lifecycle resets each tracked editor's terminal cursor shape without restoring its captured hardware cursor visibility policy
+
+#### Scenario: Runtime transition restores visibility policy
+
+- **WHEN** Pi emits `session_shutdown` with reason `reload`, `new`, `resume`, or `fork` after the lifecycle factory created one or more Vim editors
+- **THEN** the lifecycle resets each tracked editor's terminal cursor shape and restores its captured hardware cursor visibility policy
 
 #### Scenario: Shutdown clears tracked editors
 
@@ -164,10 +169,15 @@ The Vim extension lifecycle SHALL coordinate tracked Vim editor cursor visibilit
 - **WHEN** Pi emits `agent_end` after one or more Vim editor instances were marked agent-busy
 - **THEN** the lifecycle marks each tracked editor as no longer busy and preserves the existing immediate editor installation behavior
 
-#### Scenario: Shutdown and disable reset tracked cursor state
+#### Scenario: Runtime disable restores tracked cursor state
 
-- **WHEN** Pi emits `session_shutdown` or the user disables pi-vimmode with `/vimmode off`
-- **THEN** the lifecycle resets tracked editor terminal cursor styles, clears tracked editors according to existing lifecycle cleanup behavior, and does not leave hardware cursor visibility forced on
+- **WHEN** the user disables pi-vimmode with `/vimmode off`
+- **THEN** the lifecycle resets tracked editor terminal cursor shapes, restores captured hardware cursor visibility policies, and clears tracked editors according to existing runtime cleanup behavior
+
+#### Scenario: Terminal exit leaves final visibility to Pi
+
+- **WHEN** Pi emits `session_shutdown` with reason `quit`
+- **THEN** the lifecycle resets tracked editor terminal cursor shapes, does not mutate Pi's hardware cursor visibility policy, and clears tracked editors
 
 ### Requirement: Agent cursor lifecycle is validated
 

@@ -17,7 +17,7 @@ import type {
   VimTextObjectTarget,
 } from "./types.ts";
 
-import { DEFAULT_VIM_KEYMAP } from "./config.ts";
+import { DEFAULT_VIM_KEYMAP, type VimScopeLookup } from "./config.ts";
 import {
   deriveActionsWhere,
   deriveLegacyActionToKey,
@@ -26,7 +26,14 @@ import {
   KEYMAP_MOTION_DESCRIPTORS,
   KEYMAP_OPERATOR_DESCRIPTORS,
 } from "./keymap-descriptors.ts";
-import { grammarEntriesForKeymap } from "./keymap-grammar.ts";
+import { grammarEntriesForKeymap, type KeymapGrammarEntry } from "./keymap-grammar.ts";
+import {
+  displayMappingSequence,
+  MAPPING_TOKEN_SEPARATOR,
+  mappingSequencePrefixes,
+  mappingScopesForKeymapEntry,
+  type VimMappingScope,
+} from "./mapping-scopes.ts";
 
 const LEGACY_VIM_OPERATORS = new Set<string>(
   Object.keys(deriveLegacyKeyToAction(KEYMAP_OPERATOR_DESCRIPTORS)),
@@ -120,20 +127,9 @@ type ActionBinding = Extract<Binding, { kind: "action" }>;
 
 type CompiledKeymap = {
   exactBindings: Map<string, Binding>;
-  longerPrefixes: Set<string>;
   actionBindings: Map<string, ActionBinding[]>;
   actionLongerPrefixes: Map<string, ActionBinding[]>;
-  motions: {
-    exact: Map<string, VimMotionAction>;
-    longerPrefixes: Set<string>;
-  };
-  operators: Map<
-    VimOperatorAction,
-    {
-      exact: Set<string>;
-      longerPrefixes: Set<string>;
-    }
-  >;
+  motions: { exact: Map<string, VimMotionAction> };
   textObjects: {
     kinds: Map<string, VimTextObjectKind>;
     targets: Map<string, VimTextObjectTarget>;
@@ -156,7 +152,9 @@ type EncodedCharCommandPending = { type: "charCommand"; command: VimCommandActio
 type EncodedTextObjectPending = {
   type: "textObject";
   operatorSequence: string;
-  kind: VimTextObjectKind;
+  kind?: VimTextObjectKind;
+  kindPrefix: string;
+  targetPrefix?: string;
   count?: number;
 };
 type EncodedOperatorMotionPending = {
@@ -234,18 +232,88 @@ function isPrintableCharArgument(key: string): boolean {
   return key.length === 1 && key.charCodeAt(0) >= 32 && key.charCodeAt(0) !== 127;
 }
 
+export function scopedKeymapBindingFor(
+  keymap: ResolvedVimKeymap,
+  key: string,
+  mode: VimActionBindingMode | "operatorPending",
+) {
+  return [...keymap.scoped]
+    .reverse()
+    .find((binding) => binding.key === key && binding.modes.includes(mode));
+}
+
+export function scopedKeymapSequenceFor(
+  keymap: ResolvedVimKeymap,
+  sequence: string,
+  mode: VimActionBindingMode | "operatorPending",
+  lookup?: VimScopeLookup,
+): { exact?: ResolvedVimKeymap["scoped"][number]; isPrefix: boolean } {
+  const exact =
+    !lookup || lookup.exact[sequence] ? scopedKeymapBindingFor(keymap, sequence, mode) : undefined;
+  const isScopedPrefix = keymap.scoped.some(
+    (binding) =>
+      binding.modes.includes(mode) && binding.key.startsWith(sequence) && binding.key !== sequence,
+  );
+  return {
+    exact,
+    isPrefix: isScopedPrefix && (lookup ? Boolean(lookup.prefixes[sequence]) : true),
+  };
+}
+
+export function scopedKeysForAction(
+  keymap: ResolvedVimKeymap,
+  actionId: ResolvedVimKeymap["scoped"][number]["actionId"],
+  mode: VimActionBindingMode | "operatorPending",
+): string[] {
+  return keymap.scoped
+    .filter((binding) => binding.actionId === actionId && binding.modes.includes(mode))
+    .map((binding) => binding.key);
+}
+
+function scopedTextObjectSequenceFor(
+  keymap: ResolvedVimKeymap,
+  sequence: string,
+  prefix: "textObject.kind." | "textObject.target.",
+): { action?: string; isPrefix: boolean } {
+  const bindings = keymap.scoped.filter(
+    (binding) =>
+      binding.modes.includes("operatorPending") &&
+      binding.actionId.startsWith(prefix) &&
+      !isKeyUnmapped(keymap, binding.key, "operatorPending"),
+  );
+  return {
+    action: [...bindings]
+      .reverse()
+      .find((binding) => binding.key === sequence)
+      ?.actionId.slice(prefix.length),
+    isPrefix: bindings.some(
+      (binding) => binding.key !== sequence && binding.key.startsWith(sequence),
+    ),
+  };
+}
+
 function textObjectKindForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectKind | undefined {
-  return compiledKeymapFor(keymap).textObjects.kinds.get(key);
+  if (isKeyUnmapped(keymap, key, "operatorPending")) return undefined;
+  return (
+    (scopedTextObjectSequenceFor(keymap, key, "textObject.kind.").action as
+      | VimTextObjectKind
+      | undefined) ?? compiledKeymapFor(keymap).textObjects.kinds.get(key)
+  );
 }
 
 function textObjectTargetForKey(
   key: string,
   keymap: ResolvedVimKeymap,
 ): VimTextObjectTarget | undefined {
-  return compiledKeymapFor(keymap).textObjects.targets.get(key);
+  if (isKeyUnmapped(keymap, key, "operatorPending")) return undefined;
+  return (
+    (scopedTextObjectSequenceFor(keymap, key, "textObject.target.").action as
+      | VimTextObjectTarget
+      | undefined) ?? compiledKeymapFor(keymap).textObjects.targets.get(key)
+  );
 }
 
 function isLegacyVimOperator(key: string): key is VimOperator {
@@ -263,7 +331,7 @@ function lineCommandFor(operator: VimOperator): NormalCommand {
 }
 
 function addLongerPrefixes(prefixes: Set<string>, sequence: string): void {
-  for (let index = 1; index < sequence.length; index += 1) prefixes.add(sequence.slice(0, index));
+  for (const prefix of mappingSequencePrefixes(sequence)) prefixes.add(prefix);
 }
 
 function setFirstBinding(bindings: Map<string, Binding>, binding: Binding): void {
@@ -275,8 +343,7 @@ function addActionBinding(bindings: Map<string, ActionBinding[]>, binding: Actio
 }
 
 function addActionPrefixes(prefixes: Map<string, ActionBinding[]>, binding: ActionBinding): void {
-  for (let index = 1; index < binding.sequence.length; index += 1) {
-    const prefix = binding.sequence.slice(0, index);
+  for (const prefix of mappingSequencePrefixes(binding.sequence)) {
     prefixes.set(prefix, [...(prefixes.get(prefix) ?? []), binding]);
   }
 }
@@ -309,22 +376,11 @@ function compiledKeymapFor(keymap: ResolvedVimKeymap): CompiledKeymap {
   return compiled;
 }
 
-function isAtomicKeySequence(sequence: string): boolean {
-  // Arrow-key aliases arrive as complete terminal escape sequences, never character-by-character.
-  return sequence === "left" || sequence === "down" || sequence === "up" || sequence === "right";
-}
-
 function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
   const exactBindings = new Map<string, Binding>();
-  const longerPrefixes = new Set<string>();
   const actionBindings = new Map<string, ActionBinding[]>();
   const actionLongerPrefixes = new Map<string, ActionBinding[]>();
   const motionExact = new Map<string, VimMotionAction>();
-  const motionLongerPrefixes = new Set<string>();
-  const operators = new Map<
-    VimOperatorAction,
-    { exact: Set<string>; longerPrefixes: Set<string> }
-  >();
   const textObjectKinds = new Map<string, VimTextObjectKind>();
   const textObjectTargets = new Map<string, VimTextObjectTarget>();
   const searchDirections = new Map<string, "forward" | "backward">();
@@ -339,36 +395,23 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
 
   for (const entry of grammarEntriesForKeymap(keymap)) {
     if (entry.family === "operator") {
-      const operatorLookup = operators.get(entry.id) ?? {
-        exact: new Set<string>(),
-        longerPrefixes: new Set<string>(),
-      };
       setFirstBinding(exactBindings, {
         sequence: entry.sequence,
         kind: "operator",
         operator: entry.id,
       });
-      addLongerPrefixes(longerPrefixes, entry.sequence);
-      operatorLookup.exact.add(entry.sequence);
-      addLongerPrefixes(operatorLookup.longerPrefixes, entry.sequence);
-      operators.set(entry.id, operatorLookup);
     } else if (entry.family === "motion") {
       setFirstBinding(exactBindings, {
         sequence: entry.sequence,
         kind: "motion",
         motion: entry.id,
       });
-      if (!isAtomicKeySequence(entry.sequence)) {
-        addLongerPrefixes(longerPrefixes, entry.sequence);
-        addLongerPrefixes(motionLongerPrefixes, entry.sequence);
-      }
     } else if (entry.family === "command") {
       setFirstBinding(exactBindings, {
         sequence: entry.sequence,
         kind: "command",
         command: entry.id,
       });
-      addLongerPrefixes(longerPrefixes, entry.sequence);
     } else if (entry.family === "textObjectKind") {
       setFirstValue(textObjectKinds, entry.sequence, entry.id);
     } else if (entry.family === "textObjectTarget") {
@@ -426,11 +469,9 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
 
   return {
     exactBindings,
-    longerPrefixes,
     actionBindings,
     actionLongerPrefixes,
-    motions: { exact: motionExact, longerPrefixes: motionLongerPrefixes },
-    operators,
+    motions: { exact: motionExact },
     textObjects: { kinds: textObjectKinds, targets: textObjectTargets },
     commands: {
       searchDirections,
@@ -445,40 +486,136 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
 
 function actionBindingMatchesMode(
   binding: Binding,
-  mode: VimActionBindingMode | undefined,
+  mode: VimActionBindingMode | "operatorPending" | undefined,
 ): boolean {
   return (
     binding.kind !== "action" ||
     mode === undefined ||
     !binding.modes ||
-    binding.modes.includes(mode)
+    (mode !== "operatorPending" && binding.modes.includes(mode))
   );
+}
+
+function grammarEntryScopes(entry: KeymapGrammarEntry): readonly VimMappingScope[] {
+  const family =
+    entry.family === "textObjectKind"
+      ? "textObject.kind"
+      : entry.family === "textObjectTarget"
+        ? "textObject.target"
+        : entry.family;
+  return mappingScopesForKeymapEntry(family, entry.id);
+}
+
+function liveGrammarEntries(
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode | "operatorPending",
+): KeymapGrammarEntry[] {
+  return grammarEntriesForKeymap(keymap).filter(
+    (entry) =>
+      !isKeyUnmapped(keymap, entry.sequence, mode) &&
+      (!mode || grammarEntryScopes(entry).includes(mode)),
+  );
+}
+
+function appendMappingSequence(
+  prefix: string,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode | "operatorPending",
+): string {
+  const separated = `${prefix}${MAPPING_TOKEN_SEPARATOR}${key}`;
+  const isSeparatedContinuation = (sequence: string) =>
+    sequence === separated || mappingSequencePrefixes(sequence).includes(separated);
+  const usesSeparatedBoundary =
+    keymap.scoped.some(
+      (binding) => (!mode || binding.modes.includes(mode)) && isSeparatedContinuation(binding.key),
+    ) || liveGrammarEntries(keymap, mode).some((entry) => isSeparatedContinuation(entry.sequence));
+  return usesSeparatedBoundary ? separated : `${prefix}${key}`;
+}
+
+export function isKeyUnmapped(
+  keymap: ResolvedVimKeymap,
+  sequence: string,
+  mode: VimActionBindingMode | "operatorPending" | undefined,
+): boolean {
+  return Boolean(
+    mode && keymap.unmaps.some((unmap) => unmap.key === sequence && unmap.modes.includes(mode)),
+  );
+}
+
+function scopedBinding(
+  sequence: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode | "operatorPending",
+): Binding | undefined {
+  const mapping = mode ? scopedKeymapBindingFor(keymap, sequence, mode) : undefined;
+  if (!mapping) return undefined;
+  const [family, ...parts] = mapping.actionId.split(".");
+  const action = parts.join(".");
+  if (family === "operator")
+    return { sequence, kind: "operator", operator: action as VimOperatorAction };
+  if (family === "motion") return { sequence, kind: "motion", motion: action as VimMotionAction };
+  if (family === "command")
+    return { sequence, kind: "command", command: action as VimCommandAction };
+  if (mapping.actionId.startsWith("prompt.transform.")) {
+    return {
+      sequence,
+      kind: "action",
+      actionId: mapping.actionId as BindablePromptTransformActionId,
+      args: mapping.args as PromptTransform,
+    };
+  }
+  return undefined;
 }
 
 function exactBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
-  mode?: VimActionBindingMode,
+  mode?: VimActionBindingMode | "operatorPending",
 ): Binding | undefined {
+  const scoped = scopedBinding(sequence, keymap, mode);
+  if (scoped) return scoped;
+  if (isKeyUnmapped(keymap, sequence, mode)) return undefined;
   const compiled = compiledKeymapFor(keymap);
-  const binding = compiled.exactBindings.get(sequence);
-  if (binding) return binding;
-  return compiled.actionBindings
+  const action = compiled.actionBindings
     .get(sequence)
-    ?.find((action) => actionBindingMatchesMode(action, mode));
+    ?.find(
+      (binding) =>
+        actionBindingMatchesMode(binding, mode) && !isKeyUnmapped(keymap, binding.sequence, mode),
+    );
+  return action ?? compiled.exactBindings.get(sequence);
 }
 
 function hasLongerPrefix(
   sequence: string,
   keymap: ResolvedVimKeymap,
-  mode?: VimActionBindingMode,
+  mode?: VimActionBindingMode | "operatorPending",
 ): boolean {
-  const compiled = compiledKeymapFor(keymap);
-  if (compiled.longerPrefixes.has(sequence)) return true;
+  if (
+    keymap.scoped.some(
+      (binding) =>
+        binding.key !== sequence &&
+        binding.key.startsWith(sequence) &&
+        (!mode || binding.modes.includes(mode)) &&
+        !isKeyUnmapped(keymap, binding.key, mode),
+    )
+  ) {
+    return true;
+  }
+  if (
+    liveGrammarEntries(keymap, mode).some((entry) =>
+      mappingSequencePrefixes(entry.sequence).includes(sequence),
+    )
+  ) {
+    return true;
+  }
   return (
-    compiled.actionLongerPrefixes
-      .get(sequence)
-      ?.some((binding) => actionBindingMatchesMode(binding, mode)) ?? false
+    compiledKeymapFor(keymap)
+      .actionLongerPrefixes.get(sequence)
+      ?.some(
+        (binding) =>
+          actionBindingMatchesMode(binding, mode) && !isKeyUnmapped(keymap, binding.sequence, mode),
+      ) ?? false
   );
 }
 
@@ -486,33 +623,51 @@ function searchDirectionForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): "forward" | "backward" | undefined {
-  return compiledKeymapFor(keymap).commands.searchDirections.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.searchDirections.get(sequence);
 }
 
 function hasSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.searchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.searchDirections.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 function charSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): OperatorCharSearchCommand | undefined {
-  return compiledKeymapFor(keymap).commands.charSearch.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.charSearch.get(sequence);
 }
 
 function hasCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.charSearchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.charSearch.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 function repeatCharSearchCommandForBinding(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): Extract<VimCommandAction, "repeatCharSearch" | "repeatCharSearchReverse"> | undefined {
-  return compiledKeymapFor(keymap).commands.repeatCharSearch.get(sequence);
+  return isKeyUnmapped(keymap, sequence, "operatorPending")
+    ? undefined
+    : compiledKeymapFor(keymap).commands.repeatCharSearch.get(sequence);
 }
 
 function hasRepeatCharSearchLongerPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).commands.repeatCharSearchLongerPrefixes.has(sequence);
+  return [...compiledKeymapFor(keymap).commands.repeatCharSearch.keys()].some(
+    (candidate) =>
+      mappingSequencePrefixes(candidate).includes(sequence) &&
+      !isKeyUnmapped(keymap, candidate, "operatorPending"),
+  );
 }
 
 export const DEFAULT_MACRO_SLOTS = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -562,13 +717,19 @@ export function resolveMacroCommand(
 }
 
 export function pendingDisplay(pending: string | undefined): string | undefined {
+  const display = pendingDisplayInternal(pending);
+  return display === undefined ? undefined : displayMappingSequence(display);
+}
+
+function pendingDisplayInternal(pending: string | undefined): string | undefined {
   if (!pending) return undefined;
   const count = decodeCountPending(pending);
-  if (count) return `${count.count}${pendingDisplay(count.inner) ?? count.inner}`;
+  if (count) return `${count.count}${pendingDisplayInternal(count.inner) ?? count.inner}`;
   const charCommand = decodeCharCommandPending(pending);
   if (charCommand) return commandSequenceFor(charCommand.command, DEFAULT_VIM_KEYMAP);
   const textObject = decodeTextObjectPending(pending);
-  if (textObject) return `${textObject.operatorSequence}${textObject.kind === "inner" ? "i" : "a"}`;
+  if (textObject)
+    return `${textObject.operatorSequence}${textObject.kindPrefix}${textObject.targetPrefix ?? ""}`;
   const operatorMotion = decodeOperatorMotionPending(pending);
   if (operatorMotion) return `${operatorMotion.operatorSequence}${operatorMotion.motionPrefix}`;
   const operatorLine = decodeOperatorLinePending(pending);
@@ -611,22 +772,39 @@ function decodeCharCommandPending(pending: string): EncodedCharCommandPending | 
 
 function encodeTextObjectPending(
   operatorSequence: string,
-  kind: VimTextObjectKind,
+  kindPrefix: string,
+  kind: VimTextObjectKind | undefined,
+  targetPrefix?: string,
   count?: number,
 ): string {
-  return `${operatorSequence}${TEXT_OBJECT_SEPARATOR}${kind}${TEXT_OBJECT_SEPARATOR}${count ?? ""}`;
+  return [operatorSequence, kindPrefix, kind ?? "", targetPrefix ?? "", count ?? ""].join(
+    TEXT_OBJECT_SEPARATOR,
+  );
 }
 
 function decodeTextObjectPending(pending: string): EncodedTextObjectPending | undefined {
   const parts = pending.split(TEXT_OBJECT_SEPARATOR);
-  if (parts.length !== 3) return undefined;
-  const kind = parts[1] as VimTextObjectKind;
-  if (kind !== "inner" && kind !== "around") return undefined;
+  if (parts.length === 3) {
+    const kind = parts[1] as VimTextObjectKind;
+    if (kind !== "inner" && kind !== "around") return undefined;
+    return {
+      type: "textObject",
+      operatorSequence: parts[0] ?? "",
+      kindPrefix: kind === "inner" ? "i" : "a",
+      kind,
+      count: parts[2] ? Number(parts[2]) : undefined,
+    };
+  }
+  if (parts.length !== 5) return undefined;
+  const kind = parts[2] as VimTextObjectKind | "";
+  if (kind && kind !== "inner" && kind !== "around") return undefined;
   return {
     type: "textObject",
     operatorSequence: parts[0] ?? "",
-    kind,
-    count: parts[2] ? Number(parts[2]) : undefined,
+    kindPrefix: parts[1] ?? "",
+    kind: kind || undefined,
+    targetPrefix: parts[3] || undefined,
+    count: parts[4] ? Number(parts[4]) : undefined,
   };
 }
 
@@ -749,11 +927,12 @@ function decodeOperatorCharSearchRepeatPending(
 export function operatorActionForSequence(
   sequence: string | undefined,
   keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP,
+  mode: VimActionBindingMode = "normal",
 ): VimOperatorAction | undefined {
   if (!sequence) return undefined;
   const count = decodeCountPending(sequence);
-  if (count) return operatorActionForSequence(count.inner, keymap);
-  const binding = exactBinding(sequence, keymap);
+  if (count) return operatorActionForSequence(count.inner, keymap, mode);
+  const binding = exactBinding(sequence, keymap, mode);
   return binding?.kind === "operator" ? binding.operator : undefined;
 }
 
@@ -774,15 +953,15 @@ function motionForSequence(
   sequence: string,
   keymap: ResolvedVimKeymap,
 ): VimMotionAction | undefined {
-  return compiledKeymapFor(keymap).motions.exact.get(sequence);
+  if (isKeyUnmapped(keymap, sequence, "operatorPending")) return undefined;
+  const scoped = exactBinding(sequence, keymap, "operatorPending");
+  return scoped?.kind === "motion"
+    ? scoped.motion
+    : compiledKeymapFor(keymap).motions.exact.get(sequence);
 }
 
 function hasMotionPrefix(sequence: string, keymap: ResolvedVimKeymap): boolean {
-  return compiledKeymapFor(keymap).motions.longerPrefixes.has(sequence);
-}
-
-function operatorLookupFor(keymap: ResolvedVimKeymap, operator: VimOperatorAction) {
-  return compiledKeymapFor(keymap).operators.get(operator);
+  return hasLongerPrefix(sequence, keymap, "operatorPending");
 }
 
 function hasOperatorPrefix(
@@ -790,7 +969,23 @@ function hasOperatorPrefix(
   keymap: ResolvedVimKeymap,
   operator: VimOperatorAction,
 ): boolean {
-  return operatorLookupFor(keymap, operator)?.longerPrefixes.has(sequence) ?? false;
+  return (
+    keymap.scoped.some(
+      (binding) =>
+        binding.actionId === `operator.${operator}` &&
+        binding.modes.includes("normal") &&
+        binding.key !== sequence &&
+        binding.key.startsWith(sequence) &&
+        !isKeyUnmapped(keymap, binding.key, "operatorPending"),
+    ) ||
+    liveGrammarEntries(keymap).some(
+      (entry) =>
+        entry.family === "operator" &&
+        entry.id === operator &&
+        mappingSequencePrefixes(entry.sequence).includes(sequence) &&
+        !isKeyUnmapped(keymap, entry.sequence, "operatorPending"),
+    )
+  );
 }
 
 function operatorSequenceMatches(
@@ -798,7 +993,10 @@ function operatorSequenceMatches(
   keymap: ResolvedVimKeymap,
   operator: VimOperatorAction,
 ): boolean {
-  return operatorLookupFor(keymap, operator)?.exact.has(sequence) ?? false;
+  return (
+    !isKeyUnmapped(keymap, sequence, "operatorPending") &&
+    operatorActionForSequence(sequence, keymap) === operator
+  );
 }
 
 function withCount<T extends SemanticCommandResult>(
@@ -835,7 +1033,12 @@ function resolveOperatorMotionPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const motionSequence = pending.motionPrefix + key;
+  const motionSequence = appendMappingSequence(
+    pending.motionPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const motion = motionForSequence(motionSequence, keymap);
   if (motion && keymap.operatorMotions[operator].includes(motion)) {
     return { type: "operatorMotion", operator, motion, count: pending.count };
@@ -856,7 +1059,12 @@ function resolveOperatorLinePending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator) return { type: "invalid" };
-  const repeatSequence = pending.repeatPrefix + key;
+  const repeatSequence = appendMappingSequence(
+    pending.repeatPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   if (operatorSequenceMatches(repeatSequence, keymap, operator)) {
     return { type: "lineCommand", operator, count: pending.count };
   }
@@ -876,7 +1084,12 @@ function resolveOperatorSearchPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const searchSequence = pending.searchPrefix + key;
+  const searchSequence = appendMappingSequence(
+    pending.searchPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const direction = searchDirectionForBinding(searchSequence, keymap);
   if (direction) {
     return { type: "operatorSearch", operator, direction, count: pending.count };
@@ -946,7 +1159,12 @@ function resolveOperatorCharSearchPending(
       effectiveOperatorCharSearchCount(pending.count, pending.targetCount),
     );
   }
-  const commandSequence = pending.commandPrefix + key;
+  const commandSequence = appendMappingSequence(
+    pending.commandPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const command = charSearchCommandForBinding(commandSequence, keymap);
   if (command) {
     return {
@@ -981,7 +1199,12 @@ function resolveOperatorCharSearchRepeatPending(
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
   if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
-  const repeatSequence = pending.repeatPrefix + key;
+  const repeatSequence = appendMappingSequence(
+    pending.repeatPrefix,
+    key,
+    keymap,
+    "operatorPending",
+  );
   const command = repeatCharSearchCommandForBinding(repeatSequence, keymap);
   if (command) {
     return {
@@ -1010,14 +1233,68 @@ function resolveTextObjectPending(
   keymap: ResolvedVimKeymap,
 ): SemanticCommandResult {
   const operator = operatorActionForSequence(pending.operatorSequence, keymap);
-  const target = textObjectTargetForKey(key, keymap);
-  if (!operator || !isMotionOperator(operator) || !target) return { type: "invalid" };
-  return {
-    type: "operatorTextObject",
-    operator,
-    textObject: { kind: pending.kind, target },
-    count: pending.count,
-  };
+  if (!operator || !isMotionOperator(operator)) return { type: "invalid" };
+
+  if (!pending.kind) {
+    const kindSequence = appendMappingSequence(pending.kindPrefix, key, keymap, "operatorPending");
+    const scoped = scopedTextObjectSequenceFor(keymap, kindSequence, "textObject.kind.");
+    const kind = textObjectKindForKey(kindSequence, keymap);
+    if (kind && !scoped.isPrefix) {
+      return {
+        type: "pending",
+        pending: encodeTextObjectPending(
+          pending.operatorSequence,
+          kindSequence,
+          kind,
+          undefined,
+          pending.count,
+        ),
+      };
+    }
+    if (scoped.isPrefix) {
+      return {
+        type: "pending",
+        pending: encodeTextObjectPending(
+          pending.operatorSequence,
+          kindSequence,
+          undefined,
+          undefined,
+          pending.count,
+        ),
+      };
+    }
+    return { type: "invalid" };
+  }
+
+  const targetSequence = appendMappingSequence(
+    pending.targetPrefix ?? "",
+    key,
+    keymap,
+    "operatorPending",
+  );
+  const scoped = scopedTextObjectSequenceFor(keymap, targetSequence, "textObject.target.");
+  const target = textObjectTargetForKey(targetSequence, keymap);
+  if (target && !scoped.isPrefix) {
+    return {
+      type: "operatorTextObject",
+      operator,
+      textObject: { kind: pending.kind, target },
+      count: pending.count,
+    };
+  }
+  if (scoped.isPrefix) {
+    return {
+      type: "pending",
+      pending: encodeTextObjectPending(
+        pending.operatorSequence,
+        pending.kindPrefix,
+        pending.kind,
+        targetSequence,
+        pending.count,
+      ),
+    };
+  }
+  return { type: "invalid" };
 }
 
 function resolveAfterOperator(
@@ -1090,11 +1367,18 @@ function resolveAfterOperator(
     }
   }
 
+  const scopedTextObjectKind = scopedTextObjectSequenceFor(keymap, key, "textObject.kind.");
   const textObjectKind = textObjectKindForKey(key, keymap);
-  if (textObjectKind) {
+  if (textObjectKind && !scopedTextObjectKind.isPrefix) {
     return {
       type: "pending",
-      pending: encodeTextObjectPending(operatorSequence, textObjectKind, count),
+      pending: encodeTextObjectPending(operatorSequence, key, textObjectKind, undefined, count),
+    };
+  }
+  if (scopedTextObjectKind.isPrefix) {
+    return {
+      type: "pending",
+      pending: encodeTextObjectPending(operatorSequence, key, undefined, undefined, count),
     };
   }
 
@@ -1114,6 +1398,7 @@ function resolveWithoutPending(
   count?: number,
   mode?: VimActionBindingMode,
 ): SemanticCommandResult {
+  if (!count && keymap.leader === key) return { type: "pending", pending: key };
   if (!count && /^[1-9]$/.test(key)) return { type: "pending", pending: encodeCountPending(key) };
   if (hasLongerPrefix(key, keymap, mode))
     return { type: "pending", pending: count ? encodeCountPending(String(count), key) : key };
@@ -1185,7 +1470,7 @@ export function resolveNormalCommand(
     const pendingOperator = operatorActionForSequence(pending, keymap);
     if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
 
-    const combined = pending + key;
+    const combined = appendMappingSequence(pending, key, keymap, mode);
     if (hasLongerPrefix(combined, keymap, mode)) return { type: "pending", pending: combined };
     const combinedBinding = exactBinding(combined, keymap, mode);
     if (combinedBinding?.kind === "motion")

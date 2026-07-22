@@ -1,3 +1,4 @@
+import type { VimMappingScope } from "./mapping-scopes.ts";
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 
 export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
@@ -8,7 +9,8 @@ export type CursorStyle = "block" | "bar" | "underline";
 
 export type CursorStyles = Record<VimMode, CursorStyle>;
 
-export type VimPreset = "minimal" | "prompt-safe" | "vim-heavy";
+export const VIM_PRESETS = ["minimal", "prompt-safe", "vim-heavy"] as const;
+export type VimPreset = (typeof VIM_PRESETS)[number];
 
 export type VimNoopFeedback = "off" | "status";
 
@@ -94,7 +96,8 @@ export type VimCommandAction =
   | "undo"
   | "redo"
   | "showKeybindings"
-  | "reselectVisual";
+  | "reselectVisual"
+  | "easymotion";
 
 export type VimTextObjectKind = "inner" | "around";
 
@@ -121,6 +124,7 @@ export type VimTextObject = {
 };
 
 export type VimStatusItem = "mode" | "pendingOperator" | "selection" | "cursorPosition";
+export type VimStatusPosition = "left" | "right";
 
 export type VimMacroKeymapOptions = {
   record?: readonly string[];
@@ -149,6 +153,10 @@ export type VimActionKeyBindingEntry =
       key: string;
       args?: Readonly<Record<string, unknown>>;
       modes?: readonly VimActionBindingMode[];
+      allowProtected?: boolean;
+      desc?: string;
+      /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+      __sourceOrder?: number;
     };
 
 export type VimActionKeymapOptions = Partial<
@@ -159,6 +167,10 @@ export type VimKeySequenceRemap = {
   key: string;
   inputs: readonly string[];
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type VimKeySequenceRemapOptions = {
@@ -210,6 +222,10 @@ export type ResolvedVimActionBinding = {
   actionId: BindablePromptTransformActionId;
   args: PromptTransform;
   modes?: readonly VimActionBindingMode[];
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
 };
 
 export type ResolvedVimActionKeymap = {
@@ -229,7 +245,31 @@ export type ResolvedVimInsertKeymap = {
   moveLineEnd: readonly string[];
 };
 
+export type VimFiniteActionId =
+  | "escape"
+  | `operator.${VimOperatorAction}`
+  | `motion.${VimMotionAction}`
+  | `command.${VimCommandAction}`
+  | `macro.${keyof ResolvedVimMacroKeymap}`
+  | `mark.${keyof ResolvedVimMarkKeymap}`
+  | `insert.${keyof ResolvedVimInsertKeymap}`
+  | `textObject.kind.${VimTextObjectKind}`
+  | `textObject.target.${VimTextObjectTarget}`
+  | BindablePromptTransformActionId;
+
+export type VimScopedKeymapBinding = {
+  actionId: VimFiniteActionId;
+  key: string;
+  modes: readonly VimMappingScope[];
+  args?: Readonly<Record<string, unknown>>;
+  allowProtected?: boolean;
+  desc?: string;
+  /** @internal Preserves trusted JavaScript operation order across mapping kinds. */
+  __sourceOrder?: number;
+};
+
 export type ResolvedVimKeymap = {
+  leader?: string;
   escape: readonly string[];
   operators: Record<VimOperatorAction, readonly string[]>;
   motions: Record<VimMotionAction, readonly string[]>;
@@ -241,6 +281,9 @@ export type ResolvedVimKeymap = {
   insert: ResolvedVimInsertKeymap;
   actions: ResolvedVimActionKeymap;
   remaps: VimKeySequenceRemapOptions;
+  scoped: readonly VimScopedKeymapBinding[];
+  /** Compiler tombstones. Keep scope-local unmaps from erasing sibling grammar. */
+  unmaps: readonly { key: string; modes: readonly VimMappingScope[] }[];
 };
 
 export type VimSearchOptions = {
@@ -253,9 +296,18 @@ export type VimSearchOptions = {
 
 export type ResolvedVimSearch = VimSearchOptions;
 
+export type VimEasymotionOptions = {
+  labelColor: string;
+};
+
+export type ResolvedVimEasymotion = VimEasymotionOptions;
+
+export type PartialVimEasymotionOptions = Partial<ResolvedVimEasymotion>;
+
 export type VimUiOptions = {
   status: {
     enabled: boolean;
+    position: VimStatusPosition;
     items: readonly VimStatusItem[];
   };
   mode: {
@@ -275,6 +327,18 @@ export type VimUiOptions = {
   workbench: {
     reservedRows: number;
   };
+};
+
+export type VimUiEditorOptions = {
+  status?: Partial<VimUiOptions["status"]>;
+  mode?: {
+    enabled?: boolean;
+    labels?: Partial<Record<VimMode, string>>;
+    narrowLabels?: Partial<Record<VimMode, string>>;
+  };
+  selection?: Partial<VimUiOptions["selection"]>;
+  cursorPosition?: Partial<VimUiOptions["cursorPosition"]>;
+  workbench?: Partial<VimUiOptions["workbench"]>;
 };
 
 export type ResolvedVimUi = VimUiOptions;
@@ -328,13 +392,15 @@ export type VimPromptTransformEditorOptions = {
 
 export type VimEditorOptions = {
   preset?: VimPreset;
+  leader?: string | null;
   startMode?: StartupMode;
   cursor?: Partial<CursorStyles>;
   keymap?: VimKeymapOptions;
-  ui?: Partial<ResolvedVimUi>;
+  ui?: VimUiEditorOptions;
   macros?: Partial<ResolvedVimMacros>;
   marks?: Partial<ResolvedVimMarks>;
   search?: Partial<ResolvedVimSearch>;
+  easymotion?: PartialVimEasymotionOptions;
   feedback?: Partial<VimFeedbackOptions>;
   promptStructures?: VimPromptStructureEditorOptions;
   promptTransforms?: VimPromptTransformEditorOptions;
@@ -342,6 +408,7 @@ export type VimEditorOptions = {
 
 export type ResolvedVimEditorOptions = {
   preset?: VimPreset;
+  leader?: string;
   startMode: StartupMode;
   cursor: CursorStyles;
   keymap?: ResolvedVimKeymap;
@@ -349,6 +416,7 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  easymotion?: ResolvedVimEasymotion;
   exCommand?: ResolvedVimExCommand;
   feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
@@ -358,6 +426,12 @@ export type ResolvedVimEditorOptions = {
 export type Position = {
   line: number;
   col: number;
+};
+
+export type EasymotionTarget = {
+  label: string;
+  line: number;
+  character: number;
 };
 
 export type TextRange = {

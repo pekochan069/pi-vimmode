@@ -8,6 +8,7 @@ import {
 
 import type { ReadOnlyPopup } from "./read-only-popup.ts";
 
+import { renderMarkdownRows } from "./markdown-popup.ts";
 import { HELP_POPUP_BODY_ROWS, scrollHelpPopup } from "./read-only-popup.ts";
 
 export const READ_ONLY_POPUP_MIN_WIDTH = 48;
@@ -91,6 +92,16 @@ export class ReadOnlyPopupOverlayComponent implements Component {
   render(width: number): string[] {
     const safeWidth = Math.max(36, width);
     const style = styleForTheme(this.theme);
+    if (this.popup.markdown !== undefined) {
+      this.popup = {
+        ...this.popup,
+        lines: renderMarkdownRows(
+          this.popup.markdown,
+          Math.max(1, safeWidth - BORDER_OVERHEAD),
+          style,
+        ),
+      };
+    }
     const bodyRows = Math.min(HELP_POPUP_BODY_ROWS, this.popup.lines.length);
     const maxOffset = Math.max(0, this.popup.lines.length - bodyRows);
     const offset = Math.max(0, Math.min(maxOffset, this.popup.scrollOffset));

@@ -79,7 +79,14 @@ function hasKeyInMap(map: Record<string, readonly string[]>, key: string): boole
   return Object.values(map).some((bindings) => bindings.includes(key));
 }
 
-export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string, mode?: VimMode): boolean {
+export function keymapHasBinding(
+  keymap: ResolvedVimKeymap,
+  key: string,
+  mode?: VimMode | "operatorPending",
+): boolean {
+  if (mode && keymap.unmaps.some((unmap) => unmap.key === key && unmap.modes.includes(mode))) {
+    return false;
+  }
   if (keymap.escape.includes(key)) return true;
   if (hasKeyInMap(keymap.operators as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.motions as Record<string, readonly string[]>, key)) return true;
@@ -104,7 +111,12 @@ export function keymapHasBinding(keymap: ResolvedVimKeymap, key: string, mode?: 
   ) {
     return true;
   }
-  return false;
+  return keymap.scoped.some(
+    (binding) =>
+      (binding.key === key || binding.key.startsWith(key)) &&
+      binding.modes.includes(mode as never) &&
+      binding.allowProtected === true,
+  );
 }
 
 export function shiftActionForOperator(
@@ -188,6 +200,7 @@ export function clearCommandPending(state: ModalState): ModalState {
     pendingSearch: _pendingSearch,
     pendingEx: _pendingEx,
     pendingInsertEscape: _pendingInsertEscape,
+    pendingInsertEscapeInputs: _pendingInsertEscapeInputs,
     exMessage: _exMessage,
     helpPopup: _helpPopup,
     ...rest

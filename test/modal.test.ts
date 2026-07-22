@@ -1,11 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { EasymotionTarget, ResolvedVimEditorOptions } from "../src/types.ts";
 
-import { DEFAULT_VIM_KEYMAP, resolveVimOptions } from "../src/config.ts";
-import { canFastDelegateInsertInput, handleModalInput } from "../src/modal/engine.ts";
+import {
+  createVimConfigPlan,
+  DEFAULT_VIM_KEYMAP,
+  resolveVimOptions,
+  type VimConfigPlan,
+} from "../src/config.ts";
+import { encodeMappingTokens } from "../src/mapping-scopes.ts";
+import {
+  canFastDelegateInsertInput,
+  handleModalInput as handleModalInputWithPlan,
+} from "../src/modal/engine.ts";
 import { createModalState, resetTransientState, transitionMode } from "../src/modal/state.ts";
 import { modalModeLabel, modalStatus, modalVisualStatus } from "../src/modal/view.ts";
+import { handleModalInputWithOptions as handleModalInput } from "./modal-test-helper.ts";
 
 const p = (line: number, col: number) => ({ line, col });
 const cursor = { line: 0, col: 0 };
@@ -28,6 +39,7 @@ const csiAltD = "\u001b[100;3u";
 const altF = "\u001bf";
 const csiAltF = "\u001b[102;3u";
 const ctrlE = "\u001b[101;5u";
+const ctrlP = "\u001b[112;5u";
 const altV = "\u001bv";
 const ctrlAltV = "\u001b[118;7u";
 const escapeOptions = resolveVimOptions({
@@ -39,22 +51,22 @@ function applyModalKeys(
   initialText: string,
   initialCursor: { line: number; col: number },
   keys: readonly string[],
-  modalOptions: ModalOptions = options,
+  configuration: ModalOptions | VimConfigPlan = options,
   terminalRows?: number,
 ) {
   let state = initialState;
   let text = initialText;
   let cursor = initialCursor;
+  const plan = "scopes" in configuration ? configuration : undefined;
+  const modalOptions = "scopes" in configuration ? configuration.options : configuration;
 
   const effects: ModalEffect[] = [];
 
   for (const key of keys) {
-    const update = handleModalInput(
-      state,
-      { text, lines: text.split("\n"), cursor, terminalRows },
-      modalOptions,
-      key,
-    );
+    const editorSnapshot = { text, lines: text.split("\n"), cursor, terminalRows };
+    const update = plan
+      ? handleModalInputWithPlan(state, editorSnapshot, plan, key)
+      : handleModalInput(state, editorSnapshot, modalOptions, key);
     state = update.state;
     effects.push(...update.effects);
     for (const effect of update.effects) {
@@ -1127,6 +1139,32 @@ describe("Ex command-line modal behavior", () => {
     expect(result.state.helpPopup?.lines.join("\n")).toContain("vimmode.doctor");
   });
 
+  test("changelog Ex command preserves prompt state and records successful history", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+    };
+    const result = applyModalKeys(initial, "abc", p(0, 1), [":", ..."changelog", "\r"]);
+
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state.register).toEqual(initial.register);
+    expect(result.state.marks).toEqual(initial.marks);
+    expect(result.state.macros).toEqual(initial.macros);
+    expect(result.state.lastSearch).toEqual(initial.lastSearch);
+    expect(result.state.lastRepeatableChange).toEqual(initial.lastRepeatableChange);
+    expect(result.state.exHistory).toEqual(["changelog"]);
+    expect(result.state.helpPopup).toMatchObject({
+      title: "pi-vimmode v0.9.0 changes",
+      source: "changelog",
+    });
+    expect(result.state.helpPopup?.markdown).toContain("Changelog unavailable for v0.9.0");
+  });
+
   test("visual features keybindings popup restores visual state after marker deletion", () => {
     const opened = handleModalInput(
       { mode: "visual", visualAnchor: p(0, 1) },
@@ -2025,6 +2063,17 @@ describe("Ex command-line modal behavior", () => {
     expect(reflowed.text).toBe("alpha beta gamma\ndelta epsilon");
   });
 
+  test("project semantic action exact keys override built-in grammar", () => {
+    const options = resolveVimOptions(undefined, {
+      piVimMode: {
+        keymap: { actions: { "prompt.transform.quote": [{ key: "u", modes: ["normal"] }] } },
+      },
+    }).options;
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["u"], options);
+    expect(result.text).toBe("> hello");
+  });
+
   test("keybound prompt transform actions edit visual touched lines", () => {
     const actionOptions = resolveVimOptions({
       piVimMode: { keymap: { actions: { "prompt.transform.quote": ["g>"] } } },
@@ -2083,6 +2132,467 @@ describe("Ex command-line modal behavior", () => {
     );
     expect(visual.text).toBe("one");
     expect(visual.state.pending).toBeUndefined();
+  });
+
+  test("scoped command binding overrides macro record key", () => {
+    const base = resolveVimOptions(undefined).options;
+    const options: ModalOptions = {
+      ...base,
+      keymap: {
+        ...base.keymap!,
+        scoped: [...base.keymap!.scoped, { actionId: "command.undo", key: "q", modes: ["normal"] }],
+      },
+    };
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], options);
+    expect(result.state.pendingMacro).toBeUndefined();
+    expect(result.effects).toContainEqual({ type: "adapterCommand", command: "undo" });
+  });
+
+  test("visual-scoped operator descriptors execute visual operations", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "u",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u"],
+      options,
+    );
+    expect(result.text).toBe("hlo");
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("multi-key scoped escape descriptors complete in visual mode", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "zz",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["z", "z"],
+      options,
+    );
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("scoped escape descriptors dispatch only in selected modes", () => {
+    const insertOnly = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: "alt+z",
+            modes: ["insert"],
+          },
+        },
+      ],
+    }).options;
+
+    const insert = applyModalKeys({ mode: "insert" }, "hello", p(0, 5), ["\u001bz"], insertOnly);
+    expect(insert.state.mode).toBe("normal");
+
+    const visual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["\u001bz"],
+      insertOnly,
+    );
+    expect(visual.state.mode).toBe("visual");
+  });
+
+  test("multi-key scoped text-object descriptors complete under operators", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "textObject.kind.inner",
+            key: "zz",
+            modes: ["operatorPending"],
+          },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "textObject.target.word",
+            key: "xx",
+            modes: ["operatorPending"],
+          },
+        },
+      ],
+    }).options;
+
+    const pendingKind = applyModalKeys(
+      { mode: "normal" },
+      "hello world",
+      p(0, 1),
+      ["d", "z"],
+      descriptorOptions,
+    );
+    expect(pendingKind.state.pending).toBeDefined();
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "hello world",
+      p(0, 1),
+      ["d", "z", "z", "x", "x"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe(" world");
+  });
+
+  test("multi-key modified scoped escape descriptors retain token prefixes", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      "hello",
+      p(0, 1),
+      ["\u001b[120;5u", "z"],
+      descriptorOptions,
+    );
+    expect(result.state.mode).toBe("normal");
+  });
+
+  test("tokenized scoped insert escapes preserve terminal input on mismatch", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "escape",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
+            modes: ["insert"],
+          },
+        },
+      ],
+    }).options;
+
+    const matched = applyModalKeys(
+      { mode: "insert" },
+      "hello",
+      p(0, 5),
+      ["\u001b[120;5u", "z"],
+      options,
+    );
+    expect(matched.state.mode).toBe("normal");
+
+    const pending = handleModalInput({ mode: "insert" }, snapshot, options, "\u001b[120;5u");
+    const mismatch = handleModalInput(pending.state, snapshot, options, "a");
+    expect(mismatch.effects).toEqual([
+      { type: "delegate", input: "\u001b[120;5u" },
+      { type: "delegate", input: "a" },
+    ]);
+  });
+
+  test("tokenized scoped remaps complete at runtime", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "remap",
+            key: encodeMappingTokens(["ctrl+x", "z"]),
+            inputs: ["l"],
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+
+    const pending = handleModalInput({ mode: "normal" }, snapshot, options, "\u001b[120;5u");
+    const replay = handleModalInput(pending.state, snapshot, options, "z");
+    expect(replay.effects).toContainEqual({ type: "playMacro", slot: "remap", inputs: ["l"] });
+  });
+
+  test("scoped operator aliases repeat as linewise operations", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "z",
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "one\ntwo\nthree",
+      cursor,
+      ["z", "z"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe("two\nthree");
+  });
+
+  test("scoped prefixes own visual grammar, macros, marks, and easymotion", () => {
+    const visualOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "operator.delete",
+            key: "uz",
+            modes: ["visual", "visualLine", "visualBlock"],
+          },
+        },
+      ],
+    }).options;
+    const pendingVisual = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u"],
+      visualOptions,
+    );
+    expect(pendingVisual.text).toBe("hello");
+    expect(pendingVisual.state).toMatchObject({ mode: "visual", pending: "u" });
+    const deleted = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["u", "z"],
+      visualOptions,
+    );
+    expect(deleted.text).toBe("hlo");
+
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: { kind: "descriptor", actionId: "macro.record", key: "zz", modes: ["normal"] },
+        },
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "command.easymotion",
+            key: "q",
+            modes: ["normal"],
+          },
+        },
+      ],
+    }).options;
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z"], descriptorOptions).state,
+    ).toMatchObject({ pending: "z" });
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z", "z", "a"], descriptorOptions).state
+        .recordingSlot,
+    ).toBe("a");
+    const markOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: { kind: "descriptor", actionId: "mark.set", key: "zz", modes: ["normal"] },
+        },
+      ],
+    }).options;
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["z", "z", "a"], markOptions).state
+        .marks,
+    ).toMatchObject({ a: p(0, 0) });
+    expect(
+      applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], descriptorOptions).state,
+    ).toMatchObject({ pendingEasymotion: { kind: "char" } });
+  });
+
+  test("scoped unmaps return protected inherited keys to Pi", () => {
+    const unmappedOptions = resolveVimOptions(
+      {
+        piVimMode: {
+          keymap: {
+            allowProtectedOverrides: ["<C-p>"],
+            commands: { undo: ["<C-p>"] },
+          },
+        },
+      },
+      undefined,
+      {
+        kind: "success",
+        warnings: [],
+        operations: [{ kind: "unmap", key: "ctrl+p", modes: ["normal"] }],
+      },
+    ).options;
+
+    const update = handleModalInput({ mode: "normal" }, snapshot, unmappedOptions, ctrlP);
+    expect(update.effects).toContainEqual({ type: "delegate", input: ctrlP });
+    expect(update.state).toEqual({ mode: "normal" });
+  });
+
+  test("operator-pending protected descriptors keep modal ownership", () => {
+    const descriptorOptions = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [
+        {
+          kind: "map",
+          mapping: {
+            kind: "descriptor",
+            actionId: "motion.wordForward",
+            key: "ctrl+p",
+            modes: ["operatorPending"],
+            allowProtected: true,
+          },
+        },
+      ],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "normal" },
+      "one two",
+      p(0, 0),
+      ["d", "\x10"],
+      descriptorOptions,
+    );
+    expect(result.text).toBe("two");
+    expect(result.effects).not.toContainEqual({ type: "delegate", input: "\x10" });
+  });
+
+  test("scoped unmaps remove inherited escape aliases by scope", () => {
+    const options = resolveVimOptions({ piVimMode: { keymap: { escape: ["<D-j>"] } } }, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "super+j", modes: ["insert"] }],
+    }).options;
+    const insert = handleModalInput({ mode: "insert" }, snapshot, options, superJ);
+    expect(insert.state.mode).toBe("insert");
+    expect(insert.effects).toContainEqual({ type: "delegate", input: superJ });
+    const visual = handleModalInput(
+      { mode: "visual", visualAnchor: p(0, 0) },
+      snapshot,
+      options,
+      superJ,
+    );
+    expect(visual.state.mode).toBe("normal");
+  });
+
+  test("scoped unmap disables inherited macro key", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "q", modes: ["normal"] }],
+    }).options;
+
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), ["q"], options);
+    expect(result.state.pendingMacro).toBeUndefined();
+  });
+
+  test("scoped unmap disables inherited visual command", () => {
+    const options = resolveVimOptions(undefined, undefined, {
+      kind: "success",
+      warnings: [],
+      operations: [{ kind: "unmap", key: "x", modes: ["visual", "visualLine", "visualBlock"] }],
+    }).options;
+
+    const result = applyModalKeys(
+      { mode: "visual", visualAnchor: p(0, 1) },
+      "hello",
+      p(0, 2),
+      ["x"],
+      options,
+    );
+    expect(result.text).toBe("hello");
+    expect(result.state.mode).toBe("visual");
+  });
+
+  test("exact semantic actions win when a stale remap survives resolution", () => {
+    const actionOptions = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "<leader>u", modes: ["normal"] }],
+          },
+        },
+      },
+    }).options;
+    const conflictingOptions: ModalOptions = {
+      ...actionOptions,
+      keymap: {
+        ...actionOptions.keymap!,
+        remaps: { accepted: [{ key: ",u", inputs: ["l"], modes: ["normal"] }] },
+      },
+    };
+
+    const actionPlan = createVimConfigPlan(actionOptions, []);
+    const result = applyModalKeys({ mode: "normal" }, "hello", p(0, 0), [",", "u"], {
+      ...actionPlan,
+      options: conflictingOptions as ResolvedVimEditorOptions,
+    });
+
+    expect(result.text).toBe("> hello");
+    expect(result.effects.some((effect) => effect.type === "playMacro")).toBe(false);
   });
 
   test("keybound prompt transform actions report no-op feedback and skip dot-repeat", () => {
@@ -2437,7 +2947,11 @@ describe("modal view state", () => {
       width: 40,
       pending: "d",
       ui: {
-        status: { enabled: true, items: ["cursorPosition", "mode", "pendingOperator"] },
+        status: {
+          enabled: true,
+          position: "left",
+          items: ["cursorPosition", "mode", "pendingOperator"],
+        },
         mode: {
           enabled: true,
           labels: {
@@ -2465,6 +2979,90 @@ describe("modal view state", () => {
     expect(status.right).toBe("");
   });
 
+  test("modal status moves the complete status group to the right", () => {
+    const ui = resolveVimOptions({
+      piVimMode: {
+        ui: {
+          status: {
+            position: "right",
+            items: ["cursorPosition", "mode", "pendingOperator"],
+          },
+        },
+      },
+    }).options.ui;
+    const status = modalStatus({
+      mode: "normal",
+      text: "abc",
+      cursor,
+      width: 40,
+      pending: "d",
+      recordingSlot: "a",
+      ui,
+    });
+    const visual = modalStatus({
+      mode: "visual",
+      text: "abc",
+      cursor: { line: 0, col: 1 },
+      visualAnchor: cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: {
+          ui: { status: { position: "right", items: ["selection", "mode"] } },
+        },
+      }).options.ui,
+    });
+
+    expect(status).toEqual({ left: "", right: " 1:1 NORMAL REC a d… " });
+    expect(visual).toEqual({ left: "", right: " 2 chars · ab VISUAL " });
+  });
+
+  test("right-positioned status honors mode visibility and narrow labels", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        ui: {
+          status: { position: "right", items: ["mode"] },
+          mode: {
+            labels: { normal: "COMMAND" },
+            narrowLabels: { normal: "C" },
+          },
+        },
+      },
+    }).options.ui;
+    const narrow = modalStatus({ mode: "normal", text: "", cursor, width: 5, ui: configured });
+    const hidden = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { position: "right" }, mode: { enabled: false } } },
+      }).options.ui,
+    });
+    const omitted = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { position: "right", items: ["cursorPosition"] } } },
+      }).options.ui,
+    });
+    const disabled = modalStatus({
+      mode: "normal",
+      text: "",
+      cursor,
+      width: 40,
+      ui: resolveVimOptions({
+        piVimMode: { ui: { status: { enabled: false, position: "right" } } },
+      }).options.ui,
+    });
+
+    expect(narrow.right).toBe(" C ");
+    expect(hidden.right).toBe(" 1:1 ");
+    expect(omitted.right).toBe(" 1:1 ");
+    expect(disabled).toEqual({ left: "", right: "" });
+  });
+
   test("modal status shows active macro recording", () => {
     const status = modalStatus({
       mode: "normal",
@@ -2483,7 +3081,7 @@ describe("modal view state", () => {
       width: 10,
       recordingSlot: "a",
       ui: {
-        status: { enabled: true, items: ["selection"] },
+        status: { enabled: true, position: "right", items: ["selection"] },
         mode: {
           enabled: false,
           labels: {
@@ -2506,7 +3104,7 @@ describe("modal view state", () => {
         workbench: { reservedRows: 0 },
       },
     });
-    expect(modeHidden.left.trim()).toBe("REC a");
+    expect(modeHidden).toEqual({ left: "", right: " REC a " });
   });
 });
 
@@ -2531,6 +3129,140 @@ describe("modal engine", () => {
     expect(handleModalInput({ mode: "normal", pending: "d" }, snapshot, options, "q")).toEqual({
       state: { mode: "normal" },
       effects: [{ type: "invalidate" }],
+    });
+  });
+
+  test("active leader overrides normal structural prefixes", () => {
+    for (const leader of ['"', "q", "m"]) {
+      const configured = resolveVimOptions({
+        piVimMode: {
+          leader,
+          keymap: { actions: { "prompt.transform.quote": ["<leader>x"] } },
+        },
+      }).options;
+      const result = handleModalInput({ mode: "normal" }, snapshot, configured, leader);
+      expect(result.state.pending).toBe(leader);
+      expect(result.state.pendingRegister).toBeUndefined();
+      expect(result.state.pendingMacro).toBeUndefined();
+      expect(result.state.pendingMark).toBeUndefined();
+    }
+  });
+
+  test("visual leader overrides direct case transform across visual modes", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: "u",
+        keymap: {
+          actions: {
+            "prompt.transform.quote": [{ key: "<leader>x", modes: ["visual"] }],
+          },
+        },
+      },
+    }).options;
+
+    for (const mode of ["visual", "visualLine", "visualBlock"] as const) {
+      const state: ModalState = { mode, visualAnchor: p(0, 0) };
+      const result = handleModalInput(state, snapshot, configured, "u");
+      expect(result.state).toEqual({ ...state, pending: "u" });
+      expect(result.effects).toEqual([{ type: "invalidate" }]);
+    }
+    expect(handleModalInput({ mode: "normal" }, snapshot, configured, "u").state.pending).toBe("u");
+  });
+
+  test("invalid leader continuation preserves durable modal state", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: '"',
+        feedback: { noop: "status" },
+        keymap: { actions: { "prompt.transform.quote": ["<leader>q"] } },
+      },
+    }).options;
+    const initial: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastSearch: { query: "abc", direction: "forward" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      lastVisualSelection: {
+        mode: "visual",
+        anchor: p(0, 0),
+        cursor: p(0, 1),
+        text: "abc",
+      },
+    };
+
+    const result = applyModalKeys(initial, "abc", p(0, 1), ['"', "z"], configured);
+    expect(result.text).toBe("abc");
+    expect(result.cursor).toEqual(p(0, 1));
+    expect(result.state).toEqual(initial);
+    expect(result.state.exMessage).toBeUndefined();
+    expect(result.effects.every((effect) => effect.type === "invalidate")).toBe(true);
+  });
+
+  test("pending register keeps ownership of leader character", () => {
+    const configured = resolveVimOptions({
+      piVimMode: {
+        leader: "w",
+        keymap: { actions: { "prompt.transform.quote": ["<leader>x"] } },
+      },
+    }).options;
+    const result = handleModalInput(
+      { mode: "normal", pendingRegister: "awaitingSlot" },
+      snapshot,
+      configured,
+      "w",
+    );
+    expect(result.state.pendingRegister).toEqual({ kind: "named", slot: "w", append: false });
+    expect(result.state.pending).toBeUndefined();
+  });
+
+  test("insert after moves only when cursor points before logical line end", () => {
+    expect(
+      handleModalInput(
+        { mode: "normal" },
+        { text: "abc\n", lines: ["abc", ""], cursor: p(0, 2) },
+        options,
+        "a",
+      ).effects,
+    ).toContainEqual({ type: "adapterCommand", command: "right" });
+
+    for (const atBoundary of [
+      { text: "abc\n", lines: ["abc", ""], cursor: p(0, 3) },
+      { text: "\n", lines: ["", ""], cursor: p(0, 0) },
+    ]) {
+      expect(
+        handleModalInput({ mode: "normal" }, atBoundary, options, "a").effects,
+      ).not.toContainEqual({ type: "adapterCommand", command: "right" });
+    }
+  });
+
+  test("insert after at line end preserves persistent modal state", () => {
+    const state: ModalState = {
+      mode: "normal",
+      register: { type: "char", text: "saved" },
+      namedRegisters: { a: { type: "line", text: "line" } },
+      marks: { a: p(0, 1) },
+      macros: { a: ["x"] },
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      searchHighlight: { query: "abc", current: p(0, 0) },
+      exMessage: { kind: "info", text: "clear me" },
+    };
+
+    expect(
+      handleModalInput(state, { text: "abc\n", lines: ["abc", ""], cursor: p(0, 3) }, options, "a"),
+    ).toEqual({
+      state: {
+        mode: "insert",
+        register: state.register,
+        namedRegisters: state.namedRegisters,
+        marks: state.marks,
+        macros: state.macros,
+        lastRepeatableChange: state.lastRepeatableChange,
+      },
+      effects: [{ type: "terminalCursor", style: "bar" }, { type: "invalidate" }],
     });
   });
 
@@ -2813,6 +3545,55 @@ describe("modal engine", () => {
     );
     expect(repeated.effects[0]).toEqual({ type: "restoreCursor", position: { line: 0, col: 3 } });
 
+    const reversedRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "f",
+      "a",
+      ";",
+      ";",
+      ",",
+      ",",
+    ]);
+    expect(reversedRepeated.cursor).toEqual(p(0, 1));
+    expect(reversedRepeated.state.lastCharSearch).toEqual({
+      command: "findCharForward",
+      target: "a",
+    });
+
+    const backwardReversed = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 17), [
+      "F",
+      "a",
+      ",",
+    ]);
+    expect(backwardReversed.cursor).toEqual(p(0, 17));
+    expect(backwardReversed.state.lastCharSearch).toEqual({
+      command: "findCharBackward",
+      target: "a",
+    });
+
+    const tillRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "t",
+      "a",
+      ";",
+    ]);
+    expect(tillRepeated.cursor).toEqual(p(0, 2));
+
+    const tillBackwardRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 5), [
+      "T",
+      "a",
+      ";",
+    ]);
+    expect(tillBackwardRepeated.cursor).toEqual(p(0, 2));
+
+    const tillReverseRepeated = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "l",
+      "l",
+      "l",
+      "T",
+      "a",
+      ",",
+    ]);
+    expect(tillReverseRepeated.cursor).toEqual(p(0, 4));
+
     const replacePending = handleModalInput({ mode: "normal" }, snapshot, options, "r");
     const replaced = handleModalInput(replacePending.state, snapshot, options, "z");
     const repeatedChange = handleModalInput(
@@ -3065,6 +3846,17 @@ describe("modal engine", () => {
     expect(reversed.text).toBe("ac");
     expect(reversed.state.mode).toBe("insert");
     expect(reversed.state.register).toEqual({ type: "char", text: ":b:" });
+    expect(reversed.state.lastCharSearch).toEqual({ command: "findCharForward", target: ":" });
+
+    const tillSearched = applyModalKeys({ mode: "normal" }, "banana apple alpha", p(0, 0), [
+      "t",
+      "a",
+    ]);
+    const tillDeleted = applyModalKeys(tillSearched.state, tillSearched.text, tillSearched.cursor, [
+      "d",
+      ";",
+    ]);
+    expect(tillDeleted.text).toBe("ana apple alpha");
   });
 
   test("normal mode supports WORD and previous-end motions", () => {
@@ -5320,5 +6112,166 @@ describe("gv visual reselection", () => {
     expect(reselected.state.mode).toBe("visual");
     expect(reselected.state.visualAnchor).toEqual(p(0, 0));
     expect(reselected.cursor).toEqual(p(0, 2));
+  });
+});
+
+describe("EasyMotion modal effects", () => {
+  const highlight = (targets: EasymotionTarget[]): ModalState => ({
+    mode: "normal",
+    pendingEasymotion: { kind: "highlight", targets },
+  });
+
+  test("matches prompt-wide, case-insensitively, with lowercase then uppercase labels", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEasymotion: { kind: "char" } },
+      { text: "Axa\ncatA", lines: ["Axa", "catA"], cursor },
+      options,
+      "a",
+    );
+
+    expect(update.state.pendingEasymotion).toEqual({
+      kind: "highlight",
+      targets: [
+        { label: "a", line: 0, character: 0 },
+        { label: "b", line: 0, character: 2 },
+        { label: "c", line: 1, character: 1 },
+        { label: "d", line: 1, character: 3 },
+      ],
+    });
+    expect(update.effects).toEqual([{ type: "invalidate" }]);
+    expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+  });
+
+  test("preserves source offsets when case folding expands characters", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEasymotion: { kind: "char" } },
+      { text: "İI", lines: ["İI"], cursor },
+      options,
+      "i",
+    );
+
+    expect(update.state.pendingEasymotion).toEqual({
+      kind: "highlight",
+      targets: [
+        { label: "a", line: 0, character: 0 },
+        { label: "b", line: 0, character: 1 },
+      ],
+    });
+  });
+
+  test("caps targets at 52 labels", () => {
+    const text = "a".repeat(60);
+    const update = handleModalInput(
+      { mode: "normal", pendingEasymotion: { kind: "char" } },
+      { text, lines: [text], cursor },
+      options,
+      "a",
+    );
+    const targets = update.state.pendingEasymotion;
+
+    expect(targets?.kind).toBe("highlight");
+    if (targets?.kind !== "highlight") return;
+    expect(targets.targets).toHaveLength(52);
+    expect(targets.targets.at(-1)).toEqual({ label: "Z", line: 0, character: 51 });
+  });
+
+  test("no match clears pending state without editing", () => {
+    const update = handleModalInput(
+      { mode: "normal", pendingEasymotion: { kind: "char" } },
+      snapshot,
+      options,
+      "z",
+    );
+
+    expect(update.state).toEqual({ mode: "normal" });
+    expect(update.effects).toEqual([{ type: "invalidate" }]);
+  });
+
+  test("escape and invalid labels preserve highlight without editing", () => {
+    const initial = highlight([{ label: "a", line: 0, character: 2 }]);
+    const cancelled = handleModalInput(initial, { ...snapshot, text: "xxa" }, options, "\x1b");
+    const invalid = handleModalInput(initial, { ...snapshot, text: "xxa" }, options, "Z");
+
+    expect(cancelled.state).toEqual({ mode: "normal" });
+    expect(cancelled.effects).toEqual([{ type: "invalidate" }]);
+    expect(invalid.state).toEqual(initial);
+    expect(invalid.effects).toEqual([{ type: "invalidate" }]);
+    expect(
+      [...cancelled.effects, ...invalid.effects].some((effect) => effect.type === "edit"),
+    ).toBe(false);
+  });
+
+  test("valid lowercase and uppercase labels move cursor without editing", () => {
+    const lowercase = handleModalInput(
+      highlight([
+        { label: "a", line: 0, character: 2 },
+        { label: "A", line: 1, character: 4 },
+      ]),
+      { text: "xxa\nyyyyA", lines: ["xxa", "yyyyA"], cursor },
+      options,
+      "a",
+    );
+    const uppercase = handleModalInput(
+      highlight([
+        { label: "a", line: 0, character: 2 },
+        { label: "A", line: 1, character: 4 },
+      ]),
+      { text: "xxa\nyyyyA", lines: ["xxa", "yyyyA"], cursor },
+      options,
+      "A",
+    );
+
+    expect(lowercase.state.pendingEasymotion).toBeUndefined();
+    expect(uppercase.state.pendingEasymotion).toBeUndefined();
+    expect(lowercase.effects).toContainEqual({
+      type: "restoreCursor",
+      position: { line: 0, col: 2 },
+    });
+    expect(uppercase.effects).toContainEqual({
+      type: "restoreCursor",
+      position: { line: 1, col: 4 },
+    });
+    expect(
+      [...lowercase.effects, ...uppercase.effects].some((effect) => effect.type === "edit"),
+    ).toBe(false);
+  });
+
+  test("EasyMotion leaves durable modal state unchanged", () => {
+    const initial: ModalState = {
+      mode: "normal",
+      pendingEasymotion: { kind: "char" },
+      namedRegisters: { a: { type: "char", text: "register" } },
+      marks: { a: p(0, 1) },
+      macros: { q: ["x"] },
+      lastPlayedMacro: "q",
+      lastCharSearch: { command: "findCharForward", target: "," },
+      lastSearch: { query: "needle", direction: "forward" },
+      searchHistory: [{ query: "needle", matcherMode: "literal" }],
+      lastRepeatableChange: { type: "command", command: "deleteChar" },
+      lastVisualSelection: { mode: "visual", anchor: p(0, 0), cursor: p(0, 1), text: "ab" },
+      messageHistory: [{ kind: "info", text: "kept" }],
+    };
+    const entered = handleModalInput(
+      initial,
+      { text: "abc", lines: ["abc"], cursor },
+      options,
+      "a",
+    );
+    const states = [
+      entered,
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "\x1b"),
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "Z"),
+      handleModalInput(entered.state, { text: "abc", lines: ["abc"], cursor }, options, "a"),
+    ];
+
+    const { pendingEasymotion: _pending, ...durable } = initial;
+    for (const update of states) {
+      expect(update.state).toMatchObject(durable);
+      expect(update.effects.some((effect) => effect.type === "edit")).toBe(false);
+    }
+    expect(entered.state.pendingEasymotion?.kind).toBe("highlight");
+    expect(states[1]?.state.pendingEasymotion).toBeUndefined();
+    expect(states[2]?.state.pendingEasymotion?.kind).toBe("highlight");
+    expect(states[3]?.state.pendingEasymotion).toBeUndefined();
   });
 });

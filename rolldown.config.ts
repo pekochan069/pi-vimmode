@@ -1,7 +1,10 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "rolldown";
+
+import { PACKAGE_DOCS, PACKAGE_MANIFEST_FILES } from "./scripts/package-inventory.ts";
+import { currentReleaseAsset, RELEASE_ASSET_FILE } from "./src/release-notes.ts";
 
 const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 const piCorePackages = [
@@ -12,33 +15,8 @@ const piCorePackages = [
   "typebox",
 ];
 const distDir = "dist";
-const distDocs = ["docs/features.md", "docs/settings.md"];
-
 const isExternal = (id: string) =>
   nodeBuiltins.has(id) || piCorePackages.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
-
-async function writeDistPackageJson() {
-  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-
-  delete packageJson.scripts;
-  delete packageJson.devDependencies;
-
-  packageJson.type = "module";
-  packageJson.main = "./index.js";
-  packageJson.module = "./index.js";
-  packageJson.exports = "./index.js";
-  packageJson.files = ["index.js", "README.md", "LICENSE", "docs/features.md", "docs/settings.md"];
-  packageJson.pi = { extensions: ["./index.js"] };
-
-  await writeFile(join(distDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
-}
-
-async function copyDistDocs() {
-  await mkdir(join(distDir, "docs"), { recursive: true });
-  await cp("README.md", join(distDir, "README.md"));
-  await cp("LICENSE", join(distDir, "LICENSE"));
-  await Promise.all(distDocs.map((doc) => cp(doc, join(distDir, doc))));
-}
 
 export default defineConfig({
   input: "./src/index.ts",
@@ -59,7 +37,44 @@ export default defineConfig({
     {
       name: "dist-package-files",
       async writeBundle() {
-        await Promise.all([writeDistPackageJson(), copyDistDocs()]);
+        for (const directory of [join(distDir, "docs")]) {
+          if (!existsSync(directory)) await this.fs.mkdir(directory, { recursive: true });
+        }
+
+        const packageJson = await JSON.parse(
+          await this.fs.readFile("package.json", {
+            encoding: "utf8",
+          }),
+        );
+        const releaseSource = await this.fs.readFile("RELEASE.md", { encoding: "utf8" });
+        if (typeof packageJson.version !== "string")
+          throw new Error("Root package.json has no version");
+        const releaseAsset = currentReleaseAsset(releaseSource, packageJson.version);
+        delete packageJson.scripts;
+        delete packageJson.devDependencies;
+
+        packageJson.type = "module";
+        packageJson.main = "./index.js";
+        packageJson.module = "./index.js";
+        packageJson.exports = {
+          ".": "./index.js",
+          "./config": { types: "./config.d.ts" },
+        };
+        packageJson.files = PACKAGE_MANIFEST_FILES;
+        packageJson.pi = { extensions: ["./index.js"] };
+
+        await Promise.all([
+          this.fs.writeFile(
+            join(distDir, "package.json"),
+            `${JSON.stringify(packageJson, null, 2)}\n`,
+          ),
+          this.fs.copyFile("README.md", join(distDir, "README.md")),
+          this.fs.copyFile("LICENSE", join(distDir, "LICENSE")),
+          this.fs.copyFile("src/vim-config.d.ts", join(distDir, "config.d.ts")),
+          this.fs.copyFile("RELEASE.md", join(distDir, "RELEASE.md")),
+          this.fs.writeFile(join(distDir, RELEASE_ASSET_FILE), releaseAsset),
+          ...PACKAGE_DOCS.map((doc) => this.fs.copyFile(doc, join(distDir, doc))),
+        ]);
       },
     },
   ],

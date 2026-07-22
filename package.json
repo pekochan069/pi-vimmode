@@ -1,6 +1,6 @@
 {
   "name": "pi-vimmode",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "private": false,
   "description": "Vim mode for Pi coding agent",
   "keywords": [
@@ -25,6 +25,9 @@
     "dist",
     "README.md",
     "LICENSE",
+    "RELEASE.md",
+    "release-notes.json",
+    "docs/config.md",
     "docs/features.md",
     "docs/settings.md"
   ],
@@ -35,23 +38,28 @@
   },
   "scripts": {
     "build": "rolldown -c",
+    "verify-package": "bun scripts/verify-package.ts",
+    "generate:config-reference": "bun scripts/generate-config-reference.ts",
+    "check:config-reference": "bun scripts/generate-config-reference.ts --check",
+    "prepublish": "bun run build && bun run verify-package",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "bun test",
     "check-types": "tsc --noEmit",
+    "verify": "bun run check-types && bun run lint && bun run test",
     "prepare": "lefthook install"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",
     "@earendil-works/pi-tui": "^0.77.0",
     "bun-types": "^1.3.14",
-    "lefthook": "^2.1.9",
-    "oxfmt": "^0.56.0",
-    "oxlint": "^1.71.0",
-    "rolldown": "^1.1.3",
-    "typescript": "^7.0.1-rc"
+    "lefthook": "^2.1.10",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
+    "rolldown": "^1.2.0",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",

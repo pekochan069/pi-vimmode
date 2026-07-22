@@ -164,7 +164,16 @@ export async function withPackageConsumer<T>(
 
 export async function verifyPackageSmoke(packageDir: string): Promise<void> {
   await withPackageConsumer(packageDir, async ({ run }) => {
-    await run(["--no-install", "-e", "await import('pi-vimmode')"]);
+    await run([
+      "--no-install",
+      "-e",
+      `const { loadCurrentRelease } = await import("pi-vimmode");
+if (typeof loadCurrentRelease !== "function") throw new Error("Missing release loader");
+const release = loadCurrentRelease();
+if (!release.available || !release.content || release.version === "unknown") {
+  throw new Error("Packaged release asset unavailable");
+}`,
+    ]);
     try {
       await run(["--no-install", "-e", "await import('pi-vimmode/config')"]);
     } catch (error) {

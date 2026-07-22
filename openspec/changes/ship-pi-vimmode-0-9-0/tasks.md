@@ -23,7 +23,7 @@
 
 ## 5. Packaged Current-Version Changelog
 
-- [ ] 5.1 Implement [#44](https://github.com/pekochan069/pi-vimmode/issues/44): validate first `RELEASE.md` release against package version, package current-release runtime asset, and prove defensive package-relative loading outside repository cwd. **Blocked by:** #34.
+- [x] 5.1 Implement [#44](https://github.com/pekochan069/pi-vimmode/issues/44): validate first `RELEASE.md` release against package version, package current-release runtime asset, and prove defensive package-relative loading outside repository cwd. **Blocked by:** #34.
 - [ ] 5.2 Implement [#45](https://github.com/pekochan069/pi-vimmode/issues/45): add exact manual `:changelog` command and width-safe Markdown rendering through existing read-only popup while preserving all prompt-editing state. **Blocked by:** #44.
 
 ## 6. Change Validation

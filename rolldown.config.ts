@@ -26,8 +26,18 @@ async function writeDistPackageJson() {
   packageJson.type = "module";
   packageJson.main = "./index.js";
   packageJson.module = "./index.js";
-  packageJson.exports = "./index.js";
-  packageJson.files = ["index.js", "README.md", "LICENSE", "docs/features.md", "docs/settings.md"];
+  packageJson.exports = {
+    ".": "./index.js",
+    "./config": { types: "./config.d.ts" },
+  };
+  packageJson.files = [
+    "index.js",
+    "config.d.ts",
+    "README.md",
+    "LICENSE",
+    "docs/features.md",
+    "docs/settings.md",
+  ];
   packageJson.pi = { extensions: ["./index.js"] };
 
   await writeFile(join(distDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -59,7 +69,11 @@ export default defineConfig({
     {
       name: "dist-package-files",
       async writeBundle() {
-        await Promise.all([writeDistPackageJson(), copyDistDocs()]);
+        await Promise.all([
+          writeDistPackageJson(),
+          copyDistDocs(),
+          cp("src/vim-config.d.ts", join(distDir, "config.d.ts")),
+        ]);
       },
     },
   ],

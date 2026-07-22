@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { resolveNormalCommand } from "../src/commands.ts";
 import { loadVimJsConfig } from "../src/config-js.ts";
@@ -25,6 +26,20 @@ function operations(result: Awaited<ReturnType<typeof loadVimJsConfig>>) {
 }
 
 describe("vim JS config loading", () => {
+  test("loads committed basic typed example without warnings", async () => {
+    const result = await loadVimJsConfig(
+      join(dirname(fileURLToPath(import.meta.url)), "../examples/pi-vimmode.config.js"),
+    );
+    expect(result.warnings).toEqual([]);
+    expect(operations(result)).toEqual([
+      { kind: "preset", preset: "prompt-safe" },
+      { kind: "leaf", path: "leader", value: " " },
+      { kind: "leaf", path: "startMode", value: "normal" },
+      { kind: "leaf", path: "cursor.normal", value: "bar" },
+      { kind: "leaf", path: "ui.status.position", value: "right" },
+    ]);
+  });
+
   test("missing JS config is quiet", async () => {
     const result = await loadVimJsConfig(join(tmpdir(), "missing-pi-vimmode.config.js"));
     expect(result).toEqual({ kind: "missing", warnings: [] });

@@ -24,5 +24,5 @@
 - [x] 4.1 Run focused `bun test` coverage for config metadata, trusted JavaScript config, config resolution, public config types, generator behavior, and protected Pi shortcut handling.
 - [x] 4.2 Run existing live `VimEditor` and modal regression coverage to confirm config parsing/editor construction, dot-repeat, register writes, search highlight clearing, visual range capture, cursor behavior, and Pi delegation remain unchanged.
 - [x] 4.3 Run `bun test` and `bun run check-types`.
-- [ ] 4.4 Run `bun run lint` and `bun run format:check`.
+- [x] 4.4 Run `bun run lint` and `bun run format:check`.
 - [x] 4.5 Run generated-reference check mode, `openspec validate generate-canonical-config-reference --strict`, and `openspec validate --specs --strict`.

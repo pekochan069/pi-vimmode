@@ -5,12 +5,15 @@
 - Added trusted JavaScript configuration via `~/.pi/agent/pi-vimmode.config.js`. Configure presets, leader, cursor mode, UI, macros, marks, search, Ex command, prompt structures/transforms, action presets, prompt/insert actions, replay mappings, and scoped unmaps with a small `vim` API. Configuration writes are validated and staged atomically; defaults, global JSON, JavaScript, and project JSON compile into one immutable scoped plan before activation. Project JSON remains final authority, and failed config files leave existing settings unchanged.
 
 ```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
   vim.g.mapleader = " ";
   vim.keymap.set("n", "<leader>q", vim.prompt.quote());
   vim.keymap.set("n", "zq", null);
 };
 ```
+
+- Added declaration-only JavaScript/TypeScript definitions for trusted config through `pi-vimmode/config`. `VimConfig` types synchronous or asynchronous root exports, while `VimConfigApi` types imported helpers and presets. Because the global config lives outside Pi's npm directory, use the exact relative JSDoc import shown above for editor completion and type checking. No runtime config helper or module is added.
 
 - Added scoped action-keymap descriptors for trusted JavaScript. `vim.keymap.set` accepts finite actions in normal, visual, insert, or operator-pending scopes; supports compatibility mode aliases, scoped `unmap`, deterministic conflict resolution, protected-shortcut overrides, and bounded replay mappings. Project settings remain final authority.
 

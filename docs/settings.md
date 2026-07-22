@@ -47,15 +47,16 @@ Common warning causes:
 - Invalid UI/search/macro/mark/feedback field type.
 - Invalid `piVimMode.ui.workbench.reservedRows` value outside `0` through `5`.
 - Legacy `piVimMode.vimOptions` present.
-- Invalid global JS config import, export shape, mode, key string, or RHS.
+- Invalid global JS config import, export shape, mode, key string, or mapping target.
 
 ## Global JS config
 
 `~/.pi/agent/pi-vimmode.config.js` is trusted local code executed with Pi process privileges. It is not sandboxed. Project-local executable JS config is intentionally unsupported.
 
-Use `vim.keymap.set(mode, key, rhs, options?)`. `rhs` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap that exact key in selected scopes. The key uses JSON key syntax; string RHS values are replayed keys, never internal action IDs.
+Use `vim.keymap.set(mode, keys, target, options?)`. `target` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap those exact keys in selected scopes. `keys` uses JSON key syntax; string targets are replayed keys, never internal action IDs.
 
 ```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
   vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
@@ -75,7 +76,7 @@ Literal replay strings work only in normal or visual scopes, are bounded, and do
 
 Set `vim.g.mapleader` to one printable character or `null`. Assignment affects every retained `<leader>` mapping after project settings apply, regardless of assignment order inside the JS file. Invalid assignments warn and preserve the last valid value.
 
-JS config boundaries: no raw object export, no string RHS that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String RHS is replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping LHS keys, never in replay RHS strings.
+JS config boundaries: no raw object export, no string target that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String targets are replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping keys, never in replay target strings.
 
 Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results.
 
@@ -193,7 +194,7 @@ Rules:
 - Any retained normal/visual leader mapping reserves selected prefix across normal and all visual modes. Existing grammar on that prefix becomes unavailable, including counts for digit leaders, named-register entry for `"`, macro/mark keys, and direct visual `u`/`U` transforms.
 - Leader setting alone changes no key behavior. Insert escape/action and multi-key text-object bindings retain existing validation and do not activate normal/visual prefix reservation.
 - Runtime keybinding views show expanded physical keys, not `<leader>` source notation.
-- No timeout fallback, recursive expansion, runtime `:map`, RHS substitution, Vimscript, or Neovim Lua support.
+- No timeout fallback, recursive expansion, runtime `:map`, target substitution, Vimscript, or Neovim Lua support.
 
 ## Cursor settings
 

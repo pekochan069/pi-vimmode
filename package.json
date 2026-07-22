@@ -43,6 +43,7 @@
     "lint:fix": "oxlint --fix",
     "test": "bun test",
     "check-types": "tsc --noEmit",
+    "verify": "bun run check-types && bun run lint && bun run test",
     "prepare": "lefthook install"
   },
   "devDependencies": {

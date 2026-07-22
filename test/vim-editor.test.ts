@@ -27,6 +27,12 @@ function ctrlVVisualBlockOptions(startMode: "insert" | "normal" = "insert") {
   }).options;
 }
 
+function easyMotionOptions() {
+  return resolveVimOptions({
+    piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
+  }).options;
+}
+
 function runtimeConfiguration(
   planOrOptions: VimConfigPlan | ResolvedVimEditorOptions = DEFAULT_VIM_OPTIONS,
   diagnostics: VimDiagnostics = { warnings: [] },
@@ -470,19 +476,60 @@ describe("vim editor integration", () => {
   });
 
   test("EasyMotion labels render without editing prompt text", () => {
-    const options = resolveVimOptions({
-      piVimMode: { startMode: "normal", keymap: { commands: { easymotion: ["e"] } } },
-    }).options;
+    const options = easyMotionOptions();
     const { editor } = createEditor(options);
-    editor.setText("one");
+    editor.setText("xone");
     typeKeys(editor, ["e", "o"]);
 
-    expect(editor.getText()).toBe("one");
+    expect(editor.getText()).toBe("xone");
     expect(editor.render(20).join("\n")).toContain("\x1b[31ma\x1b[0m");
     editor.handleInput("a");
 
-    expect(editor.getText()).toBe("one");
-    expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+    expect(editor.getText()).toBe("xone");
+    expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
+  });
+
+  test("EasyMotion cancel, invalid labels, and misses preserve prompt text", () => {
+    const options = easyMotionOptions();
+    const { editor } = createEditor(options);
+    editor.setText("xone\ntwo");
+
+    typeKeys(editor, ["e", "o", "\x1b"]);
+    expect(editor.getText()).toBe("xone\ntwo");
+
+    typeKeys(editor, ["e", "z"]);
+    expect(editor.getText()).toBe("xone\ntwo");
+
+    typeKeys(editor, ["e", "o", "Z"]);
+    expect(editor.getText()).toBe("xone\ntwo");
+    expect(editor.render(20).join("\n")).toContain("\x1b[31ma\x1b[0m");
+  });
+
+  test("undo after EasyMotion reverses prior real edit", () => {
+    const { editor } = createEditor(easyMotionOptions());
+    editor.setText("draft");
+    typeKeys(editor, ["g", "g", "i", "x", "\x1b"]);
+    expect(editor.getText()).toBe("xdraft");
+
+    typeKeys(editor, ["e", "d", "a"]);
+    expect(editor.getText()).toBe("xdraft");
+    editor.handleInput("u");
+
+    expect(editor.getText()).toBe("draft");
+  });
+
+  test("EasyMotion preserves undo and redo history", () => {
+    const options = easyMotionOptions();
+    const { editor } = createEditor(options);
+    editor.setText("draft");
+    typeKeys(editor, ["g", "g", "i", "x", "\x1b", "u"]);
+    expect(editor.getText()).toBe("draft");
+
+    typeKeys(editor, ["e", "d", "\x1b"]);
+    expect(editor.getText()).toBe("draft");
+    editor.handleInput("\x12");
+
+    expect(editor.getText()).toBe("xdraft");
   });
 
   test("reconfigure preserves undo and redo behavior", () => {

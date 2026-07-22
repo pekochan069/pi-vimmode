@@ -1,6 +1,7 @@
 import { matchesKey, parseKey } from "@earendil-works/pi-tui";
 
 import type {
+  EasymotionTarget,
   ResolvedVimKeymap,
   VimActionBindingMode,
   VimDiagnostics,
@@ -248,7 +249,6 @@ export function canFastDelegateInsertInput(
 function handleEasymotionInput(
   state: ModalState,
   snapshot: EditorSnapshot,
-  _options: ModalOptions,
   data: string,
 ): ModalUpdate {
   const key = keySequence(data);
@@ -258,8 +258,8 @@ function handleEasymotionInput(
   }
 
   if (state.pendingEasymotion?.kind === "char") {
-    // Transition to highlight state with case-insensitive matching
-    const targets: { label: string; line: number; character: number }[] = [];
+    // Match each source character separately so folded expansions keep source offsets.
+    const targets: EasymotionTarget[] = [];
     const lines = snapshot.text.split("\n");
     const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
     let count = 0;
@@ -268,14 +268,16 @@ function handleEasymotionInput(
     for (let i = 0; i < lines.length && count < labels.length; i++) {
       const line = lines[i];
       if (line === undefined) continue;
-      // Case-insensitive matching
-      let pos = line.toLowerCase().indexOf(targetChar);
-      while (pos !== -1 && count < labels.length) {
-        const label = labels[count];
-        if (label === undefined) break;
-        targets.push({ label, line: i, character: pos });
-        count++;
-        pos = line.toLowerCase().indexOf(targetChar, pos + 1);
+      let sourceOffset = 0;
+      for (const sourceChar of line) {
+        if (sourceChar.toLowerCase().includes(targetChar)) {
+          const label = labels[count];
+          if (label === undefined) break;
+          targets.push({ label, line: i, character: sourceOffset });
+          count++;
+        }
+        sourceOffset += sourceChar.length;
+        if (count >= labels.length) break;
       }
     }
 
@@ -302,19 +304,6 @@ function handleEasymotionInput(
       ]);
     }
     return invalidate(state);
-  }
-
-  if (state.pendingEasymotion?.kind === "jump") {
-    const target = state.pendingEasymotion.targets.find((t: any) => t.label === key);
-    const { pendingEasymotion: _, ...rest } = state;
-
-    if (target) {
-      return withEffects(rest, [
-        { type: "restoreCursor", position: { line: target.line, col: target.character } },
-        { type: "invalidate" },
-      ]);
-    }
-    return invalidate(rest);
   }
 
   return invalidate(state);
@@ -1078,8 +1067,7 @@ function routeModalInput(
   if (routedState.helpPopup) return handleHelpPopupInput(routedState, options, data);
 
   // Easymotion routing
-  if (routedState.pendingEasymotion)
-    return handleEasymotionInput(routedState, snapshot, options, data);
+  if (routedState.pendingEasymotion) return handleEasymotionInput(routedState, snapshot, data);
 
   if (routedState.pendingEx)
     return handlePendingExInput(routedState, snapshot, options, data, diagnostics);
@@ -1101,10 +1089,6 @@ export function modalPendingDisplay(state: ModalState): string | undefined {
   if (state.pendingEasymotion?.kind === "highlight") {
     return `Jump [${state.pendingEasymotion.targets.map((t) => t.label).join("")}]: `;
   }
-  if (state.pendingEasymotion?.kind === "jump") {
-    return `Jump [${state.pendingEasymotion.targets.map((t: any) => t.label).join("")}]: `;
-  }
-
   return (
     exDisplay(state.pendingEx) ??
     pendingSearchDisplay(state.pendingSearch) ??

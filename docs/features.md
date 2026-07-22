@@ -343,6 +343,12 @@ Limitations:
 - XML-ish tags support matching `<name ...>` / `</name>` pairs and ignore self-closing tags.
 - Error block detection is heuristic and stops at blank or unrelated prose lines.
 
+## EasyMotion
+
+EasyMotion is opt-in; it has no default binding. Bind `command.easymotion`, type a target character, then press its label to move the cursor. Matching is case-insensitive and prompt-wide. Up to 52 targets receive deterministic labels: `a` through `z`, then `A` through `Z`.
+
+Labels are render-only substitutions over unchanged prompt cells. Escape, invalid labels, and missing matches leave prompt text and undo/redo history unchanged. Valid labels move the cursor without creating an edit. Configure label color with `piVimMode.easymotion.labelColor`.
+
 ## Character search
 
 `f`, `F`, `t`, and `T` search within the current line only. They work as normal-mode motions and as targets after `d`, `c`, or `y`.

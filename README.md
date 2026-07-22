@@ -150,7 +150,7 @@ Example keymap/UI override:
 
 ### EasyMotion
 
-When you trigger character search (e.g. `f`, `t`, `F`, `T`), matching characters on the current line are replaced with colored label characters. Press the label to jump to that character, which restores the original. The label color is configurable under `piVimMode.easymotion.labelColor`:
+EasyMotion has no default binding. Bind `command.easymotion`, type a target character, then press its label to move the cursor. Matching is case-insensitive and prompt-wide, with up to 52 labels (lowercase, then uppercase). Labels are render-only substitutions, so prompt text and undo/redo history stay unchanged. Configure label color with `piVimMode.easymotion.labelColor`:
 
 ```json
 {

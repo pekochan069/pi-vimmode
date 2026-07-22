@@ -1,4 +1,4 @@
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, arch, platform, release } from "node:os";
 import { dirname } from "node:path";
@@ -8,12 +8,15 @@ import { VimEditor } from "../src/vim-editor.ts";
 
 type CorpusKind = "ascii-single" | "ascii-multiline" | "mixed-single";
 
-type Corpus = {
+type CorpusMetadata = {
   name: string;
   kind: CorpusKind;
-  text: string;
   codeUnits: number;
   lines: number;
+};
+
+type Corpus = CorpusMetadata & {
+  text: string;
 };
 
 type Timings = {
@@ -25,7 +28,7 @@ type Timings = {
 
 type BenchmarkResult = {
   name: string;
-  corpus: { name: string; kind: CorpusKind; codeUnits: number; lines: number };
+  corpus: CorpusMetadata;
   runs: number;
   milliseconds: Timings;
 };
@@ -48,11 +51,16 @@ type Arguments = {
 
 const WIDTH = 80;
 const ROWS = 40;
+const EXPECTED_RENDER_ROWS = Math.max(5, Math.floor(ROWS * 0.3)) + 2;
 
 function fillToken(target: number, token: string): string {
   let text = "";
   while (text.length + token.length <= target) text += token;
   return text + "x".repeat(target - text.length);
+}
+
+function corpusMetadata({ name, kind, codeUnits, lines }: Corpus): CorpusMetadata {
+  return { name, kind, codeUnits, lines };
 }
 
 function makeCorpus(name: string, kind: CorpusKind, codeUnits: number, token: string): Corpus {
@@ -155,6 +163,14 @@ function leftCase(corpus: Corpus): BenchmarkCase {
   };
 }
 
+function stripRenderFormatting(text: string): string {
+  const escape = String.fromCharCode(27);
+  return text
+    .replaceAll(CURSOR_MARKER, "")
+    .replaceAll(`${escape}[7m`, "")
+    .replaceAll(`${escape}[0m`, "");
+}
+
 function renderCase(corpus: Corpus): BenchmarkCase {
   let expectedCursor: { line: number; col: number } | undefined;
   return {
@@ -169,6 +185,11 @@ function renderCase(corpus: Corpus): BenchmarkCase {
     measure: (editor) => editor.render(WIDTH),
     assert: (editor, result) => {
       if (!Array.isArray(result) || result.length === 0) throw new Error("render returned no rows");
+      if (result.length !== EXPECTED_RENDER_ROWS)
+        throw new Error("render returned unexpected row count");
+      const renderedText = result.map(stripRenderFormatting).join("\n");
+      const expectedPrefix = corpus.kind === "mixed-single" ? "界🙂é" : "word";
+      if (!renderedText.includes(expectedPrefix)) throw new Error("render omitted corpus content");
       for (const row of result) {
         if (visibleWidth(row) > WIDTH) throw new Error("render exceeded viewport width");
       }
@@ -248,12 +269,7 @@ function measureCase(item: BenchmarkCase, runs: number, warmup: number): Benchma
 
   return {
     name: item.name,
-    corpus: {
-      name: item.corpus.name,
-      kind: item.corpus.kind,
-      codeUnits: item.corpus.codeUnits,
-      lines: item.corpus.lines,
-    },
+    corpus: corpusMetadata(item.corpus),
     runs,
     milliseconds: summarize(samples),
   };
@@ -335,7 +351,7 @@ async function run(): Promise<void> {
     viewport: { columns: WIDTH, rows: ROWS },
     profile: args.profile ?? "full",
     selection: args.cases.length > 0 ? args.cases : "all",
-    corpora: corpora.map(({ name, kind, codeUnits, lines }) => ({ name, kind, codeUnits, lines })),
+    corpora: corpora.map(corpusMetadata),
     results,
   };
   const json = `${JSON.stringify(output, null, 2)}\n`;

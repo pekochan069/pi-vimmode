@@ -735,12 +735,15 @@ export class VimEditor extends CustomEditor {
       for (let i = current.line; i < target.line; i++) super.handleInput(KEY.down);
     }
 
-    super.handleInput(KEY.lineStart);
-    while (this.getCursor().col < target.col) {
-      const before = this.getCursor().col;
-      super.handleInput(KEY.right);
-      if (this.getCursor().col <= before) break;
-    }
+    const lineLength = this.getLines()[target.line]?.length ?? 0;
+    const fromStart = target.col;
+    const fromEnd = lineLength - target.col;
+    const [boundaryKey, movementKey, distance] =
+      fromStart <= fromEnd
+        ? [KEY.lineStart, KEY.right, fromStart]
+        : [KEY.lineEnd, KEY.left, fromEnd];
+    super.handleInput(boundaryKey);
+    for (let index = 0; index < distance; index++) super.handleInput(movementKey);
   }
 
   private terminalRows(): number | undefined {

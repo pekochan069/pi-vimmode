@@ -2,6 +2,8 @@
 
 ## What's new
 
+- Added manual `:changelog` display of packaged current-version release notes in the existing read-only popup, with semantic Markdown rendering, width-safe prose wrapping, preserved code indentation, rendered-row scrolling, and explicit unavailable fallback.
+
 - Added trusted JavaScript configuration via `~/.pi/agent/pi-vimmode.config.js`. Configure presets, leader, cursor mode, UI, macros, marks, search, Ex command, prompt structures/transforms, action presets, prompt/insert actions, replay mappings, and scoped unmaps with a small `vim` API. Configuration writes are validated and staged atomically; defaults, global JSON, JavaScript, and project JSON compile into one immutable scoped plan before activation. Project JSON remains final authority, and failed config files leave existing settings unchanged.
 
 ```js

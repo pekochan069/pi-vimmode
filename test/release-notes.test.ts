@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { changelogPopup } from "../src/keybinding-discovery-popup.ts";
 import { loadCurrentRelease, parseCurrentRelease } from "../src/release-notes.ts";
 
 const repositoryReleaseUrl = "https://github.com/pekochan069/pi-vimmode/releases/tag/v0.9.0";
@@ -42,6 +43,22 @@ describe("current release parsing", () => {
       parseCurrentRelease("# v0.9.0\n\n## Added\n\n```text\n```not-a-close\n```", "0.9.0"),
     ).toBe("## Added\n\n```text\n```not-a-close\n```");
   });
+});
+
+test("builds titled changelog popup without outer release heading", () => {
+  const popup = changelogPopup({
+    available: true,
+    version: "0.9.0",
+    content: "## Added\n\nText",
+    releaseUrl: repositoryReleaseUrl,
+  });
+
+  expect(popup).toMatchObject({
+    title: "pi-vimmode v0.9.0 changes",
+    source: "changelog",
+    markdown: "## Added\n\nText",
+  });
+  expect(popup.markdown).not.toContain("# v0.9.0");
 });
 
 describe("packaged current release", () => {

@@ -325,6 +325,18 @@ describe("Ex command parser", () => {
     });
   });
 
+  test("parses exact changelog popup command", () => {
+    expect(parseExCommand("changelog", context)).toEqual({
+      type: "changelog",
+      command: "changelog",
+    });
+    expect(parseExCommand("changelog old", context)).toEqual({
+      type: "error",
+      message: "Unexpected Ex command arguments",
+    });
+    expect(suggestExCommands("change", context)).toEqual(["changelog"]);
+  });
+
   test("parses dedicated keybindings popup command", () => {
     expect(parseExCommand("keybindings", context)).toEqual({
       type: "keybindings",

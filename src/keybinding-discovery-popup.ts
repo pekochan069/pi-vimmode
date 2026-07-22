@@ -1,5 +1,6 @@
 import type { ExMessage, EditorSnapshot, ModalState } from "./modal/types.ts";
 import type { ReadOnlyPopup } from "./read-only-popup.ts";
+import type { CurrentRelease } from "./release-notes.ts";
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "./types.ts";
 
 import { ACTION_KEYBINDING_RECIPES } from "./action-keybinding-recipes.ts";
@@ -19,6 +20,7 @@ import {
 } from "./customization.ts";
 import { runtimeMessagesMessage, vimmodeInspectMessage } from "./modal/inspect.ts";
 import { popupFromMessage } from "./read-only-popup.ts";
+import { loadCurrentRelease } from "./release-notes.ts";
 import { runtimeFeaturesMessage, runtimeHelpMessage } from "./runtime-help.ts";
 
 export {
@@ -151,6 +153,16 @@ export function inspectPopup(input: InspectPopupInput): ReadOnlyPopup {
     source: "inspect",
     message: vimmodeInspectMessage(input),
   });
+}
+
+export function changelogPopup(release: CurrentRelease = loadCurrentRelease()): ReadOnlyPopup {
+  return {
+    title: `pi-vimmode v${release.version} changes`,
+    source: "changelog",
+    scrollOffset: 0,
+    lines: [],
+    markdown: release.content,
+  };
 }
 
 function compactRecipeLines(): string[] {

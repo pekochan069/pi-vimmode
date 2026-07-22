@@ -87,6 +87,11 @@ export type ParsedExInspectCommand = {
   query: "inspect";
 };
 
+export type ParsedExChangelogCommand = {
+  type: "changelog";
+  command: "changelog";
+};
+
 export type ParsedExQuitCommand = {
   type: "quit";
   command: "q" | "quit";
@@ -104,6 +109,7 @@ export type ExParseResult =
   | ParsedExRuntimeHelpCommand
   | ParsedExKeybindingsCommand
   | ParsedExInspectCommand
+  | ParsedExChangelogCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
   | ParsedExQuitCommand
   | { type: "lineJump"; range: LineRange; line: number }
@@ -141,6 +147,7 @@ type ParsedCommandName =
   | "messages"
   | "keybindings"
   | "vimmode"
+  | "changelog"
   | "noh"
   | "nohlsearch"
   | "q"
@@ -159,6 +166,7 @@ type ParsedCommandType =
   | "runtimeHelp"
   | "keybindings"
   | "inspect"
+  | "changelog"
   | "nohlsearch"
   | "quit";
 
@@ -235,6 +243,8 @@ function commandType(command: ParsedCommandName): ParsedCommandType {
       return "keybindings";
     case "vimmode":
       return "inspect";
+    case "changelog":
+      return "changelog";
     case "noh":
     case "nohlsearch":
       return "nohlsearch";
@@ -285,6 +295,7 @@ function parseCommand(
     "messages",
     "keybindings",
     "vimmode",
+    "changelog",
     "noh",
     "nohlsearch",
     "q",
@@ -533,6 +544,11 @@ export function parseExCommand(commandLine: string, context: ExParseContext): Ex
     return { type, command: "vimmode", query: "inspect" };
   }
 
+  if (type === "changelog") {
+    const trailing = rejectTrailingArgs(command.rest);
+    return trailing ?? { type, command: "changelog" };
+  }
+
   if (type === "transform") {
     const transformAction = command.command.transformAction;
     if (!transformAction) return { type: "error", message: "Unsupported Ex command" };
@@ -616,6 +632,7 @@ const CANDIDATE_NAMES_BY_COMMAND_TYPE: Record<string, string[]> = {
   runtimeHelp: ["help", "features", "messages"],
   keybindings: ["keybindings"],
   inspect: ["vimmode"],
+  changelog: ["changelog"],
   transform: [] as string[],
 };
 

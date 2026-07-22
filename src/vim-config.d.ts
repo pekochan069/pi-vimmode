@@ -239,8 +239,8 @@ export type VimKeymapApi = {
   operatorMotions: Partial<Record<VimMotionOperatorAction, readonly VimMotionAction[]>>;
   set(
     mode: VimModeInput,
-    lhs: string,
-    rhs: VimKeymapRightHandSide,
+    keys: string,
+    target: VimKeymapRightHandSide,
     options?: VimKeymapMappingOptions,
   ): void;
 };

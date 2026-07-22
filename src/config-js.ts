@@ -380,7 +380,7 @@ function tokenizeKeys(value: string): string[] | undefined {
   return normalized.every((key) => key !== undefined) ? (normalized as string[]) : undefined;
 }
 
-function tokenizeLhsKeys(value: string): string[] | undefined {
+function tokenizeMappingKeys(value: string): string[] | undefined {
   const tokens = value.match(/<[^>]+>|./g) ?? [];
   const normalized = tokens.map((token) =>
     /^<leader>$/i.test(token) ? "<leader>" : normalizeKey(token),
@@ -465,8 +465,8 @@ function recordDescriptorMapping(
 function compileMapping(
   session: ConfigSession,
   mode: unknown,
-  lhs: unknown,
-  rhs: unknown,
+  keys: unknown,
+  target: unknown,
   rawOptions?: unknown,
 ): void {
   session.assertOpen();
@@ -475,8 +475,8 @@ function compileMapping(
     session.warning(`unsupported mode ${String(mode)}`);
     return;
   }
-  if (typeof lhs !== "string" || lhs.length === 0) {
-    session.warning("keymap lhs must be a non-empty string");
+  if (typeof keys !== "string" || keys.length === 0) {
+    session.warning("keymap keys must be a non-empty string");
     return;
   }
   const options = mappingOptions(rawOptions);
@@ -484,32 +484,32 @@ function compileMapping(
     session.warning("keymap options only support allowProtected:boolean and desc:string");
     return;
   }
-  const lhsKeys = tokenizeLhsKeys(lhs);
-  if (!lhsKeys || lhsKeys.length === 0) {
-    session.warning("keymap lhs must contain supported key syntax");
+  const mappingKeys = tokenizeMappingKeys(keys);
+  if (!mappingKeys || mappingKeys.length === 0) {
+    session.warning("keymap keys must contain supported key syntax");
     return;
   }
-  const key = encodeMappingTokens(lhsKeys);
-  const protectedKey = lhsKeys.find((candidate) => protectedShortcutForKey(candidate));
+  const key = encodeMappingTokens(mappingKeys);
+  const protectedKey = mappingKeys.find((candidate) => protectedShortcutForKey(candidate));
   const protectedShortcut = protectedKey ? protectedShortcutForKey(protectedKey) : undefined;
   if (protectedKey && protectedShortcut && !options.allowProtected) {
     session.warning(
-      `keymap lhs contains protected key ${protectedKey} (${protectedShortcut.reason})`,
+      `keymap keys contain protected key ${protectedKey} (${protectedShortcut.reason})`,
     );
     return;
   }
-  if (rhs === null) {
+  if (target === null) {
     session.recordUnmap(key, modes, options.allowProtected);
     return;
   }
-  if (typeof rhs === "string") {
-    recordStringRemap(session, key, rhs, modes, options);
+  if (typeof target === "string") {
+    recordStringRemap(session, key, target, modes, options);
     return;
   }
-  const action = actionDescriptor(rhs);
+  const action = actionDescriptor(target);
   if (!action) {
     session.warning(
-      "keymap rhs must be an opaque vim.action descriptor, vim.prompt alias, key string, or null",
+      "keymap target must be an opaque vim.action descriptor, vim.prompt alias, key string, or null",
     );
     return;
   }
@@ -519,7 +519,7 @@ function compileMapping(
 function recordStringRemap(
   session: ConfigSession,
   key: string,
-  rhs: string,
+  target: string,
   modes: readonly VimMappingScope[],
   options: MappingOptions,
 ): void {
@@ -528,12 +528,12 @@ function recordStringRemap(
       mode === "normal" || mode === "visual" || mode === "visualLine" || mode === "visualBlock",
   );
   if (actionModes.length !== modes.length) {
-    session.warning("string rhs keymaps only support normal and visual modes");
+    session.warning("string targets only support normal and visual modes");
     return;
   }
-  const inputs = tokenizeReplayInputs(rhs);
+  const inputs = tokenizeReplayInputs(target);
   if (!inputs || inputs.length === 0) {
-    session.warning("string rhs must contain supported key syntax");
+    session.warning("string target must contain supported key syntax");
     return;
   }
   session.recordMap({
@@ -633,8 +633,8 @@ function createGlobalApi(session: ConfigSession): object {
 
 function createVimApi(session: ConfigSession, g: object): object {
   const keymap = createOptionNamespace(session, "keymap", {
-    set: (mode: unknown, lhs: unknown, rhs: unknown, options?: unknown) =>
-      compileMapping(session, mode, lhs, rhs, options),
+    set: (mode: unknown, keys: unknown, target: unknown, options?: unknown) =>
+      compileMapping(session, mode, keys, target, options),
   });
   return createOptionNamespace(session, "", {
     g,

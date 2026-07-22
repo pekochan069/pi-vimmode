@@ -1076,7 +1076,7 @@ export default (vim) => {
         },
       ]);
       expect(result.warnings).toContainEqual(
-        expect.stringContaining("keymap lhs must contain supported key syntax"),
+        expect.stringContaining("keymap keys must contain supported key syntax"),
       );
       const keymap = resolveVimOptions(undefined, undefined, result).options.keymap!;
       expect(resolveNormalCommand("shift+ctrl+x", undefined, keymap, "normal")).toMatchObject({
@@ -1435,8 +1435,8 @@ export default (vim) => {
       const result = await loadVimJsConfig(f.path);
       expect(operations(result)).toEqual([{ kind: "leaf", path: "leader", value: "," }]);
       expect(result.warnings).toEqual([
-        expect.stringContaining("keymap lhs contains protected key ctrl+p"),
-        expect.stringContaining("keymap lhs contains protected key ctrl+p"),
+        expect.stringContaining("keymap keys contain protected key ctrl+p"),
+        expect.stringContaining("keymap keys contain protected key ctrl+p"),
       ]);
     } finally {
       f.cleanup();
@@ -1450,7 +1450,7 @@ export default (vim) => {
       const result = await loadVimJsConfig(f.path);
       expect(operations(result)).toEqual([]);
       expect(result.warnings).toEqual([
-        "global JS config: string rhs keymaps only support normal and visual modes",
+        "global JS config: string targets only support normal and visual modes",
       ]);
     } finally {
       f.cleanup();
@@ -1763,7 +1763,7 @@ export default ${asyncExport ? "async " : ""}(vim) => {
         const loaded = await loadVimJsConfig(f.path);
         const retained = Reflect.get(globalThis, retainedKey) as {
           g: { mapleader: string | null };
-          keymap: { set(mode: string, lhs: string, rhs: string): void };
+          keymap: { set(mode: string, keys: string, target: string): void };
         };
         expect(() => {
           retained.g.mapleader = " ";

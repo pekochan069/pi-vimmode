@@ -56,6 +56,7 @@ Common warning causes:
 Use `vim.keymap.set(mode, keys, target, options?)`. `target` is an opaque `vim.action.*` descriptor, a compatible `vim.prompt.*` built-in, a literal key replay string, or `null` to unmap those exact keys in selected scopes. `keys` uses JSON key syntax; string targets are replayed keys, never internal action IDs.
 
 ```js
+/** @type {import("./npm/node_modules/pi-vimmode/config").VimConfig} */
 export default (vim) => {
   vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());

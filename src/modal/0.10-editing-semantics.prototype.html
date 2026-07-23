@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE — 0.10 editing semantics</title>
+<style>
+  :root { font: 16px/1.45 system-ui,sans-serif; color:#20242b; background:#f5f3ee; }
+  body { max-width:960px; margin:0 auto; padding:32px 20px 64px; }
+  h1,h2 { line-height:1.15; } h1 { margin-bottom:8px; }
+  .note,.state,.walkthrough { background:white; border:1px solid #d7d2c8; border-radius:10px; padding:18px; margin:18px 0; }
+  .note { border-left:5px solid #6c5ce7; }
+  .tabs,.actions { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+  button { border:1px solid #aaa39a; background:white; border-radius:7px; padding:9px 12px; cursor:pointer; }
+  button.active,button.primary { color:white; background:#5b4bd8; border-color:#5b4bd8; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  dl { display:grid; grid-template-columns:150px 1fr; gap:8px 16px; margin:0; }
+  dt { font-weight:700; } dd { margin:0; white-space:pre-wrap; font-family:ui-monospace,monospace; }
+  .buffer { font:18px/1.5 ui-monospace,monospace; background:#252a34; color:#f8f8f2; padding:14px; border-radius:7px; white-space:pre-wrap; }
+  .change { color:#5b4bd8; font-weight:700; }
+  code { background:#ebe8e1; padding:1px 4px; border-radius:4px; }
+</style>
+</head>
+<body>
+<h1>PROTOTYPE — pi-vimmode 0.10 editing semantics</h1>
+<p>Question: should selected features follow Neovim 0.11 exactly, including surprising repeat and register behavior, while keeping existing prompt-search and fixed keyword boundaries?</p>
+<div class="note">
+  <strong>Decision pressure points</strong>
+  <ul>
+    <li>Insert-mode cursor movement starts a new dot-repeat segment.</li>
+    <li><code>p</code> overwrites default registers; <code>P</code> preserves them.</li>
+    <li>Dot after Visual put repeats selection deletion, not inserted text.</li>
+    <li><code>gn</code>/<code>gN</code> always mean forward/backward, independent of prior search direction.</li>
+    <li>Small-word uses pi-vimmode’s fixed <code>[A-Za-z0-9_]</code> keyword set; WORD means non-whitespace.</li>
+  </ul>
+</div>
+
+<h2>Guided walkthroughs</h2>
+<div id="tabs" class="tabs"></div>
+<div class="walkthrough">
+  <strong id="scenario-title"></strong>
+  <p id="scenario-description"></p>
+  <p>Next: <span id="next-label" class="change"></span></p>
+  <div class="actions">
+    <button id="reset">Reset</button>
+    <button id="undo">Undo step</button>
+    <button id="next" class="primary">Run next action</button>
+  </div>
+</div>
+
+<h2>Current state</h2>
+<div class="state">
+  <pre id="buffer" class="buffer"></pre>
+  <dl>
+    <dt>Cursor / selection</dt><dd id="cursor"></dd>
+    <dt>Unnamed register</dt><dd id="register"></dd>
+    <dt>Dot-repeat target</dt><dd id="repeat"></dd>
+    <dt>Undo units</dt><dd id="undo-count"></dd>
+    <dt>What changed</dt><dd id="changed"></dd>
+  </dl>
+</div>
+
+<script>
+const scenarios = [
+  {
+    title: "Inserted text and dot-repeat",
+    description: "Cursor movement inside Insert mode splits redo text. Dot repeats only text entered after latest movement.",
+    states: [
+      ["one two", "line 1, col 1", '""', "none", 0, "Initial prompt"],
+      ["abXc one two", "on X", '""', 'insert "X"', 2, "Ran iabc<Left>X<Esc>; movement split insertion into two undo/repeat segments"],
+      ["abXc one Xtwo", "on inserted X", '""', 'insert "X"', 3, "Ran .; only X repeated"],
+    ],
+    actions: ["iabc<Left>X<Esc>", "."],
+  },
+  {
+    title: "word versus WORD",
+    description: "Small-word separates keyword and punctuation runs. WORD spans all non-whitespace. Around objects prefer trailing whitespace.",
+    states: [
+      ["foo...bar baz", "on first .", '""', "none", 0, "Initial prompt"],
+      ["foobar baz", "on b", '"..." (char)', "diw", 1, "diw deleted punctuation run only"],
+      [" baz", "on leading space", '"foo...bar" (char)', "diW", 1, "Reset, then diW deleted whole non-whitespace run"],
+      ["baz", "on b", '"foo...bar " (char)', "daW", 1, "Reset, then daW included trailing whitespace"],
+    ],
+    actions: ["diw", "reset + diW", "reset + daW"],
+  },
+  {
+    title: "Characterwise Visual p and P",
+    description: "Both replace inclusive selection. p stores overwritten text in default registers; P preserves source register. Cursor lands on last inserted character.",
+    states: [
+      ["abcdef", "Visual selection: bc", '"XX" (char)', "none", 0, "Initial prompt and source register"],
+      ["aXXdef", "on second X; gv selects XX", '"bc" (char)', "Visual p shape", 1, "p replaced bc and overwrote unnamed register"],
+      ["aXXdef", "on second X; gv selects XX", '"XX" (char)', "Visual P shape", 1, "Reset, then P replaced bc and preserved unnamed register"],
+      ["aXXXXdef", "on fourth X; gv selects XXXX", '"XX" (char)', "Visual P shape", 1, "Reset, then 2P duplicated source text"],
+    ],
+    actions: ["p", "reset + P", "reset + 2P"],
+  },
+  {
+    title: "Visual-put dot-repeat surprise",
+    description: "Neovim dot-repeat remembers Visual operation shape but does not reinsert source text.",
+    states: [
+      ["abcdef ghijkl", "Visual selection: bc", '"XX" (char)', "none", 0, "Initial prompt"],
+      ["aXXdef ghijkl", "on second X", '"XX" (char)', "delete 2-char Visual shape", 1, "P replaced bc"],
+      ["aXXdef ijkl", "on i", '"gh" (char)', "delete 2-char Visual shape", 2, "Moved to gh and ran .; gh deleted, XX not inserted"],
+    ],
+    actions: ["P", "move to gh + ."],
+  },
+  {
+    title: "gn/gN match selection",
+    description: "Normal count targets nth match only. Operators act on match, not gap. Dot recomputes next match.",
+    states: [
+      ["aa xx aa yy aa", "in xx; last prompt search = aa", '""', "none", 0, "Initial prompt"],
+      ["aa xx  yy aa", "at deleted match start", '"aa" (char)', "dgn", 1, "dgn deleted next forward match only; gap remained"],
+      ["aa xx  yy ", "at deleted match start", '"aa" (char)', "dgn", 2, ". deleted next match"],
+      ["aa xx aa yy aa", "Visual selection: final aa", '""', "none", 0, "Reset, then 2gn selected second forward match only"],
+    ],
+    actions: ["dgn", ".", "reset + 2gn"],
+  },
+];
+
+const Model = (() => {
+  const initial = { scenario: 0, step: 0 };
+  function reduce(state, action) {
+    if (action.type === "scenario") return { scenario: action.index, step: 0 };
+    if (action.type === "reset") return { ...state, step: 0 };
+    if (action.type === "undo") return { ...state, step: Math.max(0, state.step - 1) };
+    if (action.type === "next") {
+      const last = scenarios[state.scenario].states.length - 1;
+      return { ...state, step: Math.min(last, state.step + 1) };
+    }
+    return state;
+  }
+  return { initial, reduce };
+})();
+
+let model = Model.initial;
+const el = id => document.getElementById(id);
+function dispatch(action) { model = Model.reduce(model, action); render(); }
+function render() {
+  const scenario = scenarios[model.scenario];
+  const state = scenario.states[model.step];
+  el("tabs").innerHTML = scenarios.map((item, index) =>
+    `<button class="${index === model.scenario ? "active" : ""}" data-scenario="${index}">${item.title}</button>`
+  ).join("");
+  document.querySelectorAll("[data-scenario]").forEach(button => button.onclick = () => dispatch({ type:"scenario", index:+button.dataset.scenario }));
+  el("scenario-title").textContent = scenario.title;
+  el("scenario-description").textContent = scenario.description;
+  el("next-label").textContent = scenario.actions[model.step] ?? "Walkthrough complete";
+  el("buffer").textContent = state[0];
+  el("cursor").textContent = state[1];
+  el("register").textContent = state[2];
+  el("repeat").textContent = state[3];
+  el("undo-count").textContent = state[4];
+  el("changed").textContent = state[5];
+  el("undo").disabled = model.step === 0;
+  el("next").disabled = model.step === scenario.states.length - 1;
+}
+el("reset").onclick = () => dispatch({ type:"reset" });
+el("undo").onclick = () => dispatch({ type:"undo" });
+el("next").onclick = () => dispatch({ type:"next" });
+render();
+</script>
+</body>
+</html>

@@ -58,6 +58,7 @@
     "lefthook": "^2.1.10",
     "oxfmt": "^0.60.0",
     "oxlint": "^1.75.0",
+    "oxlint-plugin-complexity": "^2.1.6",
     "rolldown": "^1.2.0",
     "typescript": "^7.0.2"
   },

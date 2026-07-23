@@ -4,6 +4,20 @@
 - Follow rules in `docs/rules/*`
 - When create new pr, use `.github/pull_request_template.md`
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage labels are used unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Documented Solutions
 
 `docs/solutions/` contains documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
@@ -16,7 +30,6 @@
 - Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
 
 ### Testing
 

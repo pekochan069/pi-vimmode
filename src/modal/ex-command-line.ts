@@ -29,7 +29,12 @@ import {
   yankExLineRange,
 } from "../buffer.ts";
 import { keymapForOptions, promptTransformsForOptions } from "../config.ts";
-import { parseExCommand, suggestExCommands, type ParsedExSubstitution } from "../ex.ts";
+import {
+  parseExCommand,
+  suggestExCommands,
+  type ExParseResult,
+  type ParsedExSubstitution,
+} from "../ex.ts";
 import {
   changelogPopup,
   diagnosticPopup,
@@ -226,104 +231,90 @@ function finishExEdit(
   return withEffects(finished, effects);
 }
 
-function executeExCommand(
+function finishExPreview(
+  state: ModalState,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+): ModalUpdate | undefined {
+  if (pendingEx.preview?.command === pendingEx.command) {
+    const result = pendingEx.preview;
+    const source = result.repeatSource ?? state.lastExSubstitution;
+    const base = result.edit.changed ? clearSearchHighlight(state) : state;
+    const finished = finishExState(
+      source ? { ...base, lastExSubstitution: source } : base,
+      "success",
+      substitutionMessage(result.matches),
+    );
+    const effects: ModalEffect[] = result.edit.changed
+      ? [{ type: "edit", result: result.edit }]
+      : [{ type: "invalidate" }];
+    return withEffects(finished, effects);
+  }
+  return undefined;
+}
+
+function executeSubstitutionCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  parsed: Extract<ExParseResult, { type: "substitute" | "repeatSubstitute" }>,
+): ModalUpdate {
+  const previewUpdate = finishExPreview(state, pendingEx);
+  if (previewUpdate) return previewUpdate;
+
+  const source =
+    parsed.type === "substitute" ? substitutionSource(parsed) : state.lastExSubstitution;
+  if (!source) return invalidate(finishExState(state, "error", "No previous substitution"));
+
+  const optionsForSubstitution = {
+    range: parsed.range,
+    pattern: source.pattern,
+    replacement: source.replacement,
+    global: source.global,
+    ignoreCase: source.ignoreCase,
+    originalCursor: snapshot.cursor,
+  };
+  const result =
+    source.matcherMode === "regex"
+      ? substituteLineRangeRegex(snapshot.text, optionsForSubstitution)
+      : {
+          ok: true as const,
+          ...substituteLineRangeLiteral(snapshot.text, optionsForSubstitution),
+        };
+  if (!result.ok) return invalidate(finishExState(state, "error", result.message));
+  if (parsed.type === "substitute" && parsed.countOnly) {
+    return invalidate(finishExState(state, "success", substitutionMessage(result.matches)));
+  }
+  if (result.matches === 0) {
+    if (parsed.type === "substitute" && parsed.noError) {
+      return invalidate(finishExState(state, "success", substitutionMessage(0)));
+    }
+    return invalidate(finishExState(state, "error", `Pattern not found: ${source.pattern}`));
+  }
+
+  const message = `${result.matches} ${result.matches === 1 ? "match" : "matches"} found; Enter applies, Esc cancels`;
+  return invalidate({
+    ...state,
+    pendingEx: {
+      ...pendingEx,
+      preview: {
+        command: pendingEx.command,
+        matches: result.matches,
+        ranges: result.ranges,
+        edit: result.edit,
+        message,
+        repeatSource: source,
+      },
+    },
+  });
+}
+
+function executeExPopupCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  diagnostics: VimDiagnostics = { warnings: [] },
-): ModalUpdate {
-  const pendingEx = state.pendingEx;
-  if (!pendingEx) return invalidate(state);
-  const parsed = parseExCommand(pendingEx.command, {
-    lineCount: snapshot.lines.length,
-    cursorLine: snapshot.cursor.line,
-    visualRange: pendingEx.visualRange,
-    promptTransforms: promptTransformsForOptions(options),
-  });
-  if (parsed.type === "empty") return invalidate(finishExState(state));
-  if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
-
-  if (parsed.type === "substitute" || parsed.type === "repeatSubstitute") {
-    if (pendingEx.preview?.command === pendingEx.command) {
-      const result = pendingEx.preview;
-      const source = result.repeatSource ?? state.lastExSubstitution;
-      const base = result.edit.changed ? clearSearchHighlight(state) : state;
-      const finished = finishExState(
-        source ? { ...base, lastExSubstitution: source } : base,
-        "success",
-        substitutionMessage(result.matches),
-      );
-      const effects: ModalEffect[] = result.edit.changed
-        ? [{ type: "edit", result: result.edit }]
-        : [{ type: "invalidate" }];
-      return withEffects(finished, effects);
-    }
-
-    const source =
-      parsed.type === "substitute" ? substitutionSource(parsed) : state.lastExSubstitution;
-    if (!source) return invalidate(finishExState(state, "error", "No previous substitution"));
-
-    const optionsForSubstitution = {
-      range: parsed.range,
-      pattern: source.pattern,
-      replacement: source.replacement,
-      global: source.global,
-      ignoreCase: source.ignoreCase,
-      originalCursor: snapshot.cursor,
-    };
-    const result =
-      source.matcherMode === "regex"
-        ? substituteLineRangeRegex(snapshot.text, optionsForSubstitution)
-        : {
-            ok: true as const,
-            ...substituteLineRangeLiteral(snapshot.text, optionsForSubstitution),
-          };
-    if (!result.ok) return invalidate(finishExState(state, "error", result.message));
-    if (parsed.type === "substitute" && parsed.countOnly) {
-      return invalidate(finishExState(state, "success", substitutionMessage(result.matches)));
-    }
-    if (result.matches === 0) {
-      if (parsed.type === "substitute" && parsed.noError) {
-        return invalidate(finishExState(state, "success", substitutionMessage(0)));
-      }
-      return invalidate(finishExState(state, "error", `Pattern not found: ${source.pattern}`));
-    }
-
-    const message = `${result.matches} ${result.matches === 1 ? "match" : "matches"} found; Enter applies, Esc cancels`;
-    return invalidate({
-      ...state,
-      pendingEx: {
-        ...pendingEx,
-        preview: {
-          command: pendingEx.command,
-          matches: result.matches,
-          ranges: result.ranges,
-          edit: result.edit,
-          message,
-          repeatSource: source,
-        },
-      },
-    });
-  }
-
-  if (parsed.type === "quit") {
-    const finished = finishExState(state);
-    return withEffects(finished, [{ type: "shutdown" }]);
-  }
-
-  if (parsed.type === "lineJump") {
-    const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
-    const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);
-    return withEffects(finished, [
-      { type: "restoreCursor", position: { line: parsed.line, col: targetCol } },
-      { type: "invalidate" },
-    ]);
-  }
-
-  if (parsed.type === "nohlsearch") {
-    return invalidate(finishExState(clearSearchHighlight(state)));
-  }
-
+  diagnostics: VimDiagnostics,
+  parsed: ExParseResult,
+): ModalUpdate | undefined {
   if (parsed.type === "diagnostic") {
     return openReadOnlyPopup(state, diagnosticPopup(parsed, options, diagnostics));
   }
@@ -346,7 +337,39 @@ function executeExCommand(
   if (parsed.type === "changelog") {
     return openReadOnlyPopup(state, changelogPopup());
   }
+  return undefined;
+}
 
+function executeExDirectCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  parsed: ExParseResult,
+): ModalUpdate | undefined {
+  if (parsed.type === "quit") {
+    const finished = finishExState(state);
+    return withEffects(finished, [{ type: "shutdown" }]);
+  }
+
+  if (parsed.type === "lineJump") {
+    const finished = finishExState(state, "success", `line ${parsed.line + 1}`);
+    const targetCol = Math.min(snapshot.cursor.col, snapshot.lines[parsed.line]?.length ?? 0);
+    return withEffects(finished, [
+      { type: "restoreCursor", position: { line: parsed.line, col: targetCol } },
+      { type: "invalidate" },
+    ]);
+  }
+
+  if (parsed.type === "nohlsearch") {
+    return invalidate(finishExState(clearSearchHighlight(state)));
+  }
+  return undefined;
+}
+
+function executeExTransformCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  parsed: ExParseResult,
+): ModalUpdate | undefined {
   if (parsed.type === "transform") {
     const result = applyPromptTransform(
       snapshot.text,
@@ -357,7 +380,14 @@ function executeExCommand(
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
     return finishExEdit(state, result, lineMessage(result.lines, "transformed"));
   }
+  return undefined;
+}
 
+function executeExYankCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  parsed: ExParseResult,
+): ModalUpdate | undefined {
   if (parsed.type === "yank") {
     const result = yankExLineRange(snapshot.text, parsed.range);
     const base = parsed.register ? { ...state, pendingRegister: parsed.register } : state;
@@ -367,6 +397,19 @@ function executeExCommand(
       [...written.effects, { type: "invalidate" }],
     );
   }
+  return undefined;
+}
+
+function executeExEditRangeCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  parsed: ExParseResult,
+): ModalUpdate | undefined {
+  const transformUpdate = executeExTransformCommand(state, snapshot, parsed);
+  if (transformUpdate) return transformUpdate;
+
+  const yankUpdate = executeExYankCommand(state, snapshot, parsed);
+  if (yankUpdate) return yankUpdate;
 
   if (parsed.type === "delete") {
     const result = deleteExLineRange(snapshot.text, parsed.range);
@@ -389,7 +432,14 @@ function executeExCommand(
     const next = parsed.register ? writeRegisters(base, undefined) : base;
     return finishExEdit(next, result, lineMessage(result.lines, "put"));
   }
+  return undefined;
+}
 
+function executeExMoveRangeCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  parsed: ExParseResult,
+): ModalUpdate {
   if (parsed.type === "copy") {
     const result = copyExLineRange(snapshot.text, parsed.range, parsed.destination);
     if (!result.ok) return invalidate(finishExState(state, "error", result.message));
@@ -402,9 +452,42 @@ function executeExCommand(
     return finishExEdit(state, result, lineMessage(result.lines, "moved"));
   }
 
-  const result = joinExLineRange(snapshot.text, parsed.range, parsed.rangeExplicit);
+  const join = parsed as { range: LineRange; rangeExplicit: boolean };
+  const result = joinExLineRange(snapshot.text, join.range, join.rangeExplicit);
   if (!result.ok) return invalidate(finishExState(state, "error", result.message));
   return finishExEdit(state, result, lineMessage(result.lines, "joined"));
+}
+
+function executeExCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  diagnostics: VimDiagnostics = { warnings: [] },
+): ModalUpdate {
+  const pendingEx = state.pendingEx;
+  if (!pendingEx) return invalidate(state);
+  const parsed = parseExCommand(pendingEx.command, {
+    lineCount: snapshot.lines.length,
+    cursorLine: snapshot.cursor.line,
+    visualRange: pendingEx.visualRange,
+    promptTransforms: promptTransformsForOptions(options),
+  });
+  if (parsed.type === "empty") return invalidate(finishExState(state));
+  if (parsed.type === "error") return invalidate(finishExState(state, "error", parsed.message));
+
+  if (parsed.type === "substitute" || parsed.type === "repeatSubstitute")
+    return executeSubstitutionCommand(state, snapshot, pendingEx, parsed);
+
+  const directUpdate = executeExDirectCommand(state, snapshot, parsed);
+  if (directUpdate) return directUpdate;
+
+  const popupUpdate = executeExPopupCommand(state, snapshot, options, diagnostics, parsed);
+  if (popupUpdate) return popupUpdate;
+
+  const editUpdate = executeExEditRangeCommand(state, snapshot, parsed);
+  if (editUpdate) return editUpdate;
+
+  return executeExMoveRangeCommand(state, snapshot, parsed);
 }
 
 function clearExPreview(pendingEx: NonNullable<ModalState["pendingEx"]>) {
@@ -582,26 +665,12 @@ function navigateExHistory(
   };
 }
 
-export function handlePendingExInput(
+function handleExEditingNavigation(
   state: ModalState,
-  snapshot: EditorSnapshot,
-  options: ModalOptions,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
   data: string,
-  diagnostics: VimDiagnostics,
-): ModalUpdate {
-  const pendingEx = state.pendingEx;
-  if (!pendingEx) return invalidate(state);
-  const parsed = keySequence(data);
-  if (
-    keyMatches(data, "escape") ||
-    (parsed !== undefined && keymapForOptions(options).escape.includes(parsed))
-  ) {
-    return cancelExCommand(state);
-  }
-  if (keyMatches(data, "ctrl+c") || keyMatches(data, "ctrl+g"))
-    return resetAndDelegate(state, options, data);
-  if (keyMatches(data, "enter") || keyMatches(data, "return"))
-    return executeExCommand(state, snapshot, options, diagnostics);
+  key: string | undefined,
+): ModalUpdate | undefined {
   if (keyMatches(data, "backspace")) {
     const cursor = exCursor(pendingEx);
     if (cursor === 0) return invalidate(state);
@@ -614,7 +683,7 @@ export function handlePendingExInput(
       ),
     });
   }
-  if (keyMatches(data, "delete") || parsed === "delete" || data === "\x1b[3~") {
+  if (keyMatches(data, "delete") || key === "delete" || data === "\x1b[3~") {
     const cursor = exCursor(pendingEx);
     if (cursor >= pendingEx.command.length) return invalidate(state);
     return invalidate({
@@ -643,41 +712,55 @@ export function handlePendingExInput(
       pendingEx: { ...clearExPreview(pendingEx), cursor: pendingEx.command.length },
     });
   }
-  if (keyMatches(data, "up")) {
-    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
-    if (autocompleteEnabled) {
-      const suggestions = suggestExCommandsForPending(pendingEx, options);
-      const hasHistory = (state.exHistory ?? []).length > 0;
-      if (suggestions.length > 0 && (!hasHistory || pendingEx.command)) {
-        const current = pendingEx.selectedSuggestion ?? suggestions.length;
-        return invalidate({
-          ...state,
-          pendingEx: {
-            ...pendingEx,
-            selectedSuggestion: (current - 1 + suggestions.length) % suggestions.length,
-          },
-        });
-      }
-    }
-    return invalidate(navigateExHistory(state, pendingEx, "previous"));
-  }
-  if (keyMatches(data, "down")) {
-    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
-    if (autocompleteEnabled) {
-      const suggestions = suggestExCommandsForPending(pendingEx, options);
-      const hasHistory = (state.exHistory ?? []).length > 0;
-      if (suggestions.length > 0 && (!hasHistory || pendingEx.command)) {
-        const current = pendingEx.selectedSuggestion ?? -1;
-        return invalidate({
-          ...state,
-          pendingEx: { ...pendingEx, selectedSuggestion: (current + 1) % suggestions.length },
-        });
-      }
-    }
-    return invalidate(navigateExHistory(state, pendingEx, "next"));
-  }
+  return undefined;
+}
 
-  const key = parsed;
+function exSuggestionNavigation(
+  state: ModalState,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+  direction: "previous" | "next",
+): ModalUpdate | undefined {
+  if (options.exCommand?.autocomplete === false) return undefined;
+  const suggestions = suggestExCommandsForPending(pendingEx, options);
+  const hasHistory = (state.exHistory ?? []).length > 0;
+  if (suggestions.length === 0 || (hasHistory && !pendingEx.command)) return undefined;
+  const selected =
+    pendingEx.selectedSuggestion ?? (direction === "previous" ? suggestions.length : -1);
+  const offset = direction === "previous" ? -1 : 1;
+  return invalidate({
+    ...state,
+    pendingEx: {
+      ...pendingEx,
+      selectedSuggestion: (selected + offset + suggestions.length) % suggestions.length,
+    },
+  });
+}
+
+function handleExHistoryNavigation(
+  state: ModalState,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate | undefined {
+  if (keyMatches(data, "up"))
+    return (
+      exSuggestionNavigation(state, pendingEx, options, "previous") ??
+      invalidate(navigateExHistory(state, pendingEx, "previous"))
+    );
+  if (keyMatches(data, "down"))
+    return (
+      exSuggestionNavigation(state, pendingEx, options, "next") ??
+      invalidate(navigateExHistory(state, pendingEx, "next"))
+    );
+}
+
+function handleExWordNavigation(
+  state: ModalState,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  data: string,
+  key: string | undefined,
+): ModalUpdate | undefined {
   if (key === "alt+left") {
     return invalidate({
       ...state,
@@ -708,34 +791,72 @@ export function handlePendingExInput(
       ),
     });
   }
-  if (keyMatches(data, "tab") || data === "\t") {
-    const autocompleteEnabled = options.exCommand?.autocomplete !== false;
-    if (autocompleteEnabled) {
-      const suggestions = pendingEx.command ? suggestExCommandsForPending(pendingEx, options) : [];
-      if (suggestions.length > 0) {
-        const selected = pendingEx.selectedSuggestion ?? 0;
-        if (selected < suggestions.length) {
-          const boundaries = exCommandWordBoundaries(
-            pendingEx.command,
-            exCursor(pendingEx),
-            pendingEx.visualRange,
-          );
-          const range = boundaries ? pendingEx.command.slice(0, boundaries.left) : "";
-          const newCommand = range + suggestions[selected];
-          return invalidate({
-            ...state,
-            pendingEx: editPendingEx(pendingEx, newCommand, newCommand.length),
-          });
-        }
-      }
-    }
-    const completed = completePendingExCommand(pendingEx, options);
-    if (!completed) return invalidate(state);
-    return invalidate({
-      ...state,
-      pendingEx: editPendingEx(pendingEx, completed.command, completed.cursor),
-    });
+  return undefined;
+}
+
+function autocompleteExCommand(
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+): string | undefined {
+  if (options.exCommand?.autocomplete === false || !pendingEx.command) return undefined;
+  const suggestions = suggestExCommandsForPending(pendingEx, options);
+  if (suggestions.length === 0) return undefined;
+  const selected = pendingEx.selectedSuggestion ?? 0;
+  if (selected >= suggestions.length) return undefined;
+  const boundaries = exCommandWordBoundaries(
+    pendingEx.command,
+    exCursor(pendingEx),
+    pendingEx.visualRange,
+  );
+  return (boundaries ? pendingEx.command.slice(0, boundaries.left) : "") + suggestions[selected];
+}
+
+function handleExTabInput(
+  state: ModalState,
+  pendingEx: NonNullable<ModalState["pendingEx"]>,
+  options: ModalOptions,
+  data: string,
+): ModalUpdate | undefined {
+  if (!keyMatches(data, "tab") && data !== "\t") return undefined;
+  const command = autocompleteExCommand(pendingEx, options);
+  if (command)
+    return invalidate({ ...state, pendingEx: editPendingEx(pendingEx, command, command.length) });
+  const completed = completePendingExCommand(pendingEx, options);
+  return completed
+    ? invalidate({
+        ...state,
+        pendingEx: editPendingEx(pendingEx, completed.command, completed.cursor),
+      })
+    : invalidate(state);
+}
+
+export function handlePendingExInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+  diagnostics: VimDiagnostics,
+): ModalUpdate {
+  const pendingEx = state.pendingEx;
+  if (!pendingEx) return invalidate(state);
+  const parsed = keySequence(data);
+  if (
+    keyMatches(data, "escape") ||
+    (parsed !== undefined && keymapForOptions(options).escape.includes(parsed))
+  ) {
+    return cancelExCommand(state);
   }
+  if (keyMatches(data, "ctrl+c") || keyMatches(data, "ctrl+g"))
+    return resetAndDelegate(state, options, data);
+  if (keyMatches(data, "enter") || keyMatches(data, "return"))
+    return executeExCommand(state, snapshot, options, diagnostics);
+  const key = parsed;
+  const navigationUpdate =
+    handleExEditingNavigation(state, pendingEx, data, key) ??
+    handleExHistoryNavigation(state, pendingEx, options, data) ??
+    handleExWordNavigation(state, pendingEx, data, key) ??
+    handleExTabInput(state, pendingEx, options, data);
+  if (navigationUpdate) return navigationUpdate;
   if (!key || key.length !== 1) return invalidate(state);
   const cursor = exCursor(pendingEx);
   return invalidate({

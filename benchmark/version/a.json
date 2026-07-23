@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "baseline": "pi-vimmode-0.9.0-pre-change",
+  "revision": "7f9d5db386fe3a96b4f9e1de79949f80dd15e2ca",
+  "runtime": {
+    "bun": "1.3.14",
+    "os": "linux 6.18.26.1-microsoft-standard-WSL2 x64",
+    "cpu": "Intel(R) Core(TM) Ultra 7 258V"
+  },
+  "viewport": {
+    "columns": 80,
+    "rows": 40
+  },
+  "profile": "full",
+  "selection": "all",
+  "corpora": [
+    {
+      "name": "ascii-single-100k",
+      "kind": "ascii-single",
+      "codeUnits": 100000,
+      "lines": 1
+    },
+    {
+      "name": "ascii-single-1m",
+      "kind": "ascii-single",
+      "codeUnits": 1000000,
+      "lines": 1
+    },
+    {
+      "name": "mixed-single-100k",
+      "kind": "mixed-single",
+      "codeUnits": 100000,
+      "lines": 1
+    },
+    {
+      "name": "mixed-single-1m",
+      "kind": "mixed-single",
+      "codeUnits": 1000000,
+      "lines": 1
+    },
+    {
+      "name": "ascii-multiline-100k",
+      "kind": "ascii-multiline",
+      "codeUnits": 100000,
+      "lines": 2000
+    },
+    {
+      "name": "ascii-multiline-1m",
+      "kind": "ascii-multiline",
+      "codeUnits": 1000000,
+      "lines": 20000
+    }
+  ],
+  "results": [
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-1000",
+      "corpus": {
+        "name": "ascii-single-1000",
+        "kind": "ascii-single",
+        "codeUnits": 1000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 0.591665,
+        "p50": 0.695411,
+        "p95": 1.466694,
+        "max": 1.466694
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-5000",
+      "corpus": {
+        "name": "ascii-single-5000",
+        "kind": "ascii-single",
+        "codeUnits": 5000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 2.204397,
+        "p50": 2.507561,
+        "p95": 4.760645,
+        "max": 4.760645
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-10000",
+      "corpus": {
+        "name": "ascii-single-10000",
+        "kind": "ascii-single",
+        "codeUnits": 10000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 3.911388,
+        "p50": 4.203485,
+        "p95": 8.408373,
+        "max": 8.408373
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-25000",
+      "corpus": {
+        "name": "ascii-single-25000",
+        "kind": "ascii-single",
+        "codeUnits": 25000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 9.797556,
+        "p50": 14.116268,
+        "p95": 18.707807,
+        "max": 18.707807
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-50000",
+      "corpus": {
+        "name": "ascii-single-50000",
+        "kind": "ascii-single",
+        "codeUnits": 50000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 21.542228,
+        "p50": 24.042859,
+        "p95": 26.49193,
+        "max": 26.49193
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/ascii-single-100k",
+      "corpus": {
+        "name": "ascii-single-100k",
+        "kind": "ascii-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 49.828466,
+        "p50": 56.347834,
+        "p95": 143.425226,
+        "max": 143.425226
+      }
+    },
+    {
+      "name": "cursor-restoration/word-backward/mixed-single-100k",
+      "corpus": {
+        "name": "mixed-single-100k",
+        "kind": "mixed-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 48.505989,
+        "p50": 60.829654,
+        "p95": 89.804597,
+        "max": 89.804597
+      }
+    },
+    {
+      "name": "cursor-restoration/left/ascii-single-100k",
+      "corpus": {
+        "name": "ascii-single-100k",
+        "kind": "ascii-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 8.795088,
+        "p50": 15.079979,
+        "p95": 31.694815,
+        "max": 31.694815
+      }
+    },
+    {
+      "name": "cursor-restoration/left/mixed-single-100k",
+      "corpus": {
+        "name": "mixed-single-100k",
+        "kind": "mixed-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 10.080471,
+        "p50": 19.214345,
+        "p95": 46.72635,
+        "max": 46.72635
+      }
+    },
+    {
+      "name": "cursor-restoration/buffer-start/ascii-multiline-100k",
+      "corpus": {
+        "name": "ascii-multiline-100k",
+        "kind": "ascii-multiline",
+        "codeUnits": 100000,
+        "lines": 2000
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 753.935662,
+        "p50": 881.485729,
+        "p95": 1117.07076,
+        "max": 1117.07076
+      }
+    },
+    {
+      "name": "long-line-render/warmed/ascii-single-100k",
+      "corpus": {
+        "name": "ascii-single-100k",
+        "kind": "ascii-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 2.665085,
+        "p50": 4.009656,
+        "p95": 42.279097,
+        "max": 42.279097
+      }
+    },
+    {
+      "name": "long-line-render/warmed/ascii-single-1m",
+      "corpus": {
+        "name": "ascii-single-1m",
+        "kind": "ascii-single",
+        "codeUnits": 1000000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 20.240492,
+        "p50": 41.469683,
+        "p95": 73.058432,
+        "max": 73.058432
+      }
+    },
+    {
+      "name": "long-line-render/warmed/mixed-single-100k",
+      "corpus": {
+        "name": "mixed-single-100k",
+        "kind": "mixed-single",
+        "codeUnits": 100000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 3.73752,
+        "p50": 9.132874,
+        "p95": 20.06345,
+        "max": 20.06345
+      }
+    },
+    {
+      "name": "long-line-render/warmed/mixed-single-1m",
+      "corpus": {
+        "name": "mixed-single-1m",
+        "kind": "mixed-single",
+        "codeUnits": 1000000,
+        "lines": 1
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 43.063002,
+        "p50": 55.845988,
+        "p95": 78.363462,
+        "max": 78.363462
+      }
+    },
+    {
+      "name": "long-line-render/warmed/ascii-multiline-100k",
+      "corpus": {
+        "name": "ascii-multiline-100k",
+        "kind": "ascii-multiline",
+        "codeUnits": 100000,
+        "lines": 2000
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 0.387611,
+        "p50": 0.399667,
+        "p95": 0.889359,
+        "max": 0.889359
+      }
+    },
+    {
+      "name": "long-line-render/warmed/ascii-multiline-1m",
+      "corpus": {
+        "name": "ascii-multiline-1m",
+        "kind": "ascii-multiline",
+        "codeUnits": 1000000,
+        "lines": 20000
+      },
+      "runs": 10,
+      "milliseconds": {
+        "min": 1.487297,
+        "p50": 2.138121,
+        "p95": 5.338332,
+        "max": 5.338332
+      }
+    }
+  ]
+}

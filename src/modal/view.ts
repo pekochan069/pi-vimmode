@@ -45,30 +45,34 @@ export function modalModeLabel(mode: VimMode, width: number, ui?: ResolvedVimUi)
   return width < full.length + 4 ? narrow : full;
 }
 
+function statusPartsForItem(
+  item: ResolvedVimUi["status"]["items"][number],
+  input: ModalStatusInput,
+  ui: ResolvedVimUi,
+): string[] {
+  if (item === "mode") {
+    return [
+      ...(ui.mode.enabled ? [modalModeLabel(input.mode, input.width, ui)] : []),
+      ...(input.recordingSlot ? [`REC ${input.recordingSlot}`] : []),
+    ];
+  }
+  if (item === "pendingOperator" && input.pending) return [`${input.pending}…`];
+  if (item === "selection" && ui.selection.enabled) {
+    const selection = modalVisualStatus(input).trim();
+    return selection ? [selection] : [];
+  }
+  if (item === "cursorPosition" && ui.cursorPosition.enabled)
+    return [cursorPositionStatus(input.cursor, ui)];
+  return [];
+}
+
 export function modalStatus(input: ModalStatusInput): ModalStatus {
   const ui = input.ui ?? DEFAULT_VIM_UI;
   if (!ui.status.enabled) return { left: "", right: "" };
 
-  const parts: string[] = [];
-  let recordingAdded = false;
-  for (const item of ui.status.items) {
-    if (item === "mode") {
-      if (ui.mode.enabled) parts.push(modalModeLabel(input.mode, input.width, ui));
-      if (input.recordingSlot) {
-        parts.push(`REC ${input.recordingSlot}`);
-        recordingAdded = true;
-      }
-    } else if (item === "pendingOperator" && input.pending) {
-      parts.push(`${input.pending}…`);
-    } else if (item === "selection" && ui.selection.enabled) {
-      const selection = modalVisualStatus(input).trim();
-      if (selection.length > 0) parts.push(selection);
-    } else if (item === "cursorPosition" && ui.cursorPosition.enabled) {
-      parts.push(cursorPositionStatus(input.cursor, ui));
-    }
-  }
-
-  if (input.recordingSlot && !recordingAdded) parts.unshift(`REC ${input.recordingSlot}`);
+  const parts = ui.status.items.flatMap((item) => statusPartsForItem(item, input, ui));
+  if (input.recordingSlot && !ui.status.items.includes("mode"))
+    parts.unshift(`REC ${input.recordingSlot}`);
 
   const status = parts.length > 0 ? ` ${parts.join(" ")} ` : "";
   return ui.status.position === "right" ? { left: "", right: status } : { left: status, right: "" };

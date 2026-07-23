@@ -281,38 +281,48 @@ function commandOutput(command: string[]): string {
   return new TextDecoder().decode(result.stdout).trim();
 }
 
-function parseArguments(argv: string[]): Arguments {
-  const args: Arguments = { cases: [], runs: 3, warmup: 1 };
-  for (let index = 0; index < argv.length; index++) {
-    const value = argv[index];
-    if (value === "--case") args.cases.push(argv[++index] ?? "");
-    else if (value?.startsWith("--case=")) args.cases.push(value.slice("--case=".length));
-    else if (value === "--output") args.output = argv[++index];
-    else if (value?.startsWith("--output=")) args.output = value.slice("--output=".length);
-    else if (value === "--profile") args.profile = argv[++index] as Arguments["profile"];
-    else if (value?.startsWith("--profile="))
-      args.profile = value.slice("--profile=".length) as Arguments["profile"];
-    else if (value === "--runs") args.runs = Number(argv[++index]);
-    else if (value?.startsWith("--runs=")) args.runs = Number(value.slice("--runs=".length));
-    else if (value === "--warmup") args.warmup = Number(argv[++index]);
-    else if (value?.startsWith("--warmup=")) args.warmup = Number(value.slice("--warmup=".length));
-    else if (value === "--help") {
-      console.log(
-        "bun benchmark/run.ts [--case name] [--output path] [--runs n] [--warmup n] [--profile cursor-restoration|long-line-render]",
-      );
-      process.exit(0);
-    } else if (value) throw new Error(`Unknown argument: ${value}`);
-  }
+const ARGUMENT_SETTERS: Readonly<Record<string, (args: Arguments, value: string) => void>> = {
+  "--case": (args, value) => args.cases.push(value),
+  "--output": (args, value) => {
+    args.output = value;
+  },
+  "--profile": (args, value) => {
+    args.profile = value as Arguments["profile"];
+  },
+  "--runs": (args, value) => {
+    args.runs = Number(value);
+  },
+  "--warmup": (args, value) => {
+    args.warmup = Number(value);
+  },
+};
+
+function validateArguments(args: Arguments): void {
   if (!Number.isInteger(args.runs) || args.runs < 1)
     throw new Error("--runs must be a positive integer");
   if (!Number.isInteger(args.warmup) || args.warmup < 0)
     throw new Error("--warmup must be non-negative");
-  if (
-    args.profile !== undefined &&
-    !["cursor-restoration", "long-line-render"].includes(args.profile)
-  ) {
+  if (args.profile && !["cursor-restoration", "long-line-render"].includes(args.profile))
     throw new Error(`Unsupported profile: ${args.profile}`);
+}
+
+function parseArguments(argv: string[]): Arguments {
+  const args: Arguments = { cases: [], runs: 3, warmup: 1 };
+  for (let index = 0; index < argv.length; index++) {
+    const argument = argv[index];
+    if (argument === "--help") {
+      console.log(
+        "bun benchmark/run.ts [--case name] [--output path] [--runs n] [--warmup n] [--profile cursor-restoration|long-line-render]",
+      );
+      process.exit(0);
+    }
+    const [name, inline] = argument?.split("=", 2) ?? [];
+    const setter = name ? ARGUMENT_SETTERS[name] : undefined;
+    if (!setter) throw new Error(`Unknown argument: ${argument ?? ""}`);
+    const value = inline ?? argv[++index] ?? "";
+    setter(args, value);
   }
+  validateArguments(args);
   return args;
 }
 

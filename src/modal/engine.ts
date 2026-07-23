@@ -246,67 +246,109 @@ export function canFastDelegateInsertInput(
 /**
  * EASYNOMOTION LOGIC
  */
+function easymotionTargets(text: string, key: string): EasymotionTarget[] {
+  const targets: EasymotionTarget[] = [];
+  const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  const targetChar = key.toLowerCase();
+  let count = 0;
+  for (const [lineNumber, line] of text.split("\n").entries()) {
+    if (count >= labels.length) break;
+    let sourceOffset = 0;
+    for (const sourceChar of line) {
+      if (sourceChar.toLowerCase().includes(targetChar)) {
+        const label = labels[count];
+        if (label === undefined) return targets;
+        targets.push({ label, line: lineNumber, character: sourceOffset });
+        count++;
+      }
+      sourceOffset += sourceChar.length;
+      if (count >= labels.length) break;
+    }
+  }
+  return targets;
+}
+
 function handleEasymotionInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   data: string,
 ): ModalUpdate {
   const key = keySequence(data);
-  if (!key || matchesKey(data, "escape")) {
-    const { pendingEasymotion: _, ...rest } = state;
-    return invalidate(rest);
-  }
-
+  if (!key || matchesKey(data, "escape")) return invalidate(clearPendingEasymotion(state));
   if (state.pendingEasymotion?.kind === "char") {
-    // Match each source character separately so folded expansions keep source offsets.
-    const targets: EasymotionTarget[] = [];
-    const lines = snapshot.text.split("\n");
-    const labels = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-    let count = 0;
-    const targetChar = key.toLowerCase();
-
-    for (let i = 0; i < lines.length && count < labels.length; i++) {
-      const line = lines[i];
-      if (line === undefined) continue;
-      let sourceOffset = 0;
-      for (const sourceChar of line) {
-        if (sourceChar.toLowerCase().includes(targetChar)) {
-          const label = labels[count];
-          if (label === undefined) break;
-          targets.push({ label, line: i, character: sourceOffset });
-          count++;
-        }
-        sourceOffset += sourceChar.length;
-        if (count >= labels.length) break;
-      }
-    }
-
-    if (targets.length === 0) {
-      const { pendingEasymotion: _, ...rest } = state;
-      return invalidate(rest);
-    }
-
-    return invalidate({
-      ...state,
-      pendingEasymotion: { kind: "highlight", targets },
-    });
+    const targets = easymotionTargets(snapshot.text, key);
+    return targets.length > 0
+      ? invalidate({ ...state, pendingEasymotion: { kind: "highlight", targets } })
+      : invalidate(clearPendingEasymotion(state));
   }
-
   if (state.pendingEasymotion?.kind === "highlight") {
-    // Address character input: jump to target.
-    const target = state.pendingEasymotion.targets.find((t) => t.label === key);
-
-    if (target) {
-      const { pendingEasymotion: _, ...rest } = state;
-      return withEffects(rest, [
-        { type: "restoreCursor", position: { line: target.line, col: target.character } },
-        { type: "invalidate" },
-      ]);
-    }
-    return invalidate(state);
+    const target = state.pendingEasymotion.targets.find((entry) => entry.label === key);
+    if (!target) return invalidate(state);
+    return withEffects(clearPendingEasymotion(state), [
+      { type: "restoreCursor", position: { line: target.line, col: target.character } },
+      { type: "invalidate" },
+    ]);
   }
-
   return invalidate(state);
+}
+
+function clearPendingEasymotion(state: ModalState): ModalState {
+  const { pendingEasymotion: _pendingEasymotion, ...rest } = state;
+  return rest;
+}
+
+function insertEditUpdate(
+  state: ModalState,
+  result: ReturnType<typeof openLineBelow>,
+): ModalUpdate {
+  return withEffects(editState(state, result), [{ type: "edit", result }, { type: "invalidate" }]);
+}
+
+function handleInsertKey(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  key: string,
+): ModalUpdate | undefined {
+  const insert = keymapForOptions(options).insert;
+  if (insert.openLineBelow.includes(key))
+    return insertEditUpdate(state, openLineBelow(snapshot.text, snapshot.cursor));
+  if (insert.openLineAbove.includes(key))
+    return insertEditUpdate(state, openLineAbove(snapshot.text, snapshot.cursor));
+  if (insert.deleteWordBackward.includes(key))
+    return insertEditUpdate(state, insertDeleteWordBackward(snapshot.text, snapshot.cursor));
+  if (insert.deleteWordForward.includes(key))
+    return insertEditUpdate(state, insertDeleteWordForward(snapshot.text, snapshot.cursor));
+  if (insert.deleteLineBackward.includes(key))
+    return insertEditUpdate(state, insertDeleteLineBackward(snapshot.text, snapshot.cursor));
+  if (insert.deleteLineForward.includes(key))
+    return insertEditUpdate(state, insertDeleteLineForward(snapshot.text, snapshot.cursor));
+  if (insert.moveWordBackward.includes(key))
+    return withEffects(state, [
+      {
+        type: "restoreCursor",
+        position: insertWordBackwardPosition(snapshot.text, snapshot.cursor),
+      },
+      { type: "invalidate" },
+    ]);
+  if (insert.moveWordForward.includes(key))
+    return withEffects(state, [
+      {
+        type: "restoreCursor",
+        position: insertWordForwardPosition(snapshot.text, snapshot.cursor),
+      },
+      { type: "invalidate" },
+    ]);
+  if (insert.moveLineStart.includes(key))
+    return withEffects(state, [
+      { type: "restoreCursor", position: insertLineStartPosition(snapshot.text, snapshot.cursor) },
+      { type: "invalidate" },
+    ]);
+  if (insert.moveLineEnd.includes(key))
+    return withEffects(state, [
+      { type: "restoreCursor", position: insertLineEndPosition(snapshot.text, snapshot.cursor) },
+      { type: "invalidate" },
+    ]);
 }
 
 function handleInsertInput(
@@ -316,86 +358,21 @@ function handleInsertInput(
   data: string,
 ): ModalUpdate {
   if (state.blockInsert) return handleBlockInsertInput(state, snapshot, options, data);
-
-  if (matchesKey(data, "escape")) {
-    if (snapshot.isAutocompleteOpen) return delegateBufferedInsertEscape(state, data);
-    return modeUpdate(clearPendingInsertEscape(state), "normal", options);
-  }
-
+  if (matchesKey(data, "escape"))
+    return snapshot.isAutocompleteOpen
+      ? delegateBufferedInsertEscape(state, data)
+      : modeUpdate(clearPendingInsertEscape(state), "normal", options);
   if (snapshot.isAutocompleteOpen) return delegateBufferedInsertEscape(state, data);
-
   const match = matchInsertEscapeInput(state, data, escapeAliasesForScope(options, "insert"));
   if (match.kind === "matched")
     return modeUpdate(clearPendingInsertEscape(state), "normal", options);
-  if (match.kind === "pending") {
+  if (match.kind === "pending")
     return withEffects(pendingInsertEscape(state, match.sequence, data), []);
-  }
   if (match.kind === "mismatched") return delegateBufferedInsertEscape(state, data);
-
   const key = insertKeySequence(data);
-  if (key) {
-    const insert = keymapForOptions(options).insert;
-    if (insert.openLineBelow.includes(key)) {
-      const result = openLineBelow(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.openLineAbove.includes(key)) {
-      const result = openLineAbove(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.deleteWordBackward.includes(key)) {
-      const result = insertDeleteWordBackward(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.deleteWordForward.includes(key)) {
-      const result = insertDeleteWordForward(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.deleteLineBackward.includes(key)) {
-      const result = insertDeleteLineBackward(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.deleteLineForward.includes(key)) {
-      const result = insertDeleteLineForward(snapshot.text, snapshot.cursor);
-      return withEffects(editState(state, result), [
-        { type: "edit", result },
-        { type: "invalidate" },
-      ]);
-    }
-    if (insert.moveWordBackward.includes(key)) {
-      const position = insertWordBackwardPosition(snapshot.text, snapshot.cursor);
-      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
-    }
-    if (insert.moveWordForward.includes(key)) {
-      const position = insertWordForwardPosition(snapshot.text, snapshot.cursor);
-      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
-    }
-    if (insert.moveLineStart.includes(key)) {
-      const position = insertLineStartPosition(snapshot.text, snapshot.cursor);
-      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
-    }
-    if (insert.moveLineEnd.includes(key)) {
-      const position = insertLineEndPosition(snapshot.text, snapshot.cursor);
-      return withEffects(state, [{ type: "restoreCursor", position }, { type: "invalidate" }]);
-    }
-  }
-
-  return delegate(state, data);
+  return key
+    ? (handleInsertKey(state, snapshot, options, key) ?? delegate(state, data))
+    : delegate(state, data);
 }
 
 function markJumpTarget(
@@ -531,6 +508,26 @@ function remapUpdate(
   return undefined;
 }
 
+function macroKeysFor(keymap: ResolvedVimKeymap, action: "record" | "play"): string[] {
+  return [
+    ...keymap.macros[action],
+    ...scopedKeysForAction(keymap, `macro.${action}`, "normal"),
+  ].filter((binding) => !isKeyUnmapped(keymap, binding, "normal"));
+}
+
+function isMacroInputBlocked(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  key: string,
+  recordKeys: string[],
+  playKeys: string[],
+): boolean {
+  return Boolean(
+    snapshot.isMacroReplaying &&
+    (state.pendingMacro || isMacroControlKey(key, recordKeys, playKeys)),
+  );
+}
+
 function handleNormalMacroOrMark(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -539,16 +536,9 @@ function handleNormalMacroOrMark(
   key: string,
 ): ModalUpdate | undefined {
   const macros = macrosForOptions(options);
-  const macroKeys = (action: "record" | "play") =>
-    [...keymap.macros[action], ...scopedKeysForAction(keymap, `macro.${action}`, "normal")].filter(
-      (binding) => !isKeyUnmapped(keymap, binding, "normal"),
-    );
-  const recordKeys = macroKeys("record");
-  const playKeys = macroKeys("play");
-  if (
-    snapshot.isMacroReplaying &&
-    (state.pendingMacro || isMacroControlKey(key, recordKeys, playKeys))
-  ) {
+  const recordKeys = macroKeysFor(keymap, "record");
+  const playKeys = macroKeysFor(keymap, "play");
+  if (isMacroInputBlocked(state, snapshot, key, recordKeys, playKeys)) {
     return invalidate(clearPendingMacro(state));
   }
   const result = resolveMacroCommand(key, state.pendingMacro, Boolean(state.recordingSlot), {
@@ -574,10 +564,32 @@ function handleNormalMacroOrMark(
   if (result.type === "invalid") return invalidate(clearPendingMacro(state));
 
   const markTarget = markPendingForKey(key, options);
-  return markTarget ? invalidate({ ...clearPending(state), pendingMark: markTarget }) : undefined;
+  if (markTarget) return invalidate({ ...clearPending(state), pendingMark: markTarget });
+  return undefined;
 }
 
-function applyNormalResolution(
+function applyNormalPendingResolution(
+  state: ModalState,
+  keymap: ResolvedVimKeymap,
+  result: Extract<SemanticCommandResult, { type: "pending" }>,
+): ModalUpdate {
+  if (state.pendingRegister && !operatorActionForSequence(result.pending, keymap))
+    return invalidate(clearPending(state));
+  return invalidate({ ...state, pending: result.pending });
+}
+
+function applyNormalCommandResolution(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  result: Extract<SemanticCommandResult, { type: "command" }>,
+): ModalUpdate {
+  if (result.command === "easymotion")
+    return invalidate({ ...state, pending: undefined, pendingEasymotion: { kind: "char" } });
+  return applyCommand(state, snapshot, options, result.command, result.count);
+}
+
+function applyNormalRemainingResolution(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
@@ -585,25 +597,6 @@ function applyNormalResolution(
   key: string,
   result: SemanticCommandResult,
 ): ModalUpdate {
-  if (result.type === "pending") {
-    const operator = operatorActionForSequence(result.pending, keymap);
-    if (state.pendingRegister && !operator) return invalidate(clearPending(state));
-    return invalidate({ ...state, pending: result.pending });
-  }
-  if (result.type === "motion") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return moveUpdate(clearPending(state), result.motion, snapshot, result.count);
-  }
-  if (result.type === "command") {
-    if (result.command === "easymotion") {
-      return invalidate({ ...state, pending: undefined, pendingEasymotion: { kind: "char" } });
-    }
-    return applyCommand(state, snapshot, options, result.command, result.count);
-  }
-  if (result.type === "action") {
-    if (state.pendingRegister) return invalidate(clearPending(state));
-    return applyPromptTransformAction(state, snapshot, options, result);
-  }
   if (result.type === "charCommand")
     return applyCommand(state, snapshot, options, result.command, result.count, result.char);
   if (result.type === "lineCommand")
@@ -656,6 +649,27 @@ function applyNormalResolution(
   return invalidate(withNoopFeedback(state, options, `unmapped key: ${key}`));
 }
 
+function applyNormalResolution(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  keymap: ResolvedVimKeymap,
+  key: string,
+  result: SemanticCommandResult,
+): ModalUpdate {
+  if (result.type === "pending") return applyNormalPendingResolution(state, keymap, result);
+  if (result.type === "motion")
+    return state.pendingRegister
+      ? invalidate(clearPending(state))
+      : moveUpdate(clearPending(state), result.motion, snapshot, result.count);
+  if (result.type === "command")
+    return applyNormalCommandResolution(state, snapshot, options, result);
+  if (result.type === "action")
+    return state.pendingRegister
+      ? invalidate(clearPending(state))
+      : applyPromptTransformAction(state, snapshot, options, result);
+  return applyNormalRemainingResolution(state, snapshot, options, keymap, key, result);
+}
 function scopedInputSequence(
   state: ModalState,
   key: string,
@@ -727,6 +741,59 @@ function handlePendingTargetInput(
   }
 }
 
+function handleNormalEscapeOrProtectedInput(
+  state: ModalState,
+  options: ModalOptions,
+  data: string,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  pendingOperator: VimOperatorAction | undefined,
+): ModalUpdate | undefined {
+  if (pendingOperator) {
+    const escapeMatch = matchInsertEscapeInput(
+      state,
+      data,
+      escapeAliasesForScope(options, "operatorPending"),
+    );
+    if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
+    if (escapeMatch.kind === "pending")
+      return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
+    if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
+  }
+  if (isProtectedPiDelegateKey(data)) {
+    const scope = pendingOperator ? "operatorPending" : "normal";
+    if (!keymapHasBinding(keymap, key, scope)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
+  }
+}
+
+function handlePendingOperatorInput(
+  state: ModalState,
+  options: ModalOptions,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  pendingOperator: VimOperatorAction | undefined,
+): ModalUpdate | undefined {
+  if (pendingOperator && !isKeyUnmapped(keymap, key, "operatorPending")) {
+    const searchCommand = resolveNormalCommand(key, undefined, keymap, "normal");
+    if (searchCommand.type === "command" && searchCommand.command === "startSearch") {
+      return startSearchUpdate(state, "forward", pendingOperator);
+    }
+    if (searchCommand.type === "command" && searchCommand.command === "startSearchBackward") {
+      return startSearchUpdate(state, "backward", pendingOperator);
+    }
+    const markTarget = markPendingForKey(
+      key,
+      options,
+      pendingOperator,
+      state.pending,
+      "operatorPending",
+    );
+    if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
+  }
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -748,23 +815,15 @@ function handleNormalInput(
 
   const keymap = keymapForOptions(options);
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
-  if (pendingOperator) {
-    const escapeMatch = matchInsertEscapeInput(
-      state,
-      data,
-      escapeAliasesForScope(options, "operatorPending"),
-    );
-    if (escapeMatch.kind === "matched") return invalidate(clearPending(state));
-    if (escapeMatch.kind === "pending")
-      return withEffects(pendingInsertEscape(state, escapeMatch.sequence, data), []);
-    if (escapeMatch.kind === "mismatched") return invalidate(clearPending(state));
-  }
-  if (isProtectedPiDelegateKey(data)) {
-    const scope = pendingOperator ? "operatorPending" : "normal";
-    if (!keymapHasBinding(keymap, key, scope)) {
-      return delegateProtectedShortcut(state, options, data);
-    }
-  }
+  const earlyUpdate = handleNormalEscapeOrProtectedInput(
+    state,
+    options,
+    data,
+    key,
+    keymap,
+    pendingOperator,
+  );
+  if (earlyUpdate) return earlyUpdate;
 
   const scopedUpdate = handleNormalScopedInput(state, snapshot, options, key, keymap, scopes);
   if (scopedUpdate) return scopedUpdate;
@@ -782,23 +841,8 @@ function handleNormalInput(
   const remapped = remapUpdate(state, options, "normal", key);
   if (remapped) return remapped;
 
-  if (pendingOperator && !isKeyUnmapped(keymap, key, "operatorPending")) {
-    const searchCommand = resolveNormalCommand(key, undefined, keymap, "normal");
-    if (searchCommand.type === "command" && searchCommand.command === "startSearch") {
-      return startSearchUpdate(state, "forward", pendingOperator);
-    }
-    if (searchCommand.type === "command" && searchCommand.command === "startSearchBackward") {
-      return startSearchUpdate(state, "backward", pendingOperator);
-    }
-    const markTarget = markPendingForKey(
-      key,
-      options,
-      pendingOperator,
-      state.pending,
-      "operatorPending",
-    );
-    if (markTarget) return invalidate({ ...clearRegisterTarget(state), pendingMark: markTarget });
-  }
+  const operatorUpdate = handlePendingOperatorInput(state, options, key, keymap, pendingOperator);
+  if (operatorUpdate) return operatorUpdate;
 
   return applyNormalResolution(
     state,
@@ -810,6 +854,27 @@ function handleNormalInput(
   );
 }
 
+function applyVisualModeCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: Extract<SemanticCommandResult, { type: "command" }>["command"],
+): ModalUpdate | undefined {
+  if (command === "startSearch") return startSearchUpdate(state);
+  if (command === "startSearchBackward") return startSearchUpdate(state, "backward");
+  if (command === "startExCommand")
+    return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
+  if (command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
+  if (command === "repeatSearchReverse") return repeatSearch(state, snapshot, options, true);
+  const modes = {
+    visualLine: "visualLine",
+    visualChar: "visual",
+    visualBlock: "visualBlock",
+  } as const;
+  const mode = modes[command as keyof typeof modes];
+  if (mode) return state.mode === mode ? invalidate(state) : modeUpdate(state, mode, options);
+}
+
 function applyVisualCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -818,22 +883,8 @@ function applyVisualCommand(
 ): ModalUpdate {
   const registerAware = command === "deleteChar" || command === "pasteAfter";
   if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
-  if (command === "startSearch") return startSearchUpdate(state);
-  if (command === "startSearchBackward") return startSearchUpdate(state, "backward");
-  if (command === "startExCommand")
-    return captureBeforeVisualExit(state, snapshot, startVisualExCommandUpdate(state, snapshot));
-  if (command === "repeatSearch") return repeatSearch(state, snapshot, options, false);
-  if (command === "repeatSearchReverse") return repeatSearch(state, snapshot, options, true);
-  if (command === "visualLine")
-    return state.mode === "visualLine"
-      ? invalidate(state)
-      : modeUpdate(state, "visualLine", options);
-  if (command === "visualChar")
-    return state.mode === "visual" ? invalidate(state) : modeUpdate(state, "visual", options);
-  if (command === "visualBlock")
-    return state.mode === "visualBlock"
-      ? invalidate(state)
-      : modeUpdate(state, "visualBlock", options);
+  const modeCommand = applyVisualModeCommand(state, snapshot, options, command);
+  if (modeCommand) return modeCommand;
   if (state.mode === "visualBlock" && command === "insertLineStart")
     return startBlockInsert(state, snapshot, options, "start");
   if (state.mode === "visualBlock" && command === "insertLineEnd")
@@ -847,13 +898,12 @@ function applyVisualCommand(
   return invalidate(state.pendingRegister ? clearPending(state) : state);
 }
 
-function applyVisualResolution(
+function applyVisualBasicResolution(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  keymap: ResolvedVimKeymap,
   result: SemanticCommandResult,
-): ModalUpdate {
+): ModalUpdate | undefined {
   if (result.type === "motion") {
     if (state.pendingRegister) return invalidate(clearPending(state));
     return moveUpdate(state, result.motion, snapshot, result.count);
@@ -873,6 +923,18 @@ function applyVisualResolution(
     if (state.pendingRegister) return invalidate(clearPending(state));
     return applyVisualPromptTransformAction(state, snapshot, options, result);
   }
+  return undefined;
+}
+
+function applyVisualResolution(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  keymap: ResolvedVimKeymap,
+  result: SemanticCommandResult,
+): ModalUpdate {
+  const basicUpdate = applyVisualBasicResolution(state, snapshot, options, result);
+  if (basicUpdate) return basicUpdate;
   if (result.type === "command")
     return applyVisualCommand(state, snapshot, options, result.command);
   if (result.type === "pending") {
@@ -938,38 +1000,13 @@ function handleVisualEscapeInput(
   if (match.kind === "mismatched") return invalidate(clearPendingInsertEscape(state));
 }
 
-function handleVisualInput(
+function handleVisualPendingOrTransformInput(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
-  data: string,
-  scopes?: VimConfigPlan["scopes"],
-): ModalUpdate {
-  const escapeUpdate = handleVisualEscapeInput(state, snapshot, options, data);
-  if (escapeUpdate) return escapeUpdate;
-  if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
-  const key = keySequence(data);
-  if (!key) return delegate(state, data);
-
-  const keymap = keymapForOptions(options);
-  if (isProtectedPiDelegateKey(data)) {
-    if (!keymapHasBinding(keymap, key, state.mode)) {
-      return delegateProtectedShortcut(state, options, data);
-    }
-  }
-
-  const scope = state.mode as VimActionBindingMode;
-  const scopedUpdate = handleVisualScopedInput(
-    state,
-    snapshot,
-    options,
-    key,
-    keymap,
-    scope,
-    scopes,
-  );
-  if (scopedUpdate) return scopedUpdate;
-
+  key: string,
+  keymap: ResolvedVimKeymap,
+): ModalUpdate | undefined {
   const startsLeader =
     !state.pending && !state.pendingRegister && !state.pendingMacro && keymap.leader === key;
   const pendingTargetUpdate = handlePendingTargetInput(state, snapshot, options, key, startsLeader);
@@ -1004,6 +1041,50 @@ function handleVisualInput(
       return invalidate({ ...clearPending(state), pendingMark: markTarget });
     }
   }
+
+  return undefined;
+}
+
+function handleVisualInput(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  data: string,
+  scopes?: VimConfigPlan["scopes"],
+): ModalUpdate {
+  const escapeUpdate = handleVisualEscapeInput(state, snapshot, options, data);
+  if (escapeUpdate) return escapeUpdate;
+  if (isDelegatedResetKey(data)) return resetAndDelegate(state, options, data);
+  const key = keySequence(data);
+  if (!key) return delegate(state, data);
+
+  const keymap = keymapForOptions(options);
+  if (isProtectedPiDelegateKey(data)) {
+    if (!keymapHasBinding(keymap, key, state.mode)) {
+      return delegateProtectedShortcut(state, options, data);
+    }
+  }
+
+  const scope = state.mode as VimActionBindingMode;
+  const scopedUpdate = handleVisualScopedInput(
+    state,
+    snapshot,
+    options,
+    key,
+    keymap,
+    scope,
+    scopes,
+  );
+  if (scopedUpdate) return scopedUpdate;
+
+  const pendingOrTransform = handleVisualPendingOrTransformInput(
+    state,
+    snapshot,
+    options,
+    key,
+    keymap,
+  );
+  if (pendingOrTransform) return pendingOrTransform;
 
   const remapped = remapUpdate(
     state,

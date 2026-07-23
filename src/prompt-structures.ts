@@ -70,6 +70,14 @@ function fenceMarker(line: string): string | undefined {
   return match?.[1];
 }
 
+function isOpeningFence(infos: LineInfo[], index: number, marker: string): boolean {
+  let open = false;
+  for (let prior = index - 1; prior >= 0; prior--) {
+    if (fenceMarker(infos[prior]?.text ?? "") === marker) open = !open;
+  }
+  return !open;
+}
+
 function resolveCodeFence(
   text: string,
   cursor: Position,
@@ -79,33 +87,27 @@ function resolveCodeFence(
   const line = cursorLine(text, cursor);
   let openLine: number | undefined;
   let marker: string | undefined;
-
   for (let index = line; index >= 0; index--) {
     const found = fenceMarker(infos[index]?.text ?? "");
-    if (!found) continue;
-    let earlierOpen = false;
-    for (let prior = index - 1; prior >= 0; prior--) {
-      if (fenceMarker(infos[prior]?.text ?? "") === found) earlierOpen = !earlierOpen;
-    }
-    if (!earlierOpen) {
+    if (found && isOpeningFence(infos, index, found)) {
       openLine = index;
       marker = found;
       break;
     }
   }
-
   if (openLine === undefined || marker === undefined) return undefined;
-  let closeLine: number | undefined;
-  for (let index = openLine + 1; index < infos.length; index++) {
-    if (fenceMarker(infos[index]?.text ?? "") === marker) {
-      closeLine = index;
-      break;
-    }
-  }
-  if (closeLine === undefined || line < openLine || line > closeLine) return undefined;
+  const closeLine = findFenceClose(infos, openLine, marker);
+  if (closeLine === undefined || line > closeLine) return undefined;
   return kind === "around"
     ? lineRange(infos, openLine, closeLine)
     : lineRange(infos, openLine + 1, closeLine - 1);
+}
+
+function findFenceClose(infos: LineInfo[], openLine: number, marker: string): number | undefined {
+  for (let index = openLine + 1; index < infos.length; index++) {
+    if (fenceMarker(infos[index]?.text ?? "") === marker) return index;
+  }
+  return undefined;
 }
 
 function headingLevel(line: string): number | undefined {
@@ -153,6 +155,35 @@ function listMarker(line: string): { indent: number; markerEnd: number } | undef
   return { indent: match[1]?.length ?? 0, markerEnd: match[0].length };
 }
 
+function findListItemStart(
+  infos: LineInfo[],
+  line: number,
+):
+  | {
+      startLine: number;
+      marker: { indent: number; markerEnd: number };
+    }
+  | undefined {
+  for (let index = line; index >= 0; index--) {
+    const marker = listMarker(infos[index]?.text ?? "");
+    if (marker) return { startLine: index, marker };
+    if (!(infos[index]?.text ?? "").trim()) return undefined;
+  }
+  return undefined;
+}
+
+function findListItemEnd(infos: LineInfo[], startLine: number, indent: number): number {
+  let endLine = startLine;
+  for (let index = startLine + 1; index < infos.length; index++) {
+    const textLine = infos[index]?.text ?? "";
+    const marker = listMarker(textLine);
+    const indentation = /^\s*/.exec(textLine)?.[0].length ?? 0;
+    if ((marker && marker.indent <= indent) || !textLine.trim() || indentation <= indent) break;
+    endLine = index;
+  }
+  return endLine;
+}
+
 function resolveListItem(
   text: string,
   cursor: Position,
@@ -160,32 +191,12 @@ function resolveListItem(
 ): PromptStructureRange | undefined {
   const infos = lineInfos(text);
   const line = cursorLine(text, cursor);
-  let startLine: number | undefined;
-  let marker: { indent: number; markerEnd: number } | undefined;
-
-  for (let index = line; index >= 0; index--) {
-    const found = listMarker(infos[index]?.text ?? "");
-    if (found) {
-      startLine = index;
-      marker = found;
-      break;
-    }
-    if ((infos[index]?.text ?? "").trim().length === 0) return undefined;
-  }
-  if (startLine === undefined || !marker) return undefined;
-
-  let endLine = startLine;
-  for (let index = startLine + 1; index < infos.length; index++) {
-    const textLine = infos[index]?.text ?? "";
-    const found = listMarker(textLine);
-    const indentation = /^\s*/.exec(textLine)?.[0].length ?? 0;
-    if (found && found.indent <= marker.indent) break;
-    if (textLine.trim().length === 0 || indentation <= marker.indent) break;
-    endLine = index;
-  }
+  const found = findListItemStart(infos, line);
+  if (!found) return undefined;
+  const endLine = findListItemEnd(infos, found.startLine, found.marker.indent);
   if (line > endLine) return undefined;
-  if (kind === "around") return lineRange(infos, startLine, endLine);
-  const start = (infos[startLine]?.start ?? 0) + marker.markerEnd;
+  if (kind === "around") return lineRange(infos, found.startLine, endLine);
+  const start = (infos[found.startLine]?.start ?? 0) + found.marker.markerEnd;
   const endExclusive = infos[endLine]?.end ?? start;
   return isNonEmpty({ start, endExclusive }) ? { start, endExclusive } : undefined;
 }
@@ -263,28 +274,19 @@ function isErrorContinuation(line: string): boolean {
   return /^\s+\S/.test(line) && !/^\s*[-+*]\s+/.test(line);
 }
 
+function isErrorBlockMember(line: string): boolean {
+  return isErrorBlockLine(line) || isErrorContinuation(line);
+}
+
 function resolveErrorBlock(text: string, cursor: Position): PromptStructureRange | undefined {
   const infos = lineInfos(text);
   const line = cursorLine(text, cursor);
-  const current = infos[line]?.text ?? "";
-  if (!isErrorBlockLine(current) && !isErrorContinuation(current)) return undefined;
-
+  if (!isErrorBlockMember(infos[line]?.text ?? "")) return undefined;
   let startLine = line;
-  while (startLine > 0) {
-    const previous = infos[startLine - 1]?.text ?? "";
-    if (previous.trim().length === 0) break;
-    if (!isErrorBlockLine(previous) && !isErrorContinuation(previous)) break;
-    startLine--;
-  }
-
+  while (startLine > 0 && isErrorBlockMember(infos[startLine - 1]?.text ?? "")) startLine--;
   let endLine = line;
-  while (endLine + 1 < infos.length) {
-    const next = infos[endLine + 1]?.text ?? "";
-    if (next.trim().length === 0) break;
-    if (!isErrorBlockLine(next) && !isErrorContinuation(next)) break;
+  while (endLine + 1 < infos.length && isErrorBlockMember(infos[endLine + 1]?.text ?? ""))
     endLine++;
-  }
-
   const containsStrongErrorLine = infos
     .slice(startLine, endLine + 1)
     .some((info) => isErrorBlockLine(info.text));

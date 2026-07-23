@@ -372,6 +372,51 @@ function mappingOptions(value: unknown): MappingOptions | undefined {
   return options;
 }
 
+function descriptorOptions(options: MappingOptions): MappingOptions {
+  return options.allowProtected || options.desc !== undefined ? options : {};
+}
+
+function descriptorArguments(
+  action: ActionDescriptor,
+): Readonly<Record<string, unknown>> | undefined {
+  return action.args as Readonly<Record<string, unknown>> | undefined;
+}
+
+function recordInsertDescriptor(
+  session: ConfigSession,
+  key: string,
+  actionId: string,
+  options: MappingOptions,
+): boolean {
+  const action = actionId.slice("insert.".length) as VimInsertAction;
+  if (!actionId.startsWith("insert.")) return false;
+  if (!INSERT_ACTIONS.has(action)) {
+    session.warning(`unsupported insert action ${action}`);
+    return true;
+  }
+  session.recordMap({ kind: "insert", action, key, ...descriptorOptions(options) });
+  return true;
+}
+
+function recordPromptTransformDescriptor(
+  session: ConfigSession,
+  key: string,
+  modes: readonly VimMappingScope[],
+  action: ActionDescriptor,
+  options: MappingOptions,
+): boolean {
+  if (!action.actionId.startsWith("prompt.transform.")) return false;
+  session.recordMap({
+    kind: "action",
+    actionId: action.actionId as BindablePromptTransformActionId,
+    key,
+    args: descriptorArguments(action),
+    modes: modes as VimActionBindingMode[],
+    ...descriptorOptions(options),
+  });
+  return true;
+}
+
 function recordDescriptorMapping(
   session: ConfigSession,
   key: string,
@@ -388,41 +433,15 @@ function recordDescriptorMapping(
     session.warning(`${action.actionId} does not accept these arguments`);
     return;
   }
-  if (action.actionId.startsWith("insert.")) {
-    const insertAction = action.actionId.slice("insert.".length) as VimInsertAction;
-    if (!INSERT_ACTIONS.has(insertAction)) {
-      session.warning(`unsupported insert action ${insertAction}`);
-      return;
-    }
-    session.recordMap({
-      kind: "insert",
-      action: insertAction,
-      key,
-      ...(options.allowProtected ? { allowProtected: true } : {}),
-      ...(options.desc === undefined ? {} : { desc: options.desc }),
-    });
-    return;
-  }
-  if (action.actionId.startsWith("prompt.transform.")) {
-    session.recordMap({
-      kind: "action",
-      actionId: action.actionId as BindablePromptTransformActionId,
-      key,
-      args: action.args as Readonly<Record<string, unknown>> | undefined,
-      modes: modes as VimActionBindingMode[],
-      ...(options.allowProtected ? { allowProtected: true } : {}),
-      ...(options.desc === undefined ? {} : { desc: options.desc }),
-    });
-    return;
-  }
+  if (recordInsertDescriptor(session, key, action.actionId, options)) return;
+  if (recordPromptTransformDescriptor(session, key, modes, action, options)) return;
   session.recordMap({
     kind: "descriptor",
     actionId: action.actionId,
     key,
     modes,
-    args: action.args as Readonly<Record<string, unknown>> | undefined,
-    ...(options.allowProtected ? { allowProtected: true } : {}),
-    ...(options.desc === undefined ? {} : { desc: options.desc }),
+    args: descriptorArguments(action),
+    ...descriptorOptions(options),
   });
 }
 
@@ -519,26 +538,28 @@ export function isPrintableLeader(value: unknown): value is string {
   );
 }
 
+const PROMPT_API = Object.freeze({
+  quote: () => builtinPromptTransform("quote"),
+  unquote: () => builtinPromptTransform("unquote"),
+  bulletize: () => builtinPromptTransform("bulletize"),
+  fence: (args: { language?: string } = {}) => builtinPromptTransform("fence", args),
+  indent: () => builtinPromptTransform("indent"),
+  dedent: () => builtinPromptTransform("dedent"),
+  reflow: (args: { width?: number } = {}) => builtinPromptTransform("reflow", args),
+  openLineBelow: () => builtinInsert("openLineBelow"),
+  openLineAbove: () => builtinInsert("openLineAbove"),
+  deleteWordBackward: () => builtinInsert("deleteWordBackward"),
+  deleteWordForward: () => builtinInsert("deleteWordForward"),
+  deleteLineBackward: () => builtinInsert("deleteLineBackward"),
+  deleteLineForward: () => builtinInsert("deleteLineForward"),
+  moveWordBackward: () => builtinInsert("moveWordBackward"),
+  moveWordForward: () => builtinInsert("moveWordForward"),
+  moveLineStart: () => builtinInsert("moveLineStart"),
+  moveLineEnd: () => builtinInsert("moveLineEnd"),
+});
+
 function createPromptApi() {
-  return Object.freeze({
-    quote: () => builtinPromptTransform("quote"),
-    unquote: () => builtinPromptTransform("unquote"),
-    bulletize: () => builtinPromptTransform("bulletize"),
-    fence: (args: { language?: string } = {}) => builtinPromptTransform("fence", args),
-    indent: () => builtinPromptTransform("indent"),
-    dedent: () => builtinPromptTransform("dedent"),
-    reflow: (args: { width?: number } = {}) => builtinPromptTransform("reflow", args),
-    openLineBelow: () => builtinInsert("openLineBelow"),
-    openLineAbove: () => builtinInsert("openLineAbove"),
-    deleteWordBackward: () => builtinInsert("deleteWordBackward"),
-    deleteWordForward: () => builtinInsert("deleteWordForward"),
-    deleteLineBackward: () => builtinInsert("deleteLineBackward"),
-    deleteLineForward: () => builtinInsert("deleteLineForward"),
-    moveWordBackward: () => builtinInsert("moveWordBackward"),
-    moveWordForward: () => builtinInsert("moveWordForward"),
-    moveLineStart: () => builtinInsert("moveLineStart"),
-    moveLineEnd: () => builtinInsert("moveLineEnd"),
-  });
+  return PROMPT_API;
 }
 
 function actionFactory(actionId: VimFiniteActionId): (args?: unknown) => object {

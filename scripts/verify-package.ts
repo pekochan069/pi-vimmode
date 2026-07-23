@@ -35,82 +35,83 @@ async function packageFiles(packageDir: string): Promise<string[]> {
   return files.sort();
 }
 
-export async function verifyPackageInventory(
-  packageDir: string,
-  expectedVersion: string,
-): Promise<void> {
-  const files = await packageFiles(packageDir);
-  const missing = REQUIRED_PACKAGE_FILES.filter((file) => !files.includes(file));
-  const forbidden = files.filter((file) =>
+function forbiddenFiles(files: readonly string[]): string[] {
+  return files.filter((file) =>
     file
       .split("/")
       .some((segment) =>
         FORBIDDEN_PACKAGE_PREFIXES.some((prefix) => segment.toLowerCase().startsWith(prefix)),
       ),
   );
-  const manifestPath = join(packageDir, "package.json");
-  let manifest: PackageJson | undefined;
+}
 
-  if (!missing.includes("package.json")) {
-    manifest = JSON.parse(await readFile(manifestPath, "utf8")) as PackageJson;
-  }
-
-  const manifestFiles = Array.isArray(manifest?.files)
+function manifestFileNames(manifest: PackageJson | undefined): string[] {
+  return Array.isArray(manifest?.files)
     ? manifest.files.filter((file): file is string => typeof file === "string")
     : [];
+}
+
+function exportsFor(manifest: PackageJson | undefined): Record<string, unknown> {
+  const exports = manifest?.exports;
+  return exports && typeof exports === "object" && !Array.isArray(exports)
+    ? (exports as Record<string, unknown>)
+    : {};
+}
+
+function inventoryErrors(
+  files: readonly string[],
+  manifest: PackageJson | undefined,
+  expectedVersion: string,
+): string[] {
+  const missing = REQUIRED_PACKAGE_FILES.filter((file) => !files.includes(file));
+  const manifestFiles = manifestFileNames(manifest);
   const manifestMissing = REQUIRED_PACKAGE_FILES.filter(
     (file) =>
       file !== "package.json" &&
       !manifestFiles.some((entry) => file === entry || file.startsWith(`${entry}/`)),
   );
-  const manifestForbidden = manifestFiles.filter((file) =>
-    file
-      .split("/")
-      .some((segment) =>
-        FORBIDDEN_PACKAGE_PREFIXES.some((prefix) => segment.toLowerCase().startsWith(prefix)),
-      ),
+  const exports = exportsFor(manifest);
+  const errors = [
+    missing.length ? `Missing required package files: ${missing.join(", ")}` : "",
+    manifestMissing.length ? `Manifest missing packaged files: ${manifestMissing.join(", ")}` : "",
+    manifest?.version === expectedVersion
+      ? ""
+      : `Package version mismatch: expected ${expectedVersion}, found ${String(manifest?.version)}`,
+    forbiddenFiles(files).length
+      ? `Forbidden package files: ${forbiddenFiles(files).join(", ")}`
+      : "",
+    forbiddenFiles(manifestFiles).length
+      ? `Forbidden manifest files: ${forbiddenFiles(manifestFiles).join(", ")}`
+      : "",
+    files.filter((file) => /(?:^|\/)config\.(?:cjs|js|mjs)$/.test(file)).length
+      ? `Config subpath must not include runtime files: ${files.filter((file) => /(?:^|\/)config\.(?:cjs|js|mjs)$/.test(file)).join(", ")}`
+      : "",
+    exports["."] === "./index.js"
+      ? ""
+      : `Manifest root export mismatch: expected ./index.js, found ${String(exports["."])}`,
+    isTypesOnlyConfigExport(exports["./config"])
+      ? ""
+      : "Manifest ./config export must contain only types: ./config.d.ts",
+  ];
+  return errors.filter(Boolean);
+}
+
+function isTypesOnlyConfigExport(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return (
+    Object.keys(value).length === 1 && (value as Record<string, unknown>).types === "./config.d.ts"
   );
-  const configRuntimeFiles = files.filter((file) => /(?:^|\/)config\.(?:cjs|js|mjs)$/.test(file));
-  const packageExports = manifest?.exports;
-  const rootExport =
-    packageExports && typeof packageExports === "object" && !Array.isArray(packageExports)
-      ? (packageExports as Record<string, unknown>)["."]
-      : undefined;
-  const configExport =
-    packageExports && typeof packageExports === "object" && !Array.isArray(packageExports)
-      ? (packageExports as Record<string, unknown>)["./config"]
-      : undefined;
+}
 
-  const errors: string[] = [];
-  if (missing.length > 0) errors.push(`Missing required package files: ${missing.join(", ")}`);
-  if (manifestMissing.length > 0) {
-    errors.push(`Manifest missing packaged files: ${manifestMissing.join(", ")}`);
-  }
-  if (manifest?.version !== expectedVersion) {
-    errors.push(
-      `Package version mismatch: expected ${expectedVersion}, found ${String(manifest?.version)}`,
-    );
-  }
-  if (forbidden.length > 0) errors.push(`Forbidden package files: ${forbidden.join(", ")}`);
-  if (manifestForbidden.length > 0) {
-    errors.push(`Forbidden manifest files: ${manifestForbidden.join(", ")}`);
-  }
-  if (configRuntimeFiles.length > 0) {
-    errors.push(`Config subpath must not include runtime files: ${configRuntimeFiles.join(", ")}`);
-  }
-  if (rootExport !== "./index.js") {
-    errors.push(`Manifest root export mismatch: expected ./index.js, found ${String(rootExport)}`);
-  }
-  if (
-    !configExport ||
-    typeof configExport !== "object" ||
-    Array.isArray(configExport) ||
-    Object.keys(configExport).length !== 1 ||
-    (configExport as Record<string, unknown>).types !== "./config.d.ts"
-  ) {
-    errors.push("Manifest ./config export must contain only types: ./config.d.ts");
-  }
-
+export async function verifyPackageInventory(
+  packageDir: string,
+  expectedVersion: string,
+): Promise<void> {
+  const files = await packageFiles(packageDir);
+  const manifest = files.includes("package.json")
+    ? (JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")) as PackageJson)
+    : undefined;
+  const errors = inventoryErrors(files, manifest, expectedVersion);
   if (errors.length > 0) throw new Error(errors.join("\n"));
 }
 

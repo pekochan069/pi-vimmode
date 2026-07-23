@@ -8,24 +8,25 @@ export function createModalState(mode: StartupMode): ModalState {
 }
 
 export function resetTransientState(state: ModalState, mode: VimMode): ModalState {
-  const nextState: ModalState = { mode };
-  if (state.register) nextState.register = state.register;
-  if (state.namedRegisters) nextState.namedRegisters = state.namedRegisters;
-  if (state.clipboardRegisters) nextState.clipboardRegisters = state.clipboardRegisters;
-  if (state.macros) nextState.macros = state.macros;
-  if (state.recordingSlot) nextState.recordingSlot = state.recordingSlot;
-  if (state.lastPlayedMacro) nextState.lastPlayedMacro = state.lastPlayedMacro;
-  if (state.marks) nextState.marks = state.marks;
-  if (state.lastCharSearch) nextState.lastCharSearch = state.lastCharSearch;
-  if (state.lastSearch) nextState.lastSearch = state.lastSearch;
-  if (state.searchHistory) nextState.searchHistory = state.searchHistory;
-  if (state.searchHighlight) nextState.searchHighlight = state.searchHighlight;
-  if (state.messageHistory) nextState.messageHistory = state.messageHistory;
-  if (state.exHistory) nextState.exHistory = state.exHistory;
-  if (state.lastExSubstitution) nextState.lastExSubstitution = state.lastExSubstitution;
-  if (state.lastRepeatableChange) nextState.lastRepeatableChange = state.lastRepeatableChange;
-  if (state.lastVisualSelection) nextState.lastVisualSelection = state.lastVisualSelection;
-  return nextState;
+  const persistent = {
+    register: state.register,
+    namedRegisters: state.namedRegisters,
+    clipboardRegisters: state.clipboardRegisters,
+    macros: state.macros,
+    recordingSlot: state.recordingSlot,
+    lastPlayedMacro: state.lastPlayedMacro,
+    marks: state.marks,
+    lastCharSearch: state.lastCharSearch,
+    lastSearch: state.lastSearch,
+    searchHistory: state.searchHistory,
+    searchHighlight: state.searchHighlight,
+    messageHistory: state.messageHistory,
+    exHistory: state.exHistory,
+    lastExSubstitution: state.lastExSubstitution,
+    lastRepeatableChange: state.lastRepeatableChange,
+    lastVisualSelection: state.lastVisualSelection,
+  };
+  return { mode, ...Object.fromEntries(Object.entries(persistent).filter(([, value]) => value)) };
 }
 
 function clearHighlightsForMode(

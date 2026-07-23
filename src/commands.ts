@@ -782,19 +782,21 @@ function encodeTextObjectPending(
   );
 }
 
+function decodeLegacyTextObjectPending(parts: string[]): EncodedTextObjectPending | undefined {
+  const kind = parts[1] as VimTextObjectKind;
+  if (kind !== "inner" && kind !== "around") return undefined;
+  return {
+    type: "textObject",
+    operatorSequence: parts[0] ?? "",
+    kindPrefix: kind === "inner" ? "i" : "a",
+    kind,
+    count: parts[2] ? Number(parts[2]) : undefined,
+  };
+}
+
 function decodeTextObjectPending(pending: string): EncodedTextObjectPending | undefined {
   const parts = pending.split(TEXT_OBJECT_SEPARATOR);
-  if (parts.length === 3) {
-    const kind = parts[1] as VimTextObjectKind;
-    if (kind !== "inner" && kind !== "around") return undefined;
-    return {
-      type: "textObject",
-      operatorSequence: parts[0] ?? "",
-      kindPrefix: kind === "inner" ? "i" : "a",
-      kind,
-      count: parts[2] ? Number(parts[2]) : undefined,
-    };
-  }
+  if (parts.length === 3) return decodeLegacyTextObjectPending(parts);
   if (parts.length !== 5) return undefined;
   const kind = parts[2] as VimTextObjectKind | "";
   if (kind && kind !== "inner" && kind !== "around") return undefined;
@@ -1297,6 +1299,61 @@ function resolveTextObjectPending(
   return { type: "invalid" };
 }
 
+function resolveOperatorSearchTarget(
+  operatorSequence: string,
+  operator: VimMotionOperatorAction,
+  key: string,
+  keymap: ResolvedVimKeymap,
+  count?: number,
+): SemanticCommandResult | undefined {
+  if (/^[1-9]$/.test(key)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(operatorSequence, "", count, Number(key)),
+    };
+  }
+  const charSearchCommand = charSearchCommandForBinding(key, keymap);
+  if (charSearchCommand) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(
+        operatorSequence,
+        key,
+        count,
+        undefined,
+        charSearchCommand,
+      ),
+    };
+  }
+  if (hasCharSearchLongerPrefix(key, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchPending(operatorSequence, key, count),
+    };
+  }
+  const repeatCharSearchCommand = repeatCharSearchCommandForBinding(key, keymap);
+  if (repeatCharSearchCommand) {
+    return {
+      type: "operatorCharSearchRepeat",
+      operator,
+      reverse: repeatCharSearchCommand === "repeatCharSearchReverse",
+      count,
+    };
+  }
+  if (hasRepeatCharSearchLongerPrefix(key, keymap)) {
+    return {
+      type: "pending",
+      pending: encodeOperatorCharSearchRepeatPending(operatorSequence, key, count),
+    };
+  }
+  const searchDirection = searchDirectionForBinding(key, keymap);
+  if (searchDirection)
+    return { type: "operatorSearch", operator, direction: searchDirection, count };
+  if (hasSearchLongerPrefix(key, keymap)) {
+    return { type: "pending", pending: encodeOperatorSearchPending(operatorSequence, key, count) };
+  }
+}
+
 function resolveAfterOperator(
   operatorSequence: string,
   key: string,
@@ -1313,58 +1370,14 @@ function resolveAfterOperator(
   }
   if (!isMotionOperator(operator)) return { type: "invalid" };
   if (supportsSearchTargets(operator)) {
-    if (/^[1-9]$/.test(key)) {
-      return {
-        type: "pending",
-        pending: encodeOperatorCharSearchPending(operatorSequence, "", count, Number(key)),
-      };
-    }
-    const charSearchCommand = charSearchCommandForBinding(key, keymap);
-    if (charSearchCommand) {
-      return {
-        type: "pending",
-        pending: encodeOperatorCharSearchPending(
-          operatorSequence,
-          key,
-          count,
-          undefined,
-          charSearchCommand,
-        ),
-      };
-    }
-    if (hasCharSearchLongerPrefix(key, keymap)) {
-      return {
-        type: "pending",
-        pending: encodeOperatorCharSearchPending(operatorSequence, key, count),
-      };
-    }
-
-    const repeatCharSearchCommand = repeatCharSearchCommandForBinding(key, keymap);
-    if (repeatCharSearchCommand) {
-      return {
-        type: "operatorCharSearchRepeat",
-        operator,
-        reverse: repeatCharSearchCommand === "repeatCharSearchReverse",
-        count,
-      };
-    }
-    if (hasRepeatCharSearchLongerPrefix(key, keymap)) {
-      return {
-        type: "pending",
-        pending: encodeOperatorCharSearchRepeatPending(operatorSequence, key, count),
-      };
-    }
-
-    const searchDirection = searchDirectionForBinding(key, keymap);
-    if (searchDirection) {
-      return { type: "operatorSearch", operator, direction: searchDirection, count };
-    }
-    if (hasSearchLongerPrefix(key, keymap)) {
-      return {
-        type: "pending",
-        pending: encodeOperatorSearchPending(operatorSequence, key, count),
-      };
-    }
+    const searchResult = resolveOperatorSearchTarget(
+      operatorSequence,
+      operator,
+      key,
+      keymap,
+      count,
+    );
+    if (searchResult) return searchResult;
   }
 
   const scopedTextObjectKind = scopedTextObjectSequenceFor(keymap, key, "textObject.kind.");
@@ -1418,82 +1431,84 @@ function resolveWithoutPending(
   return { type: "none" };
 }
 
+function resolveCountPending(
+  key: string,
+  count: EncodedCountPending,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode,
+): SemanticCommandResult {
+  if (count.inner === "" && /^\d$/.test(key))
+    return { type: "pending", pending: encodeCountPending(count.count + key) };
+  if (count.inner === "")
+    return withCount(
+      resolveWithoutPending(key, keymap, Number(count.count), mode),
+      Number(count.count),
+    );
+  const innerResult = resolveNormalCommand(key, count.inner, keymap, mode);
+  return innerResult.type === "pending"
+    ? { type: "pending", pending: encodeCountPending(count.count, innerResult.pending) }
+    : withCount(innerResult, Number(count.count));
+}
+
+function resolveCombinedPending(
+  key: string,
+  pending: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode,
+): SemanticCommandResult {
+  const combined = appendMappingSequence(pending, key, keymap, mode);
+  if (hasLongerPrefix(combined, keymap, mode)) return { type: "pending", pending: combined };
+  const binding = exactBinding(combined, keymap, mode);
+  if (binding?.kind === "motion") return { type: "motion", motion: binding.motion };
+  if (binding?.kind === "command") {
+    return CHAR_ARGUMENT_COMMANDS.has(binding.command)
+      ? { type: "pending", pending: encodeCharCommandPending(binding.command) }
+      : { type: "command", command: binding.command };
+  }
+  if (binding?.kind === "operator") return { type: "pending", pending: combined };
+  if (binding?.kind === "action")
+    return { type: "action", actionId: binding.actionId, args: binding.args };
+  return { type: "invalid" };
+}
+
+function resolveEncodedPending(
+  key: string,
+  pending: string,
+  keymap: ResolvedVimKeymap,
+  mode?: VimActionBindingMode,
+): SemanticCommandResult {
+  const charCommand = decodeCharCommandPending(pending);
+  if (charCommand)
+    return isPrintableCharArgument(key)
+      ? { type: "charCommand", command: charCommand.command, char: key, count: charCommand.count }
+      : { type: "invalid" };
+  const textObject = decodeTextObjectPending(pending);
+  if (textObject) return resolveTextObjectPending(textObject, key, keymap);
+  const operatorMotion = decodeOperatorMotionPending(pending);
+  if (operatorMotion) return resolveOperatorMotionPending(operatorMotion, key, keymap);
+  const operatorLine = decodeOperatorLinePending(pending);
+  if (operatorLine) return resolveOperatorLinePending(operatorLine, key, keymap);
+  const operatorSearch = decodeOperatorSearchPending(pending);
+  if (operatorSearch) return resolveOperatorSearchPending(operatorSearch, key, keymap);
+  const operatorCharSearch = decodeOperatorCharSearchPending(pending);
+  if (operatorCharSearch) return resolveOperatorCharSearchPending(operatorCharSearch, key, keymap);
+  const repeat = decodeOperatorCharSearchRepeatPending(pending);
+  if (repeat) return resolveOperatorCharSearchRepeatPending(repeat, key, keymap);
+  if (operatorActionForSequence(pending, keymap)) return resolveAfterOperator(pending, key, keymap);
+  return resolveCombinedPending(key, pending, keymap, mode);
+}
+
 export function resolveNormalCommand(
   key: string,
   pending: string | undefined,
   keymap: ResolvedVimKeymap = DEFAULT_VIM_KEYMAP,
   mode?: VimActionBindingMode,
 ): SemanticCommandResult {
-  if (pending) {
-    const count = decodeCountPending(pending);
-    if (count) {
-      if (count.inner === "" && /^\d$/.test(key)) {
-        return { type: "pending", pending: encodeCountPending(count.count + key) };
-      }
-      if (count.inner === "")
-        return withCount(
-          resolveWithoutPending(key, keymap, Number(count.count), mode),
-          Number(count.count),
-        );
-      const innerResult = resolveNormalCommand(key, count.inner, keymap, mode);
-      if (innerResult.type === "pending") {
-        return { type: "pending", pending: encodeCountPending(count.count, innerResult.pending) };
-      }
-      return withCount(innerResult, Number(count.count));
-    }
-
-    const charCommand = decodeCharCommandPending(pending);
-    if (charCommand) {
-      if (!isPrintableCharArgument(key)) return { type: "invalid" };
-      return {
-        type: "charCommand",
-        command: charCommand.command,
-        char: key,
-        count: charCommand.count,
-      };
-    }
-    const textObject = decodeTextObjectPending(pending);
-    if (textObject) return resolveTextObjectPending(textObject, key, keymap);
-    const operatorMotion = decodeOperatorMotionPending(pending);
-    if (operatorMotion) return resolveOperatorMotionPending(operatorMotion, key, keymap);
-    const operatorLine = decodeOperatorLinePending(pending);
-    if (operatorLine) return resolveOperatorLinePending(operatorLine, key, keymap);
-    const operatorSearch = decodeOperatorSearchPending(pending);
-    if (operatorSearch) return resolveOperatorSearchPending(operatorSearch, key, keymap);
-    const operatorCharSearch = decodeOperatorCharSearchPending(pending);
-    if (operatorCharSearch)
-      return resolveOperatorCharSearchPending(operatorCharSearch, key, keymap);
-    const operatorCharSearchRepeat = decodeOperatorCharSearchRepeatPending(pending);
-    if (operatorCharSearchRepeat)
-      return resolveOperatorCharSearchRepeatPending(operatorCharSearchRepeat, key, keymap);
-
-    const pendingOperator = operatorActionForSequence(pending, keymap);
-    if (pendingOperator) return resolveAfterOperator(pending, key, keymap);
-
-    const combined = appendMappingSequence(pending, key, keymap, mode);
-    if (hasLongerPrefix(combined, keymap, mode)) return { type: "pending", pending: combined };
-    const combinedBinding = exactBinding(combined, keymap, mode);
-    if (combinedBinding?.kind === "motion")
-      return { type: "motion", motion: combinedBinding.motion };
-    if (combinedBinding?.kind === "command") {
-      if (CHAR_ARGUMENT_COMMANDS.has(combinedBinding.command)) {
-        return { type: "pending", pending: encodeCharCommandPending(combinedBinding.command) };
-      }
-      return { type: "command", command: combinedBinding.command };
-    }
-    if (combinedBinding?.kind === "operator") return { type: "pending", pending: combined };
-    if (combinedBinding?.kind === "action") {
-      return {
-        type: "action",
-        actionId: combinedBinding.actionId,
-        args: combinedBinding.args,
-      };
-    }
-
-    return { type: "invalid" };
-  }
-
-  return resolveWithoutPending(key, keymap, undefined, mode);
+  if (!pending) return resolveWithoutPending(key, keymap, undefined, mode);
+  const count = decodeCountPending(pending);
+  return count
+    ? resolveCountPending(key, count, keymap, mode)
+    : resolveEncodedPending(key, pending, keymap, mode);
 }
 
 export function semanticOperatorToLegacy(operator: VimMotionOperatorAction): VimOperator {

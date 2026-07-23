@@ -79,12 +79,40 @@ function hasKeyInMap(map: Record<string, readonly string[]>, key: string): boole
   return Object.values(map).some((bindings) => bindings.includes(key));
 }
 
+function isKeyUnmapped(keymap: ResolvedVimKeymap, key: string, mode?: VimMode | "operatorPending") {
+  return Boolean(
+    mode && keymap.unmaps.some((unmap) => unmap.key === key && unmap.modes.includes(mode)),
+  );
+}
+
+function acceptsKey(
+  bindings: readonly { key: string; modes?: readonly (VimMode | "operatorPending")[] }[],
+  key: string,
+  mode?: VimMode | "operatorPending",
+) {
+  return bindings.some(
+    (binding) => binding.key === key && (!binding.modes || binding.modes.includes(mode as never)),
+  );
+}
+
+function acceptsKeyPrefix(
+  bindings: readonly { key: string; modes?: readonly (VimMode | "operatorPending")[] }[],
+  key: string,
+  mode?: VimMode | "operatorPending",
+) {
+  return bindings.some(
+    (binding) =>
+      (binding.key === key || binding.key.startsWith(key)) &&
+      (!binding.modes || binding.modes.includes(mode as never)),
+  );
+}
+
 export function keymapHasBinding(
   keymap: ResolvedVimKeymap,
   key: string,
   mode?: VimMode | "operatorPending",
 ): boolean {
-  if (mode && keymap.unmaps.some((unmap) => unmap.key === key && unmap.modes.includes(mode))) {
+  if (isKeyUnmapped(keymap, key, mode)) {
     return false;
   }
   if (keymap.escape.includes(key)) return true;
@@ -96,21 +124,8 @@ export function keymapHasBinding(
   if (hasKeyInMap(keymap.textObjects.kinds as Record<string, readonly string[]>, key)) return true;
   if (hasKeyInMap(keymap.textObjects.targets as Record<string, readonly string[]>, key))
     return true;
-  if (
-    keymap.actions.accepted.some(
-      (binding) => binding.key === key && (!binding.modes || binding.modes.includes(mode as never)),
-    )
-  )
-    return true;
-  if (
-    keymap.remaps.accepted.some(
-      (binding) =>
-        (binding.key === key || binding.key.startsWith(key)) &&
-        (!binding.modes || binding.modes.includes(mode as never)),
-    )
-  ) {
-    return true;
-  }
+  if (acceptsKey(keymap.actions.accepted, key, mode)) return true;
+  if (acceptsKeyPrefix(keymap.remaps.accepted, key, mode)) return true;
   return keymap.scoped.some(
     (binding) =>
       (binding.key === key || binding.key.startsWith(key)) &&

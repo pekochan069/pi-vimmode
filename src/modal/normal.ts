@@ -94,21 +94,11 @@ function halfPageLineCount(terminalRows: number | undefined): number {
   return Math.max(1, Math.floor(visibleRows / 2));
 }
 
-function moveEffectFor(
+function wordMoveEffect(
   motion: VimMotionAction,
   snapshot: EditorSnapshot,
-  count = 1,
+  count: number,
 ): ModalEffect | undefined {
-  const adapterCommands: Partial<Record<VimMotionAction, AdapterCommand>> = {
-    left: "left",
-    down: "down",
-    up: "up",
-    right: "right",
-    lineStart: "lineStart",
-    lineEnd: "lineEnd",
-  };
-  const command = adapterCommands[motion];
-  if (command) return { type: "adapterCommand", command };
   if (motion === "wordForward") {
     return {
       type: "restoreCursor",
@@ -157,6 +147,26 @@ function moveEffectFor(
       position: wordPreviousEndBigPosition(snapshot.text, snapshot.cursor, count),
     };
   }
+  return undefined;
+}
+
+function moveEffectFor(
+  motion: VimMotionAction,
+  snapshot: EditorSnapshot,
+  count = 1,
+): ModalEffect | undefined {
+  const adapterCommands: Partial<Record<VimMotionAction, AdapterCommand>> = {
+    left: "left",
+    down: "down",
+    up: "up",
+    right: "right",
+    lineStart: "lineStart",
+    lineEnd: "lineEnd",
+  };
+  const command = adapterCommands[motion];
+  if (command) return { type: "adapterCommand", command };
+  const wordEffect = wordMoveEffect(motion, snapshot, count);
+  if (wordEffect) return wordEffect;
   if (motion === "bufferStart") {
     return {
       type: "restoreCursor",
@@ -292,14 +302,14 @@ export function applyOperatorMotion(
   return withEffects(edited, effects);
 }
 
-export function applyLineCommand(
+function applyCaseOrShiftLineCommand(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   operator: VimOperatorAction,
-  count = 1,
-  recordRepeat = true,
-): ModalUpdate {
+  count: number,
+  recordRepeat: boolean,
+): ModalUpdate | undefined {
   const nextState = clearCommandPending(state);
   const caseAction = caseActionForOperator(operator as VimMotionOperatorAction);
   if (caseAction) {
@@ -333,6 +343,27 @@ export function applyLineCommand(
       result.changed ? [{ type: "edit", result }] : [{ type: "invalidate" }],
     );
   }
+  return undefined;
+}
+
+export function applyLineCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  operator: VimOperatorAction,
+  count = 1,
+  recordRepeat = true,
+): ModalUpdate {
+  const nextState = clearCommandPending(state);
+  const specialUpdate = applyCaseOrShiftLineCommand(
+    state,
+    snapshot,
+    options,
+    operator,
+    count,
+    recordRepeat,
+  );
+  if (specialUpdate) return specialUpdate;
   if (operator === "delete") {
     const result = deleteLine(snapshot.text, snapshot.cursor, count);
     const written = editStateAndEffects(nextState, result);
@@ -365,27 +396,16 @@ export function applyLineCommand(
   );
 }
 
-export function applyCommand(
+function applyCommandGroup0(
   state: ModalState,
   snapshot: EditorSnapshot,
   options: ModalOptions,
   command: VimCommandAction,
-  count = 1,
-  char?: string,
-  recordRepeat = true,
-): ModalUpdate {
-  const nextState = clearCommandPending(state);
-  const registerAware = [
-    "deleteChar",
-    "deleteCharBefore",
-    "deleteToLineEnd",
-    "changeToLineEnd",
-    "yankLine",
-    "pasteAfter",
-    "pasteBefore",
-  ].includes(command);
-  if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
-
+  count: number,
+  char: string | undefined,
+  recordRepeat: boolean,
+  nextState: ModalState,
+): ModalUpdate | undefined {
   switch (command) {
     case "insertBefore":
       return modeUpdate(nextState, "insert", options);
@@ -426,6 +446,21 @@ export function applyCommand(
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualLine", options);
     case "visualBlock":
       return modeUpdate({ ...nextState, visualAnchor: snapshot.cursor }, "visualBlock", options);
+    default:
+      return undefined;
+  }
+}
+function applyCommandGroup1(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+  count: number,
+  char: string | undefined,
+  recordRepeat: boolean,
+  nextState: ModalState,
+): ModalUpdate | undefined {
+  switch (command) {
     case "deleteChar": {
       const result = deleteCharAt(snapshot.text, snapshot.cursor, count);
       const written = editStateAndEffects(nextState, result);
@@ -501,6 +536,21 @@ export function applyCommand(
         pasteRegisterBefore(snapshot.text, snapshot.cursor, registerToRead(state)),
       );
     }
+    default:
+      return undefined;
+  }
+}
+function applyCommandGroup2(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+  count: number,
+  char: string | undefined,
+  recordRepeat: boolean,
+  nextState: ModalState,
+): ModalUpdate | undefined {
+  switch (command) {
     case "incrementNumber":
     case "decrementNumber": {
       const delta = (command === "incrementNumber" ? 1 : -1) * Math.max(1, count);
@@ -542,6 +592,21 @@ export function applyCommand(
         edited = withRepeatableChange(edited, { type: "command", command, count }, result.changed);
       return modeUpdate(edited, "insert", options, [{ type: "edit", result }]);
     }
+    default:
+      return undefined;
+  }
+}
+function applyCommandGroup3(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+  count: number,
+  char: string | undefined,
+  recordRepeat: boolean,
+  nextState: ModalState,
+): ModalUpdate | undefined {
+  switch (command) {
     case "findCharForward":
     case "findCharBackward":
     case "tillCharForward":
@@ -551,6 +616,22 @@ export function applyCommand(
       return repeatCharSearch(nextState, snapshot, false, count);
     case "repeatCharSearchReverse":
       return repeatCharSearch(nextState, snapshot, true, count);
+    default:
+      return undefined;
+  }
+}
+
+function applyCommandGroup4(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+  count: number,
+  char: string | undefined,
+  recordRepeat: boolean,
+  nextState: ModalState,
+): ModalUpdate | undefined {
+  switch (command) {
     case "startSearch":
       return startSearchUpdate(nextState);
     case "startSearchBackward":
@@ -582,10 +663,39 @@ export function applyCommand(
         { type: "invalidate" },
       ]);
     }
-    // easymotion is intercepted in handleNormalInput before reaching applyCommand
     default:
-      return invalidate(nextState);
+      return undefined;
   }
+}
+export function applyCommand(
+  state: ModalState,
+  snapshot: EditorSnapshot,
+  options: ModalOptions,
+  command: VimCommandAction,
+  count = 1,
+  char?: string,
+  recordRepeat = true,
+): ModalUpdate {
+  const nextState = clearCommandPending(state);
+  const registerAware = [
+    "deleteChar",
+    "deleteCharBefore",
+    "deleteToLineEnd",
+    "changeToLineEnd",
+    "yankLine",
+    "pasteAfter",
+    "pasteBefore",
+  ].includes(command);
+  if (state.pendingRegister && !registerAware) return invalidate(clearPending(state));
+  const args = [state, snapshot, options, command, count, char, recordRepeat, nextState] as const;
+  return (
+    applyCommandGroup0(...args) ??
+    applyCommandGroup1(...args) ??
+    applyCommandGroup2(...args) ??
+    applyCommandGroup3(...args) ??
+    applyCommandGroup4(...args) ??
+    invalidate(nextState)
+  );
 }
 
 type CharSearchCommand = Extract<

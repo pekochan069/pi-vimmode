@@ -139,34 +139,41 @@ const VISUAL_COMMANDS = new Set([
   "startExCommand",
 ]);
 
+const OPERATOR_PENDING_SCOPES = [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"] as const;
+const COMMAND_SCOPES: Readonly<Record<string, readonly VimMappingScope[]>> = {
+  insertLineStart: ["normal", "visualBlock"],
+  insertLineEnd: ["normal", "visualBlock"],
+  pasteAfter: ["normal", "visualLine"],
+};
+
+function commandScopes(action: string): readonly VimMappingScope[] {
+  return (
+    COMMAND_SCOPES[action] ?? (VISUAL_COMMANDS.has(action) ? NORMAL_AND_VISUAL_SCOPES : ["normal"])
+  );
+}
+
+function motionScopes(action: string): readonly VimMappingScope[] {
+  return ["halfPageDown", "halfPageUp"].includes(action)
+    ? NORMAL_AND_VISUAL_SCOPES
+    : OPERATOR_PENDING_SCOPES;
+}
+
+const FAMILY_SCOPES: Readonly<Partial<Record<VimMappingFamily, readonly VimMappingScope[]>>> = {
+  operator: NORMAL_AND_VISUAL_SCOPES,
+  macro: ["normal"],
+  insert: ["insert"],
+  textObjectKind: ["operatorPending"],
+  textObjectTarget: ["operatorPending"],
+  "textObject.kind": ["operatorPending"],
+  "textObject.target": ["operatorPending"],
+};
+
 export function mappingScopesForKeymapEntry(
   family: VimMappingFamily,
   action: string,
 ): readonly VimMappingScope[] {
-  if (family === "motion") {
-    return action === "halfPageDown" || action === "halfPageUp"
-      ? NORMAL_AND_VISUAL_SCOPES
-      : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
-  }
-  if (family === "operator") return NORMAL_AND_VISUAL_SCOPES;
-  if (family === "command") {
-    if (action === "insertLineStart" || action === "insertLineEnd")
-      return ["normal", "visualBlock"];
-    if (action === "pasteAfter") return ["normal", "visualLine"];
-    return VISUAL_COMMANDS.has(action) ? NORMAL_AND_VISUAL_SCOPES : ["normal"];
-  }
-  if (family === "macro") return ["normal"];
-  if (family === "mark") {
-    return action === "set" ? ["normal"] : [...NORMAL_AND_VISUAL_SCOPES, "operatorPending"];
-  }
-  if (family === "insert") return ["insert"];
-  if (
-    family === "textObjectKind" ||
-    family === "textObjectTarget" ||
-    family === "textObject.kind" ||
-    family === "textObject.target"
-  ) {
-    return ["operatorPending"];
-  }
-  return family satisfies never;
+  if (family === "motion") return motionScopes(action);
+  if (family === "command") return commandScopes(action);
+  if (family === "mark") return action === "set" ? ["normal"] : OPERATOR_PENDING_SCOPES;
+  return FAMILY_SCOPES[family]!;
 }

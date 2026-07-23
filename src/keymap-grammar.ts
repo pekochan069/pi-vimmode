@@ -18,57 +18,32 @@ export type KeymapGrammarEntry =
   | { family: "textObjectKind"; id: VimTextObjectKind; sequence: string; label: string }
   | { family: "textObjectTarget"; id: VimTextObjectTarget; sequence: string; label: string };
 
+function grammarEntries<Family extends KeymapGrammarEntry["family"]>(
+  family: Family,
+  prefix: string,
+  mappings: Readonly<Record<string, readonly string[]>>,
+): Extract<KeymapGrammarEntry, { family: Family }>[] {
+  return Object.entries(mappings).flatMap(([id, sequences]) =>
+    sequences.map(
+      (sequence) =>
+        ({ family, id, sequence, label: `${prefix}.${id}` }) as Extract<
+          KeymapGrammarEntry,
+          { family: Family }
+        >,
+    ),
+  );
+}
+
 export function grammarEntriesForKeymap(keymap: ResolvedVimKeymap): KeymapGrammarEntry[] {
-  const entries: KeymapGrammarEntry[] = [];
-  for (const [id, sequences] of Object.entries(keymap.operators) as [
-    VimOperatorAction,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences)
-      entries.push({ family: "operator", id, sequence, label: `operators.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.motions) as [
-    VimMotionAction,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences)
-      entries.push({ family: "motion", id, sequence, label: `motions.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.commands) as [
-    VimCommandAction,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences)
-      entries.push({ family: "command", id, sequence, label: `commands.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.macros)) {
-    for (const sequence of sequences)
-      entries.push({ family: "macro", id, sequence, label: `macros.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.marks)) {
-    for (const sequence of sequences)
-      entries.push({ family: "mark", id, sequence, label: `marks.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.textObjects.kinds) as [
-    VimTextObjectKind,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences)
-      entries.push({ family: "textObjectKind", id, sequence, label: `textObjects.kinds.${id}` });
-  }
-  for (const [id, sequences] of Object.entries(keymap.textObjects.targets) as [
-    VimTextObjectTarget,
-    readonly string[],
-  ][]) {
-    for (const sequence of sequences)
-      entries.push({
-        family: "textObjectTarget",
-        id,
-        sequence,
-        label: `textObjects.targets.${id}`,
-      });
-  }
-  return entries;
+  return [
+    ...grammarEntries("operator", "operators", keymap.operators),
+    ...grammarEntries("motion", "motions", keymap.motions),
+    ...grammarEntries("command", "commands", keymap.commands),
+    ...grammarEntries("macro", "macros", keymap.macros),
+    ...grammarEntries("mark", "marks", keymap.marks),
+    ...grammarEntries("textObjectKind", "textObjects.kinds", keymap.textObjects.kinds),
+    ...grammarEntries("textObjectTarget", "textObjects.targets", keymap.textObjects.targets),
+  ];
 }
 
 export function grammarBindingsForKeymap(keymap: ResolvedVimKeymap): GrammarBinding[] {

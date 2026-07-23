@@ -150,102 +150,109 @@ function addressFromSource(
   return { ok: true, value: { ast, rest } };
 }
 
+function validExLineRange(
+  startLine: number,
+  endLine: number,
+  lineCount: number,
+): RangeResult<LineRange> {
+  const range = { startLine, endLine };
+  return validLineRange(range, lineCount)
+    ? { ok: true, value: range }
+    : { ok: false, error: rangeError("Invalid Ex range") };
+}
+
+function resolveExAddressRange(
+  ast: ExLineRangeAst,
+  context: ExRangeContext,
+): RangeResult<LineRange> {
+  if (ast.type === "single") {
+    const line = resolveAddress(ast.address, context);
+    return line.ok ? { ok: true, value: { startLine: line.value, endLine: line.value } } : line;
+  }
+  if (ast.type !== "range") return { ok: false, error: rangeError("Invalid Ex range") };
+  const start = resolveAddress(ast.start, context);
+  if (!start.ok) return start;
+  const end = resolveAddress(
+    ast.end,
+    ast.separator === ";" ? { ...context, cursorLine: start.value } : context,
+  );
+  return end.ok ? validExLineRange(start.value, end.value, context.lineCount) : end;
+}
+
 export function resolveExLineRangeAst(
   ast: ExLineRangeAst,
   context: ExRangeContext,
 ): RangeResult<LineRange> {
-  if (ast.type === "implicit") {
-    const range = { startLine: context.cursorLine, endLine: context.cursorLine };
-    return validLineRange(range, context.lineCount)
-      ? { ok: true, value: range }
-      : { ok: false, error: rangeError("Invalid Ex range") };
-  }
-  if (ast.type === "percent") {
-    const range = { startLine: 0, endLine: context.lineCount - 1 };
-    return validLineRange(range, context.lineCount)
-      ? { ok: true, value: range }
-      : { ok: false, error: rangeError("Invalid Ex range") };
-  }
+  if (ast.type === "implicit")
+    return validExLineRange(context.cursorLine, context.cursorLine, context.lineCount);
+  if (ast.type === "percent") return validExLineRange(0, context.lineCount - 1, context.lineCount);
   if (ast.type === "visual") {
-    if (!context.visualRange) {
-      return {
-        ok: false,
-        error: rangeError("Visual range marker requires captured visual range"),
-      };
-    }
-    return validLineRange(context.visualRange, context.lineCount)
-      ? { ok: true, value: context.visualRange }
-      : { ok: false, error: rangeError("Invalid Ex range") };
+    if (!context.visualRange)
+      return { ok: false, error: rangeError("Visual range marker requires captured visual range") };
+    return validExLineRange(
+      context.visualRange.startLine,
+      context.visualRange.endLine,
+      context.lineCount,
+    );
   }
-  if (ast.type === "single") {
-    const line = resolveAddress(ast.address, context);
-    if (!line.ok) return line;
-    return { ok: true, value: { startLine: line.value, endLine: line.value } };
-  }
+  return resolveExAddressRange(ast, context);
+}
 
-  const start = resolveAddress(ast.start, context);
-  if (!start.ok) return start;
-  const endContext = ast.separator === ";" ? { ...context, cursorLine: start.value } : context;
-  const end = resolveAddress(ast.end, endContext);
-  if (!end.ok) return end;
-  const range = { startLine: start.value, endLine: end.value };
-  return validLineRange(range, context.lineCount)
-    ? { ok: true, value: range }
-    : { ok: false, error: rangeError("Invalid Ex range") };
+function hasInvalidRangeSuffix(rest: string): boolean {
+  return /^[+-]\d+/.test(rest) || rest.startsWith(",") || rest.startsWith(";");
+}
+
+function parseAddressRange(
+  source: string,
+): RangeResult<{ ast: ExLineRangeAst; rest: string; explicit: boolean }> {
+  const first = addressFromSource(source, { allowDestinationZero: false });
+  if (!first.ok) {
+    if (/^[.$\d]/.test(source)) return first;
+    return { ok: true, value: { ast: { type: "implicit" }, rest: source, explicit: false } };
+  }
+  const separator = first.value.rest[0];
+  if (separator !== "," && separator !== ";") {
+    return {
+      ok: true,
+      value: {
+        ast: { type: "single", address: first.value.ast },
+        rest: first.value.rest,
+        explicit: true,
+      },
+    };
+  }
+  const second = addressFromSource(first.value.rest.slice(1), { allowDestinationZero: false });
+  if (!second.ok || second.value.rest.startsWith(",") || second.value.rest.startsWith(";")) {
+    return { ok: false, error: rangeError("Invalid Ex range") };
+  }
+  return {
+    ok: true,
+    value: {
+      ast: { type: "range", start: first.value.ast, end: second.value.ast, separator },
+      rest: second.value.rest,
+      explicit: true,
+    },
+  };
 }
 
 export function parseExLineRange(
   source: string,
   context: ExRangeContext,
 ): RangeResult<ParsedExLineRange> {
-  let ast: ExLineRangeAst;
-  let rest: string;
-  let explicit = true;
-
-  if (source.startsWith("%")) {
-    ast = { type: "percent" };
-    rest = source.slice(1);
-    if (/^[+-]\d+/.test(rest) || rest.startsWith(",") || rest.startsWith(";")) {
-      return { ok: false, error: rangeError("Invalid Ex range") };
-    }
-  } else if (source.startsWith("'<,'>")) {
-    ast = { type: "visual" };
-    rest = source.slice("'<,'>".length);
-    if (/^[+-]\d+/.test(rest) || rest.startsWith(",") || rest.startsWith(";")) {
-      return { ok: false, error: rangeError("Invalid Ex range") };
-    }
-  } else {
-    const first = addressFromSource(source, { allowDestinationZero: false });
-    if (!first.ok) {
-      if (/^[.$\d]/.test(source)) return first;
-      ast = { type: "implicit" };
-      rest = source;
-      explicit = false;
-    } else {
-      rest = first.value.rest;
-      const separator = rest[0];
-      if (separator === "," || separator === ";") {
-        const second = addressFromSource(rest.slice(1), { allowDestinationZero: false });
-        if (!second.ok) return { ok: false, error: rangeError("Invalid Ex range") };
-        if (second.value.rest.startsWith(",") || second.value.rest.startsWith(";")) {
-          return { ok: false, error: rangeError("Invalid Ex range") };
-        }
-        ast = {
-          type: "range",
-          start: first.value.ast,
-          end: second.value.ast,
-          separator,
-        };
-        rest = second.value.rest;
-      } else {
-        ast = { type: "single", address: first.value.ast };
-      }
-    }
-  }
-
-  const range = resolveExLineRangeAst(ast, context);
+  const special = source.startsWith("%")
+    ? { ast: { type: "percent" } as const, rest: source.slice(1) }
+    : source.startsWith("'<,'>")
+      ? { ast: { type: "visual" } as const, rest: source.slice("'<,'>".length) }
+      : undefined;
+  const parsed = special
+    ? hasInvalidRangeSuffix(special.rest)
+      ? { ok: false as const, error: rangeError("Invalid Ex range") }
+      : { ok: true as const, value: { ...special, explicit: true } }
+    : parseAddressRange(source);
+  if (!parsed.ok) return parsed;
+  const range = resolveExLineRangeAst(parsed.value.ast, context);
   if (!range.ok) return range;
-  return { ok: true, value: { ast, range: range.value, rest, explicit } };
+  return { ok: true, value: { ...parsed.value, range: range.value } };
 }
 
 export function parseExDestination(

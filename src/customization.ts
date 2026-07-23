@@ -7,8 +7,6 @@ import type {
   VimCommandAction,
   VimMotionAction,
   VimOperatorAction,
-  VimTextObjectKind,
-  VimTextObjectTarget,
 } from "./types.ts";
 
 import {
@@ -302,102 +300,121 @@ export function isProtectedShortcut(key: string): boolean {
   return protectedShortcutForKey(key) !== undefined;
 }
 
+function keymapEntries(
+  mappings: Readonly<Record<string, readonly string[]>>,
+  entry: (id: string, keys: readonly string[]) => VimActionEntry,
+): VimActionEntry[] {
+  return Object.entries(mappings).map(([id, keys]) => entry(id, keys));
+}
+
+function promptTransformEntries(
+  keymap: ResolvedVimKeymap,
+  promptTransforms: ResolvedVimPromptTransforms | undefined,
+): VimActionEntry[] {
+  if (!promptTransforms) return [];
+  return PROMPT_TRANSFORM_ACTIONS.map((registryEntry) => {
+    const actionId = canonicalPromptTransformActionIdForShortName(registryEntry.action);
+    const disabledReason =
+      promptTransforms.enabled === false
+        ? "prompt transform suite disabled"
+        : promptTransforms.actions[registryEntry.action] === false
+          ? "prompt transform action disabled"
+          : undefined;
+    return {
+      id: actionId,
+      kind: "promptTransform",
+      description: registryEntry.description,
+      keys: keymap.actions.accepted
+        .filter((binding) => binding.actionId === actionId)
+        .map((binding) => binding.key),
+      exCommands: promptTransforms.commands[registryEntry.action],
+      argSummary: promptTransformArgSummary(registryEntry.args),
+      disabledReason,
+    };
+  });
+}
+
+function escapeEntry(keymap: ResolvedVimKeymap): VimActionEntry[] {
+  return keymap.escape.length
+    ? [
+        {
+          id: "alias",
+          kind: "escape",
+          description:
+            "escape alias for insert, visual, and Ex command-line states; no recursive mappings or timeoutlen",
+          keys: keymap.escape,
+          aliases: ["escape", "piVimMode.keymap.escape"],
+        },
+      ]
+    : [];
+}
+
 export function actionEntriesForKeymap(
   keymap: ResolvedVimKeymap,
   promptTransforms?: ResolvedVimPromptTransforms,
   macros?: ResolvedVimMacros,
   marks?: ResolvedVimMarks,
 ): VimActionEntry[] {
-  const entries: VimActionEntry[] = [];
-  if (keymap.escape.length > 0) {
-    entries.push({
-      id: "alias",
-      kind: "escape",
-      description:
-        "escape alias for insert, visual, and Ex command-line states; no recursive mappings or timeoutlen",
-      keys: keymap.escape,
-      aliases: ["escape", "piVimMode.keymap.escape"],
-    });
-  }
-  for (const [id, keys] of Object.entries(keymap.commands) as [
-    VimCommandAction,
-    readonly string[],
-  ][]) {
-    const kind: VimActionKind = SEARCH_COMMANDS.has(id) ? "search" : "command";
-    entries.push({ id, kind, description: COMMAND_DESCRIPTIONS[id], keys });
-  }
-  for (const [id, keys] of Object.entries(keymap.motions) as [
-    VimMotionAction,
-    readonly string[],
-  ][]) {
-    entries.push({ id, kind: "motion", description: MOTION_DESCRIPTIONS[id], keys });
-  }
-  for (const [id, keys] of Object.entries(keymap.operators) as [
-    VimOperatorAction,
-    readonly string[],
-  ][]) {
-    entries.push({ id, kind: "operator", description: OPERATOR_DESCRIPTIONS[id], keys });
-  }
-  if (macros?.enabled !== false) {
-    for (const [id, keys] of Object.entries(keymap.macros)) {
-      entries.push({ id: `macro.${id}`, kind: "macro", description: `${id} macro`, keys });
-    }
-  }
-  if (marks?.enabled !== false) {
-    for (const [id, keys] of Object.entries(keymap.marks)) {
-      entries.push({ id: `mark.${id}`, kind: "mark", description: `${id} mark`, keys });
-    }
-  }
-  for (const [id, keys] of Object.entries(keymap.textObjects.kinds) as [
-    VimTextObjectKind,
-    readonly string[],
-  ][]) {
-    entries.push({
-      id: `textObject.kind.${id}`,
-      kind: "textObject",
-      description: `${id} text object prefix`,
-      keys,
-    });
-  }
-  for (const [id, keys] of Object.entries(keymap.textObjects.targets) as [
-    VimTextObjectTarget,
-    readonly string[],
-  ][]) {
-    entries.push({
-      id: `textObject.target.${id}`,
-      kind: "textObject",
-      description: `${id} text object target`,
-      keys,
-    });
-  }
-  if (promptTransforms) {
-    for (const registryEntry of PROMPT_TRANSFORM_ACTIONS) {
-      const actionId = canonicalPromptTransformActionIdForShortName(registryEntry.action);
-      const actionKeys = keymap.actions.accepted
-        .filter((binding) => binding.actionId === actionId)
-        .map((binding) => binding.key);
-      const disabledReason =
-        promptTransforms.enabled === false
-          ? "prompt transform suite disabled"
-          : promptTransforms.actions[registryEntry.action] === false
-            ? "prompt transform action disabled"
-            : undefined;
-      entries.push({
-        id: actionId,
-        kind: "promptTransform",
-        description: registryEntry.description,
-        keys: actionKeys,
-        exCommands: promptTransforms.commands[registryEntry.action],
-        argSummary: promptTransformArgSummary(registryEntry.args),
-        disabledReason,
-      });
-    }
-  }
-  entries.push(...diagnosticActionEntries().map(diagnosticActionEntry));
-  return entries.map((entry) => ({
-    ...entry,
-    keys: entry.keys.map(displayMappingSequence),
+  const commandEntries = keymapEntries(keymap.commands, (id, keys) => ({
+    id,
+    kind: SEARCH_COMMANDS.has(id as VimCommandAction) ? "search" : "command",
+    description: COMMAND_DESCRIPTIONS[id as VimCommandAction],
+    keys,
   }));
+  const motionEntries = keymapEntries(keymap.motions, (id, keys) => ({
+    id,
+    kind: "motion",
+    description: MOTION_DESCRIPTIONS[id as VimMotionAction],
+    keys,
+  }));
+  const operatorEntries = keymapEntries(keymap.operators, (id, keys) => ({
+    id,
+    kind: "operator",
+    description: OPERATOR_DESCRIPTIONS[id as VimOperatorAction],
+    keys,
+  }));
+  const macroEntries =
+    macros?.enabled === false
+      ? []
+      : keymapEntries(keymap.macros, (id, keys) => ({
+          id: `macro.${id}`,
+          kind: "macro",
+          description: `${id} macro`,
+          keys,
+        }));
+  const markEntries =
+    marks?.enabled === false
+      ? []
+      : keymapEntries(keymap.marks, (id, keys) => ({
+          id: `mark.${id}`,
+          kind: "mark",
+          description: `${id} mark`,
+          keys,
+        }));
+  const kindEntries = keymapEntries(keymap.textObjects.kinds, (id, keys) => ({
+    id: `textObject.kind.${id}`,
+    kind: "textObject",
+    description: `${id} text object prefix`,
+    keys,
+  }));
+  const targetEntries = keymapEntries(keymap.textObjects.targets, (id, keys) => ({
+    id: `textObject.target.${id}`,
+    kind: "textObject",
+    description: `${id} text object target`,
+    keys,
+  }));
+  return [
+    ...escapeEntry(keymap),
+    ...commandEntries,
+    ...motionEntries,
+    ...operatorEntries,
+    ...macroEntries,
+    ...markEntries,
+    ...kindEntries,
+    ...targetEntries,
+    ...promptTransformEntries(keymap, promptTransforms),
+    ...diagnosticActionEntries().map(diagnosticActionEntry),
+  ].map((entry) => ({ ...entry, keys: entry.keys.map(displayMappingSequence) }));
 }
 
 export function searchActions(
@@ -463,6 +480,26 @@ function preferredActionMatch(
   );
 }
 
+const ACTION_COUNT_LABELS: ReadonlyArray<readonly [VimActionKind, string]> = [
+  ["command", "commands"],
+  ["motion", "motions"],
+  ["operator", "operators"],
+  ["textObject", "text objects"],
+  ["macro", "macros"],
+  ["mark", "marks"],
+  ["search", "searches"],
+  ["escape", "escape aliases"],
+  ["promptTransform", "transforms"],
+  ["diagnostic", "diagnostic metadata"],
+  ["runtimeHelp", "runtime-help metadata"],
+];
+
+function actionSummary(entries: readonly VimActionEntry[]): string {
+  const counts = new Map<VimActionKind, number>();
+  for (const entry of entries) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
+  return ACTION_COUNT_LABELS.map(([kind, label]) => `${counts.get(kind) ?? 0} ${label}`).join(", ");
+}
+
 export function actionsMessage(
   keymap: ResolvedVimKeymap,
   query = "",
@@ -471,13 +508,10 @@ export function actionsMessage(
   marks?: ResolvedVimMarks,
 ): string {
   const matches = searchActions(keymap, query, promptTransforms, macros, marks);
-  if (query.trim()) {
-    const match = preferredActionMatch(matches, query);
-    return match ? summarizeEntry(match) : `actions: no match for ${query.trim()}`;
-  }
-  const counts = new Map<VimActionKind, number>();
-  for (const entry of matches) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
-  return `actions: ${counts.get("command") ?? 0} commands, ${counts.get("motion") ?? 0} motions, ${counts.get("operator") ?? 0} operators, ${counts.get("textObject") ?? 0} text objects, ${counts.get("macro") ?? 0} macros, ${counts.get("mark") ?? 0} marks, ${counts.get("search") ?? 0} searches, ${counts.get("escape") ?? 0} escape aliases, ${counts.get("promptTransform") ?? 0} transforms, ${counts.get("diagnostic") ?? 0} diagnostic metadata, ${counts.get("runtimeHelp") ?? 0} runtime-help metadata; :actions <query>`;
+  const needle = query.trim();
+  if (!needle) return `actions: ${actionSummary(matches)}; :actions <query>`;
+  const match = preferredActionMatch(matches, query);
+  return match ? summarizeEntry(match) : `actions: no match for ${needle}`;
 }
 
 export function keymapMessage(

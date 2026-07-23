@@ -73,73 +73,90 @@ function expectedJsonPaths(): Set<string> {
   return new Set(VIM_CONFIG_PROPERTY_METADATA.map(({ configPath }) => `piVimMode.${configPath}`));
 }
 
-export function validateMetadata(
-  properties: readonly VimConfigPropertyMetadata[] = VIM_CONFIG_PROPERTY_METADATA,
-  actions: readonly VimActionMetadata[] = VIM_ACTION_METADATA,
+function addDuplicateErrors(errors: string[], label: string, values: readonly string[]): void {
+  for (const value of duplicates(values)) errors.push(`duplicate ${label}: ${value}`);
+}
+
+function addSetDifferenceErrors(
+  errors: string[],
+  expected: readonly string[],
+  actual: readonly string[],
+  missing: string,
+  unknown: string,
 ): void {
-  const propertyPaths: string[] = properties.map(({ path }) => path);
-  const propertyAnchors: string[] = properties.map(({ anchor }) => anchor);
-  const actionIds = actions.filter(({ bindable }) => bindable).map(({ id }) => id);
-  const actionAnchors = actions
-    .filter(({ bindable }) => bindable)
-    .map(({ anchor }) => anchor ?? "");
+  for (const value of expected.filter((value) => !actual.includes(value)))
+    errors.push(`${missing}: ${value}`);
+  for (const value of actual.filter((value) => !expected.includes(value)))
+    errors.push(`${unknown}: ${value}`);
+}
 
-  const errors: string[] = [];
-  for (const [label, values] of [
-    ["property path", propertyPaths],
-    ["property anchor", propertyAnchors],
-    ["action ID", actionIds],
-    ["action anchor", actionAnchors],
-  ] as const) {
-    for (const value of duplicates(values)) errors.push(`duplicate ${label}: ${value}`);
-  }
-
-  const expectedProperties = expectedPropertyPaths();
-  const jsonPaths = expectedJsonPaths();
-  for (const path of expectedProperties.filter((path) => !propertyPaths.includes(path))) {
-    errors.push(`missing public property metadata: ${path}`);
-  }
-  for (const path of propertyPaths.filter((path) => !expectedProperties.includes(path))) {
-    errors.push(`unknown public property metadata: ${path}`);
-  }
-
-  const expectedActions = expectedActionIds();
-  for (const id of expectedActions.filter((id) => !actionIds.includes(id))) {
-    errors.push(`missing public action metadata: ${id}`);
-  }
-  for (const id of actionIds.filter((id) => !expectedActions.includes(id))) {
-    errors.push(`unknown public action metadata: ${id}`);
-  }
-
+function addPropertyErrors(
+  errors: string[],
+  properties: readonly VimConfigPropertyMetadata[],
+  jsonPaths: ReadonlySet<string>,
+): void {
   for (const property of properties) {
     const path = property.path;
     if (!property.acceptedShape) errors.push(`missing accepted shape: ${path}`);
     if (!property.assignment) errors.push(`missing assignment semantics: ${path}`);
     if (!property.anchor) errors.push(`missing property anchor: ${path}`);
-    for (const jsonPath of property.jsonPaths) {
+    for (const jsonPath of property.jsonPaths)
       if (!jsonPaths.has(jsonPath)) errors.push(`unsupported JSON crosswalk: ${jsonPath}`);
-    }
   }
+}
 
-  for (const action of actions.filter(({ bindable }) => bindable) as PublicActionMetadata[]) {
+function addActionErrors(errors: string[], actions: readonly PublicActionMetadata[]): void {
+  for (const action of actions) {
     if (!action.factoryPath) errors.push(`missing factory path: ${action.id}`);
     if (!action.publicScopes) errors.push(`missing public scopes: ${action.id}`);
     if (!action.args) errors.push(`missing argument metadata: ${action.id}`);
-    if (action.args) {
-      for (const name of duplicates(action.args.map(({ name }) => name))) {
+    if (action.args)
+      for (const name of duplicates(action.args.map(({ name }) => name)))
         errors.push(`duplicate argument name for ${action.id}: ${name}`);
-      }
-    }
     if (!action.anchor) errors.push(`missing action anchor: ${action.id}`);
   }
+}
 
-  const diagnosticIds = actions
+export function validateMetadata(
+  properties: readonly VimConfigPropertyMetadata[] = VIM_CONFIG_PROPERTY_METADATA,
+  actions: readonly VimActionMetadata[] = VIM_ACTION_METADATA,
+): void {
+  const propertyPaths = properties.map(({ path }) => path);
+  const publicActions = actions.filter(({ bindable }) => bindable) as PublicActionMetadata[];
+  const actionIds = publicActions.map(({ id }) => id);
+  const errors: string[] = [];
+  addDuplicateErrors(errors, "property path", propertyPaths);
+  addDuplicateErrors(
+    errors,
+    "property anchor",
+    properties.map(({ anchor }) => anchor),
+  );
+  addDuplicateErrors(errors, "action ID", actionIds);
+  addDuplicateErrors(
+    errors,
+    "action anchor",
+    publicActions.map(({ anchor }) => anchor ?? ""),
+  );
+  addSetDifferenceErrors(
+    errors,
+    expectedPropertyPaths(),
+    propertyPaths,
+    "missing public property metadata",
+    "unknown public property metadata",
+  );
+  addSetDifferenceErrors(
+    errors,
+    expectedActionIds(),
+    actionIds,
+    "missing public action metadata",
+    "unknown public action metadata",
+  );
+  addPropertyErrors(errors, properties, expectedJsonPaths());
+  addActionErrors(errors, publicActions);
+  for (const id of actions
     .filter(({ source }) => source === "diagnostic-registry")
-    .map(({ id }) => id);
-  for (const id of diagnosticIds) {
+    .map(({ id }) => id))
     if (actionIds.includes(id)) errors.push(`non-bindable diagnostic exposed as action: ${id}`);
-  }
-
   if (errors.length > 0)
     throw new Error(`Config reference metadata invalid:\n- ${errors.join("\n- ")}`);
 }

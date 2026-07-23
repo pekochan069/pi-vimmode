@@ -56,28 +56,42 @@ function nextTopLevelHeading(lines: readonly string[], startIndex: number): Head
   if (fence) invalidRelease("contains unclosed fenced code block");
 }
 
+function releaseLineState(
+  line: string,
+  fence: string | undefined,
+): {
+  fence: string | undefined;
+  hasSection: boolean;
+  hasContent: boolean;
+} {
+  if (fence) {
+    const closed = closesFence(line, fence);
+    return {
+      fence: closed ? undefined : fence,
+      hasSection: false,
+      hasContent: !closed && Boolean(line.trim()),
+    };
+  }
+  const marker = fenceMarker(line);
+  if (marker) return { fence: marker, hasSection: false, hasContent: false };
+  if (/^#(?!#)\s+/.test(line)) invalidRelease("contains an unexpected top-level heading");
+  return {
+    fence,
+    hasSection: /^##(?!#)\s+\S/.test(line),
+    hasContent: Boolean(line.trim()) && !/^#{1,6}\s+/.test(line),
+  };
+}
+
 function validateReleaseContent(content: string): void {
   let fence: string | undefined;
   let hasSection = false;
   let hasContent = false;
-
   for (const line of content.split("\n")) {
-    if (fence) {
-      if (closesFence(line, fence)) fence = undefined;
-      else if (line.trim()) hasContent = true;
-      continue;
-    }
-
-    const marker = fenceMarker(line);
-    if (marker) {
-      fence = marker;
-      continue;
-    }
-    if (/^#(?!#)\s+/.test(line)) invalidRelease("contains an unexpected top-level heading");
-    if (/^##(?!#)\s+\S/.test(line)) hasSection = true;
-    else if (line.trim() && !/^#{1,6}\s+/.test(line)) hasContent = true;
+    const state = releaseLineState(line, fence);
+    fence = state.fence;
+    hasSection ||= state.hasSection;
+    hasContent ||= state.hasContent;
   }
-
   if (fence) invalidRelease("contains unclosed fenced code block");
   if (!hasSection) invalidRelease("must contain at least one second-level section");
   if (!hasContent) invalidRelease("must contain non-empty content");

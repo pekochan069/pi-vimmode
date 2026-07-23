@@ -199,59 +199,46 @@ function transformActionForCommand(
   return undefined;
 }
 
+const COMMAND_TYPES: Record<ParsedCommandName, ParsedCommandType> = {
+  s: "substitute",
+  substitute: "substitute",
+  d: "delete",
+  delete: "delete",
+  y: "yank",
+  yank: "yank",
+  pu: "put",
+  put: "put",
+  t: "copy",
+  copy: "copy",
+  m: "move",
+  move: "move",
+  j: "join",
+  join: "join",
+  quote: "transform",
+  unquote: "transform",
+  bulletize: "transform",
+  fence: "transform",
+  indent: "transform",
+  dedent: "transform",
+  reflow: "transform",
+  vimdoctor: "diagnostic",
+  keymap: "diagnostic",
+  mapcheck: "diagnostic",
+  actions: "diagnostic",
+  help: "runtimeHelp",
+  features: "runtimeHelp",
+  messages: "runtimeHelp",
+  keybindings: "keybindings",
+  vimmode: "inspect",
+  changelog: "changelog",
+  noh: "nohlsearch",
+  nohlsearch: "nohlsearch",
+  q: "quit",
+  quit: "quit",
+};
+
 function commandType(command: ParsedCommandName): ParsedCommandType {
-  switch (command) {
-    case "s":
-    case "substitute":
-      return "substitute";
-    case "d":
-    case "delete":
-      return "delete";
-    case "y":
-    case "yank":
-      return "yank";
-    case "pu":
-    case "put":
-      return "put";
-    case "t":
-    case "copy":
-      return "copy";
-    case "m":
-    case "move":
-      return "move";
-    case "j":
-    case "join":
-      return "join";
-    case "quote":
-    case "unquote":
-    case "bulletize":
-    case "fence":
-    case "indent":
-    case "dedent":
-    case "reflow":
-      return "transform";
-    case "vimdoctor":
-    case "keymap":
-    case "mapcheck":
-    case "actions":
-      return "diagnostic";
-    case "help":
-    case "features":
-    case "messages":
-      return "runtimeHelp";
-    case "keybindings":
-      return "keybindings";
-    case "vimmode":
-      return "inspect";
-    case "changelog":
-      return "changelog";
-    case "noh":
-    case "nohlsearch":
-      return "nohlsearch";
-    case "q":
-    case "quit":
-      return "quit";
-  }
+  return COMMAND_TYPES[command];
 }
 
 export type ExCommandSuggestionKind = ParsedCommandType | "repeatSubstitute";
@@ -445,160 +432,165 @@ function parseTransformArgs(
   return normalizePromptTransformActionArgs({ source: "ex", action, rest });
 }
 
+type ParsedCommandInput = { command: ParsedCommand; rest: string };
+
+function parseSubstitutionCommand(
+  command: ParsedCommandInput,
+  range: LineRange,
+  rangeExplicit: boolean,
+): ExParseResult {
+  const args = parseSubstitutionArgs(command.rest);
+  if (!args.ok) return { type: "error", message: args.message };
+  return {
+    type: "substitute",
+    command: command.command.name as "s" | "substitute",
+    range,
+    rangeExplicit,
+    pattern: args.pattern,
+    replacement: args.replacement,
+    global: args.global,
+    ignoreCase: args.ignoreCase,
+    countOnly: args.countOnly,
+    noError: args.noError,
+    matcherMode: args.matcherMode,
+  };
+}
+
+function parseDestinationCommand(
+  command: ParsedCommandInput,
+  range: LineRange,
+  rangeExplicit: boolean,
+  context: ExParseContext,
+): ExParseResult {
+  const destination = parseExDestination(command.rest, context);
+  if (!destination.ok) return { type: "error", message: destination.error.message };
+  return {
+    type: command.command.type as "copy" | "move",
+    command: command.command.name,
+    range,
+    rangeExplicit,
+    destination: destination.value.destination,
+  };
+}
+
+function parseDiagnosticCommand(command: ParsedCommandInput): ExParseResult {
+  const args = command.rest.trim();
+  const name = command.command.name as ParsedExDiagnosticCommand["command"];
+  if (name === "vimdoctor" && args.length > 0)
+    return { type: "error", message: "Unexpected Ex command arguments" };
+  if (name === "mapcheck" && args.length === 0)
+    return { type: "error", message: "Missing mapcheck key" };
+  return args.length > 0
+    ? { type: "diagnostic", command: name, query: args }
+    : { type: "diagnostic", command: name };
+}
+
+function parseRuntimeHelpCommand(command: ParsedCommandInput): ExParseResult {
+  const args = command.rest.trim();
+  const name = command.command.name as ParsedExRuntimeHelpCommand["command"];
+  if (name === "messages" && args.length > 0)
+    return { type: "error", message: "Unexpected Ex command arguments" };
+  return args.length > 0
+    ? { type: "runtimeHelp", command: name, query: args }
+    : { type: "runtimeHelp", command: name };
+}
+
+function parseTransformCommand(
+  command: ParsedCommandInput,
+  range: LineRange,
+  rangeExplicit: boolean,
+): ExParseResult {
+  const action = command.command.transformAction;
+  if (!action) return { type: "error", message: "Unsupported Ex command" };
+  const transform = parseTransformArgs(action, command.rest);
+  if (!transform.ok) return { type: "error", message: transform.message };
+  return {
+    type: "transform",
+    command: command.command.name,
+    range,
+    rangeExplicit,
+    transform: transform.transform,
+  };
+}
+
+function parseLineCommand(
+  command: ParsedCommandInput,
+  range: LineRange,
+  rangeExplicit: boolean,
+): ExParseResult {
+  const register = parseRegisterOperand(command.rest);
+  if (!register.ok) return { type: "error", message: register.message };
+  return {
+    type: command.command.type as "delete" | "yank" | "put",
+    command: command.command.name,
+    range,
+    rangeExplicit,
+    ...(register.register ? { register: register.register } : {}),
+  };
+}
+
+function parseMetadataCommand(command: ParsedCommandInput): ExParseResult {
+  if (command.command.type === "keybindings") {
+    const query = command.rest.trim();
+    return query
+      ? { type: "keybindings", command: "keybindings", query }
+      : { type: "keybindings", command: "keybindings" };
+  }
+  if (command.command.type === "inspect")
+    return command.rest.trim() === "inspect"
+      ? { type: "inspect", command: "vimmode", query: "inspect" }
+      : { type: "error", message: "Unexpected Ex command arguments" };
+  return rejectTrailingArgs(command.rest) ?? { type: "changelog", command: "changelog" };
+}
+
+function parseParsedExCommand(
+  command: ParsedCommandInput,
+  range: LineRange,
+  rangeExplicit: boolean,
+  context: ExParseContext,
+): ExParseResult {
+  if (command.command.type === "substitute")
+    return parseSubstitutionCommand(command, range, rangeExplicit);
+  if (command.command.type === "copy" || command.command.type === "move")
+    return parseDestinationCommand(command, range, rangeExplicit, context);
+  if (command.command.type === "diagnostic") return parseDiagnosticCommand(command);
+  if (command.command.type === "runtimeHelp") return parseRuntimeHelpCommand(command);
+  if (["keybindings", "inspect", "changelog"].includes(command.command.type))
+    return parseMetadataCommand(command);
+  if (command.command.type === "transform")
+    return parseTransformCommand(command, range, rangeExplicit);
+  if (["delete", "yank", "put"].includes(command.command.type))
+    return parseLineCommand(command, range, rangeExplicit);
+  const trailing = rejectTrailingArgs(command.rest);
+  if (trailing) return trailing;
+  if (command.command.type === "nohlsearch")
+    return { type: "nohlsearch", command: command.command.name as "noh" | "nohlsearch" };
+  if (command.command.type === "quit")
+    return { type: "quit", command: command.command.name as "q" | "quit", range, rangeExplicit };
+  return { type: "join", command: command.command.name, range, rangeExplicit };
+}
+
 export function parseExCommand(commandLine: string, context: ExParseContext): ExParseResult {
   const source = commandLine.trim();
   if (source.length === 0) return { type: "empty" };
-
   const range = parseExLineRange(source, context);
   if (!range.ok) return { type: "error", message: range.error.message };
-
   const repeat = range.value.rest.trim();
-  if (repeat === "&" || repeat === "&&") {
+  if (repeat === "&" || repeat === "&&")
     return {
       type: "repeatSubstitute",
       command: repeat,
       range: range.value.range,
       rangeExplicit: range.value.explicit,
     };
-  }
-
   if (repeat.length === 0 && range.value.explicit) {
-    const ast = range.value.ast;
-    if (ast.type === "single") {
-      return {
-        type: "lineJump",
-        range: range.value.range,
-        line: range.value.range.startLine,
-      };
-    }
-    if (ast.type === "percent" || ast.type === "range" || ast.type === "visual") {
-      return { type: "error", message: "Unsupported Ex command" };
-    }
+    if (range.value.ast.type === "single")
+      return { type: "lineJump", range: range.value.range, line: range.value.range.startLine };
+    return { type: "error", message: "Unsupported Ex command" };
   }
-
   const command = parseCommand(range.value.rest, context);
   if (!command.ok) return { type: "error", message: command.message };
-
-  const type = command.command.type;
-  if (type === "substitute") {
-    const args = parseSubstitutionArgs(command.rest);
-    if (!args.ok) return { type: "error", message: args.message };
-    return {
-      type,
-      command: command.command.name as "s" | "substitute",
-      range: range.value.range,
-      rangeExplicit: range.value.explicit,
-      pattern: args.pattern,
-      replacement: args.replacement,
-      global: args.global,
-      ignoreCase: args.ignoreCase,
-      countOnly: args.countOnly,
-      noError: args.noError,
-      matcherMode: args.matcherMode,
-    };
-  }
-
-  if (type === "copy" || type === "move") {
-    const destination = parseExDestination(command.rest, context);
-    if (!destination.ok) return { type: "error", message: destination.error.message };
-    return {
-      type,
-      command: command.command.name,
-      range: range.value.range,
-      rangeExplicit: range.value.explicit,
-      destination: destination.value.destination,
-    };
-  }
-
-  if (type === "diagnostic") {
-    const args = command.rest.trim();
-    const name = command.command.name as ParsedExDiagnosticCommand["command"];
-    if (name === "vimdoctor" && args.length > 0) {
-      return { type: "error", message: "Unexpected Ex command arguments" };
-    }
-    if (name === "mapcheck" && args.length === 0) {
-      return { type: "error", message: "Missing mapcheck key" };
-    }
-    return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
-  }
-
-  if (type === "runtimeHelp") {
-    const args = command.rest.trim();
-    const name = command.command.name as ParsedExRuntimeHelpCommand["command"];
-    if (name === "messages" && args.length > 0) {
-      return { type: "error", message: "Unexpected Ex command arguments" };
-    }
-    return args.length > 0 ? { type, command: name, query: args } : { type, command: name };
-  }
-
-  if (type === "keybindings") {
-    const args = command.rest.trim();
-    return args.length > 0
-      ? { type, command: "keybindings", query: args }
-      : { type, command: "keybindings" };
-  }
-
-  if (type === "inspect") {
-    const args = command.rest.trim();
-    if (args !== "inspect") return { type: "error", message: "Unexpected Ex command arguments" };
-    return { type, command: "vimmode", query: "inspect" };
-  }
-
-  if (type === "changelog") {
-    const trailing = rejectTrailingArgs(command.rest);
-    return trailing ?? { type, command: "changelog" };
-  }
-
-  if (type === "transform") {
-    const transformAction = command.command.transformAction;
-    if (!transformAction) return { type: "error", message: "Unsupported Ex command" };
-    const transform = parseTransformArgs(transformAction, command.rest);
-    if (!transform.ok) return { type: "error", message: transform.message };
-    return {
-      type,
-      command: command.command.name,
-      range: range.value.range,
-      rangeExplicit: range.value.explicit,
-      transform: transform.transform,
-    };
-  }
-
-  if (type === "delete" || type === "yank" || type === "put") {
-    const register = parseRegisterOperand(command.rest);
-    if (!register.ok) return { type: "error", message: register.message };
-    return {
-      type,
-      command: command.command.name,
-      range: range.value.range,
-      rangeExplicit: range.value.explicit,
-      ...(register.register ? { register: register.register } : {}),
-    };
-  }
-
-  const trailingError = rejectTrailingArgs(command.rest);
-  if (trailingError) return trailingError;
-
-  if (type === "nohlsearch") {
-    return { type, command: command.command.name as "noh" | "nohlsearch" };
-  }
-
-  if (type === "quit") {
-    const trailingError = rejectTrailingArgs(command.rest);
-    if (trailingError) return trailingError;
-    return {
-      type,
-      command: command.command.name as "q" | "quit",
-      range: range.value.range,
-      rangeExplicit: range.value.explicit,
-    };
-  }
-
-  return {
-    type,
-    command: command.command.name,
-    range: range.value.range,
-    rangeExplicit: range.value.explicit,
-  };
+  return parseParsedExCommand(command, range.value.range, range.value.explicit, context);
 }
 
 export function parseExSubstitution(commandLine: string, context: ExParseContext): ExParseResult {

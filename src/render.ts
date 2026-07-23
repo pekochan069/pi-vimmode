@@ -262,6 +262,49 @@ function chunkHasCursor(chunk: LayoutLine, cursor: Position): boolean {
   return cursor.col >= chunk.startIndex && cursor.col < chunk.endIndex;
 }
 
+function renderLayoutCell(
+  cell: string,
+  cellStart: number,
+  chunk: LayoutLine,
+  options: VisualRenderView,
+  marker: string,
+): { text: string; cursor: boolean } {
+  const cellWidth = visibleWidth(cell);
+  const easymotionTarget = options.easymotion?.targets.find(
+    (target) => target.line === chunk.lineIndex && target.character === cellStart,
+  );
+  const displayCell =
+    easymotionTarget && options.easymotion
+      ? fitEasymotionLabel(easymotionTarget.label, cellWidth)
+      : cell;
+  if (options.cursor.line === chunk.lineIndex && options.cursor.col === cellStart) {
+    return { text: marker + renderCursorCell(displayCell, options.cursorStyle), cursor: true };
+  }
+  if (
+    isSelectedCell(
+      options.mode,
+      options.lines,
+      options.visualAnchor,
+      options.cursor,
+      chunk.lineIndex,
+      cellStart,
+    )
+  ) {
+    return { text: styleSelection(displayCell), cursor: false };
+  }
+  if (easymotionTarget && options.easymotion) {
+    return { text: options.easymotion.labelColor + displayCell + ANSI_RESET, cursor: false };
+  }
+  const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
+  const text =
+    searchStyle === "current"
+      ? styleCurrentSearch(cell)
+      : searchStyle === "other"
+        ? styleSearch(cell)
+        : cell;
+  return { text, cursor: false };
+}
+
 function renderLayoutLine(
   chunk: LayoutLine,
   options: VisualRenderView,
@@ -272,47 +315,14 @@ function renderLayoutLine(
   let renderedWidth = 0;
   let offset = 0;
   let cursorRendered = false;
-
   while (offset < chunk.text.length) {
     const cell = Array.from(chunk.text.slice(offset))[0] ?? "";
-    const cellStart = chunk.startIndex + offset;
-    const cellWidth = visibleWidth(cell);
-    const easymotionTarget = options.easymotion?.targets.find(
-      (target) => target.line === chunk.lineIndex && target.character === cellStart,
-    );
-    const displayCell =
-      easymotionTarget && options.easymotion
-        ? fitEasymotionLabel(easymotionTarget.label, cellWidth)
-        : cell;
-    const isCursor = options.cursor.line === chunk.lineIndex && options.cursor.col === cellStart;
-
-    if (isCursor) {
-      output += marker + renderCursorCell(displayCell, options.cursorStyle);
-      cursorRendered = true;
-    } else if (
-      isSelectedCell(
-        options.mode,
-        options.lines,
-        options.visualAnchor,
-        options.cursor,
-        chunk.lineIndex,
-        cellStart,
-      )
-    ) {
-      output += styleSelection(displayCell);
-    } else if (easymotionTarget && options.easymotion) {
-      output += options.easymotion.labelColor + displayCell + ANSI_RESET;
-    } else {
-      const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
-      if (searchStyle === "current") output += styleCurrentSearch(cell);
-      else if (searchStyle === "other") output += styleSearch(cell);
-      else output += cell;
-    }
-
-    renderedWidth += cellWidth;
+    const rendered = renderLayoutCell(cell, chunk.startIndex + offset, chunk, options, marker);
+    output += rendered.text;
+    cursorRendered ||= rendered.cursor;
+    renderedWidth += visibleWidth(cell);
     offset += cell.length;
   }
-
   const cursorAtEnd =
     options.cursor.line === chunk.lineIndex &&
     options.cursor.col >= chunk.endIndex &&
@@ -326,15 +336,13 @@ function renderLayoutLine(
       options.cursor,
       chunk.lineIndex,
     );
-
   if (cursorAtEnd && !cursorRendered) {
     output += marker + renderCursorCell(" ", options.cursorStyle);
-    renderedWidth += 1;
+    renderedWidth++;
   } else if (selectedEmptyVisualLine && renderedWidth === 0) {
     output += styleSelection(" ");
-    renderedWidth += 1;
+    renderedWidth++;
   }
-
   return { text: output, width: renderedWidth };
 }
 

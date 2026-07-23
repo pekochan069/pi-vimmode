@@ -202,28 +202,28 @@ function nextWORDStartOffset(text: string, offset: number): number {
   return nextWordStartOffsetFor("big", text, offset);
 }
 
-function wordEndOffsetFor(model: WordBoundaryModel, text: string, offset: number): number {
-  let index = Math.max(0, Math.min(offset, text.length));
-  if (text.length === 0) return 0;
-  if (index >= text.length) return text.length;
-
-  if (isWhitespace(text[index])) {
-    while (index < text.length && isWhitespace(text[index])) index++;
-  } else if (index + 1 < text.length && isSameBoundaryKind(model, text[index], text[index + 1])) {
-    const kind = boundaryKind(model, text[index]);
-    while (index + 1 < text.length && boundaryKind(model, text[index + 1]) === kind) index++;
-    return index;
-  } else {
-    index++;
-  }
-
+function skipWhitespace(text: string, index: number): number {
   while (index < text.length && isWhitespace(text[index])) index++;
-  if (index >= text.length) return text.length;
+  return index;
+}
+
+function boundaryEndOffset(model: WordBoundaryModel, text: string, index: number): number {
   const kind = boundaryKind(model, text[index]);
   while (index + 1 < text.length && boundaryKind(model, text[index + 1]) === kind) index++;
   return index;
 }
 
+function wordEndOffsetFor(model: WordBoundaryModel, text: string, offset: number): number {
+  let index = Math.max(0, Math.min(offset, text.length));
+  if (index >= text.length) return text.length;
+  if (isWhitespace(text[index])) index = skipWhitespace(text, index);
+  else if (isSameBoundaryKind(model, text[index], text[index + 1]))
+    return boundaryEndOffset(model, text, index);
+  else index++;
+  if (index >= text.length) return text.length;
+  index = skipWhitespace(text, index);
+  return index >= text.length ? text.length : boundaryEndOffset(model, text, index);
+}
 function wordEndOffset(text: string, offset: number): number {
   return wordEndOffsetFor("small", text, offset);
 }
@@ -302,40 +302,33 @@ function motionTargetOffset(text: string, offset: number, motion: VimMotion): nu
   return previousWordStartOffset(text, offset);
 }
 
-function motionOffsetRange(
+function paragraphMotionOffsetRange(
   text: string,
   cursor: Position,
-  motion: VimMotion,
-  count = 1,
+  motion: "}" | "{",
+  count: number,
 ): { start: number; end: number } | undefined {
   const current = positionToOffset(text, cursor);
-  if (motion === "%") {
-    const target = navigateBuffer(text, cursor, "matchingPair");
-    if (!target) return undefined;
-    const targetOffset = positionToOffset(text, target);
-    if (targetOffset === current) return undefined;
-    return orderedOffsetRange(
-      Math.min(current, targetOffset),
-      Math.min(text.length, Math.max(current, targetOffset) + 1),
-    );
+  const lines = splitText(text);
+  let pos = clampPosition(lines, cursor);
+  const step = motion === "}" ? paragraphForwardStep : paragraphBackwardStep;
+  for (let index = 0; index < Math.max(1, count); index++) {
+    const next = step(lines, pos);
+    if (comparePositions(next, pos) === 0) break;
+    pos = next;
   }
-  if (motion === "}" || motion === "{") {
-    const lines = splitText(text);
-    let pos = clampPosition(lines, cursor);
-    const step = motion === "}" ? paragraphForwardStep : paragraphBackwardStep;
-    const repetitions = Math.max(1, count);
-    for (let index = 0; index < repetitions; index++) {
-      const next = step(lines, pos);
-      if (comparePositions(next, pos) === 0) break;
-      pos = next;
-    }
-    const targetOffset = positionToOffset(text, pos);
-    if (targetOffset === current) return undefined;
-    return orderedOffsetRange(current, targetOffset);
-  }
+  const target = positionToOffset(text, pos);
+  return target === current ? undefined : orderedOffsetRange(current, target);
+}
+
+function standardMotionOffsetRange(
+  text: string,
+  current: number,
+  motion: VimMotion,
+  count: number,
+): { start: number; end: number } | undefined {
   let target = current;
-  const repetitions = Math.max(1, count);
-  for (let index = 0; index < repetitions; index++) {
+  for (let index = 0; index < Math.max(1, count); index++) {
     const next = motionTargetOffset(text, target, motion);
     if (next === target) break;
     target = next;
@@ -349,6 +342,28 @@ function motionOffsetRange(
   return orderedOffsetRange(current, target);
 }
 
+function motionOffsetRange(
+  text: string,
+  cursor: Position,
+  motion: VimMotion,
+  count = 1,
+): { start: number; end: number } | undefined {
+  const current = positionToOffset(text, cursor);
+  if (motion === "%") {
+    const target = navigateBuffer(text, cursor, "matchingPair");
+    if (!target) return undefined;
+    const targetOffset = positionToOffset(text, target);
+    return targetOffset === current
+      ? undefined
+      : orderedOffsetRange(
+          Math.min(current, targetOffset),
+          Math.min(text.length, Math.max(current, targetOffset) + 1),
+        );
+  }
+  if (motion === "}" || motion === "{")
+    return paragraphMotionOffsetRange(text, cursor, motion, count);
+  return standardMotionOffsetRange(text, current, motion, count);
+}
 function motionLineRange(
   text: string,
   cursor: Position,
@@ -442,39 +457,34 @@ function bracketAtOrAfterCursorOnLine(text: string, cursor: Position): number | 
   return undefined;
 }
 
-export function matchingPairPosition(text: string, cursor: Position): Position | undefined {
-  const bracketOffset = bracketAtOrAfterCursorOnLine(text, cursor);
-  if (bracketOffset === undefined) return undefined;
-
-  const bracket = text[bracketOffset];
-  if (!bracket) return undefined;
-
-  const close = OPEN_TO_CLOSE[bracket];
-  if (close) {
-    let depth = 0;
-    for (let offset = bracketOffset; offset < text.length; offset++) {
-      const char = text[offset];
-      if (char === bracket) depth++;
-      if (char === close) depth--;
-      if (depth === 0) return offsetToPosition(text, offset);
-    }
-    return undefined;
-  }
-
-  const open = CLOSE_TO_OPEN[bracket];
-  if (!open) return undefined;
-
+function matchingBracketOffset(
+  text: string,
+  bracketOffset: number,
+  bracket: string,
+  match: string,
+  step: number,
+): number | undefined {
   let depth = 0;
-  for (let offset = bracketOffset; offset >= 0; offset--) {
-    const char = text[offset];
-    if (char === bracket) depth++;
-    if (char === open) depth--;
-    if (depth === 0) return offsetToPosition(text, offset);
+  for (let offset = bracketOffset; offset >= 0 && offset < text.length; offset += step) {
+    if (text[offset] === bracket) depth++;
+    if (text[offset] === match) depth--;
+    if (depth === 0) return offset;
   }
-
   return undefined;
 }
 
+export function matchingPairPosition(text: string, cursor: Position): Position | undefined {
+  const bracketOffset = bracketAtOrAfterCursorOnLine(text, cursor);
+  const bracket = bracketOffset === undefined ? undefined : text[bracketOffset];
+  if (bracketOffset === undefined || !bracket) return undefined;
+  const close = OPEN_TO_CLOSE[bracket];
+  const offset = close
+    ? matchingBracketOffset(text, bracketOffset, bracket, close, 1)
+    : CLOSE_TO_OPEN[bracket]
+      ? matchingBracketOffset(text, bracketOffset, bracket, CLOSE_TO_OPEN[bracket], -1)
+      : undefined;
+  return offset === undefined ? undefined : offsetToPosition(text, offset);
+}
 export function normalizeBufferPosition(text: string, cursor: Position): Position {
   return clampPosition(splitText(text), cursor);
 }
@@ -1239,6 +1249,74 @@ export function deleteLineRange(text: string, anchor: Position, active: Position
   };
 }
 
+function replaceVisualLines(
+  lines: string[],
+  anchor: Position,
+  active: Position,
+  char: string,
+): EditResult {
+  const range = normalizeLineRange(lines, anchor, active);
+  const selected = linewiseSelectionText(joinLines(lines), anchor, active);
+  const nextLines = lines.map((line, index) =>
+    index >= range.startLine && index <= range.endLine ? char.repeat(line.length) : line,
+  );
+  const text = joinLines(nextLines);
+  return {
+    text,
+    cursor: { line: range.startLine, col: 0 },
+    register: { type: "line", text: selected },
+    changed: text !== joinLines(lines),
+  };
+}
+
+function replaceVisualBlock(
+  lines: string[],
+  text: string,
+  anchor: Position,
+  active: Position,
+  char: string,
+): EditResult {
+  const range = normalizeBlockRange(lines, anchor, active);
+  const selected = blockSelectionText(text, anchor, active);
+  const nextLines = lines.map((line, index) => {
+    if (index < range.startLine || index > range.endLine) return line;
+    const start = Math.min(range.startCol, line.length);
+    const end = Math.min(range.endCol + 1, line.length);
+    return line.slice(0, start) + char.repeat(end - start) + line.slice(end);
+  });
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: clampPosition(nextLines, { line: range.startLine, col: range.startCol }),
+    register: selected ? { type: "char", text: selected } : undefined,
+    changed: nextText !== text,
+  };
+}
+
+function replaceVisualChars(
+  lines: string[],
+  text: string,
+  anchor: Position,
+  active: Position,
+  char: string,
+): EditResult {
+  const range = normalizeRange(lines, anchor, active);
+  const selected = selectionText(text, range.start, range.end);
+  const nextLines = lines.map((line, index) => {
+    if (index < range.start.line || index > range.end.line) return line;
+    const start = index === range.start.line ? Math.min(range.start.col, line.length) : 0;
+    const end = index === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
+    return line.slice(0, start) + char.repeat(end - start) + line.slice(end);
+  });
+  const nextText = joinLines(nextLines);
+  return {
+    text: nextText,
+    cursor: clampPosition(nextLines, range.start),
+    register: selected ? { type: "char", text: selected } : undefined,
+    changed: nextText !== text,
+  };
+}
+
 export function replaceVisualRangeChars(
   text: string,
   anchor: Position,
@@ -1246,66 +1324,13 @@ export function replaceVisualRangeChars(
   kind: "char" | "line" | "block",
   char: string,
 ): EditResult {
-  const lines = splitText(text);
-  if (char.length === 0 || char === "\n") {
+  if (!char || char === "\n")
     return { text, cursor: normalizeBufferPosition(text, anchor), changed: false };
-  }
-
-  if (kind === "line") {
-    const range = normalizeLineRange(lines, anchor, active);
-    const selected = linewiseSelectionText(text, anchor, active);
-    const nextLines = [...lines];
-    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-      const line = nextLines[lineIndex] ?? "";
-      nextLines[lineIndex] = char.repeat(line.length);
-    }
-    const nextText = joinLines(nextLines);
-    return {
-      text: nextText,
-      cursor: { line: range.startLine, col: 0 },
-      register: { type: "line", text: selected },
-      changed: nextText !== text,
-    };
-  }
-
-  if (kind === "block") {
-    const range = normalizeBlockRange(lines, anchor, active);
-    const selected = blockSelectionText(text, anchor, active);
-    const nextLines = [...lines];
-    for (let lineIndex = range.startLine; lineIndex <= range.endLine; lineIndex++) {
-      const line = nextLines[lineIndex] ?? "";
-      const start = Math.min(range.startCol, line.length);
-      const end = Math.min(range.endCol + 1, line.length);
-      nextLines[lineIndex] = line.slice(0, start) + char.repeat(end - start) + line.slice(end);
-    }
-    const nextText = joinLines(nextLines);
-    return {
-      text: nextText,
-      cursor: clampPosition(nextLines, { line: range.startLine, col: range.startCol }),
-      register: selected.length > 0 ? { type: "char", text: selected } : undefined,
-      changed: nextText !== text,
-    };
-  }
-
-  const range = normalizeRange(lines, anchor, active);
-  const selected = selectionText(text, range.start, range.end);
-  const nextLines = [...lines];
-  for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
-    const line = nextLines[lineIndex] ?? "";
-    const start = lineIndex === range.start.line ? Math.min(range.start.col, line.length) : 0;
-    const end =
-      lineIndex === range.end.line ? Math.min(range.end.col + 1, line.length) : line.length;
-    nextLines[lineIndex] = line.slice(0, start) + char.repeat(end - start) + line.slice(end);
-  }
-  const nextText = joinLines(nextLines);
-  return {
-    text: nextText,
-    cursor: clampPosition(nextLines, range.start),
-    register: selected.length > 0 ? { type: "char", text: selected } : undefined,
-    changed: nextText !== text,
-  };
+  const lines = splitText(text);
+  if (kind === "line") return replaceVisualLines(lines, anchor, active, char);
+  if (kind === "block") return replaceVisualBlock(lines, text, anchor, active, char);
+  return replaceVisualChars(lines, text, anchor, active, char);
 }
-
 export function replaceLineRangeWithRegister(
   text: string,
   anchor: Position,
@@ -1778,33 +1803,14 @@ export function findCharOnLine(
 ): Position | undefined {
   const lines = splitText(text);
   const pos = clampPosition(lines, cursor);
-  const line = lines[pos.line] ?? "";
-  if (target.length !== 1 || target === "\n") return undefined;
-  const forward = kind === "findForward" || kind === "tillForward";
-  let found = -1;
-  let remaining = Math.max(1, count);
-
-  if (forward) {
-    for (let index = pos.col + 1; index < line.length; index++) {
-      if (line[index] === target && --remaining === 0) {
-        found = index;
-        break;
-      }
-    }
-  } else {
-    for (let index = pos.col - 1; index >= 0; index--) {
-      if (line[index] === target && --remaining === 0) {
-        found = index;
-        break;
-      }
-    }
-  }
-
-  if (found < 0) return undefined;
-  const tillOffset = kind === "tillForward" ? -1 : kind === "tillBackward" ? 1 : 0;
-  return { line: pos.line, col: Math.max(0, Math.min(line.length, found + tillOffset)) };
+  const found = charSearchMatchColumn(lines[pos.line] ?? "", pos.col, kind, target, count);
+  if (found === undefined) return undefined;
+  const offset = kind === "tillForward" ? -1 : kind === "tillBackward" ? 1 : 0;
+  return {
+    line: pos.line,
+    col: Math.max(0, Math.min((lines[pos.line] ?? "").length, found + offset)),
+  };
 }
-
 function charSearchMatchColumn(
   line: string,
   cursorCol: number,
@@ -2386,36 +2392,94 @@ function quoteRangeAtOffset(
   return { start: before, end: after + 1 };
 }
 
+function bracketStartOffset(
+  text: string,
+  current: number,
+  open: string,
+  close: string,
+): number | undefined {
+  let depth = 0;
+  for (let offset = current; offset >= 0; offset--) {
+    if (text[offset] === close) depth++;
+    if (text[offset] === open && depth-- === 0) return offset;
+  }
+  return undefined;
+}
+
+function bracketEndOffset(
+  text: string,
+  start: number,
+  open: string,
+  close: string,
+): number | undefined {
+  let depth = 0;
+  for (let offset = start; offset < text.length; offset++) {
+    if (text[offset] === open) depth++;
+    if (text[offset] === close && --depth === 0) return offset + 1;
+  }
+  return undefined;
+}
+
 function bracketRangeAtOffset(
   text: string,
   cursor: Position,
   open: string,
   close: string,
 ): { start: number; end: number } | undefined {
-  const current = positionToOffset(text, cursor);
-  let start: number | undefined;
-  let depth = 0;
-  for (let offset = current; offset >= 0; offset--) {
-    const char = text[offset];
-    if (char === close) depth++;
-    if (char === open) {
-      if (depth === 0) {
-        start = offset;
-        break;
-      }
-      depth--;
-    }
-  }
-  if (start === undefined) return undefined;
+  const start = bracketStartOffset(text, positionToOffset(text, cursor), open, close);
+  const end = start === undefined ? undefined : bracketEndOffset(text, start, open, close);
+  return start === undefined || end === undefined ? undefined : { start, end };
+}
+type OffsetRange = { start: number; end: number };
 
-  depth = 0;
-  for (let offset = start; offset < text.length; offset++) {
-    const char = text[offset];
-    if (char === open) depth++;
-    if (char === close) depth--;
-    if (depth === 0) return { start, end: offset + 1 };
+function aroundWordRange(text: string, range: OffsetRange): OffsetRange {
+  let end = range.end;
+  while (end < text.length && isWhitespace(text[end]) && text[end] !== "\n") end++;
+  if (end !== range.end) return { start: range.start, end };
+  let start = range.start;
+  while (start > 0 && isWhitespace(text[start - 1]) && text[start - 1] !== "\n") start--;
+  return { start, end: range.end };
+}
+
+function delimiterRange(
+  text: string,
+  cursor: Position,
+  target: VimTextObject["target"],
+): OffsetRange | undefined {
+  const delimiters: Partial<Record<VimTextObject["target"], [string, string]>> = {
+    singleQuote: ["'", "'"],
+    doubleQuote: ['"', '"'],
+    paren: ["(", ")"],
+    bracket: ["[", "]"],
+    brace: ["{", "}"],
+  };
+  const pair = delimiters[target];
+  if (!pair) return undefined;
+  return pair[0] === pair[1]
+    ? quoteRangeAtOffset(text, cursor, pair[0])
+    : bracketRangeAtOffset(text, cursor, pair[0], pair[1]);
+}
+
+function baseTextObjectRange(
+  text: string,
+  cursor: Position,
+  textObject: VimTextObject,
+  promptStructures?: ResolvedVimPromptStructures,
+): OffsetRange | undefined {
+  if (textObject.target === "word") {
+    const range = wordRangeAtOffset(text, positionToOffset(text, cursor));
+    return range && textObject.kind === "around" ? aroundWordRange(text, range) : range;
   }
-  return undefined;
+  const delimiter = delimiterRange(text, cursor, textObject.target);
+  if (delimiter) return delimiter;
+  if (textObject.target === "paragraph")
+    return paragraphTextObjectOffsets(text, cursor, textObject.kind);
+  const structure = promptStructureTextObjectRange(text, cursor, textObject, promptStructures);
+  return structure && { start: structure.start, end: structure.endExclusive };
+}
+
+function isDelimiterTarget(target: VimTextObject["target"]): boolean {
+  return ["singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(target);
 }
 
 export function textObjectRange(
@@ -2424,43 +2488,9 @@ export function textObjectRange(
   textObject: VimTextObject,
   promptStructures?: ResolvedVimPromptStructures,
 ): { start: Position; end: Position } | undefined {
-  const current = positionToOffset(text, cursor);
-  let range: { start: number; end: number } | undefined;
-  if (textObject.target === "word") {
-    range = wordRangeAtOffset(text, current);
-    if (range && textObject.kind === "around") {
-      let end = range.end;
-      while (end < text.length && isWhitespace(text[end]) && text[end] !== "\n") end++;
-      if (end === range.end) {
-        let start = range.start;
-        while (start > 0 && isWhitespace(text[start - 1]) && text[start - 1] !== "\n") start--;
-        range = { start, end: range.end };
-      } else range = { start: range.start, end };
-    }
-  } else if (textObject.target === "singleQuote") range = quoteRangeAtOffset(text, cursor, "'");
-  else if (textObject.target === "doubleQuote") range = quoteRangeAtOffset(text, cursor, '"');
-  else if (textObject.target === "paren") range = bracketRangeAtOffset(text, cursor, "(", ")");
-  else if (textObject.target === "bracket") range = bracketRangeAtOffset(text, cursor, "[", "]");
-  else if (textObject.target === "brace") range = bracketRangeAtOffset(text, cursor, "{", "}");
-  else if (textObject.target === "paragraph")
-    range = paragraphTextObjectOffsets(text, cursor, textObject.kind);
-  else if (
-    isPromptStructureTarget(textObject.target) &&
-    (promptStructures?.enabled ?? true) &&
-    (promptStructures?.targets[textObject.target] ?? true)
-  ) {
-    const structureRange = resolvePromptStructureRange(text, cursor, {
-      kind: textObject.kind,
-      target: textObject.target,
-    });
-    if (structureRange) range = { start: structureRange.start, end: structureRange.endExclusive };
-  }
-
+  const range = baseTextObjectRange(text, cursor, textObject, promptStructures);
   if (!range) return undefined;
-  const delimiterTarget = ["singleQuote", "doubleQuote", "paren", "bracket", "brace"].includes(
-    textObject.target,
-  );
-  const inner = textObject.kind === "inner" && delimiterTarget;
+  const inner = textObject.kind === "inner" && isDelimiterTarget(textObject.target);
   const start = inner ? range.start + 1 : range.start;
   const endExclusive = inner ? range.end - 1 : range.end;
   if (start >= endExclusive) return undefined;
@@ -2473,13 +2503,24 @@ function isPromptStructureTarget(target: VimTextObject["target"]): target is Pro
   );
 }
 
+function blankRunEnd(lines: string[], start: number): number {
+  let end = start;
+  while (end + 1 < lines.length && isBlankLine(lines[end + 1]!)) end++;
+  return end;
+}
+
+function blankRunStart(lines: string[], start: number): number {
+  let begin = start;
+  while (begin > 0 && isBlankLine(lines[begin - 1]!)) begin--;
+  return begin;
+}
+
 function paragraphTextObjectOffsets(
   text: string,
   cursor: Position,
   kind: VimTextObjectKind,
-): { start: number; end: number } | undefined {
+): OffsetRange | undefined {
   const lines = splitText(text);
-  if (lines.length === 0) return undefined;
   const pos = clampPosition(lines, cursor);
   if (isBlankLine(lines[pos.line]!)) return undefined;
   const starts = lineStartOffsets(lines);
@@ -2488,16 +2529,14 @@ function paragraphTextObjectOffsets(
   const afterBody = runEnd + 1 < lines.length ? starts[runEnd + 1]! : text.length;
   if (kind === "inner") return { start: starts[runStart]!, end: afterBody };
   if (runEnd + 1 < lines.length && isBlankLine(lines[runEnd + 1]!)) {
-    let sepEnd = runEnd + 1;
-    while (sepEnd + 1 < lines.length && isBlankLine(lines[sepEnd + 1]!)) sepEnd++;
-    const end = sepEnd + 1 < lines.length ? starts[sepEnd + 1]! : text.length;
-    return { start: starts[runStart]!, end };
+    const separatorEnd = blankRunEnd(lines, runEnd + 1);
+    return {
+      start: starts[runStart]!,
+      end: separatorEnd + 1 < lines.length ? starts[separatorEnd + 1]! : text.length,
+    };
   }
-  if (runStart - 1 >= 0 && isBlankLine(lines[runStart - 1]!)) {
-    let sepStart = runStart - 1;
-    while (sepStart - 1 >= 0 && isBlankLine(lines[sepStart - 1]!)) sepStart--;
-    return { start: starts[sepStart]!, end: afterBody };
-  }
+  if (runStart > 0 && isBlankLine(lines[runStart - 1]!))
+    return { start: starts[blankRunStart(lines, runStart - 1)]!, end: afterBody };
   return { start: starts[runStart]!, end: afterBody };
 }
 

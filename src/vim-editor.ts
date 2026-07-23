@@ -119,55 +119,60 @@ function workbenchSuggestions(
   return { items, selectedIndex, total: suggestions.length };
 }
 
+type WorkbenchTheme = {
+  selectList?: {
+    selectedPrefix?: (t: string) => string;
+    selectedText?: (t: string) => string;
+    scrollInfo?: (t: string) => string;
+  };
+};
+
+function renderSuggestion(
+  item: { text: string; selected: boolean },
+  width: number,
+  theme?: WorkbenchTheme,
+): string {
+  if (!item.selected || !theme?.selectList) return fitWidth("  " + item.text, width);
+  const prefix = theme.selectList.selectedPrefix?.("→ ") ?? "> ";
+  const content = item.text.slice(0, Math.max(0, width - 2));
+  return prefix + (theme.selectList.selectedText?.(content) ?? content);
+}
+
+function suggestionRows(
+  suggestions: { text: string; selected: boolean }[],
+  selectedIndex: number,
+  total: number,
+  width: number,
+  theme?: WorkbenchTheme,
+): string[] {
+  if (suggestions.length === 0) return [];
+  const visibleCount = Math.min(suggestions.length, MAX_VISIBLE_SUGGESTIONS);
+  const scrollOffset = Math.max(
+    0,
+    Math.min(selectedIndex - visibleCount + 1, suggestions.length - visibleCount),
+  );
+  const rows = suggestions
+    .slice(scrollOffset, scrollOffset + visibleCount)
+    .map((item) => renderSuggestion(item, width, theme));
+  const scrollInfo = `(${selectedIndex + 1}/${total})`;
+  rows.push(theme?.selectList?.scrollInfo?.(scrollInfo) ?? fitWidth(scrollInfo, width));
+  return rows;
+}
+
 function renderWorkbenchRows(
   state: ModalState,
   options: ModalOptions,
   width: number,
   reservedRows: number,
-  theme?: {
-    selectList?: {
-      selectedPrefix?: (t: string) => string;
-      selectedText?: (t: string) => string;
-      scrollInfo?: (t: string) => string;
-    };
-  },
+  theme?: WorkbenchTheme,
 ): string[] {
   if (width <= 0) return [];
   const text = workbenchText(state);
   const { items: suggestions, selectedIndex, total } = workbenchSuggestions(state, options);
   const baseRows = Math.max(text === undefined ? 0 : 1, reservedRows);
   if (baseRows === 0 && suggestions.length === 0) return [];
-
-  const rows: string[] = Array.from({ length: baseRows }, () => fitWidth(text ?? "", width));
-
-  if (suggestions.length > 0) {
-    const visibleCount = Math.min(suggestions.length, MAX_VISIBLE_SUGGESTIONS);
-    const scrollOffset = Math.max(
-      0,
-      Math.min(selectedIndex - visibleCount + 1, suggestions.length - visibleCount),
-    );
-    const visibleItems = suggestions.slice(scrollOffset, scrollOffset + visibleCount);
-
-    for (const item of visibleItems) {
-      if (item.selected && theme?.selectList) {
-        const prefixFn = theme.selectList.selectedPrefix;
-        const prefix = prefixFn ? prefixFn("→ ") : "> ";
-        const textFn = theme.selectList.selectedText;
-        const maxContent = width - 2;
-        const content = item.text.length > maxContent ? item.text.slice(0, maxContent) : item.text;
-        rows.push(prefix + (textFn ? textFn(content) : content));
-      } else {
-        rows.push(fitWidth("  " + item.text, width));
-      }
-    }
-
-    if (theme?.selectList?.scrollInfo) {
-      rows.push(theme.selectList.scrollInfo(`(${selectedIndex + 1}/${total})`));
-    } else {
-      rows.push(fitWidth(`(${selectedIndex + 1}/${total})`, width));
-    }
-  }
-
+  const rows = Array.from({ length: baseRows }, () => fitWidth(text ?? "", width));
+  rows.push(...suggestionRows(suggestions, selectedIndex, total, width, theme));
   return rows;
 }
 

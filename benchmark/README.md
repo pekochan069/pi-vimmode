@@ -2,15 +2,16 @@
 
 Dependency-free production-path benchmark for pi-vimmode. Harness generates corpora in memory; no generated prompt files are committed.
 
-Reproduce committed pre-change evidence:
+Release-gate runs default to 30 measured samples after 10 warmups:
 
 ```sh
-PI_VIMMODE_VERSION=0.9.0
+bun benchmark/run.ts --output benchmark/version/0.10.0.json
+```
 
-bun benchmark/run.ts \
-  --runs=10 \
-  --warmup=10 \
-  --output "benchmark/version/${PI_VIMMODE_VERSION}.json"
+Use explicit lower counts only for local smoke runs:
+
+```sh
+bun benchmark/run.ts --runs=1 --warmup=0
 ```
 
 Harness measures `VimEditor.handleInput` through modal dispatch and installed Pi `CustomEditor`, plus warmed `VimEditor.render`, at an 80×40 viewport. Setup, corpus generation, warmup, editor construction, reset, and assertions stay outside timed regions. Each measured operation asserts text, cursor, mode, or rendered row width.
@@ -22,7 +23,7 @@ Corpus matrix:
 - 100k and 1m ASCII multi-line prompts; 1m uses 20k lines
 - 1k, 5k, 10k, 25k, 50k, and 100k cursor-restoration scaling cases
 
-Output records revision, Bun, OS, CPU, viewport, corpus code units, line count, run count, min, p50, p95, and max milliseconds. Percentiles use nearest rank. Absolute values are reference evidence for matching environments, not CI latency gates. `--case` selects exact cases; committed version JSON records its selection. Full pre-change word restoration is intentionally slow under current implementation, so focused runs are available.
+Output records revision; runtime, OS, CPU, and viewport environment; sample and warmup counts; corpus code units and line count; correctness status; min, p50, p95, and max milliseconds. Percentiles use nearest rank. Assertions run outside timed regions, and failure prevents result emission. `cursor-restoration/prompt-search-repeat/ascii-single-100k` measures repeated prompt search across distant 100k matches. `long-line-render/warmed/mixed-single-1m` covers mixed-width 1m rendering. Absolute values are reference evidence for matching environments, not CI latency gates. `--case` selects exact cases; committed version JSON records its selection. Full pre-change word restoration is intentionally slow under current implementation, so focused runs are available.
 
 Focused CPU profiles use Bun's 100 µs sampling interval. Keep cursor restoration and rendering separate:
 

@@ -30,10 +30,12 @@ type BenchmarkResult = {
   name: string;
   corpus: CorpusMetadata;
   runs: number;
+  warmup: number;
+  correctness: "passed";
   milliseconds: Timings;
 };
 
-type BenchmarkCase = {
+export type BenchmarkCase = {
   name: string;
   corpus: Corpus;
   setup: (editor: VimEditor) => void;
@@ -41,7 +43,7 @@ type BenchmarkCase = {
   assert: (editor: VimEditor, result: unknown) => void;
 };
 
-type Arguments = {
+export type Arguments = {
   output?: string;
   profile?: "cursor-restoration" | "long-line-render";
   cases: string[];
@@ -171,6 +173,35 @@ function stripRenderFormatting(text: string): string {
     .replaceAll(`${escape}[0m`, "");
 }
 
+function promptSearchRepeatCase(): BenchmarkCase {
+  const needle = "needle";
+  const firstMatch = 100;
+  const secondMatch = 100_000 - needle.length;
+  const text = `${"x".repeat(firstMatch)}${needle}${"x".repeat(secondMatch - firstMatch - needle.length)}${needle}`;
+  const corpus: Corpus = {
+    name: "ascii-single-100k",
+    kind: "ascii-single",
+    text,
+    codeUnits: text.length,
+    lines: 1,
+  };
+  return {
+    name: "cursor-restoration/prompt-search-repeat/ascii-single-100k",
+    corpus,
+    setup: (editor) => {
+      editor.setText(text);
+      for (const key of ["g", "g", "/", ...needle, "\r"]) editor.handleInput(key);
+    },
+    measure: (editor) => editor.handleInput("n"),
+    assert: (editor) => {
+      if (editor.getText() !== text) throw new Error("prompt-search-repeat changed text");
+      if (editor.getCursor().col !== secondMatch)
+        throw new Error("prompt-search-repeat cursor mismatch");
+      if (editor.getVimMode() !== "normal") throw new Error("prompt-search-repeat mode mismatch");
+    },
+  };
+}
+
 function renderCase(corpus: Corpus): BenchmarkCase {
   let expectedCursor: { line: number; col: number } | undefined;
   return {
@@ -194,6 +225,7 @@ function renderCase(corpus: Corpus): BenchmarkCase {
         if (visibleWidth(row) > WIDTH) throw new Error("render exceeded viewport width");
       }
       if (editor.getText() !== corpus.text) throw new Error("render changed text");
+      if (editor.getVimMode() !== "normal") throw new Error("render changed mode");
       if (!expectedCursor) throw new Error("render setup missing cursor");
       if (
         editor.getCursor().line !== expectedCursor.line ||
@@ -229,6 +261,7 @@ function buildCases(corpora: Corpus[]): BenchmarkCase[] {
   cases.push(leftCase(byName.get("ascii-single-100k")!));
   cases.push(leftCase(byName.get("mixed-single-100k")!));
   cases.push(bufferStartCase(byName.get("ascii-multiline-100k")!));
+  cases.push(promptSearchRepeatCase());
   cases.push(...corpora.map(renderCase));
   return cases;
 }
@@ -248,7 +281,7 @@ function summarize(samples: number[]): Timings {
   };
 }
 
-function measureCase(item: BenchmarkCase, runs: number, warmup: number): BenchmarkResult {
+export function measureCase(item: BenchmarkCase, runs: number, warmup: number): BenchmarkResult {
   for (let index = 0; index < warmup; index++) {
     const editor = createEditor();
     item.setup(editor);
@@ -271,6 +304,8 @@ function measureCase(item: BenchmarkCase, runs: number, warmup: number): Benchma
     name: item.name,
     corpus: corpusMetadata(item.corpus),
     runs,
+    warmup,
+    correctness: "passed",
     milliseconds: summarize(samples),
   };
 }
@@ -307,7 +342,7 @@ function validateArguments(args: Arguments): void {
 }
 
 function parseArguments(argv: string[]): Arguments {
-  const args: Arguments = { cases: [], runs: 3, warmup: 1 };
+  const args: Arguments = { cases: [], runs: 30, warmup: 10 };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
     if (argument === "--help") {
@@ -326,7 +361,7 @@ function parseArguments(argv: string[]): Arguments {
   return args;
 }
 
-function selectCases(
+export function selectCases(
   cases: BenchmarkCase[],
   profile: Arguments["profile"],
   filters: string[],
@@ -343,15 +378,37 @@ function selectCases(
   );
 }
 
+export function createOutput(
+  args: Arguments,
+  corpora: Corpus[],
+  results: BenchmarkResult[],
+  environment: {
+    revision: string;
+    runtime: { bun: string; os: string; cpu: string };
+    viewport: { columns: number; rows: number };
+  },
+) {
+  return {
+    schemaVersion: 2,
+    baseline: "pi-vimmode-0.10.0-release-gate",
+    revision: environment.revision,
+    environment: { runtime: environment.runtime, viewport: environment.viewport },
+    samples: args.runs,
+    warmups: args.warmup,
+    profile: args.profile ?? "full",
+    selection: args.cases.length > 0 ? args.cases : "all",
+    corpora: corpora.map(corpusMetadata),
+    results,
+  };
+}
+
 async function run(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
   const corpora = buildCorpora();
   const cases = selectCases(buildCases(corpora), args.profile, args.cases);
   if (cases.length === 0) throw new Error("No benchmark cases selected");
   const results = cases.map((item) => measureCase(item, args.runs, args.warmup));
-  const output = {
-    schemaVersion: 1,
-    baseline: "pi-vimmode-0.9.0-pre-change",
+  const output = createOutput(args, corpora, results, {
     revision: commandOutput(["git", "rev-parse", "HEAD"]),
     runtime: {
       bun: Bun.version,
@@ -359,11 +416,7 @@ async function run(): Promise<void> {
       cpu: cpus()[0]?.model ?? "unknown",
     },
     viewport: { columns: WIDTH, rows: ROWS },
-    profile: args.profile ?? "full",
-    selection: args.cases.length > 0 ? args.cases : "all",
-    corpora: corpora.map(corpusMetadata),
-    results,
-  };
+  });
   const json = `${JSON.stringify(output, null, 2)}\n`;
   if (args.output) {
     await mkdir(dirname(args.output), { recursive: true });
@@ -375,4 +428,4 @@ async function run(): Promise<void> {
 
 if (import.meta.main) await run();
 
-export { buildCorpora, summarize };
+export { buildCases, buildCorpora, summarize };

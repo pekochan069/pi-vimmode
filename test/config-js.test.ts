@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveNormalCommand } from "../src/commands.ts";
-import { loadVimJsConfig } from "../src/config-js.ts";
+import { defaultJsConfigPath, getAgentDir, loadVimJsConfig } from "../src/config-js.ts";
 import { loadVimOptions, resolveVimOptions } from "../src/config.ts";
 import { encodeMappingTokens } from "../src/mapping-scopes.ts";
 
@@ -2194,6 +2194,33 @@ test("loadVimOptions includes the trusted global JS config layer", async () => {
     expect(result.options.keymap?.actions.accepted.map((binding) => binding.key)).toEqual(["zq"]);
     expect(result.warnings).toEqual([]);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadVimJsConfig respects PI_CODING_AGENT_DIR", async () => {
+  const originalEnv = process.env.PI_CODING_AGENT_DIR;
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-agent-env-js-"));
+  try {
+    process.env.PI_CODING_AGENT_DIR = dir;
+    expect(getAgentDir()).toBe(dir);
+    expect(defaultJsConfigPath()).toBe(join(dir, "pi-vimmode.config.js"));
+
+    writeFileSync(
+      join(dir, "pi-vimmode.config.js"),
+      `export default (vim) => {
+  vim.preset = "vim-heavy";
+};`,
+    );
+
+    const result = await loadVimJsConfig();
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.operations).toContainEqual({ kind: "preset", preset: "vim-heavy" });
+    }
+  } finally {
+    if (originalEnv !== undefined) process.env.PI_CODING_AGENT_DIR = originalEnv;
+    else delete process.env.PI_CODING_AGENT_DIR;
     rmSync(dir, { recursive: true, force: true });
   }
 });

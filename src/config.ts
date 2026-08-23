@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { GrammarBinding, KeymapGrammarEntry } from "./keymap-grammar.ts";
@@ -45,7 +44,8 @@ import {
   isActionKeybindingPreset,
 } from "./action-keybinding-recipes.ts";
 import {
-  DEFAULT_JS_CONFIG_PATH,
+  defaultJsConfigPath,
+  getAgentDir,
   isPrintableLeader,
   loadVimJsConfig,
   optionValueAtPath,
@@ -3576,10 +3576,11 @@ function readJsonFile(
 }
 
 export function defaultVimConfigPaths(cwd = process.cwd()): Required<Omit<VimConfigPaths, "cwd">> {
+  const agentDir = getAgentDir();
   return {
-    globalSettingsPath: join(homedir(), ".pi", "agent", "settings.json"),
+    globalSettingsPath: join(agentDir, "settings.json"),
     projectSettingsPath: join(cwd, ".pi", "settings.json"),
-    jsConfigPath: DEFAULT_JS_CONFIG_PATH,
+    jsConfigPath: defaultJsConfigPath(),
   };
 }
 

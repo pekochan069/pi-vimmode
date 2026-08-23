@@ -9,7 +9,12 @@ import {
   ACTION_KEYBINDING_PRESETS,
   ACTION_KEYBINDING_RECIPES,
 } from "../src/action-keybinding-recipes.ts";
-import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
+import {
+  DEFAULT_VIM_OPTIONS,
+  defaultVimConfigPaths,
+  loadVimOptions,
+  resolveVimOptions,
+} from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
 function tempSettings() {
@@ -1779,4 +1784,42 @@ test("rejects action conflicts but allows shared non-executable prefixes", () =>
       expect.stringContaining("duplicate action key zq"),
     ]),
   );
+});
+
+test("defaultVimConfigPaths respects PI_CODING_AGENT_DIR", async () => {
+  const originalEnv = process.env.PI_CODING_AGENT_DIR;
+  const customDir = mkdtempSync(join(tmpdir(), "pi-agent-env-"));
+  try {
+    delete process.env.PI_CODING_AGENT_DIR;
+    const defaultPaths = defaultVimConfigPaths("/project");
+    expect(defaultPaths.projectSettingsPath).toBe(join("/project", ".pi", "settings.json"));
+    expect(defaultPaths.globalSettingsPath).toContain(join(".pi", "agent", "settings.json"));
+    expect(defaultPaths.jsConfigPath).toContain(join(".pi", "agent", "pi-vimmode.config.js"));
+
+    process.env.PI_CODING_AGENT_DIR = customDir;
+    const customPaths = defaultVimConfigPaths("/project");
+    expect(customPaths.globalSettingsPath).toBe(join(customDir, "settings.json"));
+    expect(customPaths.jsConfigPath).toBe(join(customDir, "pi-vimmode.config.js"));
+    expect(customPaths.projectSettingsPath).toBe(join("/project", ".pi", "settings.json"));
+
+    process.env.PI_CODING_AGENT_DIR = "~/custom-pi-agent";
+    const tildePaths = defaultVimConfigPaths("/project");
+    expect(tildePaths.globalSettingsPath).not.toContain("~");
+    expect(tildePaths.globalSettingsPath).toContain(join("custom-pi-agent", "settings.json"));
+    expect(tildePaths.jsConfigPath).toContain(join("custom-pi-agent", "pi-vimmode.config.js"));
+
+    process.env.PI_CODING_AGENT_DIR = customDir;
+    writeFileSync(
+      join(customDir, "settings.json"),
+      JSON.stringify({ piVimMode: { startMode: "normal" } }),
+    );
+    const loaded = await loadVimOptions({
+      projectSettingsPath: join(customDir, "nonexistent.json"),
+    });
+    expect(loaded.options.startMode).toBe("normal");
+  } finally {
+    if (originalEnv !== undefined) process.env.PI_CODING_AGENT_DIR = originalEnv;
+    else delete process.env.PI_CODING_AGENT_DIR;
+    rmSync(customDir, { recursive: true, force: true });
+  }
 });

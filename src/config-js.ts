@@ -33,7 +33,21 @@ import {
 import { PROMPT_TRANSFORM_ACTIONS } from "./prompt-transform-actions.ts";
 import { VIM_PRESETS } from "./types.ts";
 
-export const DEFAULT_JS_CONFIG_PATH = join(homedir(), ".pi", "agent", "pi-vimmode.config.js");
+export function getAgentDir(): string {
+  const envDir = process.env.PI_CODING_AGENT_DIR?.trim();
+  if (envDir) {
+    if (envDir === "~") return homedir();
+    if (envDir.startsWith("~/") || envDir.startsWith("~\\")) {
+      return join(homedir(), envDir.slice(2));
+    }
+    return envDir;
+  }
+  return join(homedir(), ".pi", "agent");
+}
+
+export function defaultJsConfigPath(): string {
+  return join(getAgentDir(), "pi-vimmode.config.js");
+}
 
 type ActionDescriptor = {
   actionId: VimFiniteActionId;
@@ -721,7 +735,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 }
 
 export async function loadVimJsConfig(
-  configPath = DEFAULT_JS_CONFIG_PATH,
+  configPath = defaultJsConfigPath(),
   seed: Record<string, unknown> = {},
   rules?: VimJsConfigRules,
 ): Promise<VimJsConfigLoadResult> {

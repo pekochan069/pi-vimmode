@@ -100,6 +100,7 @@ describe("canonical config metadata", () => {
       "cursor.visualBlock",
       "keymap.actionPresets",
       "keymap.operatorMotions",
+      "ui.piStatus.enabled",
       "ui.status.enabled",
       "ui.status.position",
       "ui.status.items",

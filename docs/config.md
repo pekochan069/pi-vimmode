@@ -377,6 +377,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - JSON crosswalk: `piVimMode.ui.mode.narrowLabels`
 - Compatibility aliases: none
 
+#### `vim.ui.piStatus.enabled`
+
+<a id="config-property-ui-piStatus-enabled"></a>
+
+- Accepted shape: `boolean`
+- Built-in default: `true`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.ui.piStatus.enabled`
+- Compatibility aliases: none
+
 #### `vim.ui.selection.enabled`
 
 <a id="config-property-ui-selection-enabled"></a>

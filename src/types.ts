@@ -305,6 +305,9 @@ export type ResolvedVimEasymotion = VimEasymotionOptions;
 export type PartialVimEasymotionOptions = Partial<ResolvedVimEasymotion>;
 
 export type VimUiOptions = {
+  piStatus: {
+    enabled: boolean;
+  };
   status: {
     enabled: boolean;
     position: VimStatusPosition;
@@ -330,6 +333,7 @@ export type VimUiOptions = {
 };
 
 export type VimUiEditorOptions = {
+  piStatus?: Partial<VimUiOptions["piStatus"]>;
   status?: Partial<VimUiOptions["status"]>;
   mode?: {
     enabled?: boolean;

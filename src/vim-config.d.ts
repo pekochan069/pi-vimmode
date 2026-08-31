@@ -254,6 +254,9 @@ export type VimConfigApi = {
   startMode: VimStartupMode;
   cursor: Record<VimMode, VimCursorStyle>;
   ui: {
+    piStatus: {
+      enabled: boolean;
+    };
     status: {
       enabled: boolean;
       position: VimStatusPosition;

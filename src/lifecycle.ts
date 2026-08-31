@@ -5,6 +5,7 @@ import type { ResolvedVimEditorOptions } from "./types.ts";
 import {
   createVimConfigPlan,
   DEFAULT_VIM_OPTIONS,
+  DEFAULT_VIM_UI,
   loadVimOptions,
   type VimConfigLoadResult,
   type VimConfigPaths,
@@ -20,6 +21,23 @@ type VimEditorFactory = (
 
 /** Callback type for shutdown requests from VimEditor. */
 export type VimShutdownCallback = () => void;
+
+/**
+ * Whether the persistent Pi footer status item ("vim" / "vim ⚠" / "vim off")
+ * should be shown. Controlled by `piVimMode.ui.piStatus.enabled` (default true).
+ */
+function piStatusEnabled(options: ResolvedVimEditorOptions): boolean {
+  return options.ui?.piStatus?.enabled ?? DEFAULT_VIM_UI.piStatus.enabled;
+}
+
+/** Set or clear the pi-vimmode footer status, honoring `ui.piStatus.enabled`. */
+function setVimStatus(
+  ctx: ExtensionContext,
+  options: ResolvedVimEditorOptions,
+  label: string,
+): void {
+  ctx.ui.setStatus("pi-vimmode", piStatusEnabled(options) ? label : undefined);
+}
 
 type EditorComponentFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
 type TrackedEditor = Pick<
@@ -82,8 +100,9 @@ function createConfigState(
     const planChanged = serializePlan(currentConfiguration) !== previousPlan;
     const diagnosticsChanged = serializeDiagnostics(currentConfiguration) !== previousDiagnostics;
     if (planChanged || diagnosticsChanged) onUpdate(currentConfiguration, planChanged);
-    ctx.ui.setStatus(
-      "pi-vimmode",
+    setVimStatus(
+      ctx,
+      currentConfiguration.plan.options,
       currentConfiguration.diagnostics.warnings.length > 0 ? "vim ⚠" : "vim",
     );
   };
@@ -173,7 +192,7 @@ function installEditor(
 ): void | Promise<void> {
   if (generation !== state.installGeneration) return;
   if (!state.enabled) {
-    ctx.ui.setStatus("pi-vimmode", "vim off");
+    setVimStatus(ctx, state.config.configuration().plan.options, "vim off");
     return;
   }
   const refreshed = state.config.refresh(ctx);
@@ -181,7 +200,7 @@ function installEditor(
     return refreshed.then((applied) => {
       if (!applied || generation !== state.installGeneration) return;
       if (state.enabled) finishInstall(state, ctx, force);
-      else ctx.ui.setStatus("pi-vimmode", "vim off");
+      else setVimStatus(ctx, state.config.configuration().plan.options, "vim off");
     });
   }
   finishInstall(state, ctx, force);
@@ -259,7 +278,7 @@ function disableEditor(state: EditorState, ctx: ExtensionContext): void {
     ctx.ui.setEditorComponent(state.previousEditorFactory);
     state.hasInstalledFactory = false;
   }
-  ctx.ui.setStatus("pi-vimmode", "vim off");
+  setVimStatus(ctx, state.config.configuration().plan.options, "vim off");
 }
 
 function notifyVimStatus(state: EditorState, ctx: ExtensionContext): void {

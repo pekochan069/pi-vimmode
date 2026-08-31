@@ -2932,6 +2932,7 @@ test("modal status respects UI item config and cursor position format", () => {
     width: 40,
     pending: "d",
     ui: {
+      piStatus: { enabled: true },
       status: {
         enabled: true,
         position: "left",
@@ -3066,6 +3067,7 @@ test("modal status shows active macro recording", () => {
     width: 10,
     recordingSlot: "a",
     ui: {
+      piStatus: { enabled: true },
       status: { enabled: true, position: "right", items: ["selection"] },
       mode: {
         enabled: false,

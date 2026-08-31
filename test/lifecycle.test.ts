@@ -30,11 +30,11 @@ type FakeEditorComponent = (...args: unknown[]) => FakeEditor;
 type FakeUi = {
   component?: FakeEditorComponent;
   setCalls: Array<FakeEditorComponent | undefined>;
-  statuses: Array<[string, string]>;
+  statuses: Array<[string, string | undefined]>;
   notifications: Array<[string, string]>;
   getEditorComponent: () => FakeEditorComponent | undefined;
   setEditorComponent: (component: FakeEditorComponent | undefined) => void;
-  setStatus: (key: string, value: string) => void;
+  setStatus: (key: string, value: string | undefined) => void;
   notify: (message: string, level: string) => void;
 };
 
@@ -256,6 +256,39 @@ test("session start installs immediately and schedules one delayed reinstall", (
   expect(ctx.ui.statuses).toEqual([["pi-vimmode", "vim"]]);
   expect(scheduled).toHaveLength(1);
   expect(loadCalls).toEqual([{ cwd: "/repo" }]);
+});
+
+test("footer status is suppressed when ui.piStatus.enabled is false", () => {
+  const piStatusOff: ResolvedVimEditorOptions = {
+    ...DEFAULT_VIM_OPTIONS,
+    ui: {
+      ...DEFAULT_VIM_OPTIONS.ui!,
+      piStatus: { enabled: false },
+    },
+  };
+  const { hooks } = createLifecycleHarness([piStatusOff]);
+  const ctx = createContext("/repo");
+
+  hooks.get("session_start")?.({}, ctx);
+
+  expect(ctx.ui.statuses).toEqual([["pi-vimmode", undefined]]);
+});
+
+test("footer status suppression also hides the vim off label", async () => {
+  const piStatusOff: ResolvedVimEditorOptions = {
+    ...DEFAULT_VIM_OPTIONS,
+    ui: {
+      ...DEFAULT_VIM_OPTIONS.ui!,
+      piStatus: { enabled: false },
+    },
+  };
+  const { hooks, commands } = createLifecycleHarness([piStatusOff]);
+  const ctx = createContext("/repo");
+
+  hooks.get("session_start")?.({}, ctx);
+  await commands.get("vimmode")?.handler("", ctx);
+
+  expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", undefined]);
 });
 
 test("resource discovery installs immediately and schedules one delayed reinstall", () => {

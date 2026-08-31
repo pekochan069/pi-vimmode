@@ -28,6 +28,7 @@ type DeclaredPropertyPaths =
   | "leader"
   | "startMode"
   | `cursor.${keyof VimConfigApi["cursor"] & string}`
+  | `ui.piStatus.${keyof VimConfigApi["ui"]["piStatus"] & string}`
   | `ui.status.${keyof VimConfigApi["ui"]["status"] & string}`
   | `ui.mode.${keyof VimConfigApi["ui"]["mode"] & string}`
   | `ui.selection.${keyof VimConfigApi["ui"]["selection"] & string}`
@@ -126,6 +127,7 @@ type PropertyValueCoverage = Assert<
       "cursor.visualBlock": VimConfigApi["cursor"]["visualBlock"];
       "keymap.actionPresets": VimConfigApi["keymap"]["actionPresets"];
       "keymap.operatorMotions": VimConfigApi["keymap"]["operatorMotions"];
+      "ui.piStatus.enabled": boolean;
       "ui.status.enabled": boolean;
       "ui.status.position": VimConfigApi["ui"]["status"]["position"];
       "ui.status.items": VimConfigApi["ui"]["status"]["items"];

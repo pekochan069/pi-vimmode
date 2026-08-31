@@ -757,6 +757,16 @@ Example:
 
 `piVimMode.ui` is the only supported status/UI config surface. Vim/Neovim aliases such as `showmode`, `showcmd`, and `ruler` are not supported.
 
+### Pi footer status
+
+Separate from the in-editor status line below, pi-vimmode registers one persistent item in Pi's global footer status bar (via `ctx.ui.setStatus`). It reads `vim`, `vim ⚠` when configuration produced warnings, or `vim off` when the editor is toggled off.
+
+| Path                            | Default | Accepted values | Effect                                                                                                                                  |
+| ------------------------------- | ------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.ui.piStatus.enabled` | `true`  | boolean         | Shows/hides the persistent `vim` / `vim ⚠` / `vim off` item in Pi's footer status bar. Does not affect the in-editor status line below. |
+
+Setting this to `false` fully suppresses the footer item in every state, including the warning and off labels. Use `:vimdoctor` to inspect configuration warnings when the footer indicator is hidden.
+
 ### Status
 
 | Path                           | Default                                                      | Accepted values                                                   | Effect                                                                |

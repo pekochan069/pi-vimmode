@@ -310,6 +310,12 @@ const PROPERTY_FACTS = {
     jsonPaths: ["piVimMode.keymap.operatorMotions"],
     aliases: [],
   },
+  "ui.piStatus.enabled": {
+    acceptedShape: "boolean",
+    assignment: "replaces value",
+    jsonPaths: ["piVimMode.ui.piStatus.enabled"],
+    aliases: [],
+  },
   "ui.status.enabled": {
     acceptedShape: "boolean",
     assignment: "replaces value",
@@ -562,6 +568,7 @@ export const CONFIG_LEAVES: readonly ConfigLeaf[] = leaves([
   "keymap.actions.accepted",
   "keymap.remaps.accepted",
   "keymap.allowProtectedOverrides",
+  "ui.piStatus.enabled",
   "ui.status.enabled",
   "ui.status.position",
   "ui.status.items",

@@ -211,6 +211,9 @@ export const DEFAULT_VIM_KEYMAP = Object.freeze({
 }) as unknown as ResolvedVimKeymap;
 
 export const DEFAULT_VIM_UI = Object.freeze({
+  piStatus: Object.freeze({
+    enabled: true,
+  }),
   status: Object.freeze({
     enabled: true,
     position: "left",
@@ -544,6 +547,7 @@ function clonePromptTransforms(
 
 function cloneUi(ui: ResolvedVimUi = DEFAULT_VIM_UI): ResolvedVimUi {
   return {
+    piStatus: { ...ui.piStatus },
     status: {
       enabled: ui.status.enabled,
       position: ui.status.position,
@@ -1266,6 +1270,23 @@ function parseModeLabelMap(
   return Object.keys(labels).length > 0 ? labels : undefined;
 }
 
+function parseUiPiStatus(
+  value: unknown,
+  sourceLabel: string,
+  warnings: string[],
+): Partial<ResolvedVimUi["piStatus"]> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.ui.piStatus must be an object`);
+    return undefined;
+  }
+  const piStatus: Partial<ResolvedVimUi["piStatus"]> = {};
+  if (typeof value.enabled === "boolean") piStatus.enabled = value.enabled;
+  else if (value.enabled !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.ui.piStatus.enabled must be a boolean`);
+  return piStatus;
+}
+
 function parseUiStatus(
   value: unknown,
   sourceLabel: string,
@@ -1404,6 +1425,7 @@ function parseUi(
   if (value === undefined) return { warnings };
   if (!isRecord(value)) return { warnings: [`${sourceLabel}: piVimMode.ui must be an object`] };
   const partial: PartialUiOptions = {};
+  partial.piStatus = parseUiPiStatus(value.piStatus, sourceLabel, warnings);
   partial.status = parseUiStatus(value.status, sourceLabel, warnings);
   partial.mode = parseUiMode(value.mode, sourceLabel, warnings);
   partial.selection = parseUiSelection(value.selection, sourceLabel, warnings);
@@ -2478,6 +2500,7 @@ function mergeActionBindings(
 }
 
 function mergeUi(target: ResolvedVimUi, partial: PartialUiOptions): void {
+  if (partial.piStatus) target.piStatus = { ...target.piStatus, ...partial.piStatus };
   if (partial.status) target.status = { ...target.status, ...partial.status };
   if (partial.mode) {
     target.mode = {

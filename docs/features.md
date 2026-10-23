@@ -88,6 +88,7 @@ Non-goals: no public plugin action API, diagnostic action keybinding dispatch, r
 
 ### Escape and reset behavior
 
+- `Ctrl-[` is `Esc` everywhere below, whether the terminal sends it as ESC or, with the Kitty keyboard protocol, as its own key.
 - Insert + inactive autocomplete: `Esc` enters normal mode.
 - Insert + active autocomplete: `Esc` delegates to Pi so autocomplete can close.
 - Optional `piVimMode.keymap.escape` aliases such as `<D-j>` or `<C-j>` enter normal mode from insert mode when autocomplete is inactive, cancel visual modes, and cancel pending `:` Ex command-lines.

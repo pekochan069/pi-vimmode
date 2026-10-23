@@ -223,6 +223,14 @@ test("starts insert, inserts text, and escape enters normal", () => {
   expect(editor.getVimMode()).toBe("normal");
 });
 
+test("kitty ctrl-[ enters normal mode like escape without inserting text", () => {
+  const { editor } = createEditor();
+  editor.handleInput("a");
+  editor.handleInput("\x1b[91;5u");
+  expect(editor.getText()).toBe("a");
+  expect(editor.getVimMode()).toBe("normal");
+});
+
 test("entering visual mode keeps long-prompt viewport stable", () => {
   const { editor } = createEditor(
     { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },

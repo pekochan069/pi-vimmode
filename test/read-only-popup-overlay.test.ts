@@ -112,7 +112,7 @@ describe("read-only popup overlay", () => {
   });
 
   test("close controls are local to overlay", () => {
-    for (const key of ["\x1b", "\x03", "\x07"]) {
+    for (const key of ["\x1b", "\x1b[91;5u", "\x03", "\x07"]) {
       const { component, closed } = createComponent(popup(["output"]));
       component.handleInput(key);
       expect(closed()).toBe(1);

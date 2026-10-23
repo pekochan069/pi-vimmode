@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
+import type { EditorSnapshot, ModalEffect, ModalOptions, ModalState } from "../src/modal/types.ts";
 import type { EasymotionTarget, ResolvedVimEditorOptions } from "../src/types.ts";
 
 import {
@@ -248,6 +248,56 @@ test("physical escape keeps insert-mode behavior", () => {
   expect(closed.state.mode).toBe("normal");
   expect(open.state.mode).toBe("insert");
   expect(open.effects).toEqual([{ type: "delegate", input: "\x1b" }]);
+});
+
+const kittyCtrlBracket = "\x1b[91;5u";
+const kittyCtrlBracketRelease = "\x1b[91;5:3u";
+
+function runInputs(state: ModalState, inputs: readonly string[], snap: EditorSnapshot = snapshot) {
+  let current = state;
+  let effects: ModalEffect[] = [];
+  for (const input of inputs) {
+    const update = handleModalInput(current, snap, options, input);
+    current = update.state;
+    effects = update.effects;
+  }
+  return { state: current, effects };
+}
+
+test("kitty ctrl-[ acts as physical escape in every escape state", () => {
+  const cases: { name: string; state: ModalState; inputs: string[]; snap?: EditorSnapshot }[] = [
+    { name: "insert", state: { mode: "insert" }, inputs: [] },
+    {
+      name: "insert with autocomplete",
+      state: { mode: "insert" },
+      inputs: [],
+      snap: { ...snapshot, isAutocompleteOpen: true },
+    },
+    { name: "visual", state: { mode: "visual", visualAnchor: p(0, 1) }, inputs: [] },
+    { name: "normal", state: { mode: "normal" }, inputs: [] },
+    { name: "pending operator", state: { mode: "normal" }, inputs: ["d"] },
+    { name: "pending count", state: { mode: "normal" }, inputs: ["3"] },
+    { name: "pending Ex", state: { mode: "normal" }, inputs: [":", "s"] },
+    { name: "pending search", state: { mode: "normal" }, inputs: ["/", "a"] },
+  ];
+
+  for (const { name, state, inputs, snap } of cases) {
+    const viaEscape = runInputs(state, [...inputs, "\x1b"], snap);
+    const viaCtrlBracket = runInputs(state, [...inputs, kittyCtrlBracket], snap);
+    expect({ name, ...viaCtrlBracket }).toEqual({ name, ...viaEscape });
+  }
+});
+
+test("kitty ctrl-[ leaves insert mode and cancels a pending operator", () => {
+  expect(runInputs({ mode: "insert" }, [kittyCtrlBracket]).state.mode).toBe("normal");
+  const cancelled = runInputs({ mode: "normal" }, ["d", kittyCtrlBracket]);
+  expect(cancelled.state.pending).toBeUndefined();
+  expect(cancelled.state.mode).toBe("normal");
+});
+
+test("kitty ctrl-[ release events are not treated as escape", () => {
+  const released = handleModalInput({ mode: "insert" }, snapshot, options, kittyCtrlBracketRelease);
+  expect(released.state.mode).toBe("insert");
 });
 
 const insertOptions = resolveVimOptions({

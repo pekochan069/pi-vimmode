@@ -209,6 +209,12 @@ The Vim editor MUST preserve Pi application-level shortcuts and safety behavior.
 - **WHEN** the editor is in normal mode and the user presses `Esc`
 - **THEN** the key is delegated to Pi so interrupt or abort behavior still works
 
+#### Scenario: Ctrl-[ acts as Esc in every keyboard protocol
+
+- **WHEN** the user presses `Ctrl-[`, sent as ESC (`0x1b`) by legacy terminals or reported as its own key (`CSI 91;5u`) under the Kitty keyboard protocol
+- **THEN** the editor handles the press exactly like physical `Esc` in every mode and pending state, including delegation to Pi, and does not insert text
+- **AND** a `Ctrl-[` key release event is not treated as `Esc`
+
 #### Scenario: Control shortcut delegated
 
 - **WHEN** the user presses Pi control shortcuts such as `Ctrl+C`, `Ctrl+D`, `Ctrl+G`, model selection shortcuts, thinking shortcuts, or image paste shortcuts

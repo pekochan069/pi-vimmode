@@ -72,7 +72,12 @@ export class ReadOnlyPopupOverlayComponent implements Component {
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+g")) {
+    if (
+      matchesKey(data, "escape") ||
+      matchesKey(data, "ctrl+[") ||
+      matchesKey(data, "ctrl+c") ||
+      matchesKey(data, "ctrl+g")
+    ) {
       this.onClose();
       return;
     }

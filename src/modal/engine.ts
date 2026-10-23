@@ -70,6 +70,7 @@ import {
   keymapHasBinding,
   keySequence,
   modeUpdate,
+  normalizeEscapeInput,
   resetAndDelegate,
   withEffects,
   withNoopFeedback,
@@ -1184,11 +1185,12 @@ export function handleModalInput(
   data: string,
   diagnostics: VimDiagnostics = plan.diagnostics,
 ): ModalUpdate {
-  const update = routeModalInput(state, snapshot, plan, data, diagnostics);
-  if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, plan.options, data))
+  const input = normalizeEscapeInput(data);
+  const update = routeModalInput(state, snapshot, plan, input, diagnostics);
+  if (!state.recordingSlot || !shouldRecordInput(state, snapshot, update, plan.options, input))
     return update;
   return {
     ...update,
-    state: appendRecordedInput(update.state, state.recordingSlot, data),
+    state: appendRecordedInput(update.state, state.recordingSlot, input),
   };
 }

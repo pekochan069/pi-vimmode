@@ -1,4 +1,4 @@
-import { decodeKittyPrintable, matchesKey, parseKey } from "@earendil-works/pi-tui";
+import { decodeKittyPrintable, isKeyRelease, matchesKey, parseKey } from "@earendil-works/pi-tui";
 
 import type {
   EditResult,
@@ -26,6 +26,18 @@ function legacyAltPrintable(data: string): string | undefined {
   if (data.length !== 2 || data.charCodeAt(0) !== 0x1b) return undefined;
   const char = data[1];
   return char && char.charCodeAt(0) >= 32 ? `alt+${char}` : undefined;
+}
+
+const ESCAPE = "\x1b";
+
+/**
+ * Ctrl-[ is Escape in Vim. Legacy terminals send it as ESC (0x1b), but with the Kitty keyboard
+ * protocol Pi reports it as its own key (`CSI 91;5u`), which does not match "escape".
+ * Map that press to ESC so it behaves like the physical key everywhere.
+ */
+export function normalizeEscapeInput(data: string): string {
+  if (data === ESCAPE || isKeyRelease(data) || !matchesKey(data, "ctrl+[")) return data;
+  return ESCAPE;
 }
 
 export function keySequence(data: string): string | undefined {

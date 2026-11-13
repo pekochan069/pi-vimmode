@@ -101,6 +101,43 @@ test("shows slash commands with provider descriptions and binding fallbacks", ()
   expect(rows.join("\n")).toContain("provider model\x1b[0m");
 });
 
+test("describes prompt commands with a trailing space and commands with arguments", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: {
+        actions: {
+          "pi.commandPrompt": [
+            { key: "<leader>v", args: { command: "/less-verbose " }, modes: ["normal"] },
+          ],
+          "pi.command": [
+            { key: "<leader>o", args: { command: "/automode off" }, modes: ["normal"] },
+          ],
+        },
+      },
+    },
+  }).options;
+  const rows = whichKeyRows(
+    { mode: "normal", pending: " " },
+    options.keymap!,
+    options.whichKey!,
+    80,
+    10,
+    new Map([
+      ["/less-verbose", "set the session word limit"],
+      ["/automode", "control automatic permissions"],
+    ]),
+    theme,
+  );
+  const text = rows.join("\n");
+  expect(text).toContain("  \x1b[36mv\x1b[0m  /less-verbose\x1b[2m");
+  expect(text).toContain("set the session word limit\x1b[0m");
+  expect(text).toContain("  \x1b[36mo\x1b[0m  /automode off\x1b[2m");
+  expect(text).toContain("control automatic permissions\x1b[0m");
+});
+
 test("uses deepest nested named group titles with tokenized keys", () => {
   const options = resolveVimOptions({
     piVimMode: {

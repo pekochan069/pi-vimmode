@@ -93,6 +93,19 @@ function keySegments(
   ];
 }
 
+/**
+ * Describe a bound command. `pi.commandPrompt` commands keep a trailing space
+ * so the prompt opens ready for arguments, and both action types accept
+ * arguments, so neither form matches a description keyed by name alone.
+ */
+function commandDescription(
+  command: string,
+  descriptions: ReadonlyMap<string, string>,
+): string | undefined {
+  const trimmed = command.trim();
+  return descriptions.get(trimmed) ?? descriptions.get(trimmed.split(/\s+/)[0]!);
+}
+
 function leafRow(
   key: string,
   typedPrefix: string,
@@ -107,11 +120,11 @@ function leafRow(
       description: binding.desc ?? binding.actionId,
     };
   }
-  const command = (binding.args as PiCommandActionArgs).command;
+  const command = (binding.args as PiCommandActionArgs).command.trim();
   return {
     primary: `${key}  ${command}`,
     primarySegments: [...primarySegments, { text: "  " }, { text: command }],
-    description: descriptions.get(command) ?? binding.desc,
+    description: commandDescription(command, descriptions) ?? binding.desc,
   };
 }
 

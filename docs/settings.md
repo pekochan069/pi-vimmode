@@ -63,6 +63,8 @@ export default (vim) => {
   vim.g.mapleader = " ";
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());
   vim.keymap.set("n", "<leader>q", vim.prompt.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>m", vim.action.pi.command({ command: "/model" }));
+  vim.keymap.set("n", "<leader>t", vim.action.pi.command({ command: "/tree" }));
   vim.keymap.set("v", "z>", vim.prompt.quote());
   vim.keymap.set("n", "H", vim.action.motion.wordForward(), { desc: "Next word" });
   vim.keymap.set("n", "zz", "llll");
@@ -72,7 +74,7 @@ export default (vim) => {
 
 Modes: `"i"`/`"insert"`, `"n"`/`"normal"`, `"v"`/`"x"`/`"visual"` for all visual modes, exact `"visualLine"` or `"visualBlock"`, and `"o"`/`"operatorPending"`/`"operator-pending"` while an operator awaits its target. Arrays of modes are accepted. Each descriptor declares allowed scopes; unsupported scope combinations warn and do not install that mapping.
 
-`vim.action` exposes finite operator, motion, command, macro, mark, insert, text-object, and prompt-transform descriptor factories. `vim.prompt.*` remains the compatible alias for prompt-transform and insert built-ins. Prompt transform factories are `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, and `reflow({ width })`; insert factories are `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, and `moveLineEnd`.
+`vim.action` exposes finite operator, motion, command, macro, mark, insert, text-object, prompt-transform, and Pi-command descriptor factories. `vim.prompt.*` remains the compatible alias for prompt-transform and insert built-ins. Prompt transform factories are `quote`, `unquote`, `bulletize`, `fence({ language })`, `indent`, `dedent`, and `reflow({ width })`; insert factories are `openLineBelow`, `openLineAbove`, `deleteWordBackward`, `deleteWordForward`, `deleteLineBackward`, `deleteLineForward`, `moveWordBackward`, `moveWordForward`, `moveLineStart`, and `moveLineEnd`.
 
 Literal replay strings work only in normal or visual scopes, are bounded, and do not recursively expand mappings. `null` removes only the exact selected-scope mapping. `options` accepts only `allowProtected: true` and diagnostic `desc: string`; an override does not guarantee that Pi or terminal delivers that key. Same-scope exact mappings are source-ordered; same-scope executable prefix overlaps warn and are rejected because keymaps have no timeout.
 
@@ -81,6 +83,65 @@ Set `vim.g.mapleader` to one printable character or `null`. Assignment affects e
 JS config boundaries: no raw object export, no string target that names internal action IDs such as `"prompt.transform.reflow"`, no recursive mapping expansion beyond normal macro replay limits, no TypeScript config, no project-local JS, no file watchers, no plugin discovery, and no arbitrary custom action execution. String targets are replayed through the macro path, so Ex-command remaps such as `":vimdoctor<CR>"` work within the normal replay-step limit. `<leader>` is expanded only in mapping keys, never in replay target strings.
 
 Run `/vimmode reload` after editing JS config. Use `:vimdoctor`, `:keymap`, and `:mapcheck <key>` to inspect results. Imported helpers follow native ESM caching; see [`docs/config.md#exports-async-config-and-imported-presets`](config.md#exports-async-config-and-imported-presets).
+
+## Pi command action bindings
+
+Use `pi.command` to submit a configured Pi slash command from Normal mode. The command is passed to Pi without checking whether that command exists. pi-vimmode restores the unfinished draft and cursor after Pi receives it.
+
+```json
+{
+  "piVimMode": {
+    "leader": " ",
+    "keymap": {
+      "actions": {
+        "pi.command": [
+          { "key": "<leader>m", "args": { "command": "/model" } },
+          { "key": "<leader>t", "args": { "command": "/tree" } },
+          { "key": "<leader>pp", "args": { "command": "/plan" } },
+          { "key": "<leader>pr", "args": { "command": "/review" } },
+          { "key": "<leader>pl", "args": { "command": "/last" } },
+          { "key": "<leader>pa", "args": { "command": "/command" } }
+        ],
+        "pi.commandPrompt": [{ "key": "<leader>pA", "args": { "command": "/command" } }]
+      }
+    }
+  }
+}
+```
+
+Every entry requires `{ "args": { "command": "/..." } }`. Commands must be non-empty, begin with `/`, and stay on one line. The action supports Normal mode only; JSON bindings without `modes` use that registry scope, and explicit Visual modes are rejected. The `p` key is a prefix for the workflow group and must not also have its own mapping.
+
+pi-vimmode restores the draft, cursor, extension redo history, and any host undo entries created only by dispatch. It also restores a draft that an asynchronous Pi command route clears after awaiting work. Only one Pi command may run at a time; a second mapping reports `Pi command already running`. An unknown slash command follows Pi's normal submit behavior and may be sent as prompt text; pi-vimmode intentionally does not prevalidate command names.
+
+Use `pi.commandPrompt` when a command needs arguments. It replaces the draft with the command and one trailing space in a temporary Insert-mode session. Escape cancels and restores the original draft. Enter submits the edited command, then restores the original draft with the same guarded asynchronous behavior as `pi.command`. When Pi autocomplete is open, the first Escape closes autocomplete and a subsequent Escape cancels the temporary session.
+
+The trusted JavaScript equivalents are `vim.action.pi.command({ command: "/tree" })` and `vim.action.pi.commandPrompt({ command: "/command" })`. This feature does not add a `:pi` Ex command or arbitrary JavaScript action callbacks.
+
+## Which-key leader preview
+
+Enable `piVimMode.whichKey` to show a bordered Normal-mode panel below the editor after pressing the configured leader. It is disabled by default and never captures input. The title is `WHICH-KEY` at the root and appends the deepest configured group label in uppercase, such as `WHICH-KEY : MODEL ALIASES`. The next row shows the typed suffix with Pi's selected slash-autocomplete prefix/text style. `escape` cancels and `backspace` moves up one key level. At the bare leader, Backspace keeps the preview open. When disabled, pi-vimmode leaves Backspace to the existing keymap resolver.
+
+Shared prefixes collapse into one row. Group labels follow the key directly, such as `a  +model aliases`; unnamed groups use their actual count. In documentation, `+n mappings` and `+n more` describe variable counts; the UI renders the actual number. Candidate rows copy Pi's unselected slash-autocomplete layout and styling without selection or input capture. A `pi.command` leaf always shows its configured slash command, such as `m  /model`. Its description comes from Pi's current autocomplete provider; if that has no description, the binding `desc` is used in the aligned description column. The titled panel border replaces the editor's normal lower border, and the normal status bar remains pinned directly below the last candidate or overflow row. On terminals too short for even the minimal title, typed-key, and candidate/overflow panel while retaining four editor rows, the preview is suppressed.
+
+```json
+{
+  "piVimMode": {
+    "whichKey": {
+      "enabled": true,
+      "groups": { "<leader>p": "workflow" }
+    }
+  }
+}
+```
+
+The trusted JavaScript equivalent is:
+
+```js
+vim.whichKey.enabled = true;
+vim.whichKey.groups = { "<leader>p": "workflow" };
+```
+
+Only leader-prefixed Normal-mode action mappings participate. Built-in Vim grammar, non-leader mappings, delay timers, and scrolling are outside this feature.
 
 ## Key sequence syntax
 

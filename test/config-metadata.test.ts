@@ -21,6 +21,7 @@ import {
   KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS,
   KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS,
 } from "../src/keymap-descriptors.ts";
+import { PI_COMMAND_ACTIONS } from "../src/pi-command-actions.ts";
 import { PROMPT_TRANSFORM_ACTIONS } from "../src/prompt-transform-actions.ts";
 
 type Assert<T extends true> = T;
@@ -47,6 +48,7 @@ describe("canonical config metadata", () => {
       ...descriptorIds("textObject.kind", KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS),
       ...descriptorIds("textObject.target", KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS),
       ...PROMPT_TRANSFORM_ACTIONS.map(({ id }) => id),
+      ...PI_COMMAND_ACTIONS.map(({ id }) => id),
       ...DIAGNOSTIC_ACTIONS.map(({ id }) => id),
     ].sort();
 
@@ -129,6 +131,8 @@ describe("canonical config metadata", () => {
       "promptTransforms.enabled",
       "promptTransforms.actions",
       "promptTransforms.commands",
+      "whichKey.enabled",
+      "whichKey.groups",
     ]);
     expect(new Set(VIM_CONFIG_PROPERTY_METADATA.map(({ anchor }) => anchor)).size).toBe(
       VIM_CONFIG_PROPERTY_METADATA.length,
@@ -157,6 +161,7 @@ describe("canonical config metadata", () => {
       ...descriptorIds("textObject.kind", KEYMAP_TEXT_OBJECT_KIND_DESCRIPTORS),
       ...descriptorIds("textObject.target", KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS),
       ...PROMPT_TRANSFORM_ACTIONS.map(({ id }) => id),
+      ...PI_COMMAND_ACTIONS.map(({ id }) => id),
     ].sort();
     expect(bindable.map(({ id }) => id).sort()).toEqual(expected);
     expect(new Set(bindable.map(({ anchor }) => anchor)).size).toBe(bindable.length);

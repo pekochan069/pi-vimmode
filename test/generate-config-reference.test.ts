@@ -23,8 +23,8 @@ describe("generated config reference", () => {
     expect(renderConfigReference(first)).toBe(first);
     expect(first).toBe(guide);
     validateLocalLinks(first);
-    expect(first.match(/<a id="config-property-/g)).toHaveLength(39);
-    expect(first.match(/<a id="config-action-/g)).toHaveLength(109);
+    expect(first.match(/<a id="config-property-/g)).toHaveLength(41);
+    expect(first.match(/<a id="config-action-/g)).toHaveLength(111);
     expect(first).not.toContain("vimmode.keybindings");
     expect(first).toContain("- Default keys: `` ` ``");
   });

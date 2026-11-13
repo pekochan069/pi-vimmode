@@ -49,13 +49,18 @@ import {
   escapeAliasesForScope as configuredEscapeAliasesForScope,
   keymapForOptions,
   macrosForOptions,
+  whichKeyForOptions,
   marksForOptions,
   type VimConfigPlan,
 } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
-import { appendMappingToken } from "../mapping-scopes.ts";
+import { appendMappingToken, mappingSequencePrefixes } from "../mapping-scopes.ts";
 import { scrollHelpPopup } from "../read-only-popup.ts";
-import { applyPromptTransformAction, applyVisualPromptTransformAction } from "./actions.ts";
+import {
+  applyPiCommandAction,
+  applyPromptTransformAction,
+  applyVisualPromptTransformAction,
+} from "./actions.ts";
 import {
   clearCommandPending,
   clearExMessage,
@@ -664,10 +669,12 @@ function applyNormalResolution(
       : moveUpdate(clearPending(state), result.motion, snapshot, result.count);
   if (result.type === "command")
     return applyNormalCommandResolution(state, snapshot, options, result);
-  if (result.type === "action")
-    return state.pendingRegister
-      ? invalidate(clearPending(state))
-      : applyPromptTransformAction(state, snapshot, options, result);
+  if (result.type === "action") {
+    if (state.pendingRegister) return invalidate(clearPending(state));
+    if (result.actionId === "pi.command" || result.actionId === "pi.commandPrompt")
+      return applyPiCommandAction(state, result);
+    return applyPromptTransformAction(state, snapshot, options, result);
+  }
   return applyNormalRemainingResolution(state, snapshot, options, keymap, key, result);
 }
 function scopedInputSequence(
@@ -794,6 +801,20 @@ function handlePendingOperatorInput(
   }
 }
 
+function leaderBackspaceUpdate(
+  state: ModalState,
+  data: string,
+  keymap: ResolvedVimKeymap,
+  enabled: boolean,
+): ModalUpdate | undefined {
+  if (!enabled || !matchesKey(data, "backspace") || !state.pending || !keymap.leader)
+    return undefined;
+  if (state.pending === keymap.leader) return invalidate(state);
+  if (!state.pending.startsWith(keymap.leader)) return undefined;
+  const prefixes = mappingSequencePrefixes(state.pending);
+  return invalidate({ ...state, pending: prefixes.at(-1) ?? keymap.leader });
+}
+
 function handleNormalInput(
   state: ModalState,
   snapshot: EditorSnapshot,
@@ -814,6 +835,8 @@ function handleNormalInput(
   }
 
   const keymap = keymapForOptions(options);
+  const backspace = leaderBackspaceUpdate(state, data, keymap, whichKeyForOptions(options).enabled);
+  if (backspace) return backspace;
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   const earlyUpdate = handleNormalEscapeOrProtectedInput(
     state,
@@ -921,6 +944,8 @@ function applyVisualBasicResolution(
   }
   if (result.type === "action") {
     if (state.pendingRegister) return invalidate(clearPending(state));
+    if (result.actionId === "pi.command" || result.actionId === "pi.commandPrompt")
+      return invalidate(clearPending(state));
     return applyVisualPromptTransformAction(state, snapshot, options, result);
   }
   return undefined;

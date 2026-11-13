@@ -210,6 +210,22 @@ describe("golden modal effects", () => {
     expect(replay.effects).toContainEqual({ type: "playMacro", slot: "a", inputs: ["x"] });
   });
 
+  test("Pi command action emits a dispatch effect in normal mode", () => {
+    const result = runGolden({ mode: "normal" }, "draft", p(0, 2), ["z", "t"], {
+      ...options,
+      keymap: {
+        ...DEFAULT_VIM_KEYMAP,
+        actions: {
+          accepted: [
+            { key: "zt", actionId: "pi.command", args: { command: "/tree" }, modes: ["normal"] },
+          ],
+        },
+      },
+    });
+    expect(result.effects).toContainEqual({ type: "dispatchPiCommand", command: "/tree" });
+    expect(result.state.pending).toBeUndefined();
+  });
+
   test("protected Pi shortcut delegates and clears pending operator", () => {
     const result = runGolden({ mode: "normal", pending: "d" }, "abc", p(0, 0), ["\x10"], {
       ...options,

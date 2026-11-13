@@ -38,6 +38,8 @@ export const TRUSTED_JS_OPTION_PATHS = [
   "promptTransforms.enabled",
   "promptTransforms.actions",
   "promptTransforms.commands",
+  "whichKey.enabled",
+  "whichKey.groups",
 ] as const;
 
 export type TrustedJsOptionPath = (typeof TRUSTED_JS_OPTION_PATHS)[number];

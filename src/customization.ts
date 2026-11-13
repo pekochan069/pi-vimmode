@@ -15,6 +15,7 @@ import {
   type DiagnosticActionEntry,
 } from "./diagnostic-actions.ts";
 import { displayMappingSequence } from "./mapping-scopes.ts";
+import { PI_COMMAND_ACTIONS } from "./pi-command-actions.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   canonicalPromptTransformActionIdForShortName,
@@ -30,6 +31,7 @@ export type VimActionKind =
   | "search"
   | "escape"
   | "promptTransform"
+  | "piCommand"
   | "diagnostic"
   | "runtimeHelp";
 
@@ -334,6 +336,18 @@ function promptTransformEntries(
   });
 }
 
+function piCommandEntries(keymap: ResolvedVimKeymap): VimActionEntry[] {
+  return PI_COMMAND_ACTIONS.map((registryEntry) => ({
+    id: registryEntry.id,
+    kind: "piCommand" as const,
+    description: registryEntry.description,
+    keys: keymap.actions.accepted
+      .filter((binding) => binding.actionId === registryEntry.id)
+      .map((binding) => binding.key),
+    argSummary: registryEntry.args.map((arg) => `${arg.name}:${arg.type}`).join(","),
+  }));
+}
+
 function escapeEntry(keymap: ResolvedVimKeymap): VimActionEntry[] {
   return keymap.escape.length
     ? [
@@ -413,6 +427,7 @@ export function actionEntriesForKeymap(
     ...kindEntries,
     ...targetEntries,
     ...promptTransformEntries(keymap, promptTransforms),
+    ...piCommandEntries(keymap),
     ...diagnosticActionEntries().map(diagnosticActionEntry),
   ].map((entry) => ({ ...entry, keys: entry.keys.map(displayMappingSequence) }));
 }
@@ -458,7 +473,10 @@ function summarizeEntry(entry: VimActionEntry): string {
   const ex = entry.exCommands?.length ? ` ex=${entry.exCommands.join(",")}` : "";
   const args = entry.argSummary ? ` args=${entry.argSummary}` : "";
   const disabled = entry.disabledReason ? ` disabled (${entry.disabledReason})` : "";
-  const id = entry.kind === "promptTransform" ? entry.id : `${entry.kind}.${entry.id}`;
+  const id =
+    entry.kind === "promptTransform" || entry.kind === "piCommand"
+      ? entry.id
+      : `${entry.kind}.${entry.id}`;
   return `${id} ${keys}${ex}${args}${disabled} — ${entry.description}`;
 }
 
@@ -490,6 +508,7 @@ const ACTION_COUNT_LABELS: ReadonlyArray<readonly [VimActionKind, string]> = [
   ["search", "searches"],
   ["escape", "escape aliases"],
   ["promptTransform", "transforms"],
+  ["piCommand", "Pi commands"],
   ["diagnostic", "diagnostic metadata"],
   ["runtimeHelp", "runtime-help metadata"],
 ];
@@ -555,6 +574,7 @@ export function keybindingCatalogLines(context: KeybindingCatalogContext): strin
       "promptTransform",
       context.promptTransforms?.enabled !== false,
     ),
+    ...whichKeyCategoryLines("Pi commands", entries, "piCommand"),
     ...protectedShortcutTableLines(),
     "Boundaries: no runtime :map; no recursive mappings; no Vimscript; no command palette; no diagnostic/help action keybinding dispatch.",
   ];
@@ -639,7 +659,7 @@ function keyDisplay(entry: VimActionEntry): string {
 }
 
 function actionIdDisplay(entry: VimActionEntry): string {
-  return entry.kind === "promptTransform" || entry.id.includes(".")
+  return entry.kind === "promptTransform" || entry.kind === "piCommand" || entry.id.includes(".")
     ? entry.id
     : `${entry.kind}.${entry.id}`;
 }
@@ -647,6 +667,7 @@ function actionIdDisplay(entry: VimActionEntry): string {
 function modeDisplay(entry: VimActionEntry): string {
   if (entry.kind === "motion" || entry.kind === "search" || entry.kind === "mark") return "n/v/op";
   if (entry.kind === "operator" || entry.kind === "promptTransform") return "n/v";
+  if (entry.kind === "piCommand") return "normal";
   if (entry.kind === "escape") return "modal";
   if (entry.kind === "textObject") return "op";
   return "normal";
@@ -701,7 +722,9 @@ export function mapcheckMessage(
   const matches = actionEntriesForKeymap(keymap).filter((entry) => entry.keys.includes(key));
   if (matches[0]) {
     const target =
-      matches[0].kind === "promptTransform" ? matches[0].id : `${matches[0].kind}.${matches[0].id}`;
+      matches[0].kind === "promptTransform" || matches[0].kind === "piCommand"
+        ? matches[0].id
+        : `${matches[0].kind}.${matches[0].id}`;
     return `mapcheck: ${key} -> ${target}`;
   }
   const protectedShortcut = protectedShortcutForKey(key);
@@ -715,6 +738,11 @@ export function doctorMessage(
   diagnostics: VimDiagnostics = { warnings: [] },
 ): string {
   const warnings = diagnostics.warnings;
-  if (warnings.length === 0) return "vimdoctor: ok — customization healthy";
-  return `vimdoctor: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}: ${warnings[0]}`;
+  const piCommandKeys =
+    options.keymap?.actions.accepted
+      .filter((binding) => binding.actionId === "pi.command")
+      .map((binding) => displayMappingSequence(binding.key)) ?? [];
+  const suffix = piCommandKeys.length ? `; pi.command -> ${piCommandKeys.join(",")}` : "";
+  if (warnings.length === 0) return `vimdoctor: ok — customization healthy${suffix}`;
+  return `vimdoctor: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}: ${warnings[0]}${suffix}`;
 }

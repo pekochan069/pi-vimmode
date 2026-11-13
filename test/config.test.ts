@@ -34,6 +34,7 @@ test("VimEditorOptions accepts partial consumer config shapes", () => {
     },
     promptStructures: { targets: { codeFence: false } },
     promptTransforms: { actions: { reflow: false }, commands: { quote: ["qte"] } },
+    whichKey: { enabled: true, groups: { "<leader>p": "workflow" } },
   } satisfies VimEditorOptions;
   const redoOptions = {
     keymap: { escape: ["<D-j>"], commands: { redo: ["ctrl+r"], showKeybindings: ["gk"] } },
@@ -68,6 +69,7 @@ test("VimEditorOptions accepts partial consumer config shapes", () => {
   expect(options.promptStructures.targets?.codeFence).toBe(false);
   expect(options.promptTransforms.actions?.reflow).toBe(false);
   expect(options.promptTransforms.commands?.quote).toEqual(["qte"]);
+  expect(options.whichKey?.groups?.["<leader>p"]).toBe("workflow");
 });
 
 test("uses defaults when settings are absent", () => {
@@ -267,6 +269,74 @@ test("invalid higher-layer leader mappings preserve lower valid bindings", () =>
     { piVimMode: { keymap: { commands: { undo: ["<leader>u", "Z"] } } } },
   );
   expect(mixed.options.keymap?.commands.undo).toEqual(["Z"]);
+
+  const piCommand = resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      keymap: {
+        actions: {
+          "pi.command": [
+            { key: "<leader>t", args: { command: "/tree" } },
+            { key: "z", args: { command: "tree" } },
+            { key: "x", args: { command: "/tree\n/model" } },
+            { key: "y", args: { command: "/tree", extra: true } },
+          ],
+        },
+      },
+    },
+  });
+  expect(piCommand.options.keymap?.actions.accepted).toEqual([
+    expect.objectContaining({ actionId: "pi.command", key: ",t", args: { command: "/tree" } }),
+  ]);
+  expect(piCommand.warnings.join("\n")).toContain("Command must be a non-empty slash command");
+  expect(piCommand.warnings.join("\n")).toContain("Command must be a single line");
+  expect(piCommand.warnings.join("\n")).toContain("Unknown action arg: extra");
+
+  const commandPrompt = resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      keymap: {
+        actions: {
+          "pi.commandPrompt": [{ key: "<leader>p", args: { command: "/annotate" } }],
+        },
+      },
+    },
+  });
+  expect(commandPrompt.options.keymap?.actions.accepted).toEqual([
+    expect.objectContaining({
+      actionId: "pi.commandPrompt",
+      key: ",p",
+      args: { command: "/annotate" },
+      modes: ["normal"],
+    }),
+  ]);
+
+  const normalOnly = resolveVimOptions({
+    piVimMode: {
+      keymap: {
+        actions: {
+          "pi.command": [
+            { key: "zt", args: { command: "/tree" } },
+            { key: "vq", args: { command: "/tree" }, modes: ["visual"] },
+          ],
+          "pi.commandPrompt": [{ key: "vp", args: { command: "/annotate" }, modes: ["visual"] }],
+          "prompt.transform.quote": [{ key: "zq", modes: ["visual"] }],
+        },
+      },
+    },
+  });
+  expect(normalOnly.options.keymap?.actions.accepted).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ actionId: "pi.command", key: "zt", modes: ["normal"] }),
+      expect.objectContaining({ actionId: "prompt.transform.quote", key: "zq", modes: ["visual"] }),
+    ]),
+  );
+  expect(normalOnly.warnings.join("\n")).toContain(
+    "unsupported action binding mode for pi.command",
+  );
+  expect(normalOnly.warnings.join("\n")).toContain(
+    "unsupported action binding mode for pi.commandPrompt",
+  );
 
   const action = resolveVimOptions(
     {
@@ -1064,6 +1134,30 @@ test("parses mark behavior options", () => {
     slots: ["x", "y"],
   });
   expect(result.warnings.some((warning) => warning.includes("lowercase a-z"))).toBe(true);
+});
+
+test("parses which-key options and rejects malformed values", () => {
+  const result = resolveVimOptions({
+    piVimMode: { whichKey: { enabled: true, groups: { "<leader>p": "workflow", bad: 1 } } },
+  });
+  expect(result.options.whichKey).toEqual({
+    enabled: true,
+    groups: { "<leader>p": "workflow" },
+  });
+  expect(result.warnings).toContain(
+    "global settings: piVimMode.whichKey.groups values must be strings",
+  );
+});
+
+test("warns for non-object and invalid enabled which-key values", () => {
+  const nonObject = resolveVimOptions({ piVimMode: { whichKey: true } });
+  expect(nonObject.warnings).toContain("global settings: piVimMode.whichKey must be an object");
+
+  const invalidEnabled = resolveVimOptions({ piVimMode: { whichKey: { enabled: "yes" } } });
+  expect(invalidEnabled.options.whichKey).toEqual({ enabled: false, groups: {} });
+  expect(invalidEnabled.warnings).toContain(
+    "global settings: piVimMode.whichKey.enabled must be a boolean",
+  );
 });
 
 test("parses prompt structure and transform options", () => {

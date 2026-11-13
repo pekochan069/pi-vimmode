@@ -27,7 +27,7 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 91 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 93 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "halfPageDown")).toContain("motion.halfPageDown ctrl+d");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
@@ -127,6 +127,29 @@ describe("vim customization helpers", () => {
     expect(mapcheckMessage(options.keymap!, "gg", warnings)).toContain("rejected");
   });
 
+  test("reports configured Pi command bindings in diagnostics", () => {
+    const { options } = resolveVimOptions({
+      piVimMode: {
+        leader: ",",
+        keymap: { actions: { "pi.command": [{ key: "<leader>t", args: { command: "/tree" } }] } },
+      },
+    });
+    expect(keymapMessage(options.keymap!, "pi.command")).toContain("pi.command ,t");
+    expect(
+      keybindingCatalogLines({
+        keymap: options.keymap!,
+        promptTransforms: options.promptTransforms,
+      }).join("\n"),
+    ).toContain("Pi commands");
+    expect(
+      keybindingCatalogLines({
+        keymap: options.keymap!,
+        promptTransforms: options.promptTransforms,
+      }).join("\n"),
+    ).toContain(",t             normal      pi.command");
+    expect(doctorMessage(options)).toContain("pi.command -> ,t");
+  });
+
   test("reports disabled prompt transforms as disabled registry entries", () => {
     const { options, warnings } = resolveVimOptions({
       piVimMode: {
@@ -174,6 +197,7 @@ describe("vim customization helpers", () => {
     expect(lines).toContain("Marks");
     expect(lines).toContain("Searches");
     expect(lines).toContain("Prompt transforms");
+    expect(lines).toContain("Pi commands");
     expect(lines).not.toContain("Effective pi-vimmode keybindings");
     expect(lines).not.toContain("Diagnostic/help metadata");
     expect(lines).toContain("Protected Pi shortcuts");

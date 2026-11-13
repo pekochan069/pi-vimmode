@@ -9,6 +9,7 @@ import { DEFAULT_VIM_OPTIONS, resolveVimOptions } from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 import { parseExCommand } from "../src/ex.ts";
 import { keybindingDiscoveryPopup, keybindingsPopup } from "../src/keybinding-discovery-popup.ts";
+import { PI_COMMAND_ACTIONS } from "../src/pi-command-actions.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   bindablePromptTransformActionIds,
@@ -227,6 +228,13 @@ describe("documentation data contracts", () => {
     expect(featuresDoc).toContain(":&");
     expect(featuresDoc).toContain(":delete a");
     expect(featuresDoc).toContain("piVimMode.ui.workbench.reservedRows");
+  });
+
+  test("Pi command action registry stays aligned with docs", () => {
+    for (const action of PI_COMMAND_ACTIONS) {
+      expect(allUserDocs).toContain(action.id);
+      expect(allUserDocs).toContain(action.docsAnchor);
+    }
   });
 
   test("prompt transform action registry stays aligned with docs", () => {

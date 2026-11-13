@@ -83,6 +83,50 @@ export default (vim) => {
   }
 });
 
+test("loads normal-only Pi command descriptors", async () => {
+  const f = fixture();
+  try {
+    f.write(`
+export default (vim) => {
+  vim.keymap.set("n", "<leader>t", vim.action.pi.command({ command: "/tree" }));
+  vim.keymap.set("v", "t", vim.action.pi.command({ command: "/tree" }));
+  vim.keymap.set("n", "x", vim.action.pi.command({ command: "tree" }));
+  vim.keymap.set("n", "<leader>p", vim.action.pi.commandPrompt({ command: "/annotate" }));
+  vim.keymap.set("v", "p", vim.action.pi.commandPrompt({ command: "/annotate" }));
+};`);
+    const result = await loadVimJsConfig(f.path);
+    expect(result.warnings).toEqual([
+      "global JS config: pi.command does not support selected mode",
+      "global JS config: pi.command does not accept these arguments",
+      "global JS config: pi.commandPrompt does not support selected mode",
+    ]);
+    expect(operations(result)).toEqual([
+      {
+        kind: "map",
+        mapping: {
+          kind: "action",
+          actionId: "pi.command",
+          key: "<leader>\u0000t",
+          args: { command: "/tree" },
+          modes: ["normal"],
+        },
+      },
+      {
+        kind: "map",
+        mapping: {
+          kind: "action",
+          actionId: "pi.commandPrompt",
+          key: "<leader>\u0000p",
+          args: { command: "/annotate" },
+          modes: ["normal"],
+        },
+      },
+    ]);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("keeps command leaf and nested EasyMotion descriptor factories callable", async () => {
   const f = fixture();
   try {

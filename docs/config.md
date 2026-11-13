@@ -437,6 +437,28 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - JSON crosswalk: `piVimMode.ui.workbench.reservedRows`
 - Compatibility aliases: none
 
+### `vim.whichKey`
+
+#### `vim.whichKey.enabled`
+
+<a id="config-property-whichKey-enabled"></a>
+
+- Accepted shape: `boolean`
+- Built-in default: `false`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.whichKey.enabled`
+- Compatibility aliases: none
+
+#### `vim.whichKey.groups`
+
+<a id="config-property-whichKey-groups"></a>
+
+- Accepted shape: `record of key sequences to group labels`
+- Built-in default: `{}`
+- Assignment semantics: merges labels by key sequence
+- JSON crosswalk: `piVimMode.whichKey.groups`
+- Compatibility aliases: none
+
 <!-- END GENERATED CONFIG PROPERTIES -->
 
 <a id="generated-actions"></a>
@@ -1337,6 +1359,28 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Supported mapping scopes: `normal`, `visual`, `visualLine`, `visualBlock`
 - Arguments: none
 - Default keys: `y`
+- Compatibility aliases: none
+
+### `vim.action.pi`
+
+#### `pi.command`
+
+<a id="config-action-pi-command"></a>
+
+- Canonical factory: `vim.action.pi.command()`
+- Supported mapping scopes: `normal`
+- Arguments: `command: string` — A non-empty single-line Pi slash command.
+- Default keys: none
+- Compatibility aliases: none
+
+#### `pi.commandPrompt`
+
+<a id="config-action-pi-commandPrompt"></a>
+
+- Canonical factory: `vim.action.pi.commandPrompt()`
+- Supported mapping scopes: `normal`
+- Arguments: `command: string` — A non-empty single-line Pi slash command.
+- Default keys: none
 - Compatibility aliases: none
 
 ### `vim.action.prompt`

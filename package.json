@@ -41,7 +41,8 @@
     "verify-package": "bun scripts/verify-package.ts",
     "generate:config-reference": "bun scripts/generate-config-reference.ts",
     "check:config-reference": "bun scripts/generate-config-reference.ts --check",
-    "prepublish": "bun run build && bun run verify-package",
+    "prepublishOnly": "bun run build && bun run verify-package",
+    "postinstall": "bun install --frozen-lockfile --ignore-scripts && bun run build && bun run verify-package",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
@@ -49,7 +50,7 @@
     "test": "bun test",
     "check-types": "tsc --noEmit",
     "verify": "bun run check-types && bun run lint && bun run test",
-    "prepare": "lefthook install"
+    "hooks:install": "lefthook install"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.77.0",

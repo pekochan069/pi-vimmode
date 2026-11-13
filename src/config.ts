@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { GrammarBinding, KeymapGrammarEntry } from "./keymap-grammar.ts";
+import type { PiCommandActionArgs } from "./pi-command-actions.ts";
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 import type {
   CursorStyle,
@@ -10,6 +11,7 @@ import type {
   PromptStructureTarget,
   PromptTransform,
   PromptTransformAction,
+  BindableVimActionId,
   ResolvedVimActionBinding,
   ResolvedVimExCommand,
   ResolvedVimInsertKeymap,
@@ -21,6 +23,7 @@ import type {
   ResolvedVimSearch,
   ResolvedVimEasymotion,
   ResolvedVimUi,
+  ResolvedVimWhichKey,
   StartupMode,
   VimActionBindingMode,
   VimActionKeybindingPreset,
@@ -38,6 +41,7 @@ import type {
   VimTextObjectKind,
   VimTextObjectTarget,
   VimUiEditorOptions,
+  VimWhichKeyEditorOptions,
 } from "./types.ts";
 
 import {
@@ -85,6 +89,11 @@ import {
   type VimMappingFamily,
   type VimMappingScope,
 } from "./mapping-scopes.ts";
+import {
+  isPiCommandActionId,
+  normalizePiCommandActionArgs,
+  piCommandActionModes,
+} from "./pi-command-actions.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS as PROMPT_TRANSFORM_ACTION_REGISTRY,
   bindablePromptTransformActionIds,
@@ -163,6 +172,11 @@ const TEXT_OBJECT_TARGET_SET = deriveSet(KEYMAP_TEXT_OBJECT_TARGET_DESCRIPTORS);
 const PROMPT_STRUCTURE_TARGET_SET = new Set<string>(PROMPT_STRUCTURE_TARGETS);
 const PROMPT_TRANSFORM_ACTION_SET = new Set<string>(PROMPT_TRANSFORM_ACTIONS);
 const BINDABLE_PROMPT_TRANSFORM_ACTION_SET = new Set<string>(bindablePromptTransformActionIds());
+const BINDABLE_ACTION_SET = new Set<string>([
+  ...BINDABLE_PROMPT_TRANSFORM_ACTION_SET,
+  "pi.command",
+  "pi.commandPrompt",
+]);
 const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
 const ACTION_BINDING_MODES: readonly VimActionBindingMode[] = [
   "normal",
@@ -289,6 +303,11 @@ export const DEFAULT_VIM_FEEDBACK = Object.freeze({
   noop: "off",
 }) as unknown as VimFeedbackOptions;
 
+export const DEFAULT_VIM_WHICH_KEY = Object.freeze({
+  enabled: false,
+  groups: Object.freeze({}),
+}) as unknown as ResolvedVimWhichKey;
+
 export const DEFAULT_VIM_PROMPT_TRANSFORMS = Object.freeze({
   enabled: true,
   actions: Object.freeze({
@@ -330,6 +349,7 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   feedback: DEFAULT_VIM_FEEDBACK,
   promptStructures: DEFAULT_VIM_PROMPT_STRUCTURES,
   promptTransforms: DEFAULT_VIM_PROMPT_TRANSFORMS,
+  whichKey: DEFAULT_VIM_WHICH_KEY,
 });
 
 type PartialVimOptions = {
@@ -347,6 +367,7 @@ type PartialVimOptions = {
   feedback?: PartialFeedbackOptions;
   promptStructures?: PartialPromptStructureOptions;
   promptTransforms?: PartialPromptTransformOptions;
+  whichKey?: VimWhichKeyEditorOptions;
 };
 
 type PartialKeymapOptions = {
@@ -365,7 +386,7 @@ type PartialKeymapOptions = {
   insert?: Partial<ResolvedVimInsertKeymap>;
   actionPresets?: VimActionKeybindingPreset[];
   presetActionBindings?: ResolvedVimActionBinding[];
-  actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
+  actions?: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>>;
   remaps?: ResolvedVimKeymap["remaps"];
   scoped?: ResolvedVimKeymap["scoped"];
   unmaps?: Array<{ key: string; modes: readonly VimMappingScope[] }>;
@@ -395,7 +416,7 @@ export type VimPlanBinding =
   | { readonly kind: "insert"; readonly id: string }
   | {
       readonly kind: "action";
-      readonly id: BindablePromptTransformActionId;
+      readonly id: BindableVimActionId;
       readonly args: ResolvedVimActionBinding["args"];
     }
   | { readonly kind: "command"; readonly id: string }
@@ -532,6 +553,10 @@ function clonePromptStructures(
   return { enabled: promptStructures.enabled, targets: { ...promptStructures.targets } };
 }
 
+function cloneWhichKey(whichKey: ResolvedVimWhichKey = DEFAULT_VIM_WHICH_KEY): ResolvedVimWhichKey {
+  return { enabled: whichKey.enabled, groups: { ...whichKey.groups } };
+}
+
 function clonePromptTransforms(
   promptTransforms: ResolvedVimPromptTransforms = DEFAULT_VIM_PROMPT_TRANSFORMS,
 ): ResolvedVimPromptTransforms {
@@ -581,6 +606,7 @@ export function cloneResolvedVimOptions(
     promptTransforms: options.promptTransforms
       ? clonePromptTransforms(options.promptTransforms)
       : undefined,
+    whichKey: options.whichKey ? cloneWhichKey(options.whichKey) : undefined,
   };
 }
 
@@ -875,7 +901,7 @@ const VALID_ACTION_BINDING_MODES = new Set<VimActionBindingMode>([
 type ParsedActionBindingEntry = {
   rawKey: unknown;
   rawArgs: unknown;
-  modes?: VimActionBindingMode[];
+  modes?: readonly VimActionBindingMode[];
   allowProtected: boolean;
   desc?: string;
   sourceOrder?: number;
@@ -929,7 +955,7 @@ function parseActionBindingShape(
 
 function parseActionBindingEntry(
   entry: unknown,
-  actionId: BindablePromptTransformActionId,
+  actionId: BindableVimActionId,
   label: string,
   warnings: string[],
   options: { allowProtectedKey?: (key: string) => boolean } = {},
@@ -946,6 +972,16 @@ function parseActionBindingEntry(
     warnings.push(`${label} contains protected key ${key} (${protectedShortcut.reason})`);
     return undefined;
   }
+  if (isPiCommandActionId(actionId)) {
+    const modes = actionBindingModesForAction(actionId, parsed.modes, label, warnings);
+    if (!modes) return undefined;
+    const normalized = normalizePiCommandActionArgs(parsed.rawArgs);
+    if (!normalized.ok) {
+      warnings.push(`${label}.${key}: ${normalized.message}`);
+      return undefined;
+    }
+    return actionBinding({ ...parsed, modes }, key, actionId, normalized.args);
+  }
   const normalized = normalizePromptTransformActionArgs({
     source: "keymap",
     actionId,
@@ -955,10 +991,33 @@ function parseActionBindingEntry(
     warnings.push(`${label}.${key}: ${normalized.message}`);
     return undefined;
   }
+  return actionBinding(parsed, key, actionId, normalized.transform);
+}
+
+function actionBindingModesForAction(
+  actionId: BindableVimActionId,
+  requested: readonly VimActionBindingMode[] | undefined,
+  label: string,
+  warnings: string[],
+): readonly VimActionBindingMode[] | undefined {
+  if (!isPiCommandActionId(actionId)) return requested;
+  const supported = piCommandActionModes(actionId) as readonly VimActionBindingMode[];
+  const modes = requested ?? supported;
+  if (modes.every((mode) => supported.includes(mode))) return modes;
+  warnings.push(`${label} contains unsupported action binding mode for ${actionId}`);
+  return undefined;
+}
+
+function actionBinding(
+  parsed: ParsedActionBindingEntry,
+  key: string,
+  actionId: BindableVimActionId,
+  args: PromptTransform | PiCommandActionArgs,
+): ResolvedVimActionBinding {
   return {
     key,
     actionId,
-    args: normalized.transform,
+    args,
     modes: parsed.modes,
     ...(parsed.allowProtected ? { allowProtected: true } : {}),
     ...(parsed.desc === undefined ? {} : { desc: parsed.desc }),
@@ -971,16 +1030,16 @@ function parseActionBindings(
   sourceLabel: string,
   warnings: string[],
   options: { allowProtectedKey?: (key: string) => boolean } = {},
-): Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> | undefined {
+): Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
     warnings.push(`${sourceLabel}: piVimMode.keymap.actions must be an object`);
     return undefined;
   }
 
-  const parsed: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  const parsed: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>> = {};
   for (const [rawActionId, entries] of Object.entries(value)) {
-    if (!BINDABLE_PROMPT_TRANSFORM_ACTION_SET.has(rawActionId)) {
+    if (!BINDABLE_ACTION_SET.has(rawActionId)) {
       warnings.push(`${sourceLabel}: unsupported piVimMode.keymap.actions.${rawActionId}`);
       continue;
     }
@@ -988,7 +1047,7 @@ function parseActionBindings(
       warnings.push(`${sourceLabel}: piVimMode.keymap.actions.${rawActionId} must be an array`);
       continue;
     }
-    const actionId = rawActionId as BindablePromptTransformActionId;
+    const actionId = rawActionId as BindableVimActionId;
     const label = `${sourceLabel}: piVimMode.keymap.actions.${rawActionId}`;
     const bindings = entries
       .map((entry) => parseActionBindingEntry(entry, actionId, label, warnings, options))
@@ -1000,12 +1059,12 @@ function parseActionBindings(
 }
 
 function mergeParsedActionBindings(
-  target: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>,
-  source: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> | undefined,
+  target: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>>,
+  source: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>> | undefined,
 ): void {
   if (!source) return;
   for (const [actionId, bindings] of Object.entries(source)) {
-    target[actionId as BindablePromptTransformActionId] = bindings ?? [];
+    target[actionId as BindableVimActionId] = bindings ?? [];
   }
 }
 
@@ -1015,7 +1074,7 @@ function parseActionPresets(
   warnings: string[],
 ): {
   presets?: VimActionKeybindingPreset[];
-  actions?: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>>;
+  actions?: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>>;
 } {
   if (value === undefined) return {};
   if (!Array.isArray(value)) {
@@ -1024,7 +1083,7 @@ function parseActionPresets(
   }
 
   const presets: VimActionKeybindingPreset[] = [];
-  const actions: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  const actions: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>> = {};
   for (const entry of value) {
     if (typeof entry !== "string" || !isActionKeybindingPreset(entry)) {
       const suffix = typeof entry === "string" ? `.${entry}` : " contains unsupported preset";
@@ -1194,7 +1253,7 @@ function parseKeymap(
   const actionPresets = parseActionPresets(value.actionPresets, sourceLabel, warnings);
   partial.actionPresets = actionPresets.presets;
   partial.presetActionBindings = Object.values(actionPresets.actions ?? {}).flat();
-  const actions: Partial<Record<BindablePromptTransformActionId, ResolvedVimActionBinding[]>> = {};
+  const actions: Partial<Record<BindableVimActionId, ResolvedVimActionBinding[]>> = {};
   mergeParsedActionBindings(actions, actionPresets.actions);
   mergeParsedActionBindings(
     actions,
@@ -1653,6 +1712,35 @@ function parsePromptTransformCommands(
   return commands;
 }
 
+function parseWhichKey(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: VimWhichKeyEditorOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: VimWhichKeyEditorOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value))
+    return { warnings: [`${sourceLabel}: piVimMode.whichKey must be an object`] };
+  if (typeof value.enabled === "boolean") partial.enabled = value.enabled;
+  else if (value.enabled !== undefined)
+    warnings.push(`${sourceLabel}: piVimMode.whichKey.enabled must be a boolean`);
+  if (value.groups !== undefined) {
+    if (!isRecord(value.groups))
+      warnings.push(`${sourceLabel}: piVimMode.whichKey.groups must be an object`);
+    else {
+      const groups = Object.fromEntries(
+        Object.entries(value.groups).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+      if (Object.keys(groups).length !== Object.keys(value.groups).length)
+        warnings.push(`${sourceLabel}: piVimMode.whichKey.groups values must be strings`);
+      partial.groups = groups;
+    }
+  }
+  return Object.keys(partial).length ? { partial, warnings } : { warnings };
+}
+
 function parsePromptTransforms(
   value: unknown,
   sourceLabel: string,
@@ -1773,6 +1861,10 @@ function parsePiVimMode(
   const promptTransforms = parsePromptTransforms(value.promptTransforms, sourceLabel);
   partial.promptTransforms = promptTransforms.partial;
   warnings.push(...promptTransforms.warnings);
+
+  const whichKey = parseWhichKey(value.whichKey, sourceLabel);
+  partial.whichKey = whichKey.partial;
+  warnings.push(...whichKey.warnings);
 
   return { partial, warnings };
 }
@@ -1976,7 +2068,7 @@ function additiveKeymapLayer(
   if (partial.actions) {
     const actions: NonNullable<PartialKeymapOptions["actions"]> = {};
     for (const [actionId, bindings] of Object.entries(partial.actions)) {
-      const typedAction = actionId as BindablePromptTransformActionId;
+      const typedAction = actionId as BindableVimActionId;
       actions[typedAction] = [...(base.actions?.[typedAction] ?? []), ...bindings];
     }
     next.actions = actions;
@@ -2041,7 +2133,7 @@ function projectExactMappings(
 ): ProjectExactMapping[] {
   const mappings: ProjectExactMapping[] = [];
   const add = (key: string, modes: readonly VimMappingScope[], actionId?: string) => {
-    const finalKey = leader === undefined ? key : resolvedLeaderKey(key, leader ?? undefined);
+    const finalKey = leader === undefined ? key : resolveLeaderKey(key, leader ?? undefined);
     if (finalKey) mappings.push({ key: finalKey, modes, actionId });
   };
   const addRecord = (
@@ -2187,7 +2279,7 @@ function expandLeaderSequence(
   };
 }
 
-function resolvedLeaderKey(sequence: string, leader: string | undefined): string | undefined {
+export function resolveLeaderKey(sequence: string, leader: string | undefined): string | undefined {
   return expandLeaderSequence(sequence, "project mapping", {
     leader,
     warnings: [],
@@ -2295,7 +2387,7 @@ function expandLeaderActions(
         leaderBindings.add(expandedBinding);
       return [expandedBinding];
     });
-    const typedActionId = actionId as BindablePromptTransformActionId;
+    const typedActionId = actionId as BindableVimActionId;
     if (expanded.length > 0 || bindings.length === 0) overlay.actions![typedActionId] = expanded;
     else delete overlay.actions![typedActionId];
   }
@@ -2454,6 +2546,11 @@ function mergePromptStructures(
   if (partial.targets) target.targets = { ...target.targets, ...partial.targets };
 }
 
+function mergeWhichKey(target: ResolvedVimWhichKey, partial: VimWhichKeyEditorOptions): void {
+  if (partial.enabled !== undefined) target.enabled = partial.enabled;
+  if (partial.groups) target.groups = { ...target.groups, ...partial.groups };
+}
+
 function mergePromptTransforms(
   target: ResolvedVimPromptTransforms,
   partial: PartialPromptTransformOptions,
@@ -2467,12 +2564,12 @@ function mergeActionBindings(
   target: ResolvedVimKeymap,
   actions: NonNullable<PartialKeymapOptions["actions"]>,
 ): void {
-  const byId = new Map<BindablePromptTransformActionId, ResolvedVimActionBinding[]>();
+  const byId = new Map<BindableVimActionId, ResolvedVimActionBinding[]>();
   for (const binding of target.actions.accepted) {
     byId.set(binding.actionId, [...(byId.get(binding.actionId) ?? []), binding]);
   }
   for (const [actionId, bindings] of Object.entries(actions)) {
-    byId.set(actionId as BindablePromptTransformActionId, bindings ?? []);
+    byId.set(actionId as BindableVimActionId, bindings ?? []);
   }
   target.actions = { accepted: [...byId.values()].flat() };
 }
@@ -2500,7 +2597,9 @@ type ProjectExactMapping = {
   actionId?: string;
 };
 
-function actionBindingModes(binding: ResolvedVimActionBinding): readonly VimActionBindingMode[] {
+export function actionBindingModes(
+  binding: ResolvedVimActionBinding,
+): readonly VimActionBindingMode[] {
   return binding.modes ?? ACTION_BINDING_MODES;
 }
 
@@ -2513,9 +2612,10 @@ function projectClaimsExactMapping(
 }
 
 function disabledActionReason(
-  actionId: BindablePromptTransformActionId,
+  actionId: BindableVimActionId,
   promptTransforms: ResolvedVimPromptTransforms,
 ): string | undefined {
+  if (isPiCommandActionId(actionId)) return undefined;
   const action = promptTransformActionForId(actionId);
   if (!action) return `unsupported action ${actionId}`;
   if (!promptTransforms.enabled) return `disabled prompt transform suite for ${actionId}`;
@@ -2868,6 +2968,12 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
     clonePromptTransforms,
     mergePromptTransforms,
   );
+  const whichKey = mergedPartialValue(
+    target.whichKey,
+    partial.whichKey,
+    cloneWhichKey,
+    mergeWhichKey,
+  );
   if (keymap) target.keymap = keymap;
   if (ui) target.ui = ui;
   if (macros) target.macros = macros;
@@ -2878,12 +2984,20 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (feedback) target.feedback = feedback;
   if (promptStructures) target.promptStructures = promptStructures;
   if (promptTransforms) target.promptTransforms = promptTransforms;
+  applyWhichKeyOption(target, whichKey);
+}
+
+function applyWhichKeyOption(
+  target: ResolvedVimEditorOptions,
+  whichKey: ResolvedVimWhichKey | undefined,
+): void {
+  if (whichKey) target.whichKey = whichKey;
 }
 
 function jsMappingMatches(candidate: string, key: string, leader?: string | null): boolean {
   return leader === undefined
     ? candidate === key
-    : resolvedLeaderKey(candidate, leader ?? undefined) === key;
+    : resolveLeaderKey(candidate, leader ?? undefined) === key;
 }
 
 function removeJsInsertMappings(
@@ -2945,7 +3059,7 @@ function restoreJsUnmaps(
 ): void {
   keymap.unmaps = keymap.unmaps?.flatMap((unmap) => {
     const unmapKey =
-      leader === undefined ? unmap.key : resolvedLeaderKey(unmap.key, leader ?? undefined);
+      leader === undefined ? unmap.key : resolveLeaderKey(unmap.key, leader ?? undefined);
     if (unmapKey !== key) return [unmap];
     const remainingModes = unmap.modes.filter((mode) => !modes.includes(mode));
     return remainingModes.length ? [{ ...unmap, modes: remainingModes }] : [];
@@ -2982,6 +3096,12 @@ function applyJsInsertMapping(
   ];
 }
 
+function actionArgsForJsMapping(
+  mapping: Extract<Extract<VimJsConfigOperation, { kind: "map" }>["mapping"], { kind: "action" }>,
+): ResolvedVimActionBinding["args"] {
+  return mapping.args as ResolvedVimActionBinding["args"];
+}
+
 function applyJsScopedMapping(
   keymap: PartialKeymapOptions,
   mapping: Exclude<Extract<VimJsConfigOperation, { kind: "map" }>["mapping"], { kind: "insert" }>,
@@ -2996,7 +3116,7 @@ function applyJsScopedMapping(
       {
         actionId: mapping.actionId,
         key: mapping.key,
-        args: mapping.args as PromptTransform,
+        args: actionArgsForJsMapping(mapping),
         modes: mapping.modes,
         allowProtected: mapping.allowProtected,
         desc: mapping.desc,
@@ -3666,6 +3786,10 @@ export function promptTransformsForOptions(
   options: ResolvedVimEditorOptions,
 ): ResolvedVimPromptTransforms {
   return options.promptTransforms ?? DEFAULT_VIM_PROMPT_TRANSFORMS;
+}
+
+export function whichKeyForOptions(options: ResolvedVimEditorOptions): ResolvedVimWhichKey {
+  return options.whichKey ?? DEFAULT_VIM_WHICH_KEY;
 }
 
 export function cursorStyleForMode(options: ResolvedVimEditorOptions, mode: VimMode): CursorStyle {

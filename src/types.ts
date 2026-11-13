@@ -1,4 +1,5 @@
 import type { VimMappingScope } from "./mapping-scopes.ts";
+import type { PiCommandActionArgs, PiCommandActionId } from "./pi-command-actions.ts";
 import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 
 export type VimMode = "insert" | "normal" | "visual" | "visualLine" | "visualBlock";
@@ -159,8 +160,10 @@ export type VimActionKeyBindingEntry =
       __sourceOrder?: number;
     };
 
+export type BindableVimActionId = BindablePromptTransformActionId | PiCommandActionId;
+
 export type VimActionKeymapOptions = Partial<
-  Record<BindablePromptTransformActionId, readonly VimActionKeyBindingEntry[]>
+  Record<BindableVimActionId, readonly VimActionKeyBindingEntry[]>
 >;
 
 export type VimKeySequenceRemap = {
@@ -219,8 +222,8 @@ export type ResolvedVimTextObjectKeymap = {
 
 export type ResolvedVimActionBinding = {
   key: string;
-  actionId: BindablePromptTransformActionId;
-  args: PromptTransform;
+  actionId: BindableVimActionId;
+  args: PromptTransform | PiCommandActionArgs;
   modes?: readonly VimActionBindingMode[];
   allowProtected?: boolean;
   desc?: string;
@@ -255,7 +258,7 @@ export type VimFiniteActionId =
   | `insert.${keyof ResolvedVimInsertKeymap}`
   | `textObject.kind.${VimTextObjectKind}`
   | `textObject.target.${VimTextObjectTarget}`
-  | BindablePromptTransformActionId;
+  | BindableVimActionId;
 
 export type VimScopedKeymapBinding = {
   actionId: VimFiniteActionId;
@@ -390,6 +393,18 @@ export type VimPromptTransformEditorOptions = {
   commands?: Partial<Record<PromptTransformAction, readonly string[]>>;
 };
 
+export type VimWhichKeyOptions = {
+  enabled: boolean;
+  groups: Record<string, string>;
+};
+
+export type ResolvedVimWhichKey = VimWhichKeyOptions;
+
+export type VimWhichKeyEditorOptions = {
+  enabled?: boolean;
+  groups?: Record<string, string>;
+};
+
 export type VimEditorOptions = {
   preset?: VimPreset;
   leader?: string | null;
@@ -404,6 +419,7 @@ export type VimEditorOptions = {
   feedback?: Partial<VimFeedbackOptions>;
   promptStructures?: VimPromptStructureEditorOptions;
   promptTransforms?: VimPromptTransformEditorOptions;
+  whichKey?: VimWhichKeyEditorOptions;
 };
 
 export type ResolvedVimEditorOptions = {
@@ -421,6 +437,7 @@ export type ResolvedVimEditorOptions = {
   feedback?: VimFeedbackOptions;
   promptStructures?: ResolvedVimPromptStructures;
   promptTransforms?: ResolvedVimPromptTransforms;
+  whichKey?: ResolvedVimWhichKey;
 };
 
 export type Position = {

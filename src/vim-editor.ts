@@ -4,8 +4,10 @@ import {
   type KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
+  matchesKey,
   truncateToWidth,
   visibleWidth,
+  type AutocompleteProvider,
   type EditorTheme,
   type OverlayHandle,
   type TUI,
@@ -42,6 +44,7 @@ import {
   searchForOptions,
   uiForOptions,
   easymotionForOptions,
+  whichKeyForOptions,
   type VimConfigPlan,
   type VimRuntimeConfiguration,
 } from "./config.ts";
@@ -51,6 +54,7 @@ import {
   READ_ONLY_POPUP_MIN_WIDTH,
   ReadOnlyPopupOverlayComponent,
 } from "./keybinding-discovery-overlay.ts";
+import { keySequence } from "./modal/core.ts";
 import {
   canFastDelegateInsertInput,
   handleModalInput,
@@ -66,6 +70,7 @@ import {
   RESET_CURSOR_SHAPE,
   restyleCursorMarker,
 } from "./render.ts";
+import { whichKeyRows } from "./which-key.ts";
 
 const KEY = {
   left: "\x1b[D",
@@ -96,6 +101,7 @@ function workbenchText(state: ModalState): string | undefined {
 }
 
 const MAX_VISIBLE_SUGGESTIONS = 5;
+const MINIMUM_EDITOR_ROWS = 4;
 
 function workbenchSuggestions(
   state: ModalState,
@@ -216,8 +222,37 @@ type RedoSnapshot = {
   cursor: Position;
 };
 
+type PasteSnapshot = {
+  pastes: Map<number, string>;
+  pasteCounter: number;
+};
+
+type PiCommandDispatchState = {
+  draft: RedoSnapshot;
+  redo: RedoSnapshot[];
+  undoStack?: unknown[];
+  undoDepth: number;
+  paste?: PasteSnapshot;
+};
+
+type EditorInternals = {
+  undoStack?: unknown[];
+  pastes?: unknown;
+  pasteCounter?: unknown;
+};
+
+type Thenable = { then: (resolve: () => void, reject: () => void) => unknown };
+
 function sameRedoSnapshot(a: RedoSnapshot, b: RedoSnapshot): boolean {
   return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
+}
+
+function isThenable(value: unknown): value is Thenable {
+  return (
+    Boolean(value) &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 function clampToText(text: string, position: Position): Position {
@@ -238,6 +273,7 @@ export class VimEditor extends CustomEditor {
   private modalState: ModalState;
   private configuration: VimRuntimeConfiguration;
   private readonly overlayTheme: EditorTheme;
+  private piCommandPrompt?: PiCommandDispatchState;
   private readonly redoStack: RedoSnapshot[] = [];
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
@@ -245,6 +281,10 @@ export class VimEditor extends CustomEditor {
   private agentBusy = false;
   private isMacroReplaying = false;
   private promptViewportOffset: number | undefined;
+  private piCommandDispatchActive = false;
+  private slashCommandDescriptions = new Map<string, string>();
+  private slashCommandLookupGeneration = 0;
+  private slashCommandLookupController: AbortController | undefined;
   private readonly onShutdown?: () => void;
 
   constructor(
@@ -348,7 +388,17 @@ export class VimEditor extends CustomEditor {
     this.syncHardwareCursorVisibility(this.getCurrentCursorStyle());
   }
 
+  override setAutocompleteProvider(provider: AutocompleteProvider): void {
+    super.setAutocompleteProvider(provider);
+    this.slashCommandLookupController?.abort();
+    this.slashCommandDescriptions = new Map();
+    this.invalidate();
+    this.tui.requestRender();
+    this.refreshSlashCommandDescriptions(provider);
+  }
+
   override handleInput(data: string): void {
+    if (this.handlePiCommandPromptInput(data)) return;
     const keymap = keymapForOptions(this.options);
     if (
       canFastDelegateInsertInput(this.modalState, data, {
@@ -381,10 +431,28 @@ export class VimEditor extends CustomEditor {
       reservedRows,
       this.overlayTheme,
     );
-    const terminalRows = workbenchRows.length
-      ? Math.max(1, (this.terminalRows() ?? 24) - workbenchRows.length)
-      : this.terminalRows();
-    const lines = this.renderEditorLines(width, terminalRows, workbenchRows.length > 0);
+    const terminalRows = this.terminalRows() ?? 24;
+    const whichKeyBudget = Math.max(0, terminalRows - MINIMUM_EDITOR_ROWS - workbenchRows.length);
+    const whichKey = whichKeyRows(
+      this.modalState,
+      keymapForOptions(this.options),
+      whichKeyForOptions(this.options),
+      width,
+      whichKeyBudget,
+      this.slashCommandDescriptions,
+      { border: this.borderColor, selectList: this.overlayTheme.selectList },
+    );
+    const hasWhichKey = whichKey.length > 0;
+    const editorRows = hasWhichKey
+      ? Math.max(1, terminalRows - workbenchRows.length - whichKey.length)
+      : workbenchRows.length
+        ? Math.max(1, terminalRows - workbenchRows.length)
+        : terminalRows;
+    const lines = this.renderEditorLines(
+      width,
+      editorRows,
+      workbenchRows.length > 0 || hasWhichKey,
+    );
     if (lines.length === 0 || width <= 0) return lines;
 
     const last = lines.length - 1;
@@ -399,10 +467,39 @@ export class VimEditor extends CustomEditor {
       ui: uiForOptions(this.options),
     });
     const statusLine = fitStatusBorder(status.left, status.right, width, this.borderColor);
+    if (hasWhichKey) {
+      lines[last] = whichKey[0]!;
+      lines.push(...workbenchRows, ...whichKey.slice(1), statusLine);
+      return lines;
+    }
     if (this.isShowingAutocomplete()) lines.push(statusLine);
     else lines[last] = statusLine;
     lines.push(...workbenchRows);
     return lines;
+  }
+
+  private refreshSlashCommandDescriptions(provider: AutocompleteProvider): void {
+    const generation = ++this.slashCommandLookupGeneration;
+    const controller = new AbortController();
+    this.slashCommandLookupController = controller;
+    void provider
+      .getSuggestions(["/"], 0, 1, { signal: controller.signal })
+      .then((suggestions) => {
+        if (controller.signal.aborted || generation !== this.slashCommandLookupGeneration) return;
+        this.slashCommandDescriptions = new Map(
+          (suggestions?.items ?? [])
+            .map((item) => [item.label || item.value, item.description] as const)
+            .flatMap(([name, description]) => {
+              const normalized = name.replace(/^\/+/, "").trim();
+              return normalized && typeof description === "string"
+                ? [[`/${normalized}`, description]]
+                : [];
+            }),
+        );
+        this.invalidate();
+        this.tui.requestRender();
+      })
+      .catch(() => undefined);
   }
 
   private snapshot(): EditorSnapshot {
@@ -553,6 +650,12 @@ export class VimEditor extends CustomEditor {
         this.applyEdit(effect.result);
         if (effect.result.changed) this.clearRedoStack();
         return;
+      case "dispatchPiCommand":
+        this.dispatchPiCommand(effect.command);
+        return;
+      case "startPiCommandPrompt":
+        this.startPiCommandPrompt(effect.command);
+        return;
       case "restoreCursor":
         this.restoreCursor(effect.position);
         return;
@@ -577,6 +680,140 @@ export class VimEditor extends CustomEditor {
       case "shutdown":
         this.onShutdown?.();
         return;
+    }
+  }
+
+  private handlePiCommandPromptInput(data: string): boolean {
+    if (!this.piCommandPrompt) return false;
+    if (this.isPiCommandPromptEscape(data) && !this.isShowingAutocomplete()) {
+      this.restorePiCommandPrompt();
+      return true;
+    }
+    if (matchesKey(data, "enter") && !this.isShowingAutocomplete()) {
+      const state = this.piCommandPrompt;
+      this.piCommandPrompt = undefined;
+      this.modalState = { ...this.modalState, mode: "normal" };
+      this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
+      this.dispatchPiCommand(this.getExpandedText(), state);
+      return true;
+    }
+    this.delegateDefaultInput(data);
+    return true;
+  }
+
+  private isPiCommandPromptEscape(data: string): boolean {
+    if (matchesKey(data, "escape")) return true;
+    const key = keySequence(data);
+    return Boolean(
+      key && escapeAliasesForScope(keymapForOptions(this.options), "insert").includes(key),
+    );
+  }
+
+  private startPiCommandPrompt(command: string): void {
+    if (this.piCommandPrompt || this.piCommandDispatchActive) {
+      this.addRuntimeMessage({ kind: "error", text: "Pi command already running" });
+      return;
+    }
+    this.piCommandPrompt = this.capturePiCommandDispatchState();
+    this.setText(`${command.trimEnd()} `);
+    this.restoreCursor(this.endOfTextCursor());
+    this.modalState = { ...this.modalState, mode: "insert" };
+    this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
+    this.invalidate();
+  }
+
+  private restorePiCommandPrompt(): void {
+    const state = this.piCommandPrompt;
+    this.piCommandPrompt = undefined;
+    if (!state) return;
+    this.restorePiCommandDispatchState(state);
+    this.modalState = { ...this.modalState, mode: "normal" };
+    this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
+  }
+
+  private endOfTextCursor(): Position {
+    const lines = this.getText().split("\n");
+    return { line: lines.length - 1, col: lines.at(-1)?.length ?? 0 };
+  }
+
+  private dispatchPiCommand(command: string, originalState?: PiCommandDispatchState): void {
+    const state = originalState ?? this.capturePiCommandDispatchState();
+    if (!this.onSubmit) {
+      if (originalState) this.restorePiCommandDispatchState(state);
+      this.addRuntimeMessage({ kind: "error", text: "Pi command dispatch unavailable" });
+      return;
+    }
+    if (this.piCommandDispatchActive) {
+      if (originalState) this.restorePiCommandDispatchState(state);
+      this.addRuntimeMessage({ kind: "error", text: "Pi command already running" });
+      return;
+    }
+    this.piCommandDispatchActive = true;
+    let result: unknown;
+    let pending = false;
+    try {
+      this.setText(command);
+      result = this.onSubmit(command);
+      pending = isThenable(result);
+    } catch {
+      this.addRuntimeMessage({ kind: "error", text: "Pi command dispatch failed" });
+    } finally {
+      this.restorePiCommandDispatchState(state);
+      if (!pending) this.piCommandDispatchActive = false;
+    }
+    if (pending) this.restoreAfterPiCommandSettles(result as Thenable, state);
+  }
+
+  private capturePiCommandDispatchState(): PiCommandDispatchState {
+    const internals = this as unknown as EditorInternals;
+    const undoStack = internals.undoStack;
+    return {
+      draft: this.redoSnapshot(),
+      redo: [...this.redoStack],
+      undoStack,
+      undoDepth: undoStack?.length ?? 0,
+      paste: this.capturePasteSnapshot(internals),
+    };
+  }
+
+  private capturePasteSnapshot(internals: EditorInternals): PasteSnapshot | undefined {
+    if (!(internals.pastes instanceof Map) || typeof internals.pasteCounter !== "number")
+      return undefined;
+    return { pastes: new Map(internals.pastes), pasteCounter: internals.pasteCounter };
+  }
+
+  private restorePiCommandDispatchState(state: PiCommandDispatchState): void {
+    this.setText(state.draft.text);
+    if (state.paste) this.restorePasteSnapshot(state.paste);
+    this.restoreCursor(state.draft.cursor);
+    while (state.undoStack && state.undoStack.length > state.undoDepth) state.undoStack.pop();
+    this.redoStack.length = 0;
+    this.redoStack.push(...state.redo);
+    this.invalidate();
+  }
+
+  private restorePasteSnapshot(snapshot: PasteSnapshot): void {
+    const internals = this as unknown as EditorInternals;
+    internals.pastes = new Map(snapshot.pastes);
+    internals.pasteCounter = snapshot.pasteCounter;
+  }
+
+  private restoreAfterPiCommandSettles(result: Thenable, state: PiCommandDispatchState): void {
+    const settle = (failed: boolean) => {
+      try {
+        if (this.getText() === "") this.restorePiCommandDispatchState(state);
+        if (failed) this.addRuntimeMessage({ kind: "error", text: "Pi command dispatch failed" });
+      } finally {
+        this.piCommandDispatchActive = false;
+      }
+    };
+    try {
+      void Promise.resolve(result).then(
+        () => settle(false),
+        () => settle(true),
+      );
+    } catch {
+      settle(true);
     }
   }
 

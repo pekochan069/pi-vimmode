@@ -292,6 +292,64 @@ test("resolves configured prompt transform action bindings", () => {
   });
 });
 
+test("resolves configured Pi command action bindings", () => {
+  const keymap = resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      keymap: { actions: { "pi.command": [{ key: "<leader>t", args: { command: "/tree" } }] } },
+    },
+  }).options.keymap;
+  const pending = resolveNormalCommand(",", undefined, keymap);
+  expect(pending).toEqual({ type: "pending", pending: "," });
+  expect(
+    resolveNormalCommand("t", pending.type === "pending" ? pending.pending : "", keymap),
+  ).toEqual({
+    type: "action",
+    actionId: "pi.command",
+    args: { command: "/tree" },
+  });
+});
+
+test("resolves configured Pi prompt command action bindings", () => {
+  const keymap = resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      keymap: {
+        actions: { "pi.commandPrompt": [{ key: "<leader>p", args: { command: "/annotate" } }] },
+      },
+    },
+  }).options.keymap;
+  const pending = resolveNormalCommand(",", undefined, keymap);
+  expect(
+    resolveNormalCommand("p", pending.type === "pending" ? pending.pending : "", keymap),
+  ).toEqual({
+    type: "action",
+    actionId: "pi.commandPrompt",
+    args: { command: "/annotate" },
+  });
+});
+
+test("keeps leader p-group pending until a configured Pi command suffix", () => {
+  const keymap = resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      keymap: {
+        actions: {
+          "pi.command": [{ key: "<leader>pr", args: { command: "/review" } }],
+        },
+      },
+    },
+  }).options.keymap;
+  const leader = resolveNormalCommand(",", undefined, keymap);
+  const group = resolveNormalCommand("p", leader.type === "pending" ? leader.pending : "", keymap);
+  expect(group).toEqual({ type: "pending", pending: ",p" });
+  expect(resolveNormalCommand("r", group.type === "pending" ? group.pending : "", keymap)).toEqual({
+    type: "action",
+    actionId: "pi.command",
+    args: { command: "/review" },
+  });
+});
+
 test("resolves preset-derived prompt transform action bindings", () => {
   const keymap = resolveVimOptions({
     piVimMode: { keymap: { actionPresets: ["paragraph-editing"] } },

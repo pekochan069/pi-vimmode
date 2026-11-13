@@ -10,6 +10,8 @@ vim.startMode = "visual";
 vim.keymap.set("replace", "x", null);
 // @ts-expect-error reflow width must be numeric
 vim.prompt.reflow({ width: "wide" });
+// @ts-expect-error pi commands require a command string
+vim.action.pi.command({});
 // @ts-expect-error mapping options are finite
 vim.keymap.set("n", "x", null, { recursive: true });
 

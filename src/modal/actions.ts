@@ -19,7 +19,14 @@ import {
   withRuntimeMessage,
 } from "./core.ts";
 
-export type PromptTransformActionResult = Extract<SemanticCommandResult, { type: "action" }>;
+export type PromptTransformActionResult = Extract<
+  SemanticCommandResult,
+  { type: "action"; actionId: `prompt.transform.${string}` }
+>;
+export type PiCommandActionResult = Extract<
+  SemanticCommandResult,
+  { type: "action"; actionId: "pi.command" | "pi.commandPrompt" }
+>;
 
 function normalActionRange(snapshot: EditorSnapshot, count = 1): LineRange {
   const lastLine = Math.max(0, snapshot.lines.length - 1);
@@ -58,6 +65,17 @@ function applyActionToRange(
     return invalidate(withNoopFeedback(edited, options, "prompt transform made no changes"));
   }
   return withEffects(edited, [{ type: "edit", result: result.edit }]);
+}
+
+export function applyPiCommandAction(
+  state: ModalState,
+  action: PiCommandActionResult,
+): ModalUpdate {
+  const effect =
+    action.actionId === "pi.command"
+      ? { type: "dispatchPiCommand" as const, command: action.args.command }
+      : { type: "startPiCommandPrompt" as const, command: action.args.command };
+  return withEffects(clearCommandPending(state), [effect]);
 }
 
 export function applyPromptTransformAction(

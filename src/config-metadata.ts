@@ -20,6 +20,7 @@ import {
   type VimMappingFamily,
   type VimMappingScope,
 } from "./mapping-scopes.ts";
+import { PI_COMMAND_ACTIONS, type PiCommandActionArg } from "./pi-command-actions.ts";
 import {
   PROMPT_TRANSFORM_ACTIONS,
   type PromptTransformActionArg,
@@ -41,7 +42,7 @@ export type VimActionMetadata = {
   bindable: boolean;
   factoryPath?: string;
   publicScopes?: readonly VimMappingScope[];
-  args?: readonly PromptTransformActionArg[];
+  args?: readonly (PromptTransformActionArg | PiCommandActionArg)[];
   aliases?: readonly string[];
   anchor?: string;
 };
@@ -56,72 +57,83 @@ type ActionAliases<Id extends VimFiniteActionId> = Id extends "command.easymotio
     ? readonly [`vim.prompt.${Action}()`]
     : readonly [];
 
-type ActionArgs<Id extends VimFiniteActionId> = Id extends "prompt.transform.fence"
+type ActionArgs<Id extends VimFiniteActionId> = Id extends "pi.command" | "pi.commandPrompt"
   ? readonly [
       {
-        name: "language";
+        name: "command";
         type: "string";
-        required: false;
+        required: true;
         description: string;
       },
     ]
-  : Id extends "prompt.transform.reflow"
+  : Id extends "prompt.transform.fence"
     ? readonly [
         {
-          name: "width";
-          type: "integer";
+          name: "language";
+          type: "string";
           required: false;
           description: string;
         },
       ]
-    : readonly [];
+    : Id extends "prompt.transform.reflow"
+      ? readonly [
+          {
+            name: "width";
+            type: "integer";
+            required: false;
+            description: string;
+          },
+        ]
+      : readonly [];
 
 type NormalVisualScopes = readonly ["normal", "visual", "visualLine", "visualBlock"];
-type PublicActionScopes<Id extends VimFiniteActionId> = Id extends "escape"
-  ? readonly ["insert", "visual", "visualLine", "visualBlock", "operatorPending"]
-  : Id extends `operator.${string}`
-    ? NormalVisualScopes
-    : Id extends "motion.halfPageDown" | "motion.halfPageUp"
+type PublicActionScopes<Id extends VimFiniteActionId> = Id extends "pi.command" | "pi.commandPrompt"
+  ? readonly ["normal"]
+  : Id extends "escape"
+    ? readonly ["insert", "visual", "visualLine", "visualBlock", "operatorPending"]
+    : Id extends `operator.${string}`
       ? NormalVisualScopes
-      : Id extends `motion.${string}`
-        ? readonly ["normal", "visual", "visualLine", "visualBlock", "operatorPending"]
-        : Id extends "command.insertLineStart" | "command.insertLineEnd"
-          ? readonly ["normal", "visualBlock"]
-          : Id extends "command.pasteAfter"
-            ? readonly ["normal", "visualLine"]
-            : Id extends
-                  | "command.insertBefore"
-                  | "command.insertAfter"
-                  | "command.openLineBelow"
-                  | "command.openLineAbove"
-                  | "command.visualChar"
-                  | "command.visualLine"
-                  | "command.visualBlock"
-                  | "command.deleteChar"
-                  | "command.deleteCharBefore"
-                  | "command.deleteToLineEnd"
-                  | "command.changeToLineEnd"
-                  | "command.yankLine"
-                  | "command.joinLine"
-                  | "command.toggleCase"
-                  | "command.replaceChar"
-                  | "command.startSearch"
-                  | "command.startSearchBackward"
-                  | "command.repeatSearch"
-                  | "command.repeatSearchReverse"
-                  | "command.startExCommand"
-              ? NormalVisualScopes
-              : Id extends `command.${string}` | `macro.${string}`
-                ? readonly ["normal"]
-                : Id extends "mark.set"
+      : Id extends "motion.halfPageDown" | "motion.halfPageUp"
+        ? NormalVisualScopes
+        : Id extends `motion.${string}`
+          ? readonly ["normal", "visual", "visualLine", "visualBlock", "operatorPending"]
+          : Id extends "command.insertLineStart" | "command.insertLineEnd"
+            ? readonly ["normal", "visualBlock"]
+            : Id extends "command.pasteAfter"
+              ? readonly ["normal", "visualLine"]
+              : Id extends
+                    | "command.insertBefore"
+                    | "command.insertAfter"
+                    | "command.openLineBelow"
+                    | "command.openLineAbove"
+                    | "command.visualChar"
+                    | "command.visualLine"
+                    | "command.visualBlock"
+                    | "command.deleteChar"
+                    | "command.deleteCharBefore"
+                    | "command.deleteToLineEnd"
+                    | "command.changeToLineEnd"
+                    | "command.yankLine"
+                    | "command.joinLine"
+                    | "command.toggleCase"
+                    | "command.replaceChar"
+                    | "command.startSearch"
+                    | "command.startSearchBackward"
+                    | "command.repeatSearch"
+                    | "command.repeatSearchReverse"
+                    | "command.startExCommand"
+                ? NormalVisualScopes
+                : Id extends `command.${string}` | `macro.${string}`
                   ? readonly ["normal"]
-                  : Id extends `mark.${string}`
-                    ? NormalVisualScopes
-                    : Id extends `insert.${string}`
-                      ? readonly ["insert"]
-                      : Id extends `textObject.${string}`
-                        ? readonly ["operatorPending"]
-                        : NormalVisualScopes;
+                  : Id extends "mark.set"
+                    ? readonly ["normal"]
+                    : Id extends `mark.${string}`
+                      ? NormalVisualScopes
+                      : Id extends `insert.${string}`
+                        ? readonly ["insert"]
+                        : Id extends `textObject.${string}`
+                          ? readonly ["operatorPending"]
+                          : NormalVisualScopes;
 
 type VimPublicActionMetadataFor<Id extends VimFiniteActionId> = Omit<
   VimActionMetadata,
@@ -158,6 +170,7 @@ function publicActionFields<Id extends VimFiniteActionId>(
   "factoryPath" | "publicScopes" | "args" | "aliases" | "anchor"
 > {
   const promptAction = PROMPT_TRANSFORM_ACTIONS.find((entry) => entry.id === id);
+  const piCommandAction = PI_COMMAND_ACTIONS.find((entry) => entry.id === id);
   const factoryPath =
     id === "command.easymotion" ? "vim.action.command.easymotion.goToChar()" : `vim.action.${id}()`;
   const aliases =
@@ -171,7 +184,7 @@ function publicActionFields<Id extends VimFiniteActionId>(
   return {
     factoryPath: factoryPath as ActionFactoryPath<Id>,
     publicScopes: publicScopes as PublicActionScopes<Id>,
-    args: (promptAction?.args ?? []) as ActionArgs<Id>,
+    args: (promptAction?.args ?? piCommandAction?.args ?? []) as ActionArgs<Id>,
     aliases: aliases as unknown as ActionAliases<Id>,
     anchor: actionAnchor(id),
   };
@@ -227,6 +240,17 @@ export const VIM_ACTION_METADATA: readonly (
       ({
         id,
         source: "prompt-transform-registry" as const,
+        defaults: [],
+        scopes: modes,
+        bindable: true as const,
+        ...publicActionFields(id, modes),
+      }) as VimPublicActionMetadata,
+  ),
+  ...PI_COMMAND_ACTIONS.map(
+    ({ id, modes }) =>
+      ({
+        id,
+        source: "trusted-config-api" as const,
         defaults: [],
         scopes: modes,
         bindable: true as const,
@@ -484,6 +508,18 @@ const PROPERTY_FACTS = {
     jsonPaths: ["piVimMode.promptTransforms.commands"],
     aliases: [],
   },
+  "whichKey.enabled": {
+    acceptedShape: "boolean",
+    assignment: "replaces value",
+    jsonPaths: ["piVimMode.whichKey.enabled"],
+    aliases: [],
+  },
+  "whichKey.groups": {
+    acceptedShape: "record of key sequences to group labels",
+    assignment: "merges labels by key sequence",
+    jsonPaths: ["piVimMode.whichKey.groups"],
+    aliases: [],
+  },
 } as const satisfies Record<TrustedJsOptionPath, PropertyFacts>;
 
 type PropertyMetadataFor<Path extends TrustedJsOptionPath> = {
@@ -595,4 +631,6 @@ export const CONFIG_LEAVES: readonly ConfigLeaf[] = leaves([
     `promptTransforms.actions.${action}`,
     `promptTransforms.commands.${action}`,
   ]),
+  "whichKey.enabled",
+  "whichKey.groups",
 ]);

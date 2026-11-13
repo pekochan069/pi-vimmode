@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { BindablePromptTransformActionId } from "./prompt-transform-actions.ts";
 import type {
+  BindableVimActionId,
   VimActionBindingMode,
   VimFiniteActionId,
   VimInsertAction,
@@ -30,6 +30,7 @@ import {
   type VimMappingFamily,
   type VimMappingScope,
 } from "./mapping-scopes.ts";
+import { PI_COMMAND_ACTIONS, normalizePiCommandActionArgs } from "./pi-command-actions.ts";
 import { PROMPT_TRANSFORM_ACTIONS } from "./prompt-transform-actions.ts";
 import { VIM_PRESETS } from "./types.ts";
 
@@ -61,7 +62,7 @@ export type VimJsConfigMapOperation =
     }
   | {
       kind: "action";
-      actionId: BindablePromptTransformActionId;
+      actionId: BindableVimActionId;
       key: string;
       args?: Readonly<Record<string, unknown>>;
       modes: readonly VimActionBindingMode[];
@@ -163,9 +164,12 @@ const ACTION_SCOPES = new Map<VimFiniteActionId, readonly VimMappingScope[]>([
     ),
   ),
   ...PROMPT_TRANSFORM_ACTIONS.map(({ id, modes }) => [id as VimFiniteActionId, modes] as const),
+  ...PI_COMMAND_ACTIONS.map(({ id, modes }) => [id as VimFiniteActionId, modes] as const),
 ]);
 
 function hasValidDescriptorArguments(actionId: VimFiniteActionId, args: unknown): boolean {
+  if (actionId === "pi.command" || actionId === "pi.commandPrompt")
+    return hasValidPiCommandArguments(args);
   if (args === undefined) return true;
   if (!args || typeof args !== "object" || Array.isArray(args)) return false;
   const record = args as Record<string, unknown>;
@@ -178,6 +182,10 @@ function hasValidDescriptorArguments(actionId: VimFiniteActionId, args: unknown)
     return Object.keys(record).every((key) => key === "width" && typeof record.width === "number");
   }
   return false;
+}
+
+function hasValidPiCommandArguments(args: unknown): boolean {
+  return normalizePiCommandActionArgs(args).ok;
 }
 
 const VIM_PRESET_SET = new Set<VimPreset>(VIM_PRESETS);
@@ -398,17 +406,23 @@ function recordInsertDescriptor(
   return true;
 }
 
-function recordPromptTransformDescriptor(
+function recordBindableActionDescriptor(
   session: ConfigSession,
   key: string,
   modes: readonly VimMappingScope[],
   action: ActionDescriptor,
   options: MappingOptions,
 ): boolean {
-  if (!action.actionId.startsWith("prompt.transform.")) return false;
+  if (
+    !action.actionId.startsWith("prompt.transform.") &&
+    action.actionId !== "pi.command" &&
+    action.actionId !== "pi.commandPrompt"
+  ) {
+    return false;
+  }
   session.recordMap({
     kind: "action",
-    actionId: action.actionId as BindablePromptTransformActionId,
+    actionId: action.actionId as BindableVimActionId,
     key,
     args: descriptorArguments(action),
     modes: modes as VimActionBindingMode[],
@@ -434,7 +448,7 @@ function recordDescriptorMapping(
     return;
   }
   if (recordInsertDescriptor(session, key, action.actionId, options)) return;
-  if (recordPromptTransformDescriptor(session, key, modes, action, options)) return;
+  if (recordBindableActionDescriptor(session, key, modes, action, options)) return;
   session.recordMap({
     kind: "descriptor",
     actionId: action.actionId,

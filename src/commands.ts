@@ -4,6 +4,7 @@ import type {
   NormalCommand,
   PendingOperator,
   PromptTransform,
+  ResolvedVimActionBinding,
   ResolvedVimKeymap,
   VimActionBindingMode,
   VimCommandAction,
@@ -59,6 +60,13 @@ export type SemanticCommandResult =
       type: "action";
       actionId: BindablePromptTransformActionId;
       args: PromptTransform;
+      count?: number;
+    }
+  | { type: "action"; actionId: "pi.command"; args: { command: string }; count?: number }
+  | {
+      type: "action";
+      actionId: "pi.commandPrompt";
+      args: { command: string };
       count?: number;
     }
   | { type: "charCommand"; command: VimCommandAction; char: string; count?: number }
@@ -120,6 +128,20 @@ type Binding =
       kind: "action";
       actionId: BindablePromptTransformActionId;
       args: PromptTransform;
+      modes?: readonly VimActionBindingMode[];
+    }
+  | {
+      sequence: string;
+      kind: "action";
+      actionId: "pi.command";
+      args: { command: string };
+      modes?: readonly VimActionBindingMode[];
+    }
+  | {
+      sequence: string;
+      kind: "action";
+      actionId: "pi.commandPrompt";
+      args: { command: string };
       modes?: readonly VimActionBindingMode[];
     };
 
@@ -420,13 +442,7 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
   }
 
   for (const binding of keymap.actions.accepted) {
-    const actionBinding: ActionBinding = {
-      sequence: binding.key,
-      kind: "action",
-      actionId: binding.actionId,
-      args: binding.args,
-      modes: binding.modes,
-    };
+    const actionBinding = actionBindingForConfig(binding);
     addActionBinding(actionBindings, actionBinding);
     addActionPrefixes(actionLongerPrefixes, actionBinding);
   }
@@ -481,6 +497,25 @@ function compileKeymap(keymap: ResolvedVimKeymap): CompiledKeymap {
       repeatCharSearch,
       repeatCharSearchLongerPrefixes,
     },
+  };
+}
+
+function actionBindingForConfig(binding: ResolvedVimActionBinding): ActionBinding {
+  if (binding.actionId === "pi.command" || binding.actionId === "pi.commandPrompt") {
+    return {
+      sequence: binding.key,
+      kind: "action",
+      actionId: binding.actionId,
+      args: binding.args as { command: string },
+      modes: binding.modes,
+    };
+  }
+  return {
+    sequence: binding.key,
+    kind: "action",
+    actionId: binding.actionId,
+    args: binding.args as PromptTransform,
+    modes: binding.modes,
   };
 }
 
@@ -563,6 +598,14 @@ function scopedBinding(
       kind: "action",
       actionId: mapping.actionId as BindablePromptTransformActionId,
       args: mapping.args as PromptTransform,
+    };
+  }
+  if (mapping.actionId === "pi.command") {
+    return {
+      sequence,
+      kind: "action",
+      actionId: "pi.command",
+      args: mapping.args as { command: string },
     };
   }
   return undefined;
@@ -1425,10 +1468,27 @@ function resolveWithoutPending(
     }
     return { type: "command", command: binding.command, count };
   }
-  if (binding?.kind === "action") {
-    return { type: "action", actionId: binding.actionId, args: binding.args, count };
-  }
+  if (binding?.kind === "action") return semanticActionResult(binding, count);
   return { type: "none" };
+}
+
+type SemanticActionResult<BindingType extends ActionBinding> = BindingType extends {
+  actionId: infer ActionId;
+  args: infer Args;
+}
+  ? { type: "action"; actionId: ActionId; args: Args; count?: number }
+  : never;
+
+function semanticActionResult<BindingType extends ActionBinding>(
+  binding: BindingType,
+  count?: number,
+): SemanticActionResult<BindingType> {
+  return {
+    type: "action",
+    actionId: binding.actionId,
+    args: binding.args,
+    count,
+  } as SemanticActionResult<BindingType>;
 }
 
 function resolveCountPending(
@@ -1466,8 +1526,7 @@ function resolveCombinedPending(
       : { type: "command", command: binding.command };
   }
   if (binding?.kind === "operator") return { type: "pending", pending: combined };
-  if (binding?.kind === "action")
-    return { type: "action", actionId: binding.actionId, args: binding.args };
+  if (binding?.kind === "action") return semanticActionResult(binding);
   return { type: "invalid" };
 }
 

@@ -31,6 +31,7 @@ function legacyAltPrintable(data: string): string | undefined {
 export function keySequence(data: string): string | undefined {
   return (
     decodeKittyPrintable(data) ??
+    (matchesKey(data, "backspace") ? "backspace" : undefined) ??
     (data.length === 1 && data.charCodeAt(0) >= 32 ? data : undefined) ??
     parseKey(data)
   );

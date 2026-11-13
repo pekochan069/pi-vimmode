@@ -24,6 +24,7 @@ export type VimPromptTransformAction =
   | "dedent"
   | "reflow";
 export type VimPromptTransformActionId = `prompt.transform.${VimPromptTransformAction}`;
+export type VimPiCommandActionId = "pi.command" | "pi.commandPrompt";
 
 export type VimOperatorAction =
   | "delete"
@@ -141,7 +142,8 @@ export type VimFiniteActionId =
   | `insert.${VimInsertAction}`
   | `textObject.kind.${VimTextObjectKind}`
   | `textObject.target.${VimTextObjectTarget}`
-  | VimPromptTransformActionId;
+  | VimPromptTransformActionId
+  | VimPiCommandActionId;
 
 export type VimActionDescriptor = {
   readonly [vimActionDescriptor]: true;
@@ -175,6 +177,7 @@ export type VimActionFactory = () => VimActionDescriptor;
 export type VimOptionalArgsActionFactory<Args extends object> = (
   args?: Args,
 ) => VimActionDescriptor;
+export type VimRequiredArgsActionFactory<Args extends object> = (args: Args) => VimActionDescriptor;
 
 export type VimOperatorActionApi = Record<VimOperatorAction, VimActionFactory>;
 export type VimMotionActionApi = Record<VimMotionAction, VimActionFactory>;
@@ -211,6 +214,10 @@ export type VimActionApi = {
   };
   prompt: {
     transform: VimPromptTransformActionApi;
+  };
+  pi: {
+    command: VimRequiredArgsActionFactory<{ command: string }>;
+    commandPrompt: VimRequiredArgsActionFactory<{ command: string }>;
   };
 };
 
@@ -307,6 +314,10 @@ export type VimConfigApi = {
     enabled: boolean;
     actions: Partial<Record<VimPromptTransformAction, boolean>>;
     commands: Partial<Record<VimPromptTransformAction, readonly string[]>>;
+  };
+  whichKey: {
+    enabled: boolean;
+    groups: Record<string, string>;
   };
   action: VimActionApi;
   prompt: VimPromptApi;

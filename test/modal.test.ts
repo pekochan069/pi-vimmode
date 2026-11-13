@@ -3115,6 +3115,119 @@ test("normal pending command clears on invalid printable key", () => {
   });
 });
 
+test("leader pending backspace steps to root and leaves it pending", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: {
+        actions: {
+          "pi.command": [{ key: "<leader>pp", args: { command: "/plan" }, modes: ["normal"] }],
+        },
+      },
+    },
+  }).options;
+  let state: ModalState = { mode: "normal" };
+  for (const key of [" ", "p"]) {
+    state = handleModalInput(state, snapshot, options, key).state;
+  }
+  expect(state.pending).toBe(" p");
+  state = handleModalInput(state, snapshot, options, "\x7f").state;
+  expect(state.pending).toBe(" ");
+  state = handleModalInput(state, snapshot, options, "\x7f").state;
+  expect(state.pending).toBe(" ");
+});
+
+test("omitted action modes include Normal-mode leader dispatch", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: { actions: { "prompt.transform.quote": [{ key: "<leader>q" }] } },
+    },
+  }).options;
+  const first = handleModalInput({ mode: "normal" }, snapshot, options, " ");
+  const result = handleModalInput(first.state, snapshot, options, "q");
+  expect(result.effects.some((effect) => effect.type === "edit")).toBe(true);
+});
+
+test("disabled which-key preserves leader Backspace action mappings", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      keymap: {
+        actions: {
+          "pi.command": [
+            { key: "<leader>backspace", args: { command: "/back" }, modes: ["normal"] },
+          ],
+        },
+      },
+    },
+  }).options;
+  let state: ModalState = { mode: "normal" };
+  state = handleModalInput(state, snapshot, options, " ").state;
+  const result = handleModalInput(state, snapshot, options, "\x7f");
+  expect(result.effects).toEqual([{ type: "dispatchPiCommand", command: "/back" }]);
+  expect(result.state.pending).toBeUndefined();
+});
+
+test("disabled which-key does not change leader pending Backspace behavior", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      keymap: {
+        actions: {
+          "pi.command": [{ key: "<leader>pp", args: { command: "/plan" }, modes: ["normal"] }],
+        },
+      },
+    },
+  }).options;
+  let state: ModalState = { mode: "normal" };
+  for (const key of [" ", "p"]) state = handleModalInput(state, snapshot, options, key).state;
+  const result = handleModalInput(state, snapshot, options, "\x7f");
+  expect(result.state.pending).toBeUndefined();
+  expect(result.effects).toEqual([{ type: "invalidate" }]);
+});
+
+test("raw Backspace remains an Ex, search, and visual-block editing input", () => {
+  const search = handleModalInput(
+    { mode: "normal", pendingSearch: { query: "ab", direction: "forward" } },
+    snapshot,
+    options,
+    "\x7f",
+  );
+  expect(search.state.pendingSearch?.query).toBe("a");
+
+  const ex = handleModalInput(
+    { mode: "normal", pendingEx: { command: "set", sourceMode: "normal" } },
+    snapshot,
+    options,
+    "\x7f",
+  );
+  expect(ex.state.pendingEx?.command).toBe("se");
+
+  const block = handleModalInput(
+    {
+      mode: "insert",
+      blockInsert: {
+        anchor: cursor,
+        active: cursor,
+        placement: "start",
+        previewLine: 0,
+        text: "x",
+      },
+    },
+    snapshot,
+    options,
+    "\x7f",
+  );
+  expect(block.state.blockInsert?.text).toBe("");
+});
+
 test("active leader overrides normal structural prefixes", () => {
   for (const leader of ['"', "q", "m"]) {
     const configured = resolveVimOptions({

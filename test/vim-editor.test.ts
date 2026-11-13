@@ -213,6 +213,564 @@ function expectEditorState(
   if (expected.pending !== undefined) expect(editor.getPendingOperator()).toBe(expected.pending);
 }
 
+async function flushPiCommandDispatch() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+const largePaste = Array.from({ length: 11 }, (_, index) => `pasted line ${index + 1}`).join("\n");
+
+function pasteLargeText(editor: VimEditor) {
+  const internal = editor as unknown as { delegateDefaultInput: (input: string) => void };
+  internal.delegateDefaultInput(`\x1b[200~${largePaste}\x1b[201~`);
+}
+
+function expectLargePaste(editor: VimEditor, marker: string) {
+  expect(editor.getText()).toBe(marker);
+  expect(editor.getExpandedText()).toBe(largePaste);
+}
+
+function piCommandOptions() {
+  return resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      startMode: "normal",
+      keymap: { actions: { "pi.command": [{ key: "<leader>t", args: { command: "/tree" } }] } },
+    },
+  }).options;
+}
+
+function piPromptCommandOptions() {
+  return resolveVimOptions({
+    piVimMode: {
+      leader: ",",
+      startMode: "normal",
+      keymap: {
+        actions: {
+          "pi.commandPrompt": [{ key: "<leader>p", args: { command: "/annotate  " } }],
+        },
+      },
+    },
+  }).options;
+}
+
+test("Pi prompt command prepares arguments and restores the draft on escape", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  editor.setText("unfinished draft");
+  editor.handleInput("l");
+  const cursor = editor.getCursor();
+
+  typeKeys(editor, [",", "p"]);
+
+  expect(editor.getText()).toBe("/annotate ");
+  expect(editor.getVimMode()).toBe("insert");
+  editor.handleInput("\x1b");
+  expect(editor.getText()).toBe("unfinished draft");
+  expect(editor.getCursor()).toEqual(cursor);
+  expect(editor.getVimMode()).toBe("normal");
+});
+
+test("Pi prompt command restores a collapsed paste on escape", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  pasteLargeText(editor);
+  const marker = editor.getText();
+
+  expect(marker).toBe("[paste #1 +11 lines]");
+  typeKeys(editor, [",", "p", "\x1b"]);
+
+  expectLargePaste(editor, marker);
+});
+
+test("Pi prompt command restores a collapsed paste after submission", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  pasteLargeText(editor);
+  const marker = editor.getText();
+  editor.onSubmit = () => undefined;
+
+  typeKeys(editor, [",", "p", "f", "i", "l", "e", "\r"]);
+
+  expectLargePaste(editor, marker);
+});
+
+test("Pi prompt command restores a collapsed paste after async submission", async () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  let resolveSubmit!: () => void;
+  pasteLargeText(editor);
+  const marker = editor.getText();
+  editor.onSubmit = () =>
+    new Promise<void>((resolve) => {
+      resolveSubmit = () => {
+        editor.setText("");
+        resolve();
+      };
+    });
+
+  typeKeys(editor, [",", "p", "\r"]);
+  resolveSubmit();
+  await flushPiCommandDispatch();
+
+  expectLargePaste(editor, marker);
+});
+
+test("Pi prompt command submits edited arguments and restores the draft", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  const submitted: string[] = [];
+  editor.setText("draft");
+  editor.onSubmit = (text) => submitted.push(text);
+
+  typeKeys(editor, [",", "p", "f", "i", "l", "e", "\r"]);
+
+  expect(submitted).toEqual(["/annotate file"]);
+  expect(editor.getText()).toBe("draft");
+  expect(editor.getVimMode()).toBe("normal");
+});
+
+test("Pi prompt command expands pasted arguments before submission", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  const submitted: string[] = [];
+  editor.setText("draft");
+  editor.onSubmit = (text) => submitted.push(text);
+
+  typeKeys(editor, [",", "p"]);
+  pasteLargeText(editor);
+  typeKeys(editor, ["\r"]);
+
+  expect(submitted).toEqual([`/annotate ${largePaste}`]);
+  expect(editor.getText()).toBe("draft");
+});
+
+test("Pi prompt command restores the draft when dispatch is unavailable", () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  editor.setText("draft");
+  typeKeys(editor, [",", "p", "\r"]);
+  expect(editor.getText()).toBe("draft");
+  expect(editor.render(80).join("\n")).toContain("Pi command dispatch unavailable");
+});
+
+test("Pi prompt command lets autocomplete escape close before cancellation", async () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  editor.setText("draft");
+  installAutocomplete(editor, ["/annotate file"]);
+  typeKeys(editor, [",", "p", "f"]);
+  await flushAutocomplete();
+
+  editor.handleInput("\x1b");
+  expect(editor.getText()).toBe("/annotate f");
+  expect(editor.getVimMode()).toBe("insert");
+
+  editor.handleInput("\x1b");
+  expect(editor.getText()).toBe("draft");
+  expect(editor.getVimMode()).toBe("normal");
+});
+
+test("Pi prompt command preserves dispatch state after asynchronous submission", async () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  const internal = editor as unknown as {
+    redoStack: Array<{ text: string; cursor: { line: number; col: number } }>;
+    undoStack: unknown[];
+  };
+  let resolveSubmit!: () => void;
+  editor.setText("draft");
+  editor.handleInput("l");
+  const cursor = editor.getCursor();
+  internal.redoStack.push({ text: "redo draft", cursor: { line: 0, col: 4 } });
+  internal.undoStack = [{ before: "draft" }];
+  const undoBeforePrompt = [...internal.undoStack];
+  editor.onSubmit = () =>
+    new Promise<void>((resolve) => {
+      resolveSubmit = () => {
+        internal.undoStack.push({ command: "/annotate file" });
+        editor.setText("");
+        resolve();
+      };
+    });
+
+  typeKeys(editor, [",", "p", "f", "i", "l", "e", "\r"]);
+  resolveSubmit();
+  await flushPiCommandDispatch();
+
+  expect(editor.getText()).toBe("draft");
+  expect(editor.getCursor()).toEqual(cursor);
+  expect(internal.redoStack).toEqual([{ text: "redo draft", cursor: { line: 0, col: 4 } }]);
+  expect(internal.undoStack).toEqual(undoBeforePrompt);
+});
+
+test("Pi prompt command avoids overwriting typing after asynchronous submission", async () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  let resolveSubmit!: () => void;
+  editor.setText("draft");
+  editor.onSubmit = () =>
+    new Promise<void>((resolve) => {
+      resolveSubmit = resolve;
+    });
+
+  typeKeys(editor, [",", "p", "\r"]);
+  editor.setText("typing while pending");
+  resolveSubmit();
+  await flushPiCommandDispatch();
+
+  expect(editor.getText()).toBe("typing while pending");
+});
+
+test("Pi prompt command rejects concurrent submission and allows another after rejection", async () => {
+  const { editor } = createEditor(piPromptCommandOptions());
+  let rejectSubmit!: () => void;
+  const submitted: string[] = [];
+  editor.setText("draft");
+  editor.onSubmit = (command) => {
+    submitted.push(command);
+    return new Promise<void>((_resolve, reject) => {
+      rejectSubmit = reject;
+    });
+  };
+
+  typeKeys(editor, [",", "p", "\r"]);
+  typeKeys(editor, [",", "p"]);
+  expect(editor.render(80).join("\n")).toContain("Pi command already running");
+  expect(submitted).toEqual(["/annotate "]);
+
+  rejectSubmit();
+  await flushPiCommandDispatch();
+  typeKeys(editor, [",", "p", "\r"]);
+  expect(submitted).toEqual(["/annotate ", "/annotate "]);
+});
+
+test("Pi command bindings submit and restore the draft", () => {
+  const options = piCommandOptions();
+  const { editor } = createEditor(options);
+  editor.setText("unfinished draft");
+  editor.handleInput("l");
+  const cursor = editor.getCursor();
+  const submitted: string[] = [];
+  editor.onSubmit = (text) => submitted.push(text);
+
+  typeKeys(editor, [",", "t"]);
+
+  expect(submitted).toEqual(["/tree"]);
+  expect(editor.getText()).toBe("unfinished draft");
+  expect(editor.getCursor()).toEqual(cursor);
+  expect(editor.getVimMode()).toBe("normal");
+});
+
+test("Pi command bindings restore collapsed paste payloads", () => {
+  const { editor } = createEditor(piCommandOptions());
+  pasteLargeText(editor);
+  const marker = editor.getText();
+  editor.onSubmit = () => undefined;
+
+  typeKeys(editor, [",", "t"]);
+
+  expectLargePaste(editor, marker);
+});
+
+test("Pi command bindings restore the draft when submit throws", () => {
+  const options = piCommandOptions();
+  const { editor } = createEditor(options);
+  editor.setText("unfinished draft");
+  editor.onSubmit = () => {
+    throw new Error("submit failed");
+  };
+
+  typeKeys(editor, [",", "t"]);
+
+  expect(editor.getText()).toBe("unfinished draft");
+  expect(editor.render(80).join("\n")).toContain("Pi command dispatch failed");
+});
+
+test("Pi command bindings report unavailable submit dispatch", () => {
+  const { editor } = createEditor(piCommandOptions());
+  editor.setText("unfinished draft");
+  typeKeys(editor, [",", "t"]);
+  expect(editor.getText()).toBe("unfinished draft");
+  expect(editor.render(80).join("\n")).toContain("Pi command dispatch unavailable");
+});
+
+test("Pi command dispatch removes synchronous host undo checkpoints", () => {
+  const { editor } = createEditor(piCommandOptions());
+  const internal = editor as unknown as { undoStack: unknown[] };
+  internal.undoStack = [{ before: "draft" }];
+  editor.setText("draft");
+  const undoBeforeDispatch = [...internal.undoStack];
+  editor.onSubmit = () => {
+    internal.undoStack.push({ command: "/tree" });
+    editor.setText("");
+  };
+  typeKeys(editor, [",", "t"]);
+  expect(internal.undoStack).toEqual(undoBeforeDispatch);
+  editor.handleInput("u");
+  expect(editor.getText()).not.toBe("/tree");
+});
+
+test("Pi command dispatch preserves extension redo state", () => {
+  const { editor } = createEditor(piCommandOptions());
+  const internal = editor as unknown as {
+    redoStack: Array<{ text: string; cursor: { line: number; col: number } }>;
+  };
+  internal.redoStack.push({ text: "redo draft", cursor: { line: 0, col: 4 } });
+  editor.setText("draft");
+  editor.onSubmit = () => editor.setText("");
+  typeKeys(editor, [",", "t"]);
+  expect(internal.redoStack).toEqual([{ text: "redo draft", cursor: { line: 0, col: 4 } }]);
+});
+
+test("Pi command dispatch restores after asynchronous clear", async () => {
+  const { editor } = createEditor(piCommandOptions());
+  let resolveSubmit!: () => void;
+  editor.setText("draft");
+  editor.onSubmit = () =>
+    new Promise<void>((resolve) => {
+      resolveSubmit = () => {
+        editor.setText("");
+        resolve();
+      };
+    });
+  typeKeys(editor, [",", "t"]);
+  resolveSubmit();
+  await flushPiCommandDispatch();
+  expect(editor.getText()).toBe("draft");
+});
+
+test("Pi command dispatch allows only one pending submission", async () => {
+  const { editor } = createEditor(piCommandOptions());
+  let resolveSubmit!: () => void;
+  const submissions: string[] = [];
+  editor.setText("first draft");
+  editor.onSubmit = (command) => {
+    submissions.push(command);
+    return new Promise<void>((resolve) => {
+      resolveSubmit = resolve;
+    });
+  };
+
+  typeKeys(editor, [",", "t"]);
+  editor.setText("typing while pending");
+  typeKeys(editor, [",", "t"]);
+
+  expect(submissions).toEqual(["/tree"]);
+  expect(editor.getText()).toBe("typing while pending");
+  expect(editor.render(80).join("\n")).toContain("Pi command already running");
+
+  resolveSubmit();
+  await flushPiCommandDispatch();
+  typeKeys(editor, [",", "t"]);
+
+  expect(submissions).toEqual(["/tree", "/tree"]);
+});
+
+test("Pi command dispatch allows a new submission after rejection", async () => {
+  const { editor } = createEditor(piCommandOptions());
+  let rejectSubmit!: () => void;
+  const submissions: string[] = [];
+  editor.onSubmit = (command) => {
+    submissions.push(command);
+    return new Promise<void>((_resolve, reject) => {
+      rejectSubmit = reject;
+    });
+  };
+
+  editor.setText("draft");
+  typeKeys(editor, [",", "t"]);
+  rejectSubmit();
+  await flushPiCommandDispatch();
+  typeKeys(editor, [",", "t"]);
+
+  expect(submissions).toEqual(["/tree", "/tree"]);
+});
+
+test("Pi command dispatch restores after asynchronous rejection", async () => {
+  const { editor } = createEditor(piCommandOptions());
+  let rejectSubmit!: () => void;
+  editor.setText("draft");
+  editor.onSubmit = () =>
+    new Promise<void>((_resolve, reject) => {
+      rejectSubmit = () => {
+        editor.setText("");
+        reject(new Error("failed"));
+      };
+    });
+  typeKeys(editor, [",", "t"]);
+  rejectSubmit();
+  await flushPiCommandDispatch();
+  expect(editor.getText()).toBe("draft");
+  expect(editor.render(80).join("\n")).toContain("Pi command dispatch failed");
+});
+
+test("renders which-key rows below the editor and dispatches while visible", () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true, groups: { "<leader>p": "workflow" } },
+      keymap: {
+        actions: {
+          "pi.command": [
+            { key: "<leader>m", args: { command: "/model" }, modes: ["normal"], desc: "model" },
+            { key: "<leader>pp", args: { command: "/plan" }, modes: ["normal"], desc: "plan" },
+            { key: "<leader>pr", args: { command: "/review" }, modes: ["normal"], desc: "review" },
+          ],
+        },
+      },
+    },
+  }).options;
+  const { editor } = createEditor(options, { warnings: [] }, false, { rows: 10, columns: 80 });
+  let submitted = "";
+  (editor as unknown as { onSubmit: (text: string) => void }).onSubmit = (text) => {
+    submitted = text;
+  };
+
+  editor.setText("draft");
+  editor.handleInput(" ");
+  const rootRows = editor.render(80);
+  expect(rootRows[0]).toBe("─".repeat(80));
+  expect(rootRows.some((line) => line.includes("draft"))).toBe(true);
+  expect(rootRows.at(-1)).toContain("NORMAL");
+  const titleIndex = rootRows.findIndex((line) => line.includes("WHICH-KEY"));
+  const candidateIndex = rootRows.findIndex((line) => line.includes("/model"));
+  expect(rootRows.filter((line) => line.includes("WHICH-KEY"))).toHaveLength(1);
+  expect(titleIndex).toBeGreaterThan(0);
+  expect(rootRows[titleIndex]).toContain("WHICH-KEY");
+  expect(rootRows[titleIndex - 1]).not.toBe("─".repeat(80));
+  expect(candidateIndex).toBeGreaterThan(titleIndex);
+  expect(rootRows.at(-2)).toContain("+workflow");
+  expect(rootRows.slice(titleIndex, -1).some((line) => line.includes("NORMAL"))).toBe(false);
+  expect(rootRows.length).toBeLessThanOrEqual(10);
+  editor.handleInput("p");
+  expect(editor.render(80).join("\n")).toContain("/plan");
+  editor.handleInput("p");
+  expect(submitted).toBe("/plan");
+});
+
+test("uses the latest slash autocomplete description in which-key rows", async () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: { actions: { "pi.command": [{ key: "<leader>m", args: { command: "/model" } }] } },
+    },
+  }).options;
+  const { editor } = createEditor(options, { warnings: [] }, false, { rows: 10, columns: 80 });
+  editor.setAutocompleteProvider({
+    async getSuggestions() {
+      return {
+        prefix: "/",
+        items: [{ value: "model", label: "model", description: "switch model" }],
+      };
+    },
+    applyCompletion() {
+      throw new Error("not used");
+    },
+  });
+  await Promise.resolve();
+  editor.handleInput(" ");
+  expect(editor.render(80).join("\n")).toContain("/model");
+  expect(editor.render(80).join("\n")).toContain("switch model");
+});
+
+test("keeps the latest slash autocomplete description after a stale lookup", async () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: { actions: { "pi.command": [{ key: "<leader>m", args: { command: "/model" } }] } },
+    },
+  }).options;
+  const { editor } = createEditor(options, { warnings: [] });
+  let resolveStale: (value: any) => void = () => {};
+  editor.setAutocompleteProvider({
+    getSuggestions() {
+      return new Promise((resolve) => {
+        resolveStale = resolve;
+      });
+    },
+    applyCompletion() {
+      throw new Error("not used");
+    },
+  });
+  editor.setAutocompleteProvider({
+    async getSuggestions() {
+      return { prefix: "/", items: [{ value: "model", label: "model", description: "latest" }] };
+    },
+    applyCompletion() {
+      throw new Error("not used");
+    },
+  });
+  resolveStale({
+    prefix: "/",
+    items: [{ value: "model", label: "model", description: "stale" }],
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  editor.handleInput(" ");
+  expect(editor.render(80).join("\n")).toContain("latest");
+  expect(editor.render(80).join("\n")).not.toContain("stale");
+});
+
+test("clears old slash descriptions when a replacement provider fails", async () => {
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: {
+        actions: {
+          "pi.command": [{ key: "<leader>m", args: { command: "/model" }, desc: "fallback" }],
+        },
+      },
+    },
+  }).options;
+  const { editor } = createEditor(options, { warnings: [] });
+  editor.setAutocompleteProvider({
+    async getSuggestions() {
+      return { prefix: "/", items: [{ value: "model", label: "model", description: "old" }] };
+    },
+    applyCompletion() {
+      throw new Error("not used");
+    },
+  });
+  await Promise.resolve();
+  editor.setAutocompleteProvider({
+    async getSuggestions() {
+      throw new Error("unavailable");
+    },
+    applyCompletion() {
+      throw new Error("not used");
+    },
+  });
+  await Promise.resolve();
+  editor.handleInput(" ");
+  const rendered = editor.render(80).join("\n");
+  expect(rendered).toContain("fallback");
+  expect(rendered).not.toContain("old");
+});
+
+test("bounds which-key rows in a short terminal", () => {
+  const actions = {
+    "pi.command": Array.from({ length: 8 }, (_, index) => ({
+      key: `<leader>${String.fromCharCode(97 + index)}`,
+      args: { command: `/command-${index}` },
+      modes: ["normal"],
+    })),
+  };
+  const options = resolveVimOptions({
+    piVimMode: {
+      leader: " ",
+      startMode: "normal",
+      whichKey: { enabled: true },
+      keymap: { actions },
+    },
+  }).options;
+  const { editor } = createEditor(options, { warnings: [] }, false, { rows: 8, columns: 80 });
+
+  editor.handleInput(" ");
+  const lines = editor.render(80);
+  expect(lines.filter((line) => line.includes("WHICH-KEY")).length).toBe(1);
+  expect(lines.length).toBeLessThanOrEqual(8);
+  expect(lines.at(-1)).toContain("NORMAL");
+  expect(lines.at(-2)).toContain("+7 more");
+});
+
 test("starts insert, inserts text, and escape enters normal", () => {
   const { editor } = createEditor();
   expect(editor.getVimMode()).toBe("insert");

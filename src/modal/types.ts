@@ -228,6 +228,8 @@ export type ModalEffect =
   | { type: "delegate"; input: string }
   | { type: "adapterCommand"; command: AdapterCommand }
   | { type: "edit"; result: EditResult }
+  | { type: "dispatchPiCommand"; command: string }
+  | { type: "startPiCommandPrompt"; command: string }
   | { type: "restoreCursor"; position: Position }
   | { type: "playMacro"; slot: MacroSlot; inputs: readonly string[] }
   | { type: "openReadOnlyPopup"; popup: ReadOnlyPopup }

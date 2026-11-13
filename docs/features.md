@@ -61,16 +61,17 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 
 pi-vimmode has a finite prompt-local surface. This quickref classifies what is supported; it is not a Vim/Neovim quickref clone.
 
-| Category                             | Examples                                                                      | Classification                                                                                      |
-| ------------------------------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                                     | Prompt editing actions; configurable only through supported semantic keymap fields.                 |
-| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/`        | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                          |
-| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                           | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
-| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                           | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
-| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`              | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                         | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
-| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, `Tab` | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
-| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                                | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
+| Category                             | Examples                                                                      | Classification                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Modal motions/edits                  | `h`, `j`, `w`, `dd`, `ciw`, `/query`, `n`                                     | Prompt editing actions; configurable only through supported semantic keymap fields.                               |
+| Ex line commands                     | `:delete`, `:yank a`, `:put`, `:copy`, `:move`, `:join`, `:s/old/new/`        | Finite prompt-buffer commands; no Vimscript or file/window/shell commands.                                        |
+| Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                           | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                                   |
+| Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                           | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                                        |
+| Which-key leader preview             | `<leader>`, `<leader>p`, `Backspace`                                          | Opt-in, passive rows below the editor preview Normal-mode actions, including `pi.command` and `pi.commandPrompt`. |
+| Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`              | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.                   |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                         | Read-only source-backed help and prompt-local state/message summaries shown in popup output.                      |
+| Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, `Tab` | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                                      |
+| Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                                | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings.               |
 
 <!-- diagnostic-actions:vimmode.doctor -->
 <!-- diagnostic-actions:vimmode.actions -->
@@ -672,6 +673,12 @@ Action keybinding presets are opt-in bundles selected with `piVimMode.keymap.act
 ### Read-only Ex popup and keybinding discovery
 
 Valid read-only Ex help and diagnostic commands open a dedicated bounded read-only overlay popup, similar to Pi picker-style overlay UIs. Popup-backed commands include `:help`, `:help <topic>`, `:features`, `:features <query>`, `:features keybindings`, `:keybindings`, `:keybindings <query>`, `:actions`, `:actions <query>`, `:keymap`, `:keymap <action>`, `:mapcheck <key>`, `:messages`, `:changelog`, `:vimmode inspect`, and `:vimdoctor`.
+
+## Which-key leader preview
+
+`piVimMode.whichKey.enabled` is opt-in and defaults to `false`. When enabled, pressing a configured leader in Normal mode adds a bounded bordered panel below the editor without taking focus. The title is `WHICH-KEY`, or `WHICH-KEY : GROUP NAME` for the deepest configured prefix group. The row beneath it uses Pi's selected slash-autocomplete prefix/text styling for the typed suffix. The preview includes configured Normal-mode action bindings only, filters as keys continue, and collapses shared next-key prefixes. `piVimMode.whichKey.groups` labels a collapsed prefix adjacent to its key, such as `p  +workflow`; unnamed rows show the actual mapping count. Candidate leaves exactly use Pi's passive unselected slash-autocomplete layout and style. A `pi.command` leaf displays its slash command and uses the current Pi autocomplete provider's description in the aligned description column; a binding `desc` is the fallback. The titled panel border replaces the editor's normal lower border and the normal status bar sits directly below the last candidate or overflow row.
+
+When the preview is enabled, `Backspace` steps up one complete key token. At the bare leader it stays open, and `Esc` uses normal pending-key cancellation. When disabled, Backspace keeps its existing resolver behavior. The preview has no delay, scrolling, built-in grammar hints, or non-leader hints. If a terminal cannot fit the minimal title, typed-key, and candidate/overflow panel while retaining four editor rows, the preview is suppressed.
 
 `:keybindings` is the direct keybinding discovery entry point. It lists effective pi-vimmode bindings from resolved settings by finite category: commands, motions, operators, text objects, macros, marks, searches, prompt transform actions, and protected Pi shortcuts. Each binding row shows key, supported mode scope, action ID, and description in a fixed grid. `:keybindings <query>` shows focused detail for action IDs (`redo`, `wordForward`, `prompt.transform.reflow`), descriptions, current keys, protected shortcuts such as `ctrl+p`, rejected metadata/action binding warnings, and bounded no-match output. Ex commands and diagnostic/help metadata IDs are excluded from the catalog because they are not keybindings. It is read-only discovery: it does not edit settings, create mappings, run a command palette, or dispatch metadata actions.
 

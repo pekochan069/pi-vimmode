@@ -71,6 +71,8 @@ const helper = (vim: VimConfigApi): void => {
   vim.promptTransforms.enabled = true;
   vim.promptTransforms.actions = { quote: true };
   vim.promptTransforms.commands = { quote: ["quoteit"] };
+  vim.whichKey.enabled = true;
+  vim.whichKey.groups = { "<leader>p": "workflow" };
 
   const descriptor: VimActionDescriptor = vim.action.operator.delete();
   vim.keymap.set("n", "dd", descriptor);
@@ -82,6 +84,7 @@ const helper = (vim: VimConfigApi): void => {
   vim.keymap.set("o", "iw", vim.action.textObject.kind.inner());
   vim.keymap.set("o", "aw", vim.action.textObject.target.word());
   vim.keymap.set("v", "zq", vim.action.prompt.transform.reflow({ width: 88 }));
+  vim.keymap.set("n", "<leader>t", vim.action.pi.command({ command: "/tree" }));
   vim.keymap.set("v", "zf", vim.prompt.fence({ language: "ts" }));
   vim.keymap.set("v", "zr", vim.prompt.reflow());
   vim.keymap.set("i", "<A-w>", vim.prompt.deleteWordBackward());

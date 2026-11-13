@@ -40,6 +40,7 @@ type DeclaredPropertyPaths =
   | `feedback.${keyof VimConfigApi["feedback"] & string}`
   | `promptStructures.${keyof VimConfigApi["promptStructures"] & string}`
   | `promptTransforms.${keyof VimConfigApi["promptTransforms"] & string}`
+  | `whichKey.${keyof VimConfigApi["whichKey"] & string}`
   | "keymap.actionPresets"
   | "keymap.operatorMotions";
 type PropertyCoverage = Assert<Equal<MetadataPropertyPaths, DeclaredPropertyPaths>>;
@@ -84,9 +85,11 @@ type ExpectedPropertyShape<Path extends DeclaredPropertyPaths> = Path extends "p
                                   ? "partial record of prompt-transform actions to booleans"
                                   : Path extends "promptTransforms.commands"
                                     ? "partial record of prompt-transform actions to string arrays"
-                                    : Path extends "ui.cursorPosition.format"
-                                      ? "string"
-                                      : "boolean";
+                                    : Path extends "whichKey.groups"
+                                      ? "record of key sequences to group labels"
+                                      : Path extends "ui.cursorPosition.format"
+                                        ? "string"
+                                        : "boolean";
 type ExpectedPropertyAliases<Path extends DeclaredPropertyPaths> = Path extends "leader"
   ? readonly [`vim.g.${keyof VimConfigApi["g"] & string}`]
   : readonly [];
@@ -155,6 +158,8 @@ type PropertyValueCoverage = Assert<
       "promptTransforms.enabled": boolean;
       "promptTransforms.actions": VimConfigApi["promptTransforms"]["actions"];
       "promptTransforms.commands": VimConfigApi["promptTransforms"]["commands"];
+      "whichKey.enabled": VimConfigApi["whichKey"]["enabled"];
+      "whichKey.groups": VimConfigApi["whichKey"]["groups"];
     }
   >
 >;
@@ -171,7 +176,8 @@ type DeclaredActionIds =
   | `insert.${keyof VimActionApi["insert"] & string}`
   | `textObject.kind.${keyof VimActionApi["textObject"]["kind"] & string}`
   | `textObject.target.${keyof VimActionApi["textObject"]["target"] & string}`
-  | `prompt.transform.${keyof VimActionApi["prompt"]["transform"] & string}`;
+  | `prompt.transform.${keyof VimActionApi["prompt"]["transform"] & string}`
+  | `pi.${keyof VimActionApi["pi"] & string}`;
 type ActionCoverage = Assert<Equal<MetadataActionIds, DeclaredActionIds>>;
 type MetadataAction<Id extends MetadataActionIds> = Extract<PublicMetadata, { id: Id }>;
 type ExpectedFactory<Id extends DeclaredActionIds> = Id extends "command.easymotion"
@@ -184,57 +190,61 @@ type ExpectedAlias<Id extends DeclaredActionIds> = Id extends "command.easymotio
       ? readonly [`vim.prompt.${Action}()`]
       : readonly []
     : readonly [];
-type ExpectedArgs<Id extends DeclaredActionIds> = Id extends "prompt.transform.fence"
-  ? readonly [{ name: "language"; type: "string"; required: false; description: string }]
-  : Id extends "prompt.transform.reflow"
-    ? readonly [{ name: "width"; type: "integer"; required: false; description: string }]
-    : readonly [];
+type ExpectedArgs<Id extends DeclaredActionIds> = Id extends "pi.command" | "pi.commandPrompt"
+  ? readonly [{ name: "command"; type: "string"; required: true; description: string }]
+  : Id extends "prompt.transform.fence"
+    ? readonly [{ name: "language"; type: "string"; required: false; description: string }]
+    : Id extends "prompt.transform.reflow"
+      ? readonly [{ name: "width"; type: "integer"; required: false; description: string }]
+      : readonly [];
 type NormalVisualScopes = readonly ["normal", "visual", "visualLine", "visualBlock"];
-type ExpectedScopes<Id extends DeclaredActionIds> = Id extends "escape"
-  ? readonly ["insert", "visual", "visualLine", "visualBlock", "operatorPending"]
-  : Id extends `operator.${string}`
-    ? NormalVisualScopes
-    : Id extends "motion.halfPageDown" | "motion.halfPageUp"
+type ExpectedScopes<Id extends DeclaredActionIds> = Id extends "pi.command" | "pi.commandPrompt"
+  ? readonly ["normal"]
+  : Id extends "escape"
+    ? readonly ["insert", "visual", "visualLine", "visualBlock", "operatorPending"]
+    : Id extends `operator.${string}`
       ? NormalVisualScopes
-      : Id extends `motion.${string}`
-        ? readonly ["normal", "visual", "visualLine", "visualBlock", "operatorPending"]
-        : Id extends "command.insertLineStart" | "command.insertLineEnd"
-          ? readonly ["normal", "visualBlock"]
-          : Id extends "command.pasteAfter"
-            ? readonly ["normal", "visualLine"]
-            : Id extends
-                  | "command.insertBefore"
-                  | "command.insertAfter"
-                  | "command.openLineBelow"
-                  | "command.openLineAbove"
-                  | "command.visualChar"
-                  | "command.visualLine"
-                  | "command.visualBlock"
-                  | "command.deleteChar"
-                  | "command.deleteCharBefore"
-                  | "command.deleteToLineEnd"
-                  | "command.changeToLineEnd"
-                  | "command.yankLine"
-                  | "command.joinLine"
-                  | "command.toggleCase"
-                  | "command.replaceChar"
-                  | "command.startSearch"
-                  | "command.startSearchBackward"
-                  | "command.repeatSearch"
-                  | "command.repeatSearchReverse"
-                  | "command.startExCommand"
-              ? NormalVisualScopes
-              : Id extends `command.${string}` | `macro.${string}`
-                ? readonly ["normal"]
-                : Id extends "mark.set"
+      : Id extends "motion.halfPageDown" | "motion.halfPageUp"
+        ? NormalVisualScopes
+        : Id extends `motion.${string}`
+          ? readonly ["normal", "visual", "visualLine", "visualBlock", "operatorPending"]
+          : Id extends "command.insertLineStart" | "command.insertLineEnd"
+            ? readonly ["normal", "visualBlock"]
+            : Id extends "command.pasteAfter"
+              ? readonly ["normal", "visualLine"]
+              : Id extends
+                    | "command.insertBefore"
+                    | "command.insertAfter"
+                    | "command.openLineBelow"
+                    | "command.openLineAbove"
+                    | "command.visualChar"
+                    | "command.visualLine"
+                    | "command.visualBlock"
+                    | "command.deleteChar"
+                    | "command.deleteCharBefore"
+                    | "command.deleteToLineEnd"
+                    | "command.changeToLineEnd"
+                    | "command.yankLine"
+                    | "command.joinLine"
+                    | "command.toggleCase"
+                    | "command.replaceChar"
+                    | "command.startSearch"
+                    | "command.startSearchBackward"
+                    | "command.repeatSearch"
+                    | "command.repeatSearchReverse"
+                    | "command.startExCommand"
+                ? NormalVisualScopes
+                : Id extends `command.${string}` | `macro.${string}`
                   ? readonly ["normal"]
-                  : Id extends `mark.${string}`
-                    ? NormalVisualScopes
-                    : Id extends `insert.${string}`
-                      ? readonly ["insert"]
-                      : Id extends `textObject.${string}`
-                        ? readonly ["operatorPending"]
-                        : NormalVisualScopes;
+                  : Id extends "mark.set"
+                    ? readonly ["normal"]
+                    : Id extends `mark.${string}`
+                      ? NormalVisualScopes
+                      : Id extends `insert.${string}`
+                        ? readonly ["insert"]
+                        : Id extends `textObject.${string}`
+                          ? readonly ["operatorPending"]
+                          : NormalVisualScopes;
 type FactoryCoverage = Assert<
   Equal<
     { [Id in DeclaredActionIds]: MetadataAction<Id>["factoryPath"] },

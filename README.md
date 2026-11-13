@@ -91,6 +91,10 @@ See issue #16 for more information.
 4. Use supported Vim commands such as `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `i`, `a`, `x`, `dd`, `cw`, `p`, `/`, `n`, `N`, `v`, `V`, configured visual block, `:s`, `:d`, `:y`, `:pu`, `:t`, `:m`, `:j`, `:noh`, `q`, `@`, and `@@`.
 5. Press `i`, `a`, `I`, `A`, `o`, `O`, `C`, `s`, or `S` to return to insert mode after edits; use operator forms such as `cw`, `cc`, or `c$` when changing by motion.
 
+### Leader mappings for Pi commands
+
+Configure `pi.command` action bindings to run Pi slash commands from Normal mode while preserving the unfinished draft. Use `pi.commandPrompt` for commands that need editable arguments. For example, `<leader>m` opens `/model`, `<leader>t` opens `/tree`, and `<leader>p*` can group workflow commands. See [settings](docs/settings.md#pi-command-action-bindings) for JSON and trusted JavaScript examples.
+
 Default modes:
 
 - **INSERT**: Pi-like text entry. Autocomplete, submit, newlines, image paste, external editor, and app shortcuts use Pi's default behavior.
